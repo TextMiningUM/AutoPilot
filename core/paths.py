@@ -1,0 +1,162 @@
+"""Standard directory layout for a domain-scoped agent in the Auto Pilot repo.
+
+Convention (illustrated for ``domain="VHF"``, ``source_dirname="VHFProtocol"``)::
+
+    workspace/
+    ├── Data/
+    │   └── VHF/                             ← data_root
+    │       ├── VHFProtocol/                 ← source_dir     (training documents)
+    │       ├── VHF_Eval/                    ← eval_dir       (held-out evaluation)
+    │       │   └── vhf_gold_answers.json    ← gold_file
+    │       ├── VHF_JSON/                    ← json_dir       (§ 8 output)
+    │       └── VHF_Agents_Training/         ← cache_dir      (RAG/KG/traces/SFT/DPO)
+    ├── _models/
+    │   ├── hf_cache/                        ← hf_cache_dir   (SHARED, not domain-scoped)
+    │   └── VHF/                             ← domain_models_dir  (fine-tuned artefacts)
+    └── .env                                 ← env_file       (SHARED, not domain-scoped)
+
+Every notebook and every script for a domain reads paths from an
+``AgentPaths`` instance instead of hardcoding — one place to change if the
+convention ever evolves, and impossible to have subtly diverging paths
+between the notebook, the build scripts, and the training scripts.
+
+For a NEW domain (say COLREG), create the paths object like this::
+
+    paths = AgentPaths(domain="COLREG", source_dirname="COLREGRules")
+
+For the existing VHF agent, use the alias that hardcodes the legacy source
+folder name so nothing has to move on disk::
+
+    paths = AgentPaths.vhf()
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass(frozen=True)
+class AgentPaths:
+    """All standard folders for one domain-scoped agent.
+
+    Parameters
+    ----------
+    domain
+        Short domain name, used as the folder segment under ``Data/`` and
+        ``_models/`` (e.g. ``"VHF"``, ``"COLREG"``).
+    source_dirname
+        Name of the training-sources subfolder inside ``Data/<domain>/``.
+        VHF uses ``"VHFProtocol"`` for legacy reasons; new domains should
+        pick a descriptive name (``"COLREGRules"``, ``"SEAMAPTiles"``, …).
+    workspace
+        Absolute path to the repository root. Defaults to
+        ``Path(__file__).resolve().parent.parent`` — i.e. the parent of the
+        ``core/`` package — which is correct when the repo is checked out
+        as expected.
+    """
+    domain: str
+    source_dirname: str
+    workspace: Path
+
+    # ── constructors ────────────────────────────────────────────────────
+    def __init__(
+        self,
+        domain: str,
+        source_dirname: str,
+        workspace: Path | str | None = None,
+    ) -> None:
+        # frozen=True disables normal __setattr__; use object.__setattr__ instead
+        object.__setattr__(self, "domain", domain)
+        object.__setattr__(self, "source_dirname", source_dirname)
+        if workspace is None:
+            workspace = Path(__file__).resolve().parent.parent
+        object.__setattr__(self, "workspace", Path(workspace).resolve())
+
+    @classmethod
+    def vhf(cls, workspace: Path | str | None = None) -> "AgentPaths":
+        """Paths object pre-configured for the existing VHF agent layout."""
+        return cls(domain="VHF", source_dirname="VHFProtocol", workspace=workspace)
+
+    # ── data folders (per domain) ───────────────────────────────────────
+    @property
+    def data_root(self) -> Path:
+        return self.workspace / "Data" / self.domain
+
+    @property
+    def source_dir(self) -> Path:
+        """Training documents. Auto-discovered by the ingest pipeline."""
+        return self.data_root / self.source_dirname
+
+    @property
+    def eval_dir(self) -> Path:
+        """Held-out evaluation material. NEVER goes into training."""
+        return self.data_root / f"{self.domain}_Eval"
+
+    @property
+    def json_dir(self) -> Path:
+        """One hierarchical JSON per source document (§ 8 output)."""
+        return self.data_root / f"{self.domain}_JSON"
+
+    @property
+    def cache_dir(self) -> Path:
+        """RAG chunks, embeddings, KG, traces, SFT/DPO/reflection JSONL."""
+        return self.data_root / f"{self.domain}_Agents_Training"
+
+    @property
+    def gold_file(self) -> Path:
+        """Committed hand-authored gold Q&A file (in eval_dir)."""
+        return self.eval_dir / f"{self.domain.lower()}_gold_answers.json"
+
+    # ── model folders ───────────────────────────────────────────────────
+    @property
+    def models_root(self) -> Path:
+        return self.workspace / "_models"
+
+    @property
+    def hf_cache_dir(self) -> Path:
+        """HuggingFace hub cache. SHARED across all domains, not per-agent."""
+        return self.models_root / "hf_cache"
+
+    @property
+    def domain_models_dir(self) -> Path:
+        """Per-domain fine-tuned artefacts (LoRA adapters, merged models)."""
+        return self.models_root / self.domain
+
+    # ── workspace-level ─────────────────────────────────────────────────
+    @property
+    def env_file(self) -> Path:
+        """Shared ``.env`` (OPENAI_API_KEY etc.). Not domain-scoped."""
+        return self.workspace / ".env"
+
+    # ── utilities ───────────────────────────────────────────────────────
+    def mkdirs(self) -> None:
+        """Create every standard directory if missing. Idempotent."""
+        for p in (
+            self.data_root,
+            self.source_dir,
+            self.eval_dir,
+            self.json_dir,
+            self.cache_dir,
+            self.models_root,
+            self.hf_cache_dir,
+            self.domain_models_dir,
+        ):
+            p.mkdir(parents=True, exist_ok=True)
+
+    def describe(self) -> str:
+        """One-liner per standard path, useful for notebook printouts."""
+        rows = [
+            ("domain",             self.domain),
+            ("workspace",          self.workspace),
+            ("source_dir",         self.source_dir),
+            ("eval_dir",           self.eval_dir),
+            ("gold_file",          self.gold_file),
+            ("json_dir",           self.json_dir),
+            ("cache_dir",          self.cache_dir),
+            ("hf_cache_dir",       self.hf_cache_dir),
+            ("domain_models_dir",  self.domain_models_dir),
+            ("env_file",           self.env_file),
+        ]
+        width = max(len(k) for k, _ in rows)
+        return "\n".join(f"  {k:<{width}}  {v}" for k, v in rows)
