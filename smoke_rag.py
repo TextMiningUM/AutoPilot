@@ -4,9 +4,10 @@ from pathlib import Path
 from sentence_transformers import SentenceTransformer
 
 W = Path(__file__).resolve().parent
-chunks = json.loads((W / "_cache" / "vhf_rag_chunks.json").read_text(encoding="utf-8"))
-embs   = np.load(W / "_cache" / "vhf_rag_embeddings.npy")
-ids    = json.loads((W / "_cache" / "vhf_rag_chunk_ids.json").read_text(encoding="utf-8"))
+CACHE  = W / "Data" / "VHF" / "VHF_Agents_Training"
+chunks = json.loads((CACHE / "vhf_rag_chunks.json").read_text(encoding="utf-8"))
+embs   = np.load(CACHE / "vhf_rag_embeddings.npy")
+ids    = json.loads((CACHE / "vhf_rag_chunk_ids.json").read_text(encoding="utf-8"))
 cbi    = {c["chunk_id"]: c for c in chunks}
 print(f"Loaded: {len(chunks)} chunks, embeddings {embs.shape}")
 

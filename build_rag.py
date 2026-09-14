@@ -16,9 +16,10 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 WORKSPACE    = Path(__file__).resolve().parent
-JSON_OUT_DIR = WORKSPACE / "_json"
-CACHE_DIR    = WORKSPACE / "_cache"
-CACHE_DIR.mkdir(exist_ok=True)
+VHF_ROOT     = WORKSPACE / "Data" / "VHF"
+JSON_OUT_DIR = VHF_ROOT / "VHF_JSON"
+CACHE_DIR    = VHF_ROOT / "VHF_Agents_Training"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 RAG_CHUNKS_FILE = CACHE_DIR / "vhf_rag_chunks.json"
 EMBEDDINGS_FILE = CACHE_DIR / "vhf_rag_embeddings.npy"

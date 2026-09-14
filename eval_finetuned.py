@@ -54,11 +54,11 @@ from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 
 W = Path(__file__).resolve().parent
-CACHE = W / "_cache"
+CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
 MODELS = W / "_models"
 os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
 
-GOLD_FILE = W / "vhf_gold_answers.json"
+GOLD_FILE = W / "Data" / "VHF" / "VHF_Eval" / "vhf_gold_answers.json"
 
 SYSTEM_PLAIN = (
     "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
@@ -164,16 +164,18 @@ def lit_hit(gold: str, pred: str) -> float:
 # ── OpenAI judge (Faith + Correct) ───────────────────────────────────────
 JUDGE_MODEL = "gpt-4o-mini"
 
-FAITH_PROMPT = """You are grading whether a candidate answer is faithful to a reference (gold) answer for a VHF marine radio question. Return JSON: {"faith": 0 or 1, "reason": "..."}. 1 = candidate does not contradict gold and its factual claims can be supported by gold. 0 = contradicts or invents facts not in gold.
+FAITH_PROMPT = """You are grading whether a candidate answer is faithful to a reference (gold) answer for a VHF marine radio question. Return JSON: {{"faith": 0 or 1, "reason": "..."}}. 1 = candidate does not contradict gold and its factual claims can be supported by gold. 0 = contradicts or invents facts not in gold.
 Question: {q}
 Gold: {g}
 Candidate: {p}"""
 
-CORRECT_PROMPT = """You are grading correctness for a VHF marine radio question. Return JSON: {"correct": <float in [0,1]>, "reason": "..."}. Consider whether the candidate addresses the question, matches the gold's essential facts, and covers the listed expected points. A wrong channel number, wrong proword, or missing safety-critical step should lower the score.
+CORRECT_PROMPT = """You are grading correctness for a VHF marine radio question. Return JSON: {{"correct": <float in [0,1]>, "reason": "..."}}. Consider whether the candidate addresses the question, matches the gold's essential facts, and covers the listed expected points. A wrong channel number, wrong proword, or missing safety-critical step should lower the score.
 Question: {q}
 Gold: {g}
 Expected points: {ep}
 Candidate: {p}"""
+
+_JUDGE_ERR_LOGGED = {"faith": 0, "correct": 0}  # rate-limit stderr noise
 
 
 def judge_faith(client, q, g, p) -> float | None:
@@ -184,7 +186,10 @@ def judge_faith(client, q, g, p) -> float | None:
             messages=[{"role": "user", "content": FAITH_PROMPT.format(q=q, g=g, p=p)}],
         )
         return float(json.loads(r.choices[0].message.content).get("faith", math.nan))
-    except Exception:
+    except Exception as e:
+        if _JUDGE_ERR_LOGGED["faith"] < 3:
+            print(f"  [judge_faith error] {type(e).__name__}: {e}", flush=True)
+            _JUDGE_ERR_LOGGED["faith"] += 1
         return math.nan
 
 
@@ -196,7 +201,10 @@ def judge_correct(client, q, g, ep, p) -> float | None:
             messages=[{"role": "user", "content": CORRECT_PROMPT.format(q=q, g=g, ep=ep, p=p)}],
         )
         return float(json.loads(r.choices[0].message.content).get("correct", math.nan))
-    except Exception:
+    except Exception as e:
+        if _JUDGE_ERR_LOGGED["correct"] < 3:
+            print(f"  [judge_correct error] {type(e).__name__}: {e}", flush=True)
+            _JUDGE_ERR_LOGGED["correct"] += 1
         return math.nan
 
 

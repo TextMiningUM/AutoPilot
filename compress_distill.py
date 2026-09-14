@@ -61,13 +61,14 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
 W = Path(__file__).resolve().parent
-CACHE  = W / "_cache"
+CACHE  = W / "Data" / "VHF" / "VHF_Agents_Training"
 MODELS = W / "_models"
+VHF_MODELS = MODELS / "VHF"
 os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
 
-TEACHER_DIR       = MODELS / "VHF-QWEN"
+TEACHER_DIR       = VHF_MODELS / "VHF-QWEN"
 DEFAULT_STUDENT   = "Qwen/Qwen2.5-1.5B-Instruct"
-DEFAULT_OUT       = MODELS / "DistillVHF-QWEN"
+DEFAULT_OUT       = VHF_MODELS / "DistillVHF-QWEN"
 
 SFT_DATASETS = [
     CACHE / "vhf_sft_direct.jsonl",

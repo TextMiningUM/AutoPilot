@@ -15,7 +15,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
 W = Path(__file__).resolve().parent
-CACHE = W / "_cache"
+CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
 os.environ.setdefault("HF_HOME", str(W / "_models" / "hf_cache"))
 
 PROMPTS_FILE = CACHE / "ablation_prompts.json"

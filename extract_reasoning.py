@@ -31,7 +31,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from openai import OpenAI
 
 W = Path(__file__).resolve().parent
-CACHE = W / "_cache"
+CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
 
 CHUNKS_FILE = CACHE / "vhf_rag_chunks.json"
 OUT_FILE    = CACHE / "vhf_reasoning_traces.jsonl"

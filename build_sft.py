@@ -18,14 +18,14 @@ from sentence_transformers import SentenceTransformer
 from build_kg import kg_retrieve
 
 W = Path(__file__).resolve().parent
-CACHE = W / "_cache"
+CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
 
 TRACES_FILE = CACHE / "vhf_reasoning_traces.jsonl"
 CHUNKS_FILE = CACHE / "vhf_rag_chunks.json"
 EMBS_FILE   = CACHE / "vhf_rag_embeddings.npy"
 IDS_FILE    = CACHE / "vhf_rag_chunk_ids.json"
 KG_FILE     = CACHE / "vhf_kg.json"
-GOLD_FILE   = W / "vhf_gold_answers.json"
+GOLD_FILE   = W / "Data" / "VHF" / "VHF_Eval" / "vhf_gold_answers.json"
 
 DIRECT_OUT = CACHE / "vhf_sft_direct.jsonl"
 COT_OUT    = CACHE / "vhf_sft_cot.jsonl"

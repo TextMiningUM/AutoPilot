@@ -64,15 +64,17 @@ from trl import SFTTrainer, SFTConfig
 
 # ── Paths ────────────────────────────────────────────────────────────────
 W = Path(__file__).resolve().parent
-CACHE = W / "_cache"
+CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
 MODELS = W / "_models"
+VHF_MODELS = MODELS / "VHF"
+VHF_MODELS.mkdir(parents=True, exist_ok=True)
 MODELS.mkdir(exist_ok=True)
 
 # Keep the HF hub cache local to this project so we don't fill %USERPROFILE%.
 os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
 
 MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
-OUTPUT_DIR = MODELS / "vhf_qwen_sft_lora"
+OUTPUT_DIR = VHF_MODELS / "vhf_qwen_sft_lora"
 
 # The four SFT datasets we built from the 30 protocol JSONs.
 # NOTE: gold eval data (vhf_gold_answers.json) is deliberately NOT included.

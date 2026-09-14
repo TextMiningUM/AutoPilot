@@ -46,14 +46,16 @@ from peft import LoraConfig, PeftModel, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 
 W = Path(__file__).resolve().parent
-CACHE = W / "_cache"
+CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
 MODELS = W / "_models"
+VHF_MODELS = MODELS / "VHF"
+VHF_MODELS.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
 
 MODEL_ID     = "Qwen/Qwen2.5-7B-Instruct"
-SFT_ADAPTER  = MODELS / "vhf_qwen_sft_lora"
-DPO_ADAPTER  = MODELS / "vhf_qwen_dpo_lora"
-OUTPUT_DIR   = MODELS / "vhf_qwen_reflect_lora"
+SFT_ADAPTER  = VHF_MODELS / "vhf_qwen_sft_lora"
+DPO_ADAPTER  = VHF_MODELS / "vhf_qwen_dpo_lora"
+OUTPUT_DIR   = VHF_MODELS / "vhf_qwen_reflect_lora"
 REFL_FILE    = CACHE / "vhf_reflection.jsonl"
 
 

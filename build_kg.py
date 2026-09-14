@@ -22,7 +22,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 W = Path(__file__).resolve().parent
-CACHE = W / "_cache"
+CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
 
 CHUNKS_FILE = CACHE / "vhf_rag_chunks.json"
 EMBS_FILE   = CACHE / "vhf_rag_embeddings.npy"

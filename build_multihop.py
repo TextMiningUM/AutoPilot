@@ -20,10 +20,10 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 W = Path(__file__).resolve().parent
-CACHE = W / "_cache"
+CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
 
 TRACES_FILE = CACHE / "vhf_reasoning_traces.jsonl"
-GOLD_FILE   = W / "vhf_gold_answers.json"
+GOLD_FILE   = W / "Data" / "VHF" / "VHF_Eval" / "vhf_gold_answers.json"
 OUT_FILE    = CACHE / "vhf_multihop.jsonl"
 
 CONTAM_THRESH = 0.85

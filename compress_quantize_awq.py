@@ -51,12 +51,13 @@ import os, json, argparse, random
 from pathlib import Path
 
 W = Path(__file__).resolve().parent
-CACHE = W / "_cache"
+CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
 MODELS = W / "_models"
+VHF_MODELS = MODELS / "VHF"
 os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
 
-DEFAULT_IN  = MODELS / "VHF-QWEN"
-DEFAULT_OUT = MODELS / "VHF-QWEN-awq-int4"
+DEFAULT_IN  = VHF_MODELS / "VHF-QWEN"
+DEFAULT_OUT = VHF_MODELS / "VHF-QWEN-awq-int4"
 SFT_RAG     = CACHE / "vhf_sft_rag.jsonl"
 
 

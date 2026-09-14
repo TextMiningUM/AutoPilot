@@ -26,7 +26,7 @@ from eval_finetuned import (
 )
 
 W = Path(__file__).resolve().parent
-CACHE = W / "_cache"
+CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
 
 ANSWERS_FILE = CACHE / "ablation_answers.jsonl"
 SCORED_FILE  = CACHE / "ablation_scored.jsonl"

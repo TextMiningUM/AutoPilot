@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 W = Path(__file__).resolve().parent
-CACHE = W / "_cache"
+CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
 
 FILES = [
     ("SFT direct",   CACHE / "vhf_sft_direct.jsonl"),
@@ -18,7 +18,7 @@ FILES = [
     ("DPO pairs",    CACHE / "vhf_dpo_pairs.jsonl"),
     ("Reflection",   CACHE / "vhf_reflection.jsonl"),
 ]
-GOLD = W / "vhf_gold_answers.json"
+GOLD = W / "Data" / "VHF" / "VHF_Eval" / "vhf_gold_answers.json"
 
 
 def count_lines(p: Path) -> int:

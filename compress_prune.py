@@ -50,12 +50,13 @@ import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 W = Path(__file__).resolve().parent
-CACHE = W / "_cache"
+CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
 MODELS = W / "_models"
+VHF_MODELS = MODELS / "VHF"
 os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
 
-DEFAULT_IN  = MODELS / "VHF-QWEN"
-DEFAULT_OUT = MODELS / "VHF-QWEN-pruned"
+DEFAULT_IN  = VHF_MODELS / "VHF-QWEN"
+DEFAULT_OUT = VHF_MODELS / "VHF-QWEN-pruned"
 SFT_RAG     = CACHE / "vhf_sft_rag.jsonl"
 REPORT_FILE = CACHE / "vhf_qwen_prune_report.json"
 
