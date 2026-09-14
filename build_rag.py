@@ -1,0 +1,225 @@
+"""Standalone RAG chunker + embedder — same logic as § 9 in the notebook.
+
+Reads JSONs from _json/, writes:
+  _cache/vhf_rag_chunks.json           (chunk records)
+  _cache/vhf_rag_embeddings.npy        (numpy float32 array)
+  _cache/vhf_rag_chunk_ids.json        (chunk_id list, same order as embeddings)
+
+Run with: python build_rag.py
+"""
+from __future__ import annotations
+import json, re, hashlib, time
+from pathlib import Path
+from typing import Optional
+
+import numpy as np
+from sentence_transformers import SentenceTransformer
+
+WORKSPACE    = Path(__file__).resolve().parent
+JSON_OUT_DIR = WORKSPACE / "_json"
+CACHE_DIR    = WORKSPACE / "_cache"
+CACHE_DIR.mkdir(exist_ok=True)
+
+RAG_CHUNKS_FILE = CACHE_DIR / "vhf_rag_chunks.json"
+EMBEDDINGS_FILE = CACHE_DIR / "vhf_rag_embeddings.npy"
+IDS_FILE        = CACHE_DIR / "vhf_rag_chunk_ids.json"
+
+# ── Chunking parameters ───────────────────────────────────────────────────
+CHUNK_TARGET_TOKENS = 400
+CHUNK_MAX_TOKENS    = 500
+CHUNK_MIN_TOKENS    = 40
+TOPIC_JACCARD_MIN   = 0.5
+
+STANDALONE_TYPES = {"dialogue", "definition", "procedure"}
+
+
+def stable_id(prefix: str, *parts) -> str:
+    h = hashlib.md5(("|".join(str(p) for p in parts)).encode()).hexdigest()[:8]
+    return f"{prefix}_{h}"
+
+
+def jaccard(a: set[str], b: set[str]) -> float:
+    if not a and not b:
+        return 1.0
+    union = a | b
+    if not union:
+        return 0.0
+    return len(a & b) / len(union)
+
+
+# ── Load embedder + tokenizer ─────────────────────────────────────────────
+print("Loading all-MiniLM-L6-v2...", flush=True)
+t0 = time.time()
+model = SentenceTransformer("all-MiniLM-L6-v2")
+tokenizer = model.tokenizer
+print(f"  ready in {time.time()-t0:.1f}s", flush=True)
+
+
+def token_count(text: str) -> int:
+    return len(tokenizer.encode(text, add_special_tokens=False)) if text else 0
+
+
+# ── Chunker ───────────────────────────────────────────────────────────────
+def _can_extend(cur_types, cur_topics, cur_tokens,
+                nxt_type, nxt_topics, nxt_tokens) -> bool:
+    if nxt_type in STANDALONE_TYPES:
+        return False
+    if any(t in STANDALONE_TYPES for t in cur_types):
+        return False
+    if cur_tokens + nxt_tokens > CHUNK_MAX_TOKENS:
+        return False
+    thresh = TOPIC_JACCARD_MIN
+    if cur_tokens < CHUNK_MIN_TOKENS or nxt_tokens < CHUNK_MIN_TOKENS:
+        thresh = 0.2
+    if jaccard(cur_topics, nxt_topics) < thresh:
+        return False
+    return True
+
+
+def _finalise_chunk(sections, chapter, doc, tokens) -> dict:
+    doc_id      = doc["document_id"]
+    section_ids = [s["section_id"] for s in sections]
+    section_texts_with_headers = [
+        f"[{s['title']} — {s['type']}]\n{s['text']}" for s in sections
+    ]
+    text = "\n\n[SECTION BREAK]\n\n".join(s["text"] for s in sections) \
+             if len(sections) > 1 else sections[0]["text"]
+    text_with_context = (
+        f"Source: {doc['source_file']}  ·  Chapter: {chapter['title']}\n\n"
+        + "\n\n".join(section_texts_with_headers)
+    )
+    pages    = sorted({p for s in sections for p in s.get("pages", [])})
+    concepts = sorted({c for s in sections for c in s.get("concepts", [])})
+    topics   = sorted({t for s in sections for t in s.get("topics", [])})
+    return {
+        "chunk_id":          stable_id("chunk", doc_id, *section_ids),
+        "document_id":       doc_id,
+        "source_file":       doc["source_file"],
+        "source_type":       doc["source_type"],
+        "chapter_title":     chapter["title"],
+        "section_ids":       section_ids,
+        "section_titles":    [s["title"] for s in sections],
+        "types":             [s["type"] for s in sections],
+        "text":              text,
+        "text_with_context": text_with_context,
+        "concepts":          concepts,
+        "topics":            topics,
+        "pages":             pages,
+        "token_count":       tokens,
+        "n_sections":        len(sections),
+    }
+
+
+def chunk_chapter(chapter, doc) -> list[dict]:
+    sections = chapter.get("sections", [])
+    if not sections:
+        return []
+    out = []
+    i = 0
+    while i < len(sections):
+        seed = sections[i]
+        seed_tokens = token_count(seed["text"])
+        current = [seed]
+        cur_tokens = seed_tokens
+        cur_types = [seed["type"]]
+        cur_topics = set(seed.get("topics", []))
+        j = i + 1
+        while j < len(sections):
+            nxt = sections[j]
+            nxt_tokens = token_count(nxt["text"])
+            nxt_topics = set(nxt.get("topics", []))
+            if not _can_extend(cur_types, cur_topics, cur_tokens,
+                               nxt["type"], nxt_topics, nxt_tokens):
+                break
+            if cur_tokens >= CHUNK_TARGET_TOKENS and nxt_tokens >= CHUNK_MIN_TOKENS:
+                break
+            current.append(nxt)
+            cur_tokens += nxt_tokens
+            cur_types.append(nxt["type"])
+            cur_topics |= nxt_topics
+            j += 1
+        out.append(_finalise_chunk(current, chapter, doc, cur_tokens))
+        i = j
+    return out
+
+
+def build_chunks_for_document(doc) -> list[dict]:
+    chunks = []
+    for chapter in doc.get("chapters", []):
+        chunks.extend(chunk_chapter(chapter, doc))
+    return chunks
+
+
+# ── Build corpus ──────────────────────────────────────────────────────────
+print("\nBuilding chunks from _json/...", flush=True)
+all_chunks: list[dict] = []
+per_doc: list[tuple[str, int, int]] = []
+
+for path in sorted(JSON_OUT_DIR.glob("*.json")):
+    if path.name.startswith("_"):
+        continue
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    if not doc.get("chapters"):
+        continue
+    n_sections = sum(len(ch.get("sections", [])) for ch in doc["chapters"])
+    chunks = build_chunks_for_document(doc)
+    all_chunks.extend(chunks)
+    per_doc.append((doc["source_file"], n_sections, len(chunks)))
+    print(f"  {doc['source_file']:<70} sections={n_sections:>4}  chunks={len(chunks):>4}", flush=True)
+
+RAG_CHUNKS_FILE.write_text(json.dumps(all_chunks, indent=2, ensure_ascii=False), encoding="utf-8")
+print(f"\n{len(all_chunks)} chunks from {len(per_doc)} documents", flush=True)
+print(f"Saved: {RAG_CHUNKS_FILE}", flush=True)
+
+# Stats
+sizes = [c["token_count"] for c in all_chunks]
+sizes_sorted = sorted(sizes)
+n = len(sizes_sorted)
+print(f"\nToken distribution:")
+print(f"  min={min(sizes)}  p25={sizes_sorted[n//4]}  median={sizes_sorted[n//2]}  "
+      f"p75={sizes_sorted[3*n//4]}  max={max(sizes)}")
+print(f"  over target ({CHUNK_TARGET_TOKENS}): {sum(1 for s in sizes if s > CHUNK_TARGET_TOKENS)}")
+print(f"  over max ({CHUNK_MAX_TOKENS})   : {sum(1 for s in sizes if s > CHUNK_MAX_TOKENS)}")
+
+from collections import Counter
+n_sec_distribution = Counter(c["n_sections"] for c in all_chunks)
+print(f"\nSections per chunk:")
+for k in sorted(n_sec_distribution):
+    print(f"  {k}: {n_sec_distribution[k]}")
+
+# ── Embed ─────────────────────────────────────────────────────────────────
+print(f"\nEmbedding {len(all_chunks)} chunks on "
+      f"{'GPU' if hasattr(model, '_target_device') else 'auto'}...", flush=True)
+t0 = time.time()
+texts = [c["text_with_context"] for c in all_chunks]
+embs = model.encode(
+    texts, batch_size=32,
+    show_progress_bar=True, convert_to_numpy=True, normalize_embeddings=True,
+)
+print(f"  done in {time.time()-t0:.1f}s. Shape: {embs.shape}", flush=True)
+
+ids = [c["chunk_id"] for c in all_chunks]
+np.save(EMBEDDINGS_FILE, embs)
+IDS_FILE.write_text(json.dumps(ids), encoding="utf-8")
+print(f"Saved: {EMBEDDINGS_FILE.name}  +  {IDS_FILE.name}", flush=True)
+
+# ── Smoke test ────────────────────────────────────────────────────────────
+print("\n" + "=" * 100)
+print("Retrieval smoke test")
+print("=" * 100)
+chunk_by_id = {c["chunk_id"]: c for c in all_chunks}
+for q in ["What is VHF Channel 70 used for?",
+          "How do I send a MAYDAY call?",
+          "What is the phonetic word for the letter M?"]:
+    print(f"\nQuery: {q}")
+    q_emb = model.encode([q], normalize_embeddings=True)[0]
+    scores = embs @ q_emb
+    top = np.argsort(-scores)[:3]
+    for rank, i in enumerate(top, 1):
+        c = chunk_by_id[ids[i]]
+        preview = c["text"].replace("\n", " ")[:130]
+        print(f"  {rank}. [{scores[i]:.3f}] {c['source_file']}  → {c['chapter_title'][:35]!r}")
+        print(f"     types={c['types']} topics={c['topics']}")
+        print(f"     text: {preview}...")
+
+print("\nDone.")

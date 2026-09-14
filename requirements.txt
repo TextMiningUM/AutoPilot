@@ -1,0 +1,54 @@
+# ============================================================================
+# VHF Auto Pilot — pinned dependencies
+# ============================================================================
+# Tested combo (2026-09) on Python 3.13 + Windows + RTX 4070 Laptop 8 GB VRAM.
+#
+# INSTALL ORDER (important for CUDA-aware torch):
+#
+#   python -m venv .venv
+#   .\.venv\Scripts\Activate.ps1
+#   pip install --upgrade pip
+#
+#   # 1) CUDA-aware torch (must be from the pytorch index, not PyPI CPU wheel)
+#   pip install torch==2.6.0+cu124 torchvision==0.21.0+cu124 torchaudio==2.6.0+cu124 \
+#       --index-url https://download.pytorch.org/whl/cu124
+#
+#   # 2) The rest of this file
+#   pip install -r requirements.txt
+#
+#   # 3) Optional — only needed for compress_quantize_awq.py
+#   pip install autoawq
+#
+#   # 4) Optional — only needed for the OCR pass on 3 scanned PDFs
+#   pip install easyocr
+# ============================================================================
+
+# ── Deep learning core ──────────────────────────────────────────────────
+# torch is installed separately (see top of file). Not pinned here to avoid
+# pip re-resolving a CPU wheel from PyPI.
+transformers==5.17.0
+accelerate==1.15.0
+peft==0.20.0
+trl==1.13.0
+bitsandbytes==0.50.2      # 4-bit NF4 quantization for QLoRA
+safetensors==0.8.0
+
+# ── Data handling ───────────────────────────────────────────────────────
+datasets==5.0.1
+numpy==2.5.3
+pandas==3.0.5
+
+# ── Retrieval & embeddings ──────────────────────────────────────────────
+sentence-transformers==6.0.1   # all-MiniLM-L6-v2 for chunk embeddings + KG
+
+# ── Document parsing (chunk-building pipeline) ──────────────────────────
+pdfplumber==0.11.10       # structured PDF parsing (font size + bold detection)
+pypdfium2==5.13.0         # PDF -> image rendering (for OCR fallback)
+
+# ── LLM API judges ──────────────────────────────────────────────────────
+openai==3.13.0            # gpt-4o-mini for reasoning extraction + Faith/Correct judging
+
+# ── Notebook + visualization ────────────────────────────────────────────
+ipykernel==7.3.0
+matplotlib==3.11.2
+tqdm==4.70.1
