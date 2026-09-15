@@ -61,38 +61,38 @@ log "python:    $(which python)"
 log "gpu:      $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader)"
 
 log "--- Track 2: mine agentic training data from the 360 training conversations (notebook § 12.6) ---"
-run_stage  1 colreg_extract    false extract_conversation_reasoning.py
-run_stage  2 colreg_sft        false build_sft.py --traces-file Data/VHF/VHF_Agents_Training/vhf_conversation_traces.jsonl --out-prefix vhf_colreg_sft --extra-gold-file "$COLREG_EVAL"
-run_stage  3 colreg_dpo        false build_rlhf.py --traces-file Data/VHF/VHF_Agents_Training/vhf_conversation_traces.jsonl --out-file Data/VHF/VHF_Agents_Training/vhf_colreg_dpo_pairs.jsonl --extra-gold-file "$COLREG_EVAL"
-run_stage  4 colreg_reflection false build_reflection.py --traces-file Data/VHF/VHF_Agents_Training/vhf_conversation_traces.jsonl --out-file Data/VHF/VHF_Agents_Training/vhf_colreg_reflection.jsonl --extra-gold-file "$COLREG_EVAL"
-run_stage  5 colreg_multihop   false build_multihop.py --traces-file Data/VHF/VHF_Agents_Training/vhf_reasoning_traces.jsonl Data/VHF/VHF_Agents_Training/vhf_conversation_traces.jsonl --out-file Data/VHF/VHF_Agents_Training/vhf_colreg_multihop.jsonl --extra-gold-file "$COLREG_EVAL"
+run_stage  1 colreg_extract    false -m pipeline.track2.extract_conversation_reasoning
+run_stage  2 colreg_sft        false -m pipeline.track1.build_sft --traces-file Data/VHF/VHF_Agents_Training/vhf_conversation_traces.jsonl --out-prefix vhf_colreg_sft --extra-gold-file "$COLREG_EVAL"
+run_stage  3 colreg_dpo        false -m pipeline.track1.build_rlhf --traces-file Data/VHF/VHF_Agents_Training/vhf_conversation_traces.jsonl --out-file Data/VHF/VHF_Agents_Training/vhf_colreg_dpo_pairs.jsonl --extra-gold-file "$COLREG_EVAL"
+run_stage  4 colreg_reflection false -m pipeline.track1.build_reflection --traces-file Data/VHF/VHF_Agents_Training/vhf_conversation_traces.jsonl --out-file Data/VHF/VHF_Agents_Training/vhf_colreg_reflection.jsonl --extra-gold-file "$COLREG_EVAL"
+run_stage  5 colreg_multihop   false -m pipeline.track1.build_multihop --traces-file Data/VHF/VHF_Agents_Training/vhf_reasoning_traces.jsonl Data/VHF/VHF_Agents_Training/vhf_conversation_traces.jsonl --out-file Data/VHF/VHF_Agents_Training/vhf_colreg_multihop.jsonl --extra-gold-file "$COLREG_EVAL"
 
 # Cloud GPUs have 24-48 GB VRAM so we can use larger settings than on the laptop.
-run_stage  6 sft            true  train_sft.py       --epochs 1 --max_seq_length 2048 --save_steps 50
-run_stage  7 dpo            true  train_dpo.py       --epochs 1 --max_length 2048     --save_steps 50
-run_stage  8 reflection     true  train_reflection.py --epochs 2 --max_length 2048    --save_steps 50
-run_stage  9 merge          true  merge_adapter.py
+run_stage  6 sft            true  -m pipeline.train.train_sft       --epochs 1 --max_seq_length 2048 --save_steps 50
+run_stage  7 dpo            true  -m pipeline.train.train_dpo       --epochs 1 --max_length 2048     --save_steps 50
+run_stage  8 reflection     true  -m pipeline.train.train_reflection --epochs 2 --max_length 2048    --save_steps 50
+run_stage  9 merge          true  -m pipeline.train.merge_adapter
 
 log "--- Track 1 (rules/knowledge) + Track 2 (conversational compliance), every model tag ---"
-run_stage 10 eval_qwen_base        false eval_finetuned.py --model Qwen/Qwen2.5-7B-Instruct --tag qwen_base --n 540
-run_stage 11 eval_qwen_base_colreg false eval_colreg_scenarios.py --model Qwen/Qwen2.5-7B-Instruct --tag qwen_base
-run_stage 12 eval_vhfqwen          false eval_finetuned.py --model _models/VHF/VHF-QWEN --tag vhf_qwen --n 540
-run_stage 13 eval_vhfqwen_colreg   false eval_colreg_scenarios.py --model _models/VHF/VHF-QWEN --tag vhf_qwen
+run_stage 10 eval_qwen_base        false -m pipeline.eval.eval_finetuned --model Qwen/Qwen2.5-7B-Instruct --tag qwen_base --n 540
+run_stage 11 eval_qwen_base_colreg false -m pipeline.eval.eval_colreg_scenarios --model Qwen/Qwen2.5-7B-Instruct --tag qwen_base
+run_stage 12 eval_vhfqwen          false -m pipeline.eval.eval_finetuned --model _models/VHF/VHF-QWEN --tag vhf_qwen --n 540
+run_stage 13 eval_vhfqwen_colreg   false -m pipeline.eval.eval_colreg_scenarios --model _models/VHF/VHF-QWEN --tag vhf_qwen
 
 log "--- optional: AWQ int4 quantization (pip install autoawq may fail on some setups) ---"
 pip install -q autoawq 2>&1 | tee "$LOG_DIR/14_awq_install.log" || log "autoawq install failed -- skipping AWQ stage."
-run_stage 14 awq_quantize      false compress_quantize_awq.py --n-calibration 128 --skip-eval
-run_stage 15 eval_awq          false eval_finetuned.py --model _models/VHF/VHF-QWEN-awq-int4 --tag vhf_qwen_awq --n 540
-run_stage 16 eval_awq_colreg   false eval_colreg_scenarios.py --model _models/VHF/VHF-QWEN-awq-int4 --tag vhf_qwen_awq
+run_stage 14 awq_quantize      false -m pipeline.compress.compress_quantize_awq --n-calibration 128 --skip-eval
+run_stage 15 eval_awq          false -m pipeline.eval.eval_finetuned --model _models/VHF/VHF-QWEN-awq-int4 --tag vhf_qwen_awq --n 540
+run_stage 16 eval_awq_colreg   false -m pipeline.eval.eval_colreg_scenarios --model _models/VHF/VHF-QWEN-awq-int4 --tag vhf_qwen_awq
 
-run_stage 17 prune             false compress_prune.py --n-prune 4
-run_stage 18 distill           false compress_distill.py --merge-final
-run_stage 19 eval_distill      false eval_finetuned.py --model _models/VHF/DistillVHF-QWEN --tag distill_vhf --n 540
-run_stage 20 eval_distill_colreg false eval_colreg_scenarios.py --model _models/VHF/DistillVHF-QWEN --tag distill_vhf
+run_stage 17 prune             false -m pipeline.compress.compress_prune --n-prune 4
+run_stage 18 distill           false -m pipeline.compress.compress_distill --merge-final
+run_stage 19 eval_distill      false -m pipeline.eval.eval_finetuned --model _models/VHF/DistillVHF-QWEN --tag distill_vhf --n 540
+run_stage 20 eval_distill_colreg false -m pipeline.eval.eval_colreg_scenarios --model _models/VHF/DistillVHF-QWEN --tag distill_vhf
 
 log "--- prompt-injection ablation (base Qwen: no-context / RAG / CoT / RAG+CoT), full 540, Track 1 only ---"
-run_stage 21 ablation_prep  false prep_ablation.py --n 540
-run_stage 22 ablation_run   false run_ablation.py
-run_stage 23 ablation_score false score_ablation.py
+run_stage 21 ablation_prep  false -m pipeline.eval.prep_ablation --n 540
+run_stage 22 ablation_run   false -m pipeline.eval.run_ablation
+run_stage 23 ablation_score false -m pipeline.eval.score_ablation
 
 log "===== CLOUD CHAIN DONE ====="
