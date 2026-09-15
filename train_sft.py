@@ -195,12 +195,12 @@ def make_sft_config(args) -> SFTConfig:
         optim="paged_adamw_8bit",  # bitsandbytes 8-bit optimizer, paged to CPU RAM
         learning_rate=args.lr,
         lr_scheduler_type="cosine",
-        warmup_ratio=0.03,
+        warmup_steps=30,          # TRL >=1.13 dropped warmup_ratio; 30 ~ 3% of ~1100 steps
         weight_decay=0.01,
         max_grad_norm=1.0,
         bf16=True,
         # SFT-specific: length + chat template
-        max_seq_length=args.max_seq_length,
+        max_length=args.max_seq_length,     # was max_seq_length (renamed in TRL 1.13)
         packing=False,  # keep examples separate; packing hurts small datasets
         # I/O
         logging_steps=10,

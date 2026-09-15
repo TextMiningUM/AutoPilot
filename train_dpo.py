@@ -164,16 +164,15 @@ def make_dpo_config(args) -> DPOConfig:
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
         optim="paged_adamw_8bit",
-        learning_rate=args.lr,             # ~1/4 of SFT lr — DPO shifts are subtle
+        learning_rate=args.lr,             # ~1/4 of SFT lr -- DPO shifts are subtle
         lr_scheduler_type="cosine",
-        warmup_ratio=0.1,
+        warmup_steps=10,                    # TRL >=1.13 dropped warmup_ratio; ~10% of ~80 steps
         weight_decay=0.0,
         max_grad_norm=1.0,
         bf16=True,
         # DPO-specific
         beta=args.beta,
-        max_length=2048,
-        max_prompt_length=1024,
+        max_length=2048,                    # TRL >=1.13: single max_length for prompt+response
         loss_type="sigmoid",  # the original DPO loss; others: ipo, hinge, kto_pair
         # I/O
         logging_steps=10,

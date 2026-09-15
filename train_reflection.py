@@ -139,11 +139,11 @@ def main():
         optim="paged_adamw_8bit",
         learning_rate=args.lr,
         lr_scheduler_type="cosine",
-        warmup_ratio=0.05,
+        warmup_steps=5,               # TRL >=1.13 dropped warmup_ratio; ~5% of ~100 steps
         weight_decay=0.01,
         max_grad_norm=1.0,
         bf16=True,
-        max_seq_length=2048,
+        max_length=2048,              # was max_seq_length (renamed in TRL 1.13)
         packing=False,
         logging_steps=5,
         save_steps=100,
