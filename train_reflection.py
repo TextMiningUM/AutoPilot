@@ -110,9 +110,12 @@ def reflect_lora_config() -> LoraConfig:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--epochs", type=int, default=2)
+    ap.add_argument("--epochs", type=int, default=1)
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--grad_accum", type=int, default=8)
+    ap.add_argument("--max_length", type=int, default=1024)
+    ap.add_argument("--save_steps", type=int, default=25)
+    ap.add_argument("--max_steps", type=int, default=-1, help="-1 = unlimited")
     args = ap.parse_args()
 
     print("=" * 70)
@@ -129,7 +132,7 @@ def main():
 
     model = load_stacked_model()
 
-    sft_cfg = SFTConfig(
+    sft_cfg_kwargs = dict(
         output_dir=str(OUTPUT_DIR),
         num_train_epochs=args.epochs,
         per_device_train_batch_size=1,
@@ -139,18 +142,21 @@ def main():
         optim="paged_adamw_8bit",
         learning_rate=args.lr,
         lr_scheduler_type="cosine",
-        warmup_steps=5,               # TRL >=1.13 dropped warmup_ratio; ~5% of ~100 steps
+        warmup_steps=5,
         weight_decay=0.01,
         max_grad_norm=1.0,
         bf16=True,
-        max_length=2048,              # was max_seq_length (renamed in TRL 1.13)
+        max_length=args.max_length,
         packing=False,
         logging_steps=5,
-        save_steps=100,
+        save_steps=args.save_steps,
         save_total_limit=2,
         report_to=[],
         seed=42,
     )
+    if args.max_steps and args.max_steps > 0:
+        sft_cfg_kwargs["max_steps"] = args.max_steps
+    sft_cfg = SFTConfig(**sft_cfg_kwargs)
 
     trainer = SFTTrainer(
         model=model,

@@ -261,12 +261,17 @@ def main():
     mdl = load_base_model_4bit()
 
     # --- SFT trainer ---
+    # `processing_class` replaced `tokenizer` in newer TRL; older TRL (e.g. on
+    # some cloud images) still expects `tokenizer`. Detect which is accepted.
+    import inspect
+    trainer_params = inspect.signature(SFTTrainer.__init__).parameters
+    tok_kwarg = "processing_class" if "processing_class" in trainer_params else "tokenizer"
     trainer = SFTTrainer(
         model=mdl,
         args=make_sft_config(args),
         train_dataset=train_ds,
         peft_config=lora_config(),
-        processing_class=tok,
+        **{tok_kwarg: tok},
     )
 
     # --- Sanity: how many trainable params? ---

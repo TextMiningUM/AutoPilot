@@ -156,7 +156,7 @@ def new_dpo_lora_config() -> LoraConfig:
 
 # ── Config ───────────────────────────────────────────────────────────────
 def make_dpo_config(args) -> DPOConfig:
-    return DPOConfig(
+    cfg = dict(
         output_dir=str(OUTPUT_DIR),
         num_train_epochs=args.epochs,
         per_device_train_batch_size=1,
@@ -164,23 +164,24 @@ def make_dpo_config(args) -> DPOConfig:
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
         optim="paged_adamw_8bit",
-        learning_rate=args.lr,             # ~1/4 of SFT lr -- DPO shifts are subtle
+        learning_rate=args.lr,
         lr_scheduler_type="cosine",
-        warmup_steps=10,                    # TRL >=1.13 dropped warmup_ratio; ~10% of ~80 steps
+        warmup_steps=10,
         weight_decay=0.0,
         max_grad_norm=1.0,
         bf16=True,
-        # DPO-specific
         beta=args.beta,
-        max_length=2048,                    # TRL >=1.13: single max_length for prompt+response
-        loss_type="sigmoid",  # the original DPO loss; others: ipo, hinge, kto_pair
-        # I/O
-        logging_steps=10,
-        save_steps=200,
+        max_length=args.max_length,
+        loss_type="sigmoid",
+        logging_steps=5,
+        save_steps=args.save_steps,
         save_total_limit=3,
         report_to=[],
         seed=42,
     )
+    if args.max_steps and args.max_steps > 0:
+        cfg["max_steps"] = args.max_steps
+    return DPOConfig(**cfg)
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
@@ -191,6 +192,9 @@ def main():
     ap.add_argument("--lr", type=float, default=5e-5)
     ap.add_argument("--beta", type=float, default=0.1,
                     help="DPO temperature; higher = larger shift from reference")
+    ap.add_argument("--max_length", type=int, default=1024)
+    ap.add_argument("--save_steps", type=int, default=25)
+    ap.add_argument("--max_steps", type=int, default=-1, help="-1 = unlimited")
     args = ap.parse_args()
 
     print("=" * 70)

@@ -14,6 +14,7 @@ param(
     [int]$Port = 22,
     [string]$User = "ubuntu",
     [string]$RemotePath = "~/AutoPilot",
+    [string]$KeyPath = "C:\Users\jcsch\Documents\Python\LeafCloud\AutoPilot\KeyPairAutoPilot.txt",
     [switch]$SkipMerged    # skip the big 14 GB merged model, only pull eval + adapters
 )
 
@@ -21,7 +22,7 @@ $W = "C:\Users\jcsch\Documents\Python\Auto Pilot"
 Set-Location $W
 
 $sshTarget = "${User}@${Server}"
-$sshOpts   = "-P", $Port, "-o", "StrictHostKeyChecking=no", "-r"
+$sshOpts   = "-P", $Port, "-i", $KeyPath, "-o", "StrictHostKeyChecking=no", "-r"
 
 New-Item -ItemType Directory -Force -Path "$W\_models\VHF"                       | Out-Null
 New-Item -ItemType Directory -Force -Path "$W\Data\VHF\VHF_Agents_Training"     | Out-Null
@@ -60,7 +61,7 @@ if (-not $SkipMerged) {
 # 5. Distilled model (if it exists on the pod)
 Write-Host ""
 Write-Host "== 5/5 DistillVHF-QWEN (if present, ~3 GB) =="
-$exists = & ssh -p $Port -o StrictHostKeyChecking=no $sshTarget "test -d $RemotePath/_models/VHF/DistillVHF-QWEN && echo yes || echo no"
+$exists = & ssh -p $Port -i $KeyPath -o StrictHostKeyChecking=no $sshTarget "test -d $RemotePath/_models/VHF/DistillVHF-QWEN && echo yes || echo no"
 if ($exists.Trim() -eq "yes") {
     & scp @sshOpts "${sshTarget}:${RemotePath}/_models/VHF/DistillVHF-QWEN" "$W\_models\VHF\"
 } else {

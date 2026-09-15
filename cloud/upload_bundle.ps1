@@ -12,6 +12,7 @@ param(
     [int]$Port = 22,
     [string]$User = "ubuntu",
     [string]$RemotePath = "~/AutoPilot",
+    [string]$KeyPath = "C:\Users\jcsch\Documents\Python\LeafCloud\AutoPilot\KeyPairAutoPilot.txt",
     [switch]$IncludeEnv
 )
 
@@ -19,7 +20,9 @@ $W = "C:\Users\jcsch\Documents\Python\Auto Pilot"
 Set-Location $W
 
 $sshTarget = "${User}@${Server}"
-$sshOpts   = "-p", $Port, "-o", "StrictHostKeyChecking=no"
+# ssh uses lowercase -p for port; scp uses uppercase -P for port.
+$sshOpts   = "-p", $Port, "-i", $KeyPath, "-o", "StrictHostKeyChecking=no"
+$scpOpts   = "-P", $Port, "-i", $KeyPath, "-o", "StrictHostKeyChecking=no"
 
 Write-Host "Uploading training bundle to ${sshTarget}:${RemotePath}"
 Write-Host ""
@@ -29,33 +32,33 @@ Write-Host ""
 
 # 1. Training-data JSONL (SFT + DPO + reflection + multihop + traces)
 Write-Host "== 1/3 Training datasets =="
-& scp @sshOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_sft_direct.jsonl")    "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @sshOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_sft_cot.jsonl")       "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @sshOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_sft_rag.jsonl")       "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @sshOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_multihop.jsonl")      "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @sshOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_dpo_pairs.jsonl")     "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @sshOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_reflection.jsonl")    "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @sshOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_reasoning_traces.jsonl") "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
+& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_sft_direct.jsonl")    "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
+& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_sft_cot.jsonl")       "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
+& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_sft_rag.jsonl")       "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
+& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_multihop.jsonl")      "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
+& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_dpo_pairs.jsonl")     "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
+& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_reflection.jsonl")    "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
+& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_reasoning_traces.jsonl") "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
 
 # 2. RAG/KG cache (needed if you want to run eval with RAG on the pod)
 Write-Host ""
 Write-Host "== 2/3 RAG/KG cache =="
-& scp @sshOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_rag_chunks.json")     "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @sshOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_rag_embeddings.npy")  "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @sshOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_rag_chunk_ids.json")  "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @sshOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_kg.json")             "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
+& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_rag_chunks.json")     "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
+& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_rag_embeddings.npy")  "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
+& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_rag_chunk_ids.json")  "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
+& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_kg.json")             "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
 
 # 3. Held-out eval assets
 Write-Host ""
 Write-Host "== 3/3 Eval assets =="
-& scp @sshOpts (Join-Path $W "Data\VHF\VHF_Eval\vhf_gold_answers.json")    "${sshTarget}:${RemotePath}/Data/VHF/VHF_Eval/"
-& scp @sshOpts (Join-Path $W "Data\VHF\VHF_Eval\VHF Exam Questions.txt")   "${sshTarget}:${RemotePath}/Data/VHF/VHF_Eval/"
+& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Eval\vhf_gold_answers.json")    "${sshTarget}:${RemotePath}/Data/VHF/VHF_Eval/"
+& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Eval\VHF Exam Questions.txt")   "${sshTarget}:${RemotePath}/Data/VHF/VHF_Eval/"
 
 # 4. Optional: .env with OPENAI_API_KEY for eval judge
 if ($IncludeEnv) {
     Write-Host ""
     Write-Host "== .env (contains OPENAI_API_KEY) =="
-    & scp @sshOpts (Join-Path $W ".env") "${sshTarget}:${RemotePath}/.env"
+    & scp @scpOpts (Join-Path $W ".env") "${sshTarget}:${RemotePath}/.env"
 }
 
 Write-Host ""
