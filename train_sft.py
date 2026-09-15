@@ -183,45 +183,56 @@ def make_sft_config(args) -> SFTConfig:
     Effective batch size = per_device * grad_accum = 1 * 16 = 16
     Learning rate 2e-4 is the QLoRA-paper default for r=16.
     Cosine schedule with warmup smoothly decays LR.
-    max_seq_length=2048 covers the longest RAG-augmented prompts (~1500 tok).
+    max_length=1024 covers ~95% of examples cleanly; 2048 doubles compute for
+    marginal gain on the few very long RAG prompts.
     """
-    return SFTConfig(
+    cfg = dict(
         output_dir=str(OUTPUT_DIR),
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
-        optim="paged_adamw_8bit",  # bitsandbytes 8-bit optimizer, paged to CPU RAM
+        optim="paged_adamw_8bit",
         learning_rate=args.lr,
         lr_scheduler_type="cosine",
-        warmup_steps=30,          # TRL >=1.13 dropped warmup_ratio; 30 ~ 3% of ~1100 steps
+        warmup_steps=30,
         weight_decay=0.01,
         max_grad_norm=1.0,
         bf16=True,
-        # SFT-specific: length + chat template
-        max_length=args.max_seq_length,     # was max_seq_length (renamed in TRL 1.13)
-        packing=False,  # keep examples separate; packing hurts small datasets
-        # I/O
-        logging_steps=10,
+        packing=False,
+        logging_steps=5,
         save_steps=args.save_steps,
         save_total_limit=3,
-        report_to=[],       # no wandb/tensorboard for offline runs
+        report_to=[],
         seed=42,
         data_seed=42,
         dataloader_num_workers=2,
     )
+    # TRL renamed this SFTConfig field across versions: newer TRL (>=0.13) uses
+    # `max_length`, older TRL (<=0.11, e.g. on some cloud images) uses
+    # `max_seq_length`. Detect which one this installed version accepts.
+    import inspect
+    sft_params = inspect.signature(SFTConfig.__init__).parameters
+    if "max_length" in sft_params:
+        cfg["max_length"] = args.max_seq_length
+    elif "max_seq_length" in sft_params:
+        cfg["max_seq_length"] = args.max_seq_length
+    if args.max_steps and args.max_steps > 0:
+        cfg["max_steps"] = args.max_steps
+    return SFTConfig(**cfg)
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
-    ap.add_argument("--epochs", type=int, default=3, help="training epochs (3 is standard for SFT)")
+    ap.add_argument("--epochs", type=int, default=1, help="training epochs (1 is enough; 3 overfits on 5963 rows)")
     ap.add_argument("--batch_size", type=int, default=1, help="per-device train batch (keep 1 on 8 GB VRAM)")
     ap.add_argument("--grad_accum", type=int, default=16, help="gradient accumulation (effective batch = batch * this)")
     ap.add_argument("--lr", type=float, default=2e-4, help="peak learning rate (QLoRA paper default)")
-    ap.add_argument("--max_seq_length", type=int, default=2048, help="truncation length; covers RAG prompts")
-    ap.add_argument("--save_steps", type=int, default=100)
+    ap.add_argument("--max_seq_length", type=int, default=1024, help="truncation length; 1024 covers ~95%% of RAG prompts")
+    ap.add_argument("--save_steps", type=int, default=25, help="checkpoint every N optimizer steps")
+    ap.add_argument("--max_steps", type=int, default=-1, help="cap total steps (for smoke tests); -1 = unlimited")
     ap.add_argument("--resume", action="store_true", help="continue from latest checkpoint in output_dir")
     args = ap.parse_args()
 
