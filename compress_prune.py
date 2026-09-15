@@ -121,6 +121,10 @@ def prune_layers(model, layer_indices: list[int]):
     model.model.layers = new_layers
     # Config update so save/load consistency holds.
     model.config.num_hidden_layers = len(new_layers)
+    # Newer Qwen2.5 configs carry a per-layer `layer_types` list (e.g. full vs
+    # sliding-window attention) that HF validates against num_hidden_layers on save.
+    if getattr(model.config, "layer_types", None):
+        model.config.layer_types = [model.config.layer_types[i] for i in keep]
     return model
 
 

@@ -64,49 +64,96 @@ def load_jsonl(path: Path):
                 continue
 
 
+def _clean(s: str | None) -> str:
+    return (s or "").strip().rstrip(". ").strip()
+
+
+def _cap(s: str) -> str:
+    return s[:1].upper() + s[1:] if s else s
+
+
+def _decap(s: str) -> str:
+    if not s:
+        return s
+    first_word = s.split(" ", 1)[0]
+    if len(first_word) > 1 and first_word.isupper():
+        return s  # don't mangle acronyms like VHF, GMDSS, ITU
+    return s[:1].lower() + s[1:]
+
+
 def format_direct_answer(trace: dict, angle: str) -> str:
-    procs   = trace.get("procedures") or []
-    kf      = trace.get("key_facts") or []
-    channels = trace.get("channels") or []
-    prowords = trace.get("prowords_used") or []
-    constraints = trace.get("constraints") or []
-    outcomes = trace.get("outcomes") or []
-    warnings = trace.get("warnings") or []
+    """Fluent, natural-language answer (no 'Label: value.' dumps) so the
+    fine-tuned model learns to speak in plain prose instead of telegraphic
+    style -- this previously contaminated every downstream training stage.
+    """
+    procs       = trace.get("procedures") or []
+    kf          = [_clean(k) for k in (trace.get("key_facts") or []) if _clean(k)]
+    channels    = trace.get("channels") or []
+    constraints = [_clean(c) for c in (trace.get("constraints") or []) if _clean(c)]
+    outcomes    = [_clean(o) for o in (trace.get("outcomes") or []) if _clean(o)]
+    warnings    = [_clean(w) for w in (trace.get("warnings") or []) if _clean(w)]
 
     if angle == "how" and procs:
-        steps = " ".join(f"{p.get('step', i+1)}. {p.get('action','').rstrip('.')}." for i, p in enumerate(procs))
-        tail = ""
-        if outcomes:  tail += f" Outcome: {outcomes[0].rstrip('.')}."
-        if warnings:  tail += f" Warning: {warnings[0].rstrip('.')}."
-        return steps + tail
+        steps = [_clean(p.get("action", "")) for p in procs]
+        steps = [s for s in steps if s]
+        if not steps:
+            return "Information not available in this excerpt."
+        if len(steps) == 1:
+            answer = _cap(steps[0]) + "."
+        else:
+            connectors = ["First", "Then", "Next", "After that", "Finally"]
+            pieces = [f"{connectors[i] if i < len(connectors) else 'Then'}, {_decap(s)}"
+                      for i, s in enumerate(steps)]
+            answer = "; ".join(pieces) + "."
+        if outcomes:
+            answer += f" Do this correctly and {_decap(outcomes[0])}."
+        if warnings:
+            answer += f" Just be careful: {_decap(warnings[0])}."
+        return answer
 
     if angle == "when":
         parts = []
-        trig = trace.get("trigger")
-        if trig: parts.append(trig.rstrip("."))
-        parts.extend(c.rstrip(".") for c in constraints[:2])
-        if not parts and kf: parts.append(kf[0].rstrip("."))
-        return ". ".join(parts) + "." if parts else (kf[0] if kf else "")
+        trig = _clean(trace.get("trigger"))
+        if trig:
+            parts.append(trig)
+        parts.extend(constraints[:2])
+        if not parts and kf:
+            parts.append(kf[0])
+        if not parts:
+            return ""
+        answer = _cap(parts[0])
+        if len(parts) > 1:
+            answer += ", provided that " + " and ".join(_decap(p) for p in parts[1:])
+        return answer + "."
 
     if angle == "which" and channels:
-        chs = ", ".join(f"Channel {c}" if not str(c).lower().startswith("channel") else c for c in channels)
-        base = f"{chs}."
-        if kf: base += f" {kf[0].rstrip('.')}."
-        return base
+        chs = [str(c) if str(c).lower().startswith("channel") else f"Channel {c}" for c in channels]
+        answer = chs[0] + "." if len(chs) == 1 else ", ".join(chs[:-1]) + f" and {chs[-1]}."
+        if kf:
+            answer += f" {_cap(kf[0])}."
+        return answer
 
     if angle == "why":
-        parts = []
-        for p in procs[:2]:
-            if p.get("why"): parts.append(p["why"].rstrip("."))
-        parts.extend(kf[:2])
-        return ". ".join(parts) + "." if parts else (kf[0] if kf else "")
+        reasons = [_clean(p.get("why", "")) for p in procs[:2] if p.get("why")]
+        reasons.extend(kf[:2])
+        reasons = [r for r in reasons if r]
+        if not reasons:
+            return ""
+        if len(reasons) == 1:
+            return f"Because {_decap(reasons[0])}."
+        return "Because " + ", and because ".join(_decap(r) for r in reasons) + "."
 
     # what / who / default
     parts = kf[:2] if kf else []
     if not parts and procs:
-        parts = [procs[0].get("action", "")]
-    text = ". ".join(p.rstrip(".") for p in parts if p) + "."
-    return text if text.strip(".") else "Information not available in this excerpt."
+        act = _clean(procs[0].get("action", ""))
+        if act:
+            parts = [act]
+    if not parts:
+        return "Information not available in this excerpt."
+    if len(parts) == 1:
+        return _cap(parts[0]) + "."
+    return _cap(parts[0]) + ", and " + _decap(parts[1]) + "."
 
 
 def format_cot_answer(trace: dict, direct_answer: str) -> str:

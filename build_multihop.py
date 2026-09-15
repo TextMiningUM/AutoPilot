@@ -59,21 +59,33 @@ def concept_signature(trace: dict) -> set[str]:
     return sig
 
 
+def _clean(s: str | None) -> str:
+    return (s or "").strip().rstrip(". ").strip()
+
+
 def summarize_trace(trace: dict) -> str:
     t = trace.get("trace") or {}
-    parts: list[str] = []
-    if t.get("situation"): parts.append(t["situation"].rstrip("."))
+    sentences: list[str] = []
+    situation = _clean(t.get("situation"))
+    if situation:
+        sentences.append(situation[:1].upper() + situation[1:] + ".")
     procs = t.get("procedures") or []
     if procs:
-        acts = "; ".join(f"{p.get('action','').rstrip('.')}" for p in procs[:4])
-        parts.append(f"steps: {acts}")
-    if t.get("channels"):
-        parts.append(f"channels: {', '.join(str(c) for c in t['channels'])}")
-    if t.get("prowords_used"):
-        parts.append(f"prowords: {', '.join(t['prowords_used'])}")
+        acts = [_clean(p.get("action", "")) for p in procs[:4]]
+        acts = [a for a in acts if a]
+        if acts:
+            joined = acts[0] if len(acts) == 1 else "; then ".join(a[:1].lower() + a[1:] for a in acts)
+            sentences.append(f"The steps are: {joined}.")
+    channels = t.get("channels") or []
+    if channels:
+        sentences.append(f"Use {', '.join(str(c) for c in channels)}.")
+    prowords = t.get("prowords_used") or []
+    if prowords:
+        sentences.append(f"Use the prowords {', '.join(prowords)}.")
     kf = t.get("key_facts") or []
-    if kf: parts.append(kf[0].rstrip("."))
-    return ". ".join(parts) + "."
+    if kf:
+        sentences.append(_clean(kf[0]) + ".")
+    return " ".join(sentences)
 
 
 def compose_multihop_question(concept: str, tr_a: dict, tr_b: dict) -> str:

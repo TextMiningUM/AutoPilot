@@ -60,90 +60,125 @@ def load_jsonl(path):
             except Exception: continue
 
 
-def build_chosen_answer(trace: dict) -> str:
-    """Full correct answer with steps + channels + prowords + warnings + outcome."""
-    parts: list[str] = []
-    if trace.get("situation"): parts.append(trace["situation"].rstrip("."))
-    procs = trace.get("procedures") or []
-    if procs:
-        steps = "; ".join(f"{p.get('step','?')}. {p.get('action','').rstrip('.')}" for p in procs)
-        parts.append(f"Procedure: {steps}.")
-    if trace.get("channels"):
-        parts.append(f"Channels: {', '.join(str(c) for c in trace['channels'])}.")
-    if trace.get("prowords_used"):
-        parts.append(f"Prowords: {', '.join(trace['prowords_used'])}.")
-    if trace.get("regulations"):
-        parts.append(f"Regulations: {', '.join(trace['regulations'])}.")
-    warnings = trace.get("warnings") or []
+def _clean(s: str | None) -> str:
+    return (s or "").strip().rstrip(". ").strip()
+
+
+def _cap(s: str) -> str:
+    return s[:1].upper() + s[1:] if s else s
+
+
+def _decap(s: str) -> str:
+    if not s:
+        return s
+    first_word = s.split(" ", 1)[0]
+    if len(first_word) > 1 and first_word.isupper():
+        return s  # don't mangle acronyms like VHF, GMDSS, ITU
+    return s[:1].lower() + s[1:]
+
+
+def build_chosen_answer(
+    trace: dict,
+    *,
+    procs: list | None = None,
+    channels: list | None = None,
+    prowords: list | None = None,
+    regulations: list | None = None,
+    warnings: list | None = None,
+) -> str:
+    """Fluent, natural-language answer assembled from trace fields.
+
+    Every perturbation below calls this SAME formatter with exactly one field
+    swapped out, so chosen/rejected only ever differ in substance -- never in
+    style -- which is what DPO should actually be learning to prefer.
+    """
+    procs       = trace.get("procedures")    if procs       is None else procs
+    channels    = trace.get("channels")      if channels    is None else channels
+    prowords    = trace.get("prowords_used") if prowords    is None else prowords
+    regulations = trace.get("regulations")   if regulations is None else regulations
+    warnings    = trace.get("warnings")      if warnings    is None else warnings
+    outcomes    = trace.get("outcomes") or []
+
+    sentences: list[str] = []
+
+    situation = _clean(trace.get("situation"))
+    if situation:
+        sentences.append(_cap(situation) + ".")
+
+    procs = procs or []
+    steps = [_clean(p.get("action", "")) for p in procs]
+    steps = [s for s in steps if s]
+    if steps:
+        if len(steps) == 1:
+            sentences.append(_cap(steps[0]) + ".")
+        else:
+            connectors = ["First", "Then", "Next", "After that", "Finally"]
+            pieces = [f"{connectors[i] if i < len(connectors) else 'Then'}, {_decap(s)}"
+                      for i, s in enumerate(steps)]
+            sentences.append("; ".join(pieces) + ".")
+
+    channels = [str(c) for c in (channels or [])]
+    if channels:
+        chs = [c if c.lower().startswith("channel") else f"Channel {c}" for c in channels]
+        joined = chs[0] if len(chs) == 1 else ", ".join(chs[:-1]) + f" and {chs[-1]}"
+        sentences.append(f"Use {joined}.")
+
+    prowords = prowords or []
+    if prowords:
+        sentences.append(f"Use the prowords {', '.join(prowords)} as appropriate.")
+
+    regulations = regulations or []
+    if regulations:
+        sentences.append(f"This follows {', '.join(regulations)}.")
+
+    warnings = warnings or []
     if warnings:
-        parts.append(f"Warning: {warnings[0].rstrip('.')}.")
-    if trace.get("outcomes"):
-        parts.append(f"Outcome: {trace['outcomes'][0].rstrip('.')}.")
-    return " ".join(parts).strip()
+        sentences.append(f"Be careful: {_decap(_clean(warnings[0]))}.")
+
+    if outcomes:
+        sentences.append(f"Done correctly, {_decap(_clean(outcomes[0]))}.")
+
+    return " ".join(sentences).strip()
 
 
-def perturb_wrong_channel(chosen: str, trace: dict) -> str | None:
+def perturb_wrong_channel(trace: dict) -> str | None:
     chans = [str(c).strip() for c in (trace.get("channels") or []) if str(c).strip()]
     if not chans: return None
-    replaced = chosen
-    changed = False
-    for c in chans:
-        alts = [x for x in CHANNEL_POOL if x != c and x != c.zfill(2)]
-        wrong = RNG.choice(alts)
-        for pat in (f"Channel {c}", f"channel {c}", f" {c},", f" {c}."):
-            if pat in replaced:
-                replaced = replaced.replace(pat, pat.replace(c, wrong), 1)
-                changed = True
-                break
-    return replaced if changed else None
+    idx = RNG.randrange(len(chans))
+    alts = [x for x in CHANNEL_POOL if x != chans[idx] and x != chans[idx].zfill(2)]
+    if not alts: return None
+    wrong = list(chans)
+    wrong[idx] = RNG.choice(alts)
+    return build_chosen_answer(trace, channels=wrong)
 
 
-def perturb_wrong_proword(chosen: str, trace: dict) -> str | None:
+def perturb_wrong_proword(trace: dict) -> str | None:
     pws = trace.get("prowords_used") or []
-    if not pws: return None
-    for pw in pws:
+    for idx, pw in enumerate(pws):
         swap = PROWORD_SWAPS.get(pw.upper())
-        if swap and pw.upper() in chosen.upper():
-            idx = chosen.upper().find(pw.upper())
-            return chosen[:idx] + swap + chosen[idx + len(pw):]
+        if swap:
+            wrong = list(pws)
+            wrong[idx] = swap
+            return build_chosen_answer(trace, prowords=wrong)
     return None
 
 
-def perturb_missing_step(chosen: str, trace: dict) -> str | None:
+def perturb_missing_step(trace: dict) -> str | None:
     procs = trace.get("procedures") or []
     if len(procs) < 2: return None
     drop_idx = RNG.randint(0, len(procs) - 1)
     kept = [p for i, p in enumerate(procs) if i != drop_idx]
-    parts: list[str] = []
-    if trace.get("situation"): parts.append(trace["situation"].rstrip("."))
-    steps = "; ".join(f"{i+1}. {p.get('action','').rstrip('.')}" for i, p in enumerate(kept))
-    parts.append(f"Procedure: {steps}.")
-    if trace.get("channels"):
-        parts.append(f"Channels: {', '.join(str(c) for c in trace['channels'])}.")
-    if trace.get("prowords_used"):
-        parts.append(f"Prowords: {', '.join(trace['prowords_used'])}.")
-    return " ".join(parts).strip()
+    return build_chosen_answer(trace, procs=kept)
 
 
-def perturb_drop_regulation(chosen: str, trace: dict) -> str | None:
-    regs = trace.get("regulations") or []
-    if not regs: return None
-    for r in regs:
-        needle = f"Regulations: {', '.join(regs)}."
-        if needle in chosen:
-            return chosen.replace(needle, "", 1).strip()
-        if r in chosen:
-            return chosen.replace(r, "", 1).strip()
-    return None
+def perturb_drop_regulation(trace: dict) -> str | None:
+    if not (trace.get("regulations") or []): return None
+    return build_chosen_answer(trace, regulations=[])
 
 
-def perturb_drop_warning(chosen: str, trace: dict) -> str | None:
-    warnings = trace.get("warnings") or []
-    if not warnings: return None
-    needle = f"Warning: {warnings[0].rstrip('.')}."
-    if needle in chosen:
-        return chosen.replace(needle, "", 1).strip()
-    return None
+def perturb_drop_warning(trace: dict) -> str | None:
+    if not (trace.get("warnings") or []): return None
+    return build_chosen_answer(trace, warnings=[])
 
 
 PERTURBATIONS = [
@@ -180,7 +215,7 @@ def main():
         if len(q) < 8: continue
 
         for kind, fn in PERTURBATIONS:
-            rej = fn(chosen, t)
+            rej = fn(t)
             if rej and rej != chosen and len(rej) >= 20:
                 candidates.append({
                     "source_chunk_id": rec["chunk_id"],

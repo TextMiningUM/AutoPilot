@@ -52,63 +52,118 @@ def load_jsonl(path):
             except Exception: continue
 
 
+def _clean(s: str | None) -> str:
+    return (s or "").strip().rstrip(". ").strip()
+
+
+def _cap(s: str) -> str:
+    return s[:1].upper() + s[1:] if s else s
+
+
+def _decap(s: str) -> str:
+    if not s:
+        return s
+    first_word = s.split(" ", 1)[0]
+    if len(first_word) > 1 and first_word.isupper():
+        return s  # don't mangle acronyms like VHF, GMDSS, ITU
+    return s[:1].lower() + s[1:]
+
+
+def _steps_sentence(procs: list[dict]) -> str:
+    steps = [_clean(p.get("action", "")) for p in procs]
+    steps = [s for s in steps if s]
+    if not steps:
+        return ""
+    if len(steps) == 1:
+        return _cap(steps[0]) + "."
+    connectors = ["First", "Then", "Next", "After that", "Finally"]
+    pieces = [f"{connectors[i] if i < len(connectors) else 'Then'}, {_decap(s)}"
+              for i, s in enumerate(steps)]
+    return "; ".join(pieces) + "."
+
+
 def full_answer(trace: dict) -> str:
-    parts: list[str] = []
-    if trace.get("situation"): parts.append(trace["situation"].rstrip("."))
-    procs = trace.get("procedures") or []
-    if procs:
-        steps = " ".join(f"{p.get('step','?')}. {p.get('action','').rstrip('.')}." for p in procs)
-        parts.append(f"Steps: {steps}")
-    if trace.get("channels"):
-        parts.append(f"Channels: {', '.join(str(c) for c in trace['channels'])}.")
-    if trace.get("prowords_used"):
-        parts.append(f"Prowords: {', '.join(trace['prowords_used'])}.")
-    if trace.get("warnings"):
-        parts.append(f"Warning: {trace['warnings'][0].rstrip('.')}.")
-    if trace.get("outcomes"):
-        parts.append(f"Outcome: {trace['outcomes'][0].rstrip('.')}.")
-    return " ".join(parts).strip()
+    """Fluent, natural-language answer (no 'Label: value.' dumps)."""
+    sentences: list[str] = []
+    situation = _clean(trace.get("situation"))
+    if situation:
+        sentences.append(_cap(situation) + ".")
+
+    steps_sentence = _steps_sentence(trace.get("procedures") or [])
+    if steps_sentence:
+        sentences.append(steps_sentence)
+
+    channels = [str(c) for c in (trace.get("channels") or [])]
+    if channels:
+        chs = [c if c.lower().startswith("channel") else f"Channel {c}" for c in channels]
+        joined = chs[0] if len(chs) == 1 else ", ".join(chs[:-1]) + f" and {chs[-1]}"
+        sentences.append(f"Use {joined}.")
+
+    prowords = trace.get("prowords_used") or []
+    if prowords:
+        sentences.append(f"Use the prowords {', '.join(prowords)} as appropriate.")
+
+    warnings = trace.get("warnings") or []
+    if warnings:
+        sentences.append(f"Be careful: {_decap(_clean(warnings[0]))}.")
+
+    outcomes = trace.get("outcomes") or []
+    if outcomes:
+        sentences.append(f"Done correctly, {_decap(_clean(outcomes[0]))}.")
+
+    return " ".join(sentences).strip()
 
 
 def draft_answer(trace: dict, mode: str) -> tuple[str, str]:
-    """Return (draft, what_was_dropped). mode in {'skip_step','skip_channels','skip_warning','skip_proword'}."""
-    parts: list[str] = []
+    """Return (draft, what_was_dropped). mode in {'skip_step','skip_channels','skip_warning','skip_proword'}.
+
+    Deliberately incomplete on purpose (that's the point of the exercise) but
+    still fluent prose, not a telegraphic label dump.
+    """
+    sentences: list[str] = []
     dropped = ""
     procs = trace.get("procedures") or []
-    channels = trace.get("channels") or []
+    channels = [str(c) for c in (trace.get("channels") or [])]
     prowords = trace.get("prowords_used") or []
     warnings = trace.get("warnings") or []
 
-    if trace.get("situation"): parts.append(trace["situation"].rstrip("."))
+    situation = _clean(trace.get("situation"))
+    if situation:
+        sentences.append(_cap(situation) + ".")
 
     if mode == "skip_step" and len(procs) >= 2:
         drop_idx = RNG.randint(1, len(procs) - 1)  # avoid dropping step 1
         kept = [p for i, p in enumerate(procs) if i != drop_idx]
         dropped_p = procs[drop_idx]
-        steps = " ".join(f"{i+1}. {p.get('action','').rstrip('.')}." for i, p in enumerate(kept))
-        parts.append(f"Steps: {steps}")
-        dropped = f"step '{dropped_p.get('action','').rstrip('.')}'"
-        if channels: parts.append(f"Channels: {', '.join(str(c) for c in channels)}.")
-        if prowords: parts.append(f"Prowords: {', '.join(prowords)}.")
+        sentences.append(_steps_sentence(kept))
+        dropped = f"the step '{_clean(dropped_p.get('action', ''))}'"
+        if channels:
+            chs = [c if c.lower().startswith("channel") else f"Channel {c}" for c in channels]
+            sentences.append(f"Use {chs[0] if len(chs) == 1 else ', '.join(chs[:-1]) + f' and {chs[-1]}'}.")
+        if prowords:
+            sentences.append(f"Use the prowords {', '.join(prowords)} as appropriate.")
     elif mode == "skip_channels" and channels and procs:
-        steps = " ".join(f"{i+1}. {p.get('action','').rstrip('.')}." for i, p in enumerate(procs))
-        parts.append(f"Steps: {steps}")
-        dropped = f"the channel numbers ({', '.join(str(c) for c in channels)})"
-        if prowords: parts.append(f"Prowords: {', '.join(prowords)}.")
+        sentences.append(_steps_sentence(procs))
+        dropped = f"the channel numbers ({', '.join(channels)})"
+        if prowords:
+            sentences.append(f"Use the prowords {', '.join(prowords)} as appropriate.")
     elif mode == "skip_warning" and warnings and procs:
-        steps = " ".join(f"{i+1}. {p.get('action','').rstrip('.')}." for i, p in enumerate(procs))
-        parts.append(f"Steps: {steps}")
-        if channels: parts.append(f"Channels: {', '.join(str(c) for c in channels)}.")
-        if prowords: parts.append(f"Prowords: {', '.join(prowords)}.")
-        dropped = f"the safety warning ('{warnings[0].rstrip('.')}')"
+        sentences.append(_steps_sentence(procs))
+        if channels:
+            chs = [c if c.lower().startswith("channel") else f"Channel {c}" for c in channels]
+            sentences.append(f"Use {chs[0] if len(chs) == 1 else ', '.join(chs[:-1]) + f' and {chs[-1]}'}.")
+        if prowords:
+            sentences.append(f"Use the prowords {', '.join(prowords)} as appropriate.")
+        dropped = f"the safety warning ('{_clean(warnings[0])}')"
     elif mode == "skip_proword" and prowords and procs:
-        steps = " ".join(f"{i+1}. {p.get('action','').rstrip('.')}." for i, p in enumerate(procs))
-        parts.append(f"Steps: {steps}")
-        if channels: parts.append(f"Channels: {', '.join(str(c) for c in channels)}.")
+        sentences.append(_steps_sentence(procs))
+        if channels:
+            chs = [c if c.lower().startswith("channel") else f"Channel {c}" for c in channels]
+            sentences.append(f"Use {chs[0] if len(chs) == 1 else ', '.join(chs[:-1]) + f' and {chs[-1]}'}.")
         dropped = f"the required prowords ({', '.join(prowords)})"
     else:
         return "", ""
-    return " ".join(parts).strip(), dropped
+    return " ".join(s for s in sentences if s).strip(), dropped
 
 
 def critique(dropped: str) -> str:

@@ -89,6 +89,10 @@ def main():
     ap.add_argument("--n-calibration", type=int, default=128)
     ap.add_argument("--group-size", type=int, default=128,
                     help="AWQ group size (128 is the standard)")
+    ap.add_argument("--skip-eval", action="store_true",
+                    help="no-op here (this script never evaluates) -- accepted so "
+                         "run_all.sh's uniform 'quantize --skip-eval' call doesn't error out; "
+                         "run eval_finetuned.py separately as printed below")
     args = ap.parse_args()
 
     try:
