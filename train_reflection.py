@@ -47,7 +47,9 @@ from trl import SFTTrainer, SFTConfig
 
 W = Path(__file__).resolve().parent
 CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
-MODELS = W / "_models"
+# AUTOPILOT_MODELS_DIR points at a shared cloud location (e.g. /srv/shared-models)
+# when set; otherwise falls back to the repo-local _models/ folder (laptop use).
+MODELS = Path(os.environ["AUTOPILOT_MODELS_DIR"]) if os.environ.get("AUTOPILOT_MODELS_DIR") else W / "_models"
 VHF_MODELS = MODELS / "VHF"
 VHF_MODELS.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
@@ -118,11 +120,16 @@ def main():
     ap.add_argument("--max_length", type=int, default=1024)
     ap.add_argument("--save_steps", type=int, default=25)
     ap.add_argument("--max_steps", type=int, default=-1, help="-1 = unlimited")
+    ap.add_argument("--force", action="store_true", help="retrain even if an adapter already exists in OUTPUT_DIR")
     args = ap.parse_args()
 
     print("=" * 70)
     print("VHF-QWEN — Stage 3 Reflection tuning (Draft/Critique/Refined)")
     print("=" * 70)
+
+    if (OUTPUT_DIR / "adapter_model.safetensors").exists() and not args.force:
+        print(f"Reflection adapter already exists at {OUTPUT_DIR} -- skipping (use --force to retrain).")
+        return
 
     if not SFT_ADAPTER.exists() or not DPO_ADAPTER.exists():
         raise SystemExit("Need both SFT and DPO adapters before this stage.")

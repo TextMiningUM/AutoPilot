@@ -55,7 +55,9 @@ from openai import OpenAI
 
 W = Path(__file__).resolve().parent
 CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
-MODELS = W / "_models"
+# AUTOPILOT_MODELS_DIR points at a shared cloud location (e.g. /srv/shared-models)
+# when set; otherwise falls back to the repo-local _models/ folder (laptop use).
+MODELS = Path(os.environ["AUTOPILOT_MODELS_DIR"]) if os.environ.get("AUTOPILOT_MODELS_DIR") else W / "_models"
 os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
 
 GOLD_FILE = W / "Data" / "VHF" / "VHF_Eval" / "vhf_gold_answers.json"

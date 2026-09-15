@@ -17,9 +17,10 @@ c.Authenticator.admin_users = {"ubuntu"}
 c.Authenticator.allow_all = True
 c.PAMAuthenticator.open_sessions = False
 
-# Every spawned single-user server starts in the shared project directory
-# regardless of the user's own $HOME.
-c.Spawner.notebook_dir = "/home/ubuntu/AutoPilot"
+# Every spawned single-user server starts in that user's OWN clone of the
+# repo (~/AutoPilot) -- each teammate has independent git history, so
+# nobody's pull/push conflicts with anyone else's.
+c.Spawner.notebook_dir = "~/AutoPilot"
 c.Spawner.default_url = "/lab"
 
 # The hub's proxy trusts nginx's X-Forwarded-* headers.

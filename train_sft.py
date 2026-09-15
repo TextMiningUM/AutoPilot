@@ -65,7 +65,9 @@ from trl import SFTTrainer, SFTConfig
 # ── Paths ────────────────────────────────────────────────────────────────
 W = Path(__file__).resolve().parent
 CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
-MODELS = W / "_models"
+# AUTOPILOT_MODELS_DIR points at a shared cloud location (e.g. /srv/shared-models)
+# when set; otherwise falls back to the repo-local _models/ folder (laptop use).
+MODELS = Path(os.environ["AUTOPILOT_MODELS_DIR"]) if os.environ.get("AUTOPILOT_MODELS_DIR") else W / "_models"
 VHF_MODELS = MODELS / "VHF"
 VHF_MODELS.mkdir(parents=True, exist_ok=True)
 MODELS.mkdir(exist_ok=True)
@@ -241,11 +243,16 @@ def main():
     ap.add_argument("--save_steps", type=int, default=25, help="checkpoint every N optimizer steps")
     ap.add_argument("--max_steps", type=int, default=-1, help="cap total steps (for smoke tests); -1 = unlimited")
     ap.add_argument("--resume", action="store_true", help="continue from latest checkpoint in output_dir")
+    ap.add_argument("--force", action="store_true", help="retrain even if an adapter already exists in OUTPUT_DIR")
     args = ap.parse_args()
 
     print("=" * 70)
     print("VHF-QWEN — Stage 1 SFT (Supervised Fine-Tuning with QLoRA)")
     print("=" * 70)
+
+    if (OUTPUT_DIR / "adapter_model.safetensors").exists() and not args.force:
+        print(f"SFT adapter already exists at {OUTPUT_DIR} -- skipping (use --force to retrain).")
+        return
 
     # --- Data ---
     print("\nLoading SFT datasets...")

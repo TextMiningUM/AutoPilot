@@ -62,7 +62,9 @@ from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
 W = Path(__file__).resolve().parent
 CACHE  = W / "Data" / "VHF" / "VHF_Agents_Training"
-MODELS = W / "_models"
+# AUTOPILOT_MODELS_DIR points at a shared cloud location (e.g. /srv/shared-models)
+# when set; otherwise falls back to the repo-local _models/ folder (laptop use).
+MODELS = Path(os.environ["AUTOPILOT_MODELS_DIR"]) if os.environ.get("AUTOPILOT_MODELS_DIR") else W / "_models"
 VHF_MODELS = MODELS / "VHF"
 os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
 
