@@ -133,8 +133,9 @@ def load_model_with_sft_merged():
         attn_implementation="sdpa",
     )
     model = PeftModel.from_pretrained(base, str(SFT_ADAPTER))
-    # For DPO we don't merge (keeps memory low); TRL uses adapter-disable trick
-    # to compute the reference logprobs, which is memory-optimal.
+    # Merge SFT LoRA into the base weights: newer TRL versions reject passing
+    # both an existing PeftModel and a fresh peft_config to DPOTrainer.
+    model = model.merge_and_unload()
     model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
     return model
 

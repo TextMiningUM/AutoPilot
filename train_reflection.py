@@ -91,6 +91,9 @@ def load_stacked_model():
     # SFT and DPO active as the frozen starting point, then add a fresh
     # trainable "reflect" adapter on top.
     model.set_adapter(["sft", "dpo"])
+    # Merge both frozen adapters into the base: newer TRL versions reject
+    # passing an existing PeftModel together with a fresh peft_config.
+    model = model.merge_and_unload()
     model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
     return model
 
