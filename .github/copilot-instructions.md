@@ -22,7 +22,7 @@ There are exactly two places this project runs, and they have **different respon
 | GPU | NVIDIA RTX 4070 Laptop, 8 GB VRAM | NVIDIA A30, 24 GB VRAM |
 | Workspace | `C:\Users\jcsch\Documents\Python\Auto Pilot` | `/home/ubuntu/AutoPilot` |
 | Python env | `.venv` (project-local) | `.venv` (project-local, same layout) |
-| SSH | n/a | `ssh -i "C:\Users\jcsch\Documents\Python\LeafCloud\AutoPilot\KeyPairAutoPilot.txt" ubuntu@45.135.57.191` (key file is local-only, never committed) |
+| SSH | n/a | key file + host/user are kept in local-only notes (never committed) |
 | What runs here | Data pipeline: JSON parsing (§8), chunking/RAG/KG (§9-10), reasoning-trace extraction (§11, OpenAI API calls), all `build_*.py` dataset builders (§12/§12.5/§12.6). Also used to sanity-check that `train_sft.py`/`train_dpo.py`/`train_reflection.py`'s data-loading functions (`load_all_sft()`, `load_dpo()`, `load_reflection()`) run cleanly against the current datasets — **without** loading the actual model. | **All actual QLoRA fine-tuning, merging, AWQ quantization, pruning, distillation, and evaluation** (`train_sft.py`, `train_dpo.py`, `train_reflection.py`, `merge_adapter.py`, `compress_*.py`, `eval_finetuned.py`, `eval_colreg_scenarios.py`, ablation). |
 | Why the split | 8 GB VRAM is enough to verify the data pipeline and run tiny smoke tests, but a full SFT→DPO→Reflection→AWQ→prune→distill→ablation chain takes 8-12+ hours — that needs the cloud's 24 GB A30 and needs to survive disconnects. | See `tmux` note below. |
 
@@ -51,4 +51,4 @@ Any script generating training Q&A must embed questions and drop any with cosine
 ## Repo conventions
 
 - Only `Docs/`, `.env`, and `_models/` are gitignored. Everything else — including all generated `Data/VHF/VHF_Agents_Training/*.jsonl` and `Data/VHF/VHF_JSON/*.json` — is tracked in git and must be committed (models are the only thing too large for git).
-- Cloud repo (`ubuntu@45.135.57.191:/home/ubuntu/AutoPilot`) frequently has stale local modifications to tracked data files from in-progress runs. Never do a plain `git pull` there — use `git fetch` + scoped `git checkout origin/main -- <files>`, or `git stash --include-untracked && git reset --hard origin/main` when a full resync is intended.
+- The cloud repo (path: `~/AutoPilot` on the GPU pod) frequently has stale local modifications to tracked data files from in-progress runs. Never do a plain `git pull` there — use `git fetch` + scoped `git checkout origin/main -- <files>`, or `git stash --include-untracked && git reset --hard origin/main` when a full resync is intended.
