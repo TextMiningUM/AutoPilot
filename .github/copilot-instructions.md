@@ -12,6 +12,26 @@ Every stage of the VHF pipeline (training-data generation AND evaluation) has **
 
 Both tracks feed the **same** QLoRA fine-tune (`train_sft.py`/`train_dpo.py`/`train_reflection.py` each load a list of files spanning both tracks), but stay in **separate files** so each competency's contribution is traceable. Every model tag (`qwen_base`, `vhf_qwen`, `vhf_qwen_awq`, `distill_vhf`) must be evaluated on **both** tracks — never just one.
 
+## Local vs cloud: two environments, different jobs
+
+There are exactly two places this project runs, and they have **different responsibilities** — don't blur them:
+
+| | Local (laptop) | Cloud (LeafCloud GPU pod) |
+|---|---|---|
+| OS | Windows | Ubuntu |
+| GPU | NVIDIA RTX 4070 Laptop, 8 GB VRAM | NVIDIA A30, 24 GB VRAM |
+| Workspace | `C:\Users\jcsch\Documents\Python\Auto Pilot` | `/home/ubuntu/AutoPilot` |
+| Python env | `.venv` (project-local) | `.venv` (project-local, same layout) |
+| SSH | n/a | `ssh -i "C:\Users\jcsch\Documents\Python\LeafCloud\AutoPilot\KeyPairAutoPilot.txt" ubuntu@45.135.57.191` (key file is local-only, never committed) |
+| What runs here | Data pipeline: JSON parsing (§8), chunking/RAG/KG (§9-10), reasoning-trace extraction (§11, OpenAI API calls), all `build_*.py` dataset builders (§12/§12.5/§12.6). Also used to sanity-check that `train_sft.py`/`train_dpo.py`/`train_reflection.py`'s data-loading functions (`load_all_sft()`, `load_dpo()`, `load_reflection()`) run cleanly against the current datasets — **without** loading the actual model. | **All actual QLoRA fine-tuning, merging, AWQ quantization, pruning, distillation, and evaluation** (`train_sft.py`, `train_dpo.py`, `train_reflection.py`, `merge_adapter.py`, `compress_*.py`, `eval_finetuned.py`, `eval_colreg_scenarios.py`, ablation). |
+| Why the split | 8 GB VRAM is enough to verify the data pipeline and run tiny smoke tests, but a full SFT→DPO→Reflection→AWQ→prune→distill→ablation chain takes 8-12+ hours — that needs the cloud's 24 GB A30 and needs to survive disconnects. | See `tmux` note below. |
+
+**Rule of thumb: never launch actual model training/compression/distillation locally.** Verify data changes locally (fast, free, no GPU risk), then push to git and run the real training chain only on the cloud.
+
+`AUTOPILOT_MODELS_DIR` env var (used by `train_sft.py`, `merge_adapter.py`, `compress_*.py`, `eval_finetuned.py`) points at a shared cloud model-storage location when set, so multiple users/clones on the pod don't each download/merge their own multi-GB copy of Qwen2.5-7B; falls back to the repo-local `_models/` when unset (laptop use).
+
+The cloud pod also runs a multi-user **JupyterHub** (`/etc/jupyterhub/jupyterhub_config.py`) so the notebook can be opened there interactively too — but see the next section for why the heavy chain doesn't run through it.
+
 ## The notebook and `cloud/run_all.sh` are two independent front-ends to the SAME scripts
 
 `VHF_Agent_Training_Pipeline.ipynb` and `cloud/run_all.sh` both call the exact same standalone `.py` scripts via subprocess (`build_sft.py`, `train_sft.py`, `eval_finetuned.py`, `eval_colreg_scenarios.py`, ...). No pipeline logic lives in either of them directly.
