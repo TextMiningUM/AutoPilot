@@ -12,7 +12,7 @@ Contamination filter against 540 gold questions.
 Output: _cache/vhf_multihop.jsonl
 """
 from __future__ import annotations
-import json, random
+import json, random, argparse
 from collections import defaultdict
 from pathlib import Path
 
@@ -119,8 +119,21 @@ def compose_multihop_answer(concept: str, tr_a: dict, tr_b: dict) -> str:
 
 
 def main():
-    traces = [t for t in load_jsonl(TRACES_FILE)
-              if t.get("trace") and not t.get("skip") and not t.get("error")]
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--traces-file", type=str, nargs="+", default=[str(TRACES_FILE)],
+                    help="one or more traces files -- pass both protocol and conversation "
+                         "traces to get cross-track multi-hop pairs")
+    ap.add_argument("--out-file", type=str, default=str(OUT_FILE))
+    ap.add_argument("--extra-gold-file", type=str, default=None,
+                    help="optional 2nd held-out file to also filter against (e.g. vhf_colreg_scenarios.json)")
+    ap.add_argument("--extra-gold-key", type=str, default="question")
+    args = ap.parse_args()
+
+    out_file = Path(args.out_file)
+    traces: list[dict] = []
+    for tf in args.traces_file:
+        traces.extend(t for t in load_jsonl(Path(tf))
+                       if t.get("trace") and not t.get("skip") and not t.get("error"))
     print(f"Usable traces: {len(traces)}")
 
     # Index by concept
@@ -145,7 +158,12 @@ def main():
     print("Loading embedder + gold-Q embeddings...")
     model = SentenceTransformer("all-MiniLM-L6-v2")
     gold = json.loads(GOLD_FILE.read_text(encoding="utf-8"))
-    gold_embs = model.encode([g["question"] for g in gold],
+    gold_questions = [g["question"] for g in gold]
+    if args.extra_gold_file:
+        extra = json.loads(Path(args.extra_gold_file).read_text(encoding="utf-8"))
+        gold_questions += [g[args.extra_gold_key] for g in extra if g.get(args.extra_gold_key)]
+        print(f"  + {len(extra)} extra held-out questions from {args.extra_gold_file}")
+    gold_embs = model.encode(gold_questions,
                              normalize_embeddings=True, batch_size=64,
                              show_progress_bar=False)
 
@@ -198,7 +216,7 @@ def main():
         kept.append(p)
     print(f"kept={len(kept)} contam_dropped={dropped}")
 
-    with OUT_FILE.open("w", encoding="utf-8") as f:
+    with out_file.open("w", encoding="utf-8") as f:
         for i, p in enumerate(kept):
             f.write(json.dumps({
                 "id": f"mh_{i:04d}",
@@ -215,7 +233,7 @@ def main():
                     {"role": "assistant", "content": p["answer"]},
                 ],
             }, ensure_ascii=False) + "\n")
-    print(f"Wrote {OUT_FILE.name}  ({OUT_FILE.stat().st_size/1024:.1f} KB)  rows={len(kept)}")
+    print(f"Wrote {out_file.name}  ({out_file.stat().st_size/1024:.1f} KB)  rows={len(kept)}")
 
 
 if __name__ == "__main__":

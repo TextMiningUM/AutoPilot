@@ -10,6 +10,7 @@ Contamination filter against 540 gold questions (cos >= 0.85 dropped).
 """
 from __future__ import annotations
 import json
+import argparse
 from pathlib import Path
 
 import numpy as np
@@ -191,7 +192,23 @@ def format_cot_answer(trace: dict, direct_answer: str) -> str:
 
 
 def main():
-    traces = [t for t in load_jsonl(TRACES_FILE)
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--traces-file", type=str, default=str(TRACES_FILE),
+                    help="reasoning traces to build from (default: protocol traces / Track 1)")
+    ap.add_argument("--out-prefix", type=str, default="vhf_sft",
+                    help="outputs become <prefix>_direct.jsonl / _cot.jsonl / _rag.jsonl / _stats.json")
+    ap.add_argument("--extra-gold-file", type=str, default=None,
+                    help="optional 2nd held-out file to also filter against (e.g. vhf_colreg_scenarios.json)")
+    ap.add_argument("--extra-gold-key", type=str, default="question")
+    args = ap.parse_args()
+
+    traces_file = Path(args.traces_file)
+    direct_out  = CACHE / f"{args.out_prefix}_direct.jsonl"
+    cot_out     = CACHE / f"{args.out_prefix}_cot.jsonl"
+    rag_out     = CACHE / f"{args.out_prefix}_rag.jsonl"
+    stats_out   = CACHE / f"{args.out_prefix}_stats.json"
+
+    traces = [t for t in load_jsonl(traces_file)
               if t.get("trace") and not t.get("skip") and not t.get("error")]
     print(f"Usable traces: {len(traces)}")
 
@@ -204,7 +221,12 @@ def main():
 
     print("Loading embedder + gold-Q embeddings for contamination filter...")
     model = SentenceTransformer("all-MiniLM-L6-v2")
-    gold_embs = model.encode([g["question"] for g in gold],
+    gold_questions = [g["question"] for g in gold]
+    if args.extra_gold_file:
+        extra = json.loads(Path(args.extra_gold_file).read_text(encoding="utf-8"))
+        gold_questions += [g[args.extra_gold_key] for g in extra if g.get(args.extra_gold_key)]
+        print(f"  + {len(extra)} extra held-out questions from {args.extra_gold_file}")
+    gold_embs = model.encode(gold_questions,
                              normalize_embeddings=True, batch_size=64,
                              show_progress_bar=False)
 
@@ -252,8 +274,8 @@ def main():
     print(f"kept={len(kept)}  contam_dropped={contam_drop}  dedup_dropped={dedup_drop}")
 
     # ── Emit direct + cot ─────────────────────────────────────────────────
-    print(f"\nWriting {DIRECT_OUT.name} and {COT_OUT.name}...")
-    with DIRECT_OUT.open("w", encoding="utf-8") as fd, COT_OUT.open("w", encoding="utf-8") as fc:
+    print(f"\nWriting {direct_out.name} and {cot_out.name}...")
+    with direct_out.open("w", encoding="utf-8") as fd, cot_out.open("w", encoding="utf-8") as fc:
         for rec, angle, q, direct_ans, c_sim in kept:
             base = {
                 "source_chunk_id": rec["chunk_id"],
@@ -281,8 +303,8 @@ def main():
             }, ensure_ascii=False) + "\n")
 
     # ── Emit RAG ──────────────────────────────────────────────────────────
-    print(f"Writing {RAG_OUT.name} (KG top-3 context per Q)...")
-    with RAG_OUT.open("w", encoding="utf-8") as fr:
+    print(f"Writing {rag_out.name} (KG top-3 context per Q)...")
+    with rag_out.open("w", encoding="utf-8") as fr:
         for i, (rec, angle, q, direct_ans, c_sim) in enumerate(kept, 1):
             hits, q_cons, expanded = kg_retrieve(q, model, embs, ids, kg, k=3, dense_n=20)
             ctx = "\n\n".join(
@@ -322,11 +344,11 @@ def main():
         "kept":             len(kept),
         "contam_dropped":   contam_drop,
         "dedup_dropped":    dedup_drop,
-        "direct_bytes":     DIRECT_OUT.stat().st_size,
-        "cot_bytes":        COT_OUT.stat().st_size,
-        "rag_bytes":        RAG_OUT.stat().st_size,
+        "direct_bytes":     direct_out.stat().st_size,
+        "cot_bytes":        cot_out.stat().st_size,
+        "rag_bytes":        rag_out.stat().st_size,
     }
-    STATS_OUT.write_text(json.dumps(stats, indent=2))
+    stats_out.write_text(json.dumps(stats, indent=2))
     print(f"\n{json.dumps(stats, indent=2)}")
 
 

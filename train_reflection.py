@@ -58,15 +58,24 @@ MODEL_ID     = "Qwen/Qwen2.5-7B-Instruct"
 SFT_ADAPTER  = VHF_MODELS / "vhf_qwen_sft_lora"
 DPO_ADAPTER  = VHF_MODELS / "vhf_qwen_dpo_lora"
 OUTPUT_DIR   = VHF_MODELS / "vhf_qwen_reflect_lora"
-REFL_FILE    = CACHE / "vhf_reflection.jsonl"
+# Track 1 (protocol-derived) + Track 2 (mined from the 360 training
+# conversations -- see notebook § 12.6) reflection triples, trained together.
+REFL_FILES   = [
+    CACHE / "vhf_reflection.jsonl",
+    CACHE / "vhf_colreg_reflection.jsonl",
+]
 
 
 def load_reflection() -> Dataset:
     rows = []
-    with REFL_FILE.open("r", encoding="utf-8") as f:
-        for line in f:
-            r = json.loads(line)
-            rows.append({"messages": r["messages"]})
+    for path in REFL_FILES:
+        if not path.exists():
+            print(f"  (skipping {path.name} -- not found)")
+            continue
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                r = json.loads(line)
+                rows.append({"messages": r["messages"]})
     ds = Dataset.from_list(rows).shuffle(seed=91)
     print(f"Reflection rows: {len(ds)}")
     return ds

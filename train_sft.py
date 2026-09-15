@@ -92,6 +92,15 @@ SFT_DATASETS = [
     # dialogues, evaluated in § 16.5). Kept as its own file (never merged into
     # the Track 1 JSONLs) so each track's contribution stays traceable.
     CACHE / "vhf_conversations.jsonl",
+    # Track 2 (continued) -- agentic training data MINED from the 360 training
+    # conversations (never the held-out vhf_colreg_scenarios.json eval set) via
+    # extract_conversation_reasoning.py + build_sft.py/build_multihop.py, so
+    # Track 2 also gets RAG/CoT-style single-turn Q->A and cross-track
+    # multi-hop pairs, not just raw dialogue (see notebook § 12.6).
+    CACHE / "vhf_colreg_sft_direct.jsonl",
+    CACHE / "vhf_colreg_sft_cot.jsonl",
+    CACHE / "vhf_colreg_sft_rag.jsonl",
+    CACHE / "vhf_colreg_multihop.jsonl",
 ]
 
 

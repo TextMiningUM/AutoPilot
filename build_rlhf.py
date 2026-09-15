@@ -15,7 +15,7 @@ Output: _cache/vhf_dpo_pairs.jsonl
 Format compatible with TRL DPOTrainer: {prompt, chosen, rejected, metadata}
 """
 from __future__ import annotations
-import json, random
+import json, random, argparse
 from pathlib import Path
 
 import numpy as np
@@ -191,14 +191,30 @@ PERTURBATIONS = [
 
 
 def main():
-    traces = [t for t in load_jsonl(TRACES_FILE)
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--traces-file", type=str, default=str(TRACES_FILE))
+    ap.add_argument("--out-file", type=str, default=str(OUT_FILE))
+    ap.add_argument("--extra-gold-file", type=str, default=None,
+                    help="optional 2nd held-out file to also filter against (e.g. vhf_colreg_scenarios.json)")
+    ap.add_argument("--extra-gold-key", type=str, default="question")
+    args = ap.parse_args()
+
+    traces_file = Path(args.traces_file)
+    out_file    = Path(args.out_file)
+
+    traces = [t for t in load_jsonl(traces_file)
               if t.get("trace") and not t.get("skip") and not t.get("error")]
     print(f"Usable traces: {len(traces)}")
 
     print("Loading embedder + gold-Q embeddings...")
     model = SentenceTransformer("all-MiniLM-L6-v2")
     gold = json.loads(GOLD_FILE.read_text(encoding="utf-8"))
-    gold_embs = model.encode([g["question"] for g in gold],
+    gold_questions = [g["question"] for g in gold]
+    if args.extra_gold_file:
+        extra = json.loads(Path(args.extra_gold_file).read_text(encoding="utf-8"))
+        gold_questions += [g[args.extra_gold_key] for g in extra if g.get(args.extra_gold_key)]
+        print(f"  + {len(extra)} extra held-out questions from {args.extra_gold_file}")
+    gold_embs = model.encode(gold_questions,
                              normalize_embeddings=True, batch_size=64,
                              show_progress_bar=False)
 
@@ -246,7 +262,7 @@ def main():
         kept.append(c)
     print(f"kept={len(kept)}  contam_dropped={dropped}")
 
-    with OUT_FILE.open("w", encoding="utf-8") as f:
+    with out_file.open("w", encoding="utf-8") as f:
         for i, r in enumerate(kept):
             row = {
                 "id":           f"dpo_{i:05d}",
@@ -264,7 +280,7 @@ def main():
                 "rejected": [{"role": "assistant", "content": r["rejected"]}],
             }
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    print(f"Wrote {OUT_FILE.name}  ({OUT_FILE.stat().st_size/1024:.1f} KB)  rows={len(kept)}")
+    print(f"Wrote {out_file.name}  ({out_file.stat().st_size/1024:.1f} KB)  rows={len(kept)}")
 
 
 if __name__ == "__main__":

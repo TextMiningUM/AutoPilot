@@ -17,6 +17,13 @@ FILES = [
     ("Multi-hop",    CACHE / "vhf_multihop.jsonl"),
     ("DPO pairs",    CACHE / "vhf_dpo_pairs.jsonl"),
     ("Reflection",   CACHE / "vhf_reflection.jsonl"),
+    ("Conversations (Track 2)",      CACHE / "vhf_conversations.jsonl"),
+    ("Colreg SFT direct (Track 2)",  CACHE / "vhf_colreg_sft_direct.jsonl"),
+    ("Colreg SFT CoT (Track 2)",     CACHE / "vhf_colreg_sft_cot.jsonl"),
+    ("Colreg SFT RAG (Track 2)",     CACHE / "vhf_colreg_sft_rag.jsonl"),
+    ("Colreg Multi-hop (Track 2)",   CACHE / "vhf_colreg_multihop.jsonl"),
+    ("Colreg DPO pairs (Track 2)",   CACHE / "vhf_colreg_dpo_pairs.jsonl"),
+    ("Colreg Reflection (Track 2)",  CACHE / "vhf_colreg_reflection.jsonl"),
 ]
 GOLD = W / "Data" / "VHF" / "VHF_Eval" / "vhf_gold_answers.json"
 
