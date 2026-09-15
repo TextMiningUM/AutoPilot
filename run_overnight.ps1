@@ -15,7 +15,7 @@
 #   07 Distill       compress_distill.py    OPTIONAL (~2-4 h)   student LoRA
 #   08 Eval Distill  eval_finetuned.py      OPTIONAL (~40 min)  full 540-Q evaluation
 #
-# AWQ (§ 17) is intentionally skipped — it needs `pip install autoawq` first
+# AWQ (§ 17) is intentionally skipped -- it needs `pip install autoawq` first
 # and would otherwise abort the chain.
 #
 # If a REQUIRED stage fails, the chain aborts. If an OPTIONAL stage fails, we
@@ -56,7 +56,7 @@ function Run-Stage($idx, $name, [string[]]$scriptArgs, [bool]$required) {
 
     if ($rc -ne 0) {
         if ($required) {
-            Write-Master ("!!! REQUIRED STAGE FAILED — aborting chain.")
+            Write-Master ("!!! REQUIRED STAGE FAILED -- aborting chain.")
             throw "Stage $tag failed with exit code $rc"
         } else {
             Write-Master ("... optional stage failed, continuing.")
