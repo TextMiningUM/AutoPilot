@@ -84,13 +84,12 @@ def load_stacked_model():
         torch_dtype=torch.bfloat16, attn_implementation="sdpa",
     )
     print(f"Attaching SFT adapter from {SFT_ADAPTER}...")
-    model = PeftModel.from_pretrained(base, str(SFT_ADAPTER), adapter_name="sft")
+    model = PeftModel.from_pretrained(base, str(SFT_ADAPTER))
+    # Merge SFT before attaching DPO: this PEFT version's set_adapter() only
+    # accepts a single adapter name, not a list of simultaneously-active ones.
+    model = model.merge_and_unload()
     print(f"Attaching DPO adapter from {DPO_ADAPTER}...")
-    model.load_adapter(str(DPO_ADAPTER), adapter_name="dpo")
-    # PEFT active adapter = which one the LoRA delta uses.  We want BOTH
-    # SFT and DPO active as the frozen starting point, then add a fresh
-    # trainable "reflect" adapter on top.
-    model.set_adapter(["sft", "dpo"])
+    model = PeftModel.from_pretrained(model, str(DPO_ADAPTER))
     # Merge both frozen adapters into the base: newer TRL versions reject
     # passing an existing PeftModel together with a fresh peft_config.
     model = model.merge_and_unload()

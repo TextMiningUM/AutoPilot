@@ -75,6 +75,7 @@ def main():
 
     # ── Aggregate per config ─────────────────────────────────────────────
     per_cfg: dict[str, dict[str, list[float]]] = defaultdict(lambda: {k: [] for k in METRIC_KEYS})
+    per_cfg_latency: dict[str, list[float]] = defaultdict(list)
     with SCORED_FILE.open("r", encoding="utf-8") as f:
         for line in f:
             r = json.loads(line)
@@ -83,10 +84,18 @@ def main():
                 v = r["metrics"].get(k)
                 if v is None or (isinstance(v, float) and math.isnan(v)): continue
                 per_cfg[cfg][k].append(v)
+            if r.get("latency_s"):
+                per_cfg_latency[cfg].append(r["latency_s"])
 
     summary = {}
     for cfg, mets in per_cfg.items():
-        summary[cfg] = {k: round(float(np.mean(v)), 3) if v else None for k, v in mets.items()}
+        lat = sorted(per_cfg_latency.get(cfg, []))
+        n = len(lat)
+        summary[cfg] = {
+            **{k: round(float(np.mean(v)), 3) if v else None for k, v in mets.items()},
+            "latency_mean_s": round(sum(lat) / n, 3) if n else None,
+            "latency_p50_s":  round(lat[n // 2], 3) if n else None,
+        }
     SUMMARY_FILE.write_text(json.dumps(summary, indent=2))
 
     # ── Print comparison table ──────────────────────────────────────────

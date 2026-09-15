@@ -219,6 +219,19 @@ def composite(m: dict) -> float:
     return num / den if den > 0 else math.nan
 
 
+# ── Latency helper ────────────────────────────────────────────────────────
+def _latency_stats(sorted_vals: list[float]) -> dict:
+    """Mean/p50/p95 latency in seconds; None fields if no data."""
+    if not sorted_vals:
+        return {"mean_s": None, "p50_s": None, "p95_s": None}
+    n = len(sorted_vals)
+    return {
+        "mean_s": round(sum(sorted_vals) / n, 3),
+        "p50_s":  round(sorted_vals[n // 2], 3),
+        "p95_s":  round(sorted_vals[min(n - 1, int(n * 0.95))], 3),
+    }
+
+
 # ── Main ─────────────────────────────────────────────────────────────────
 def main():
     ap = argparse.ArgumentParser()
@@ -292,8 +305,12 @@ def main():
                 if v is None or (isinstance(v, float) and math.isnan(v)): continue
                 sums[k] += v; cnts[k] += 1
     means = {k: round(sums[k]/cnts[k], 3) if cnts[k] else None for k in keys}
+
+    latencies = sorted(r["latency_s"] for r in gen_records if r.get("latency_s"))
+    lat_stats = _latency_stats(latencies)
+
     summary = {"model": args.model, "tag": tag, "n": len(gen_records),
-               "means": means, "counts": cnts}
+               "means": means, "counts": cnts, "latency": lat_stats}
     summary_out.write_text(json.dumps(summary, indent=2))
 
     print("\n" + "=" * 60)
