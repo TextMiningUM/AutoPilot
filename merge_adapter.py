@@ -46,7 +46,9 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
 
 W = Path(__file__).resolve().parent
-MODELS = W / "_models"
+# AUTOPILOT_MODELS_DIR points at a shared cloud location (e.g. /srv/shared-models)
+# when set; otherwise falls back to the repo-local _models/ folder (laptop use).
+MODELS = Path(os.environ["AUTOPILOT_MODELS_DIR"]) if os.environ.get("AUTOPILOT_MODELS_DIR") else W / "_models"
 VHF_MODELS = MODELS / "VHF"
 VHF_MODELS.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
@@ -65,6 +67,7 @@ def main():
     ap.add_argument("--reflect", action="store_true", help="apply reflection adapter (default: yes)")
     ap.add_argument("--sft-only", action="store_true", help="only SFT (skip DPO+reflect)")
     ap.add_argument("--output", type=str, default=str(DEFAULT_OUT))
+    ap.add_argument("--force", action="store_true", help="re-merge even if --output already contains a merged model")
     args = ap.parse_args()
 
     # If no explicit stage flags, apply all three by default.
@@ -74,6 +77,9 @@ def main():
         args.dpo = args.reflect = False
 
     out = Path(args.output)
+    if (out / "config.json").exists() and not args.force:
+        print(f"Merged model already exists at {out} -- skipping (use --force to re-merge).")
+        return
     if out.exists():
         print(f"WARN: {out} exists. Removing.")
         shutil.rmtree(out)
@@ -81,28 +87,31 @@ def main():
 
     # --- Load base in fp16 (needed for merging; 4-bit doesn't merge cleanly) ---
     print(f"Loading base {MODEL_ID} in bf16 (this uses ~14 GB — spill into shared memory OK)...")
+    offload_dir = W / "_offload"
+    offload_dir.mkdir(exist_ok=True)
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID,
         torch_dtype=torch.bfloat16,
         device_map="auto",
         low_cpu_mem_usage=True,
+        offload_folder=str(offload_dir),
     )
     tok = AutoTokenizer.from_pretrained(MODEL_ID)
 
     # --- Apply adapters in training order ---
     if args.sft:
         print(f"Applying SFT adapter: {SFT_ADAPTER}")
-        model = PeftModel.from_pretrained(model, str(SFT_ADAPTER))
+        model = PeftModel.from_pretrained(model, str(SFT_ADAPTER), offload_folder=str(offload_dir))
         model = model.merge_and_unload()
         print("  merged.")
     if args.dpo:
         print(f"Applying DPO adapter: {DPO_ADAPTER}")
-        model = PeftModel.from_pretrained(model, str(DPO_ADAPTER))
+        model = PeftModel.from_pretrained(model, str(DPO_ADAPTER), offload_folder=str(offload_dir))
         model = model.merge_and_unload()
         print("  merged.")
     if args.reflect:
         print(f"Applying reflection adapter: {REFL_ADAPTER}")
-        model = PeftModel.from_pretrained(model, str(REFL_ADAPTER))
+        model = PeftModel.from_pretrained(model, str(REFL_ADAPTER), offload_folder=str(offload_dir))
         model = model.merge_and_unload()
         print("  merged.")
 
