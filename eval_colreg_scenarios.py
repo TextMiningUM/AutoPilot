@@ -114,7 +114,7 @@ def judge_colreg_correct(client: OpenAI, scenario: str, question: str, rules: li
 
 # ── Rule-based procedure checks (no LLM needed) ──────────────────────────
 _CHANNEL_NUM_RE = re.compile(r"\bchannel\s+(\d{1,2}[A]?)\b", re.IGNORECASE)
-_QUOTE_RE = re.compile(r'"([^"]{5,250})"')
+_QUOTE_RE = re.compile(r'["\']([^"\']{5,250})["\']')
 
 
 def channel_procedure_score(pred: str) -> float:
@@ -135,16 +135,16 @@ def call_format_score(own_vessel: str, pred: str) -> float | None:
     own = own_vessel.split(",")[0].replace("MV ", "").replace("M/V ", "").strip().upper()
     if not own:
         return None
-    m = _QUOTE_RE.search(pred)
-    if not m:
-        return None
-    quoted = m.group(1).upper()
-    this_is = re.search(r"THIS IS ([A-Z][A-Z ]{2,40})", quoted)
+    # Combine all quoted fragments -- models sometimes split one transmission across
+    # multiple short quotes (e.g. 'x' 'y' instead of one "x ... y").
+    quotes = _QUOTE_RE.findall(pred)
+    combined = " ".join(quotes).upper()
+    this_is = re.search(r"THIS IS ([A-Z][A-Z ]{2,40})", combined)
     if not this_is:
         return None
     # Bad: own vessel's name appears in the "THIS IS <caller>" slot AND also as the
     # first-named (called) station -- i.e. own vessel calling itself.
-    called_first = quoted.split("THIS IS")[0]
+    called_first = combined.split("THIS IS")[0]
     self_hail = own in this_is.group(1) and own in called_first
     return 0.0 if self_hail else 1.0
 
