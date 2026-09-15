@@ -220,7 +220,14 @@ def make_sft_config(args) -> SFTConfig:
         cfg["max_seq_length"] = args.max_seq_length
     if args.max_steps and args.max_steps > 0:
         cfg["max_steps"] = args.max_steps
-    return SFTConfig(**cfg)
+    try:
+        return SFTConfig(**cfg)
+    except NotImplementedError:
+        # Older `accelerate` (<1.1.0, e.g. Python 3.8 cloud images) rejects
+        # `data_seed`. Drop it and retry — `seed` alone still gives
+        # reproducible shuffling.
+        cfg.pop("data_seed", None)
+        return SFTConfig(**cfg)
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
