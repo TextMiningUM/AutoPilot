@@ -78,14 +78,22 @@ os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
 MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
 OUTPUT_DIR = VHF_MODELS / "vhf_qwen_sft_lora"
 
-# The four SFT datasets we built from the 30 protocol JSONs.
-# NOTE: gold eval data (vhf_gold_answers.json) is deliberately NOT included.
+# The SFT datasets we built from the 30 protocol JSONs, kept in TWO clearly
+# labeled tracks (see notebook § 12 for the full rationale):
+# NOTE: gold eval data (vhf_gold_answers.json / vhf_colreg_scenarios.json) is
+# deliberately NOT included in either track.
 SFT_DATASETS = [
+    # Track 1 -- rules & knowledge (single-turn Q->A, evaluated in § 16)
     CACHE / "vhf_sft_direct.jsonl",
     CACHE / "vhf_sft_cot.jsonl",
     CACHE / "vhf_sft_rag.jsonl",
     CACHE / "vhf_multihop.jsonl",
+    # Track 2 -- conversational compliance (multi-turn incoming/outgoing VHF
+    # dialogues, evaluated in § 16.5). Kept as its own file (never merged into
+    # the Track 1 JSONLs) so each track's contribution stays traceable.
+    CACHE / "vhf_conversations.jsonl",
 ]
+
 
 
 # ── Data loading ─────────────────────────────────────────────────────────
