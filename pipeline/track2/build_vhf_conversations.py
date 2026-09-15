@@ -51,7 +51,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from openai import OpenAI
 
-from build_vhf_colreg_scenarios import load_colreg_rules, REGIONS, VESSEL_TYPES
+from pipeline.track2.build_vhf_colreg_scenarios import load_colreg_rules, REGIONS, VESSEL_TYPES
 from core import AgentPaths, load_env
 
 paths = AgentPaths.vhf()

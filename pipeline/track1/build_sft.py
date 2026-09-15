@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from build_kg import kg_retrieve
+from pipeline.ingest.build_kg import kg_retrieve
 from core import AgentPaths, load_jsonl, clean as _clean, cap as _cap, decap as _decap
 
 paths = AgentPaths.vhf()

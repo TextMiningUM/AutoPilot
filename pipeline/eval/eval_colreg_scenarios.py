@@ -56,7 +56,7 @@ import torch
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 
-from eval_finetuned import load_env, load_lm, semsim, cover, _latency_stats
+from pipeline.eval.eval_finetuned import load_env, load_lm, semsim, cover, _latency_stats
 from core import AgentPaths
 
 paths = AgentPaths.vhf()

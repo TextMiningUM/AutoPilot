@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from build_kg import kg_retrieve
+from pipeline.ingest.build_kg import kg_retrieve
 from core import AgentPaths
 
 paths = AgentPaths.vhf()

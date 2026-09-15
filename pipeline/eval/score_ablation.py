@@ -20,7 +20,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 
-from eval_finetuned import (
+from pipeline.eval.eval_finetuned import (
     load_env, semsim, cover, num_hit, lit_hit,
     judge_faith, judge_correct, composite,
 )
