@@ -7,8 +7,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-W = Path(__file__).resolve().parent
-CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
+from core import AgentPaths
+
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE = paths.cache_dir
 
 FILES = [
     ("SFT direct",   CACHE / "vhf_sft_direct.jsonl"),
@@ -25,7 +28,7 @@ FILES = [
     ("Colreg DPO pairs (Track 2)",   CACHE / "vhf_colreg_dpo_pairs.jsonl"),
     ("Colreg Reflection (Track 2)",  CACHE / "vhf_colreg_reflection.jsonl"),
 ]
-GOLD = W / "Data" / "VHF" / "VHF_Eval" / "vhf_gold_answers.json"
+GOLD = paths.gold_file
 
 
 def count_lines(p: Path) -> int:

@@ -15,10 +15,12 @@ from typing import Optional
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-WORKSPACE    = Path(__file__).resolve().parent
-VHF_ROOT     = WORKSPACE / "Data" / "VHF"
-JSON_OUT_DIR = VHF_ROOT / "VHF_JSON"
-CACHE_DIR    = VHF_ROOT / "VHF_Agents_Training"
+from core import AgentPaths
+
+paths = AgentPaths.vhf()
+WORKSPACE    = paths.workspace
+JSON_OUT_DIR = paths.json_dir
+CACHE_DIR    = paths.cache_dir
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 RAG_CHUNKS_FILE = CACHE_DIR / "vhf_rag_chunks.json"

@@ -14,9 +14,12 @@ from pathlib import Path
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
-W = Path(__file__).resolve().parent
-CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
-os.environ.setdefault("HF_HOME", str(W / "_models" / "hf_cache"))
+from core import AgentPaths
+
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE = paths.cache_dir
+os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
 PROMPTS_FILE = CACHE / "ablation_prompts.json"
 ANSWERS_FILE = CACHE / "ablation_answers.jsonl"

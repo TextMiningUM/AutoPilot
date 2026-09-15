@@ -57,13 +57,15 @@ from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 
 from eval_finetuned import load_env, load_lm, semsim, cover, _latency_stats
+from core import AgentPaths
 
-W = Path(__file__).resolve().parent
-CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
-MODELS = Path(os.environ["AUTOPILOT_MODELS_DIR"]) if os.environ.get("AUTOPILOT_MODELS_DIR") else W / "_models"
-os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE = paths.cache_dir
+MODELS = paths.models_root
+os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
-SCENARIOS_FILE = W / "Data" / "VHF" / "VHF_Eval" / "vhf_colreg_scenarios.json"
+SCENARIOS_FILE = paths.eval_file("vhf_colreg_scenarios.json")
 
 SYSTEM_COLREG = (
     "You are the Auto Pilot, an automated VHF radio watch-keeper aboard a vessel. "

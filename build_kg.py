@@ -21,8 +21,11 @@ from typing import Iterable
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-W = Path(__file__).resolve().parent
-CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
+from core import AgentPaths
+
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE = paths.cache_dir
 
 CHUNKS_FILE = CACHE / "vhf_rag_chunks.json"
 EMBS_FILE   = CACHE / "vhf_rag_embeddings.npy"

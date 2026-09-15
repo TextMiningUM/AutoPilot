@@ -62,18 +62,19 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import LoraConfig, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 
-# ── Paths ────────────────────────────────────────────────────────────────
-W = Path(__file__).resolve().parent
-CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
-# AUTOPILOT_MODELS_DIR points at a shared cloud location (e.g. /srv/shared-models)
-# when set; otherwise falls back to the repo-local _models/ folder (laptop use).
-MODELS = Path(os.environ["AUTOPILOT_MODELS_DIR"]) if os.environ.get("AUTOPILOT_MODELS_DIR") else W / "_models"
-VHF_MODELS = MODELS / "VHF"
+from core import AgentPaths, load_messages_jsonl
+
+# ── Paths ────────────────────────────────────────────────────────────────────────────────────────────────────
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE = paths.cache_dir
+MODELS = paths.models_root
+VHF_MODELS = paths.domain_models_dir
 VHF_MODELS.mkdir(parents=True, exist_ok=True)
 MODELS.mkdir(exist_ok=True)
 
 # Keep the HF hub cache local to this project so we don't fill %USERPROFILE%.
-os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
+os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
 MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
 OUTPUT_DIR = VHF_MODELS / "vhf_qwen_sft_lora"
@@ -113,15 +114,7 @@ def load_jsonl_dataset(path: Path) -> Dataset:
     tokenizer's chat template automatically and computes loss only on the
     assistant tokens (not on the system/user prompt).
     """
-    rows = []
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            r = json.loads(line)
-            rows.append({"messages": r["messages"]})
-    return Dataset.from_list(rows)
+    return Dataset.from_list(load_messages_jsonl(path))
 
 
 def load_all_sft() -> Dataset:

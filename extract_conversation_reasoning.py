@@ -47,8 +47,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from openai import OpenAI
 
-W = Path(__file__).resolve().parent
-CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
+from core import AgentPaths, load_env, load_jsonl
+
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE = paths.cache_dir
 
 CONVERSATIONS_FILE = CACHE / "vhf_conversations.jsonl"
 OUT_FILE            = CACHE / "vhf_conversation_traces.jsonl"
@@ -56,28 +59,6 @@ OUT_FILE            = CACHE / "vhf_conversation_traces.jsonl"
 MAX_WORKERS = 6
 MODEL       = "gpt-4o-mini"
 
-
-def load_env(path: Path) -> None:
-    if not path.exists():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
-
-
-def load_jsonl(path: Path):
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                yield json.loads(line)
-            except Exception:
-                continue
 
 
 SYSTEM_PROMPT = """You are extracting the reasoning structure of a VHF collision-avoidance \

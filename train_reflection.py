@@ -45,14 +45,15 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import LoraConfig, PeftModel, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 
-W = Path(__file__).resolve().parent
-CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
-# AUTOPILOT_MODELS_DIR points at a shared cloud location (e.g. /srv/shared-models)
-# when set; otherwise falls back to the repo-local _models/ folder (laptop use).
-MODELS = Path(os.environ["AUTOPILOT_MODELS_DIR"]) if os.environ.get("AUTOPILOT_MODELS_DIR") else W / "_models"
-VHF_MODELS = MODELS / "VHF"
+from core import AgentPaths
+
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE = paths.cache_dir
+MODELS = paths.models_root
+VHF_MODELS = paths.domain_models_dir
 VHF_MODELS.mkdir(parents=True, exist_ok=True)
-os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
+os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
 MODEL_ID     = "Qwen/Qwen2.5-7B-Instruct"
 SFT_ADAPTER  = VHF_MODELS / "vhf_qwen_sft_lora"

@@ -30,8 +30,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from openai import OpenAI
 
-W = Path(__file__).resolve().parent
-CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
+from core import AgentPaths, load_env
+
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE = paths.cache_dir
 
 CHUNKS_FILE = CACHE / "vhf_rag_chunks.json"
 OUT_FILE    = CACHE / "vhf_reasoning_traces.jsonl"
@@ -39,17 +42,6 @@ OUT_FILE    = CACHE / "vhf_reasoning_traces.jsonl"
 MIN_TOKENS  = 40
 MAX_WORKERS = 6
 MODEL       = "gpt-4o-mini"
-
-
-def load_env(path: Path) -> None:
-    if not path.exists():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
 SYSTEM_PROMPT = """You are extracting the reasoning structure of a VHF marine-radio reference excerpt.

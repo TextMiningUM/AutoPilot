@@ -12,11 +12,13 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from build_kg import kg_retrieve
+from core import AgentPaths
 
-W = Path(__file__).resolve().parent
-CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE = paths.cache_dir
 
-GOLD_FILE   = W / "Data" / "VHF" / "VHF_Eval" / "vhf_gold_answers.json"
+GOLD_FILE   = paths.gold_file
 CHUNKS_FILE = CACHE / "vhf_rag_chunks.json"
 EMBS_FILE   = CACHE / "vhf_rag_embeddings.npy"
 IDS_FILE    = CACHE / "vhf_rag_chunk_ids.json"

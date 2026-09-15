@@ -49,13 +49,14 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-W = Path(__file__).resolve().parent
-CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
-# AUTOPILOT_MODELS_DIR points at a shared cloud location (e.g. /srv/shared-models)
-# when set; otherwise falls back to the repo-local _models/ folder (laptop use).
-MODELS = Path(os.environ["AUTOPILOT_MODELS_DIR"]) if os.environ.get("AUTOPILOT_MODELS_DIR") else W / "_models"
-VHF_MODELS = MODELS / "VHF"
-os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
+from core import AgentPaths
+
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE = paths.cache_dir
+MODELS = paths.models_root
+VHF_MODELS = paths.domain_models_dir
+os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
 DEFAULT_IN  = VHF_MODELS / "VHF-QWEN"
 DEFAULT_OUT = VHF_MODELS / "VHF-QWEN-pruned"

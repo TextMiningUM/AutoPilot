@@ -1,10 +1,10 @@
 """Quick RAG retrieval smoke test — ASCII output only."""
 import json, numpy as np
-from pathlib import Path
 from sentence_transformers import SentenceTransformer
 
-W = Path(__file__).resolve().parent
-CACHE  = W / "Data" / "VHF" / "VHF_Agents_Training"
+from core import AgentPaths
+
+CACHE = AgentPaths.vhf().cache_dir
 chunks = json.loads((CACHE / "vhf_rag_chunks.json").read_text(encoding="utf-8"))
 embs   = np.load(CACHE / "vhf_rag_embeddings.npy")
 ids    = json.loads((CACHE / "vhf_rag_chunk_ids.json").read_text(encoding="utf-8"))

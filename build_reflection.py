@@ -25,11 +25,14 @@ from pathlib import Path
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-W = Path(__file__).resolve().parent
-CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
+from core import AgentPaths, load_jsonl, clean as _clean, cap as _cap, decap as _decap, steps_sentence as _steps_sentence
+
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE = paths.cache_dir
 
 TRACES_FILE = CACHE / "vhf_reasoning_traces.jsonl"
-GOLD_FILE   = W / "Data" / "VHF" / "VHF_Eval" / "vhf_gold_answers.json"
+GOLD_FILE   = paths.gold_file
 OUT_FILE    = CACHE / "vhf_reflection.jsonl"
 
 CONTAM_THRESH = 0.85
@@ -41,45 +44,6 @@ SYSTEM = (
     "against safety-critical requirements (steps, channels, prowords, regulations, warnings), "
     "then a Refined answer that fixes any omissions."
 )
-
-
-def load_jsonl(path):
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line: continue
-            try: yield json.loads(line)
-            except Exception: continue
-
-
-def _clean(s: str | None) -> str:
-    return (s or "").strip().rstrip(". ").strip()
-
-
-def _cap(s: str) -> str:
-    return s[:1].upper() + s[1:] if s else s
-
-
-def _decap(s: str) -> str:
-    if not s:
-        return s
-    first_word = s.split(" ", 1)[0]
-    if len(first_word) > 1 and first_word.isupper():
-        return s  # don't mangle acronyms like VHF, GMDSS, ITU
-    return s[:1].lower() + s[1:]
-
-
-def _steps_sentence(procs: list[dict]) -> str:
-    steps = [_clean(p.get("action", "")) for p in procs]
-    steps = [s for s in steps if s]
-    if not steps:
-        return ""
-    if len(steps) == 1:
-        return _cap(steps[0]) + "."
-    connectors = ["First", "Then", "Next", "After that", "Finally"]
-    pieces = [f"{connectors[i] if i < len(connectors) else 'Then'}, {_decap(s)}"
-              for i, s in enumerate(steps)]
-    return "; ".join(pieces) + "."
 
 
 def full_answer(trace: dict) -> str:

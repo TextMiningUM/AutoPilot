@@ -60,37 +60,36 @@ from datasets import concatenate_datasets, Dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, get_cosine_schedule_with_warmup
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
-W = Path(__file__).resolve().parent
-CACHE  = W / "Data" / "VHF" / "VHF_Agents_Training"
-# AUTOPILOT_MODELS_DIR points at a shared cloud location (e.g. /srv/shared-models)
-# when set; otherwise falls back to the repo-local _models/ folder (laptop use).
-MODELS = Path(os.environ["AUTOPILOT_MODELS_DIR"]) if os.environ.get("AUTOPILOT_MODELS_DIR") else W / "_models"
-VHF_MODELS = MODELS / "VHF"
-os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
+from core import AgentPaths, load_messages_jsonl
+
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE  = paths.cache_dir
+MODELS = paths.models_root
+VHF_MODELS = paths.domain_models_dir
+os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
 TEACHER_DIR       = VHF_MODELS / "VHF-QWEN"
 DEFAULT_STUDENT   = "Qwen/Qwen2.5-1.5B-Instruct"
 DEFAULT_OUT       = VHF_MODELS / "DistillVHF-QWEN"
 
+# Same combined Track 1 + Track 2 datasets as train_sft.py (see notebook § 12/§12.6)
+# -- the student should see everything the teacher was fine-tuned on.
 SFT_DATASETS = [
     CACHE / "vhf_sft_direct.jsonl",
     CACHE / "vhf_sft_cot.jsonl",
     CACHE / "vhf_sft_rag.jsonl",
     CACHE / "vhf_multihop.jsonl",
+    CACHE / "vhf_conversations.jsonl",
+    CACHE / "vhf_colreg_sft_direct.jsonl",
+    CACHE / "vhf_colreg_sft_cot.jsonl",
+    CACHE / "vhf_colreg_sft_rag.jsonl",
+    CACHE / "vhf_colreg_multihop.jsonl",
 ]
 
 
-def load_jsonl(path: Path) -> Dataset:
-    rows = []
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            r = json.loads(line)
-            rows.append({"messages": r["messages"]})
-    return Dataset.from_list(rows)
-
-
 def load_all() -> Dataset:
-    parts = [load_jsonl(p) for p in SFT_DATASETS if p.exists()]
+    parts = [Dataset.from_list(load_messages_jsonl(p)) for p in SFT_DATASETS if p.exists()]
     ds = concatenate_datasets(parts).shuffle(seed=13)
     print(f"Distillation train rows: {len(ds)}")
     return ds

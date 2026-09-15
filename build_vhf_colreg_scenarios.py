@@ -36,9 +36,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from openai import OpenAI
 
-W = Path(__file__).resolve().parent
+from core import AgentPaths, load_env
+
+paths = AgentPaths.vhf()
+W = paths.workspace
 COLREG_FILE = W / "Data" / "OfficeroftheWatch" / "colregs_all.json"
-OUT_DIR     = W / "Data" / "VHF" / "VHF_Eval"
+OUT_DIR     = paths.eval_dir
 OUT_FILE    = OUT_DIR / "vhf_colreg_scenarios.json"
 
 MODEL       = "gpt-4o-mini"
@@ -158,17 +161,6 @@ radio transmission in quotation marks and then explains the manoeuvre with rule 
 Make the {batch_size} scenarios in this batch clearly DIFFERENT from one another: vary vessel \
 types, regions, bearings/ranges, and whether risk of collision is marginal or clear-cut. \
 Do not include markdown or commentary outside the JSON array."""
-
-
-def load_env(path: Path) -> None:
-    if not path.exists():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
 def load_colreg_rules() -> dict[int, dict]:

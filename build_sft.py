@@ -17,16 +17,18 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from build_kg import kg_retrieve
+from core import AgentPaths, load_jsonl, clean as _clean, cap as _cap, decap as _decap
 
-W = Path(__file__).resolve().parent
-CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE = paths.cache_dir
 
 TRACES_FILE = CACHE / "vhf_reasoning_traces.jsonl"
 CHUNKS_FILE = CACHE / "vhf_rag_chunks.json"
 EMBS_FILE   = CACHE / "vhf_rag_embeddings.npy"
 IDS_FILE    = CACHE / "vhf_rag_chunk_ids.json"
 KG_FILE     = CACHE / "vhf_kg.json"
-GOLD_FILE   = W / "Data" / "VHF" / "VHF_Eval" / "vhf_gold_answers.json"
+GOLD_FILE   = paths.gold_file
 
 DIRECT_OUT = CACHE / "vhf_sft_direct.jsonl"
 COT_OUT    = CACHE / "vhf_sft_cot.jsonl"
@@ -51,35 +53,6 @@ SYSTEM_RAG = (
     "Use ONLY the provided context excerpts. If the excerpts don't contain the answer, "
     "say so explicitly. Use correct prowords and channel numbers exactly as they appear."
 )
-
-
-def load_jsonl(path: Path):
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                yield json.loads(line)
-            except Exception:
-                continue
-
-
-def _clean(s: str | None) -> str:
-    return (s or "").strip().rstrip(". ").strip()
-
-
-def _cap(s: str) -> str:
-    return s[:1].upper() + s[1:] if s else s
-
-
-def _decap(s: str) -> str:
-    if not s:
-        return s
-    first_word = s.split(" ", 1)[0]
-    if len(first_word) > 1 and first_word.isupper():
-        return s  # don't mangle acronyms like VHF, GMDSS, ITU
-    return s[:1].lower() + s[1:]
 
 
 def format_direct_answer(trace: dict, angle: str) -> str:

@@ -25,8 +25,11 @@ from eval_finetuned import (
     judge_faith, judge_correct, composite,
 )
 
-W = Path(__file__).resolve().parent
-CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
+from core import AgentPaths
+
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE = paths.cache_dir
 
 ANSWERS_FILE = CACHE / "ablation_answers.jsonl"
 SCORED_FILE  = CACHE / "ablation_scored.jsonl"

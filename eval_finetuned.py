@@ -53,30 +53,21 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 
-W = Path(__file__).resolve().parent
-CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
-# AUTOPILOT_MODELS_DIR points at a shared cloud location (e.g. /srv/shared-models)
-# when set; otherwise falls back to the repo-local _models/ folder (laptop use).
-MODELS = Path(os.environ["AUTOPILOT_MODELS_DIR"]) if os.environ.get("AUTOPILOT_MODELS_DIR") else W / "_models"
-os.environ.setdefault("HF_HOME", str(MODELS / "hf_cache"))
+from core import AgentPaths, load_env
 
-GOLD_FILE = W / "Data" / "VHF" / "VHF_Eval" / "vhf_gold_answers.json"
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE = paths.cache_dir
+MODELS = paths.models_root
+os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
+
+GOLD_FILE = paths.gold_file
 
 SYSTEM_PLAIN = (
     "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
     "Answer accurately, use correct prowords, cite channel numbers, "
     "follow ITU/IMO/GMDSS regulations. Be concise."
 )
-
-
-# ── env loader (avoid python-dotenv dependency) ──────────────────────────
-def load_env(path: Path):
-    if not path.exists(): return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line: continue
-        k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
 # ── Qwen inference (loads only the LM) ───────────────────────────────────

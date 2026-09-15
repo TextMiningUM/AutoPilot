@@ -19,11 +19,14 @@ from pathlib import Path
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-W = Path(__file__).resolve().parent
-CACHE = W / "Data" / "VHF" / "VHF_Agents_Training"
+from core import AgentPaths, load_jsonl, clean as _clean
+
+paths = AgentPaths.vhf()
+W = paths.workspace
+CACHE = paths.cache_dir
 
 TRACES_FILE = CACHE / "vhf_reasoning_traces.jsonl"
-GOLD_FILE   = W / "Data" / "VHF" / "VHF_Eval" / "vhf_gold_answers.json"
+GOLD_FILE   = paths.gold_file
 OUT_FILE    = CACHE / "vhf_multihop.jsonl"
 
 CONTAM_THRESH = 0.85
@@ -38,15 +41,6 @@ SYSTEM = (
 )
 
 
-def load_jsonl(path):
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line: continue
-            try: yield json.loads(line)
-            except Exception: continue
-
-
 def concept_signature(trace: dict) -> set[str]:
     t = trace.get("trace") or {}
     sig = set(str(x).strip() for x in (trace.get("chunk_concepts") or []) if str(x).strip())
@@ -57,10 +51,6 @@ def concept_signature(trace: dict) -> set[str]:
     for r in (t.get("regulations") or []):
         sig.add(r.upper())
     return sig
-
-
-def _clean(s: str | None) -> str:
-    return (s or "").strip().rstrip(". ").strip()
 
 
 def summarize_trace(trace: dict) -> str:

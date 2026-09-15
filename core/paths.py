@@ -108,10 +108,23 @@ class AgentPaths:
         """Committed hand-authored gold Q&A file (in eval_dir)."""
         return self.eval_dir / f"{self.domain.lower()}_gold_answers.json"
 
+    def eval_file(self, name: str) -> Path:
+        """Any other held-out file in eval_dir, e.g. paths.eval_file("vhf_colreg_scenarios.json")."""
+        return self.eval_dir / name
+
     # ── model folders ───────────────────────────────────────────────────
     @property
     def models_root(self) -> Path:
-        return self.workspace / "_models"
+        """Shared model storage root.
+
+        Honors ``AUTOPILOT_MODELS_DIR`` (set on the cloud pod so multiple
+        users/clones share one copy of the multi-GB base weights instead of
+        each downloading/merging their own) and falls back to the
+        repo-local ``_models/`` folder otherwise (laptop use).
+        """
+        import os
+        override = os.environ.get("AUTOPILOT_MODELS_DIR")
+        return Path(override) if override else self.workspace / "_models"
 
     @property
     def hf_cache_dir(self) -> Path:

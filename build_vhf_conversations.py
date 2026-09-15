@@ -51,10 +51,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from openai import OpenAI
 
-from build_vhf_colreg_scenarios import load_colreg_rules, REGIONS, VESSEL_TYPES, load_env
+from build_vhf_colreg_scenarios import load_colreg_rules, REGIONS, VESSEL_TYPES
+from core import AgentPaths, load_env
 
-W = Path(__file__).resolve().parent
-OUT_DIR  = W / "Data" / "VHF" / "VHF_Agents_Training"
+paths = AgentPaths.vhf()
+W = paths.workspace
+OUT_DIR  = paths.cache_dir
 OUT_FILE = OUT_DIR / "vhf_conversations.jsonl"
 
 MODEL       = "gpt-4o-mini"
