@@ -78,7 +78,6 @@ _SYSTEM_BY_DOMAIN = {
 SYSTEM_DIRECT = _SYSTEM_BY_DOMAIN["direct"]
 SYSTEM_COT    = _SYSTEM_BY_DOMAIN["cot"]
 SYSTEM_RAG    = _SYSTEM_BY_DOMAIN["rag"]
-)
 
 
 def format_direct_answer(trace: dict, angle: str) -> str:
