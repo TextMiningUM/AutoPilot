@@ -209,10 +209,15 @@ def train(args: argparse.Namespace) -> None:
 
             # Mask: only positions where label != -100 contribute
             mask = (batch["labels"] != -100).float()
-            # KD loss (KL of soft distributions)
+            # KD loss (KL of soft distributions). Teacher/student can have a
+            # slightly different padded vocab size (e.g. Qwen2.5-7B vs 1.5B,
+            # 152064 vs 151936) even with the "same" tokenizer -- the extra
+            # rows are unused/reserved embedding slots, so truncating both to
+            # the common vocab before softmax is a safe, standard fix.
+            common_vocab = min(t_logits.size(-1), s_logits.size(-1))
             kd = F.kl_div(
-                F.log_softmax(s_logits / T, dim=-1),
-                F.softmax(   t_logits / T, dim=-1),
+                F.log_softmax(s_logits[..., :common_vocab] / T, dim=-1),
+                F.softmax(   t_logits[..., :common_vocab] / T, dim=-1),
                 reduction="none",
             ).sum(-1)   # sum over vocab -> per-token
             kd = (kd * mask).sum() / mask.sum().clamp_min(1) * (T * T)

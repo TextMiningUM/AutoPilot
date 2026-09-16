@@ -73,26 +73,42 @@ SYSTEM_PLAIN = (
 # ── Qwen inference (loads only the LM) ───────────────────────────────────
 def load_lm(model_dir: str):
     """Loads a fine-tuned or base causal LM. Uses bf16 if the model fits;
-    falls back to 4-bit NF4 for the 7B on 8 GB VRAM.
+    falls back to 4-bit NF4 for the 7B on 8 GB VRAM. AWQ-quantized checkpoints
+    (own quantization_config baked into config.json) are loaded as-is, since
+    forcing bf16/BitsAndBytes on top of an existing AWQ config conflicts.
     """
     from transformers import BitsAndBytesConfig
     print(f"Loading LM from {model_dir}...")
-    try:
-        model = AutoModelForCausalLM.from_pretrained(
-            model_dir, torch_dtype=torch.bfloat16, device_map="auto",
-            attn_implementation="sdpa",
-        )
-        print("  loaded in bf16")
-    except Exception as e:
-        print(f"  bf16 failed ({type(e).__name__}: {e}) — retrying in 4-bit NF4")
-        bnb = BitsAndBytesConfig(
-            load_in_4bit=True, bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
-        )
-        model = AutoModelForCausalLM.from_pretrained(
-            model_dir, quantization_config=bnb, device_map="auto",
-            torch_dtype=torch.bfloat16, attn_implementation="sdpa",
-        )
+
+    is_awq = False
+    cfg_path = Path(model_dir) / "config.json"
+    if cfg_path.exists():
+        try:
+            cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+            is_awq = cfg.get("quantization_config", {}).get("quant_method") == "awq"
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    if is_awq:
+        model = AutoModelForCausalLM.from_pretrained(model_dir, device_map="auto")
+        print("  loaded (AWQ int4)")
+    else:
+        try:
+            model = AutoModelForCausalLM.from_pretrained(
+                model_dir, torch_dtype=torch.bfloat16, device_map="auto",
+                attn_implementation="sdpa",
+            )
+            print("  loaded in bf16")
+        except Exception as e:
+            print(f"  bf16 failed ({type(e).__name__}: {e}) — retrying in 4-bit NF4")
+            bnb = BitsAndBytesConfig(
+                load_in_4bit=True, bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
+            )
+            model = AutoModelForCausalLM.from_pretrained(
+                model_dir, quantization_config=bnb, device_map="auto",
+                torch_dtype=torch.bfloat16, attn_implementation="sdpa",
+            )
     model.eval()
     tok = AutoTokenizer.from_pretrained(model_dir)
     if tok.pad_token is None:
