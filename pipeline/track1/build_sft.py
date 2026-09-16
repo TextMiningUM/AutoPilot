@@ -131,6 +131,7 @@ def format_direct_answer(trace: dict, angle: str) -> str:
 
 
 def format_cot_answer(trace: dict, direct_answer: str) -> str:
+    """Render a chain-of-thought answer (situation/procedure/constraints/channels/...) ending in `direct_answer`."""
     lines = ["Let me reason through this step by step.\n"]
     if trace.get("situation"):
         lines.append(f"Situation: {trace['situation']}")
@@ -164,7 +165,8 @@ def format_cot_answer(trace: dict, direct_answer: str) -> str:
     return "\n".join(lines)
 
 
-def main():
+def main() -> None:
+    """CLI entry point: build direct/CoT/RAG SFT rows from reasoning traces."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--traces-file", type=str, default=str(TRACES_FILE),
                     help="reasoning traces to build from (default: protocol traces / Track 1)")

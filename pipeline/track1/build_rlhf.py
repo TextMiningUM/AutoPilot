@@ -119,6 +119,7 @@ def build_chosen_answer(
 
 
 def perturb_wrong_channel(trace: dict) -> str | None:
+    """Build a 'rejected' DPO answer with one channel number swapped for a wrong one."""
     chans = [str(c).strip() for c in (trace.get("channels") or []) if str(c).strip()]
     if not chans: return None
     idx = RNG.randrange(len(chans))
@@ -130,6 +131,7 @@ def perturb_wrong_channel(trace: dict) -> str | None:
 
 
 def perturb_wrong_proword(trace: dict) -> str | None:
+    """Build a 'rejected' DPO answer with one proword swapped for a confusable wrong one."""
     pws = trace.get("prowords_used") or []
     for idx, pw in enumerate(pws):
         swap = PROWORD_SWAPS.get(pw.upper())
@@ -167,7 +169,8 @@ PERTURBATIONS = [
 ]
 
 
-def main():
+def main() -> None:
+    """CLI entry point: build chosen/rejected DPO pairs by perturbing reasoning-trace answers."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--traces-file", type=str, default=str(TRACES_FILE))
     ap.add_argument("--out-file", type=str, default=str(OUT_FILE))

@@ -169,6 +169,7 @@ def load_colreg_rules() -> dict[int, dict]:
 
 
 def user_prompt(category: dict, rules_by_num: dict[int, dict], batch_size: int) -> str:
+    """Build the user-turn message asking the model for `batch_size` scenarios in `category`."""
     rule_texts = []
     for rn in category["rules"]:
         r = rules_by_num.get(rn)
@@ -187,15 +188,17 @@ def user_prompt(category: dict, rules_by_num: dict[int, dict], batch_size: int) 
 
 
 def parse_batch(raw: str) -> list[dict] | None:
+    """Parse a JSON array of scenarios from a model response, tolerating surrounding prose
+    or the array being wrapped in an object."""
     try:
         obj = json.loads(raw)
-    except Exception:
+    except json.JSONDecodeError:
         m = re.search(r"\[.*\]", raw, re.DOTALL)
         if not m:
             return None
         try:
             obj = json.loads(m.group(0))
-        except Exception:
+        except json.JSONDecodeError:
             return None
     if isinstance(obj, dict):
         # some models wrap the array in {"scenarios": [...]}
@@ -207,6 +210,7 @@ def parse_batch(raw: str) -> list[dict] | None:
 
 
 def generate_batch(client: OpenAI, category: dict, rules_by_num: dict, batch_size: int) -> list[dict]:
+    """Call the LLM once for one category and return the parsed scenario batch (empty on failure)."""
     sys_msg = SYSTEM_PROMPT.format(category=category["name"], batch_size=batch_size)
     usr_msg = user_prompt(category, rules_by_num, batch_size)
     resp = client.chat.completions.create(
@@ -224,7 +228,8 @@ def generate_batch(client: OpenAI, category: dict, rules_by_num: dict, batch_siz
     return items or []
 
 
-def main():
+def main() -> None:
+    """CLI entry point: generate the 498-scenario held-out COLREG eval set via the OpenAI API."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--smoke", action="store_true", help="generate ~10 records only, for a quick quality check")
     ap.add_argument("--resume", action="store_true", help="keep existing records, only top up shortfalls per category")
@@ -266,6 +271,7 @@ def main():
     all_records: list[dict] = list(existing)
 
     def run_jobs(job_list: list[tuple[dict, int]]) -> None:
+        """Run (category, batch_size) jobs concurrently and append parsed results to all_records."""
         t0 = time.time()
         done_calls = 0
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:

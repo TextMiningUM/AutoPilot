@@ -95,6 +95,7 @@ Rules:
 
 
 def user_prompt(rec: dict) -> str:
+    """Build the user-turn message describing one mined conversation for the extraction prompt."""
     transcript = "\n".join(
         f"{m['role'].upper()}: {m['content']}" for m in rec["messages"]
     )
@@ -111,19 +112,21 @@ def user_prompt(rec: dict) -> str:
 
 
 def parse_response(raw: str) -> dict | None:
+    """Parse a JSON object from a model response, tolerating surrounding prose."""
     try:
         return json.loads(raw)
-    except Exception:
+    except json.JSONDecodeError:
         m = re.search(r"\{.*\}", raw, re.DOTALL)
         if not m:
             return None
         try:
             return json.loads(m.group(0))
-        except Exception:
+        except json.JSONDecodeError:
             return None
 
 
 def process_conversation(client: OpenAI, rec: dict) -> tuple[str, dict | None, str | None]:
+    """Call the LLM to extract a reasoning trace from one mined conversation; returns (id, trace_or_None, error_or_None)."""
     try:
         resp = client.chat.completions.create(
             model=MODEL,
@@ -145,6 +148,7 @@ def process_conversation(client: OpenAI, rec: dict) -> tuple[str, dict | None, s
 
 
 def load_done_ids(path: Path) -> set[str]:
+    """Read already-processed record ids from an output JSONL file, for resume support."""
     if not path.exists():
         return set()
     done: set[str] = set()
@@ -152,12 +156,13 @@ def load_done_ids(path: Path) -> set[str]:
         for line in f:
             try:
                 done.add(json.loads(line)["chunk_id"])
-            except Exception:
+            except (json.JSONDecodeError, KeyError):
                 pass
     return done
 
 
-def main():
+def main() -> None:
+    """CLI entry point: mine reasoning traces from mined conversations via the OpenAI API, with resume support."""
     load_env(W / ".env")
     if not os.environ.get("OPENAI_API_KEY"):
         raise SystemExit("OPENAI_API_KEY missing from .env")

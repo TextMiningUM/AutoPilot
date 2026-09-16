@@ -98,6 +98,7 @@ def load_chunks() -> list[dict]:
 
 # ── Build KG ──────────────────────────────────────────────────────────────
 def build_kg(chunks: list[dict]) -> dict:
+    """Build the concept/topic/adjacency knowledge graph from chunk records."""
     concept_chunks: dict[str, list[str]] = defaultdict(list)
     concept_cooccur: dict[str, Counter] = defaultdict(Counter)
     topic_chunks: dict[str, list[str]]  = defaultdict(list)
@@ -165,6 +166,7 @@ def build_kg(chunks: list[dict]) -> dict:
 
 # ── Query-time concept extraction ─────────────────────────────────────────
 def query_concepts(query: str, kg: dict) -> list[str]:
+    """Extract known concepts mentioned in `query` via alias lookup and substring matching."""
     q = " " + query.lower() + " "
     q_norm = re.sub(r"[^a-z0-9 ]+", " ", q)
     q_norm = re.sub(r"\s+", " ", q_norm)
@@ -185,10 +187,12 @@ def query_concepts(query: str, kg: dict) -> list[str]:
 
 
 # ── Hybrid retrieval ──────────────────────────────────────────────────────
-def kg_retrieve(query: str, model, embs, ids, kg,
+def kg_retrieve(query: str, model, embs: np.ndarray, ids: list[str], kg: dict,
                 k: int = 5, dense_n: int = 20,
                 concept_boost: float = 0.15,
-                cooccur_boost: float = 0.08) -> list[dict]:
+                cooccur_boost: float = 0.08) -> tuple[list[dict], list[str], list[str]]:
+    """Hybrid dense + concept-graph retrieval: dense top-`dense_n` pool, boosted by
+    concept and co-occurring-concept matches, then truncated to the top `k`."""
     qe = model.encode([query], normalize_embeddings=True)[0]
     dense_scores = embs @ qe  # cosine (unit-norm)
 
@@ -237,7 +241,8 @@ def kg_retrieve(query: str, model, embs, ids, kg,
 
 
 # ── Main ──────────────────────────────────────────────────────────────────
-def main():
+def main() -> None:
+    """CLI entry point: build the KG from cached chunks/embeddings and print a retrieval smoke test."""
     print("Loading chunks + embeddings...", flush=True)
     chunks = load_chunks()
     embs   = np.load(EMBS_FILE)

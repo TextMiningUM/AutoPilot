@@ -28,6 +28,7 @@ MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
 
 
 def load_qwen():
+    """Load the base Qwen2.5-7B-Instruct model in 4-bit NF4 for ablation inference."""
     print(f"Loading {MODEL_ID} in 4-bit NF4...")
     bnb = BitsAndBytesConfig(
         load_in_4bit=True,
@@ -48,7 +49,8 @@ def load_qwen():
 
 
 @torch.inference_mode()
-def generate(tok, mdl, messages: list[dict], max_new_tokens: int = 512):
+def generate(tok, mdl, messages: list[dict], max_new_tokens: int = 512) -> tuple[str, float]:
+    """Greedy-decode one answer from a chat-formatted message list; returns (answer_text, latency_seconds)."""
     text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     inp = tok(text, return_tensors="pt", truncation=True, max_length=4096).to(mdl.device)
     t0 = time.time()
@@ -67,20 +69,25 @@ def generate(tok, mdl, messages: list[dict], max_new_tokens: int = 512):
 
 
 def load_done() -> set[tuple[str, str]]:
+    """Read already-completed (config, q_id) pairs from ANSWERS_FILE, for resume support."""
     if not ANSWERS_FILE.exists():
         return set()
     done: set[tuple[str, str]] = set()
+    skipped = 0
     with ANSWERS_FILE.open("r", encoding="utf-8") as f:
         for line in f:
             try:
                 r = json.loads(line)
                 done.add((r["config"], r["q_id"]))
-            except Exception:
-                pass
+            except (json.JSONDecodeError, KeyError):
+                skipped += 1
+    if skipped:
+        print(f"  [load_done] skipped {skipped} malformed line(s) in {ANSWERS_FILE.name}")
     return done
 
 
-def main():
+def main() -> None:
+    """CLI entry point: generate base-Qwen answers for each ablation config, with resume support."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--configs", nargs="+",
                     default=["v0_base", "v1_rag", "v2_cot", "v3_rag_cot"])

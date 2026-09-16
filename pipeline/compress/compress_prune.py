@@ -65,6 +65,7 @@ REPORT_FILE = CACHE / "vhf_qwen_prune_report.json"
 
 
 def load_model(path: Path):
+    """Load a causal LM in bf16 with hidden states enabled, for block-influence measurement."""
     print(f"Loading {path} in bf16 for BI measurement...")
     tok = AutoTokenizer.from_pretrained(str(path))
     if tok.pad_token is None:
@@ -78,6 +79,7 @@ def load_model(path: Path):
 
 
 def calibration_prompts(n: int) -> list[str]:
+    """Sample `n` user-turn prompts (200-2500 chars) from the SFT RAG data for BI calibration."""
     rng = random.Random(0)
     lines = SFT_RAG.read_text(encoding="utf-8").splitlines()
     rng.shuffle(lines)
@@ -129,7 +131,8 @@ def prune_layers(model, layer_indices: list[int]):
     return model
 
 
-def main():
+def main() -> None:
+    """CLI entry point: measure block influence, prune the lowest-influence layers, and save the result."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--input",  type=str, default=str(DEFAULT_IN))
     ap.add_argument("--output", type=str, default=str(DEFAULT_OUT))

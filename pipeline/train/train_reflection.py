@@ -68,6 +68,7 @@ REFL_FILES   = [
 
 
 def load_reflection() -> Dataset:
+    """Load and shuffle the reflection JSONL files (Track 1 + Track 2) into one Dataset."""
     rows = []
     for path in REFL_FILES:
         if not path.exists():
@@ -122,7 +123,8 @@ def reflect_lora_config() -> LoraConfig:
     )
 
 
-def main():
+def main() -> None:
+    """CLI entry point: run reflection LoRA training on top of the merged SFT+DPO model."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--epochs", type=int, default=1)
     ap.add_argument("--lr", type=float, default=1e-4)

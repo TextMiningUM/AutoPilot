@@ -168,7 +168,8 @@ def new_dpo_lora_config() -> LoraConfig:
 
 
 # ── Config ───────────────────────────────────────────────────────────────
-def make_dpo_config(args) -> DPOConfig:
+def make_dpo_config(args: argparse.Namespace) -> DPOConfig:
+    """Build the TRL DPOConfig for the DPO training run."""
     cfg = dict(
         output_dir=str(OUTPUT_DIR),
         num_train_epochs=args.epochs,
@@ -198,7 +199,8 @@ def make_dpo_config(args) -> DPOConfig:
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
-def main():
+def main() -> None:
+    """CLI entry point: run DPO training on top of the merged SFT model."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--epochs", type=int, default=1)
     ap.add_argument("--grad_accum", type=int, default=16)

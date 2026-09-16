@@ -135,6 +135,8 @@ def critique(dropped: str) -> str:
 
 
 def choose_mode(trace: dict) -> str | None:
+    """Pick which kind of flawed-draft mode (skip_step/skip_channels/skip_warning/skip_proword)
+    this trace has enough material to build, or None if none apply."""
     procs = trace.get("procedures") or []
     channels = trace.get("channels") or []
     prowords = trace.get("prowords_used") or []
@@ -147,7 +149,8 @@ def choose_mode(trace: dict) -> str | None:
     return RNG.choice(options) if options else None
 
 
-def main():
+def main() -> None:
+    """CLI entry point: build draft/critique/full-answer reflection rows from reasoning traces."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--traces-file", type=str, default=str(TRACES_FILE))
     ap.add_argument("--out-file", type=str, default=str(OUT_FILE))

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Iterator
 
@@ -22,7 +23,8 @@ def load_jsonl(path: Path) -> Iterator[dict]:
                 continue
             try:
                 yield json.loads(line)
-            except Exception:
+            except json.JSONDecodeError as e:
+                print(f"  [load_jsonl] skipping malformed line in {path.name}: {e}", file=sys.stderr)
                 continue
 
 

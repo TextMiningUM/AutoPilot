@@ -35,13 +35,19 @@ TOPIC_JACCARD_MIN   = 0.5
 
 STANDALONE_TYPES = {"dialogue", "definition", "procedure"}
 
+# Set by main() before any chunking/embedding happens.
+model: SentenceTransformer | None = None
+tokenizer = None
+
 
 def stable_id(prefix: str, *parts) -> str:
+    """Build a short, deterministic id from `prefix` and the string forms of `parts`."""
     h = hashlib.md5(("|".join(str(p) for p in parts)).encode()).hexdigest()[:8]
     return f"{prefix}_{h}"
 
 
 def jaccard(a: set[str], b: set[str]) -> float:
+    """Jaccard similarity between two sets; 1.0 if both are empty."""
     if not a and not b:
         return 1.0
     union = a | b
@@ -50,15 +56,8 @@ def jaccard(a: set[str], b: set[str]) -> float:
     return len(a & b) / len(union)
 
 
-# ── Load embedder + tokenizer ─────────────────────────────────────────────
-print("Loading all-MiniLM-L6-v2...", flush=True)
-t0 = time.time()
-model = SentenceTransformer("all-MiniLM-L6-v2")
-tokenizer = model.tokenizer
-print(f"  ready in {time.time()-t0:.1f}s", flush=True)
-
-
 def token_count(text: str) -> int:
+    """Number of tokenizer tokens in `text` (0 for empty text)."""
     return len(tokenizer.encode(text, add_special_tokens=False)) if text else 0
 
 
@@ -113,7 +112,8 @@ def _finalise_chunk(sections, chapter, doc, tokens) -> dict:
     }
 
 
-def chunk_chapter(chapter, doc) -> list[dict]:
+def chunk_chapter(chapter: dict, doc: dict) -> list[dict]:
+    """Merge a chapter's sections into token-budgeted, topic-coherent chunks."""
     sections = chapter.get("sections", [])
     if not sections:
         return []
@@ -146,83 +146,100 @@ def chunk_chapter(chapter, doc) -> list[dict]:
     return out
 
 
-def build_chunks_for_document(doc) -> list[dict]:
+def build_chunks_for_document(doc: dict) -> list[dict]:
+    """Chunk every chapter of one parsed document."""
     chunks = []
     for chapter in doc.get("chapters", []):
         chunks.extend(chunk_chapter(chapter, doc))
     return chunks
 
 
-# ── Build corpus ──────────────────────────────────────────────────────────
-print("\nBuilding chunks from _json/...", flush=True)
-all_chunks: list[dict] = []
-per_doc: list[tuple[str, int, int]] = []
+def main() -> None:
+    """Load the embedder, chunk every document in _json/, embed the chunks, and
+    write chunks/embeddings/ids to _cache/ (plus a retrieval smoke test)."""
+    global model, tokenizer
 
-for path in sorted(JSON_OUT_DIR.glob("*.json")):
-    if path.name.startswith("_"):
-        continue
-    doc = json.loads(path.read_text(encoding="utf-8"))
-    if not doc.get("chapters"):
-        continue
-    n_sections = sum(len(ch.get("sections", [])) for ch in doc["chapters"])
-    chunks = build_chunks_for_document(doc)
-    all_chunks.extend(chunks)
-    per_doc.append((doc["source_file"], n_sections, len(chunks)))
-    print(f"  {doc['source_file']:<70} sections={n_sections:>4}  chunks={len(chunks):>4}", flush=True)
+    # ── Load embedder + tokenizer ─────────────────────────────────────────
+    print("Loading all-MiniLM-L6-v2...", flush=True)
+    t0 = time.time()
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    tokenizer = model.tokenizer
+    print(f"  ready in {time.time()-t0:.1f}s", flush=True)
 
-RAG_CHUNKS_FILE.write_text(json.dumps(all_chunks, indent=2, ensure_ascii=False), encoding="utf-8")
-print(f"\n{len(all_chunks)} chunks from {len(per_doc)} documents", flush=True)
-print(f"Saved: {RAG_CHUNKS_FILE}", flush=True)
+    # ── Build corpus ──────────────────────────────────────────────────────
+    print("\nBuilding chunks from _json/...", flush=True)
+    all_chunks: list[dict] = []
+    per_doc: list[tuple[str, int, int]] = []
 
-# Stats
-sizes = [c["token_count"] for c in all_chunks]
-sizes_sorted = sorted(sizes)
-n = len(sizes_sorted)
-print(f"\nToken distribution:")
-print(f"  min={min(sizes)}  p25={sizes_sorted[n//4]}  median={sizes_sorted[n//2]}  "
-      f"p75={sizes_sorted[3*n//4]}  max={max(sizes)}")
-print(f"  over target ({CHUNK_TARGET_TOKENS}): {sum(1 for s in sizes if s > CHUNK_TARGET_TOKENS)}")
-print(f"  over max ({CHUNK_MAX_TOKENS})   : {sum(1 for s in sizes if s > CHUNK_MAX_TOKENS)}")
+    for path in sorted(JSON_OUT_DIR.glob("*.json")):
+        if path.name.startswith("_"):
+            continue
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        if not doc.get("chapters"):
+            continue
+        n_sections = sum(len(ch.get("sections", [])) for ch in doc["chapters"])
+        chunks = build_chunks_for_document(doc)
+        all_chunks.extend(chunks)
+        per_doc.append((doc["source_file"], n_sections, len(chunks)))
+        print(f"  {doc['source_file']:<70} sections={n_sections:>4}  chunks={len(chunks):>4}", flush=True)
 
-from collections import Counter
-n_sec_distribution = Counter(c["n_sections"] for c in all_chunks)
-print(f"\nSections per chunk:")
-for k in sorted(n_sec_distribution):
-    print(f"  {k}: {n_sec_distribution[k]}")
+    RAG_CHUNKS_FILE.write_text(json.dumps(all_chunks, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"\n{len(all_chunks)} chunks from {len(per_doc)} documents", flush=True)
+    print(f"Saved: {RAG_CHUNKS_FILE}", flush=True)
 
-# ── Embed ─────────────────────────────────────────────────────────────────
-print(f"\nEmbedding {len(all_chunks)} chunks on "
-      f"{'GPU' if hasattr(model, '_target_device') else 'auto'}...", flush=True)
-t0 = time.time()
-texts = [c["text_with_context"] for c in all_chunks]
-embs = model.encode(
-    texts, batch_size=32,
-    show_progress_bar=True, convert_to_numpy=True, normalize_embeddings=True,
-)
-print(f"  done in {time.time()-t0:.1f}s. Shape: {embs.shape}", flush=True)
+    # Stats
+    sizes = [c["token_count"] for c in all_chunks]
+    sizes_sorted = sorted(sizes)
+    n = len(sizes_sorted)
+    print(f"\nToken distribution:")
+    print(f"  min={min(sizes)}  p25={sizes_sorted[n//4]}  median={sizes_sorted[n//2]}  "
+          f"p75={sizes_sorted[3*n//4]}  max={max(sizes)}")
+    print(f"  over target ({CHUNK_TARGET_TOKENS}): {sum(1 for s in sizes if s > CHUNK_TARGET_TOKENS)}")
+    print(f"  over max ({CHUNK_MAX_TOKENS})   : {sum(1 for s in sizes if s > CHUNK_MAX_TOKENS)}")
 
-ids = [c["chunk_id"] for c in all_chunks]
-np.save(EMBEDDINGS_FILE, embs)
-IDS_FILE.write_text(json.dumps(ids), encoding="utf-8")
-print(f"Saved: {EMBEDDINGS_FILE.name}  +  {IDS_FILE.name}", flush=True)
+    from collections import Counter
+    n_sec_distribution = Counter(c["n_sections"] for c in all_chunks)
+    print(f"\nSections per chunk:")
+    for k in sorted(n_sec_distribution):
+        print(f"  {k}: {n_sec_distribution[k]}")
 
-# ── Smoke test ────────────────────────────────────────────────────────────
-print("\n" + "=" * 100)
-print("Retrieval smoke test")
-print("=" * 100)
-chunk_by_id = {c["chunk_id"]: c for c in all_chunks}
-for q in ["What is VHF Channel 70 used for?",
-          "How do I send a MAYDAY call?",
-          "What is the phonetic word for the letter M?"]:
-    print(f"\nQuery: {q}")
-    q_emb = model.encode([q], normalize_embeddings=True)[0]
-    scores = embs @ q_emb
-    top = np.argsort(-scores)[:3]
-    for rank, i in enumerate(top, 1):
-        c = chunk_by_id[ids[i]]
-        preview = c["text"].replace("\n", " ")[:130]
-        print(f"  {rank}. [{scores[i]:.3f}] {c['source_file']}  → {c['chapter_title'][:35]!r}")
-        print(f"     types={c['types']} topics={c['topics']}")
-        print(f"     text: {preview}...")
+    # ── Embed ─────────────────────────────────────────────────────────────
+    print(f"\nEmbedding {len(all_chunks)} chunks on "
+          f"{'GPU' if hasattr(model, '_target_device') else 'auto'}...", flush=True)
+    t0 = time.time()
+    texts = [c["text_with_context"] for c in all_chunks]
+    embs = model.encode(
+        texts, batch_size=32,
+        show_progress_bar=True, convert_to_numpy=True, normalize_embeddings=True,
+    )
+    print(f"  done in {time.time()-t0:.1f}s. Shape: {embs.shape}", flush=True)
 
-print("\nDone.")
+    ids = [c["chunk_id"] for c in all_chunks]
+    np.save(EMBEDDINGS_FILE, embs)
+    IDS_FILE.write_text(json.dumps(ids), encoding="utf-8")
+    print(f"Saved: {EMBEDDINGS_FILE.name}  +  {IDS_FILE.name}", flush=True)
+
+    # ── Smoke test ────────────────────────────────────────────────────────
+    print("\n" + "=" * 100)
+    print("Retrieval smoke test")
+    print("=" * 100)
+    chunk_by_id = {c["chunk_id"]: c for c in all_chunks}
+    for q in ["What is VHF Channel 70 used for?",
+              "How do I send a MAYDAY call?",
+              "What is the phonetic word for the letter M?"]:
+        print(f"\nQuery: {q}")
+        q_emb = model.encode([q], normalize_embeddings=True)[0]
+        scores = embs @ q_emb
+        top = np.argsort(-scores)[:3]
+        for rank, i in enumerate(top, 1):
+            c = chunk_by_id[ids[i]]
+            preview = c["text"].replace("\n", " ")[:130]
+            print(f"  {rank}. [{scores[i]:.3f}] {c['source_file']}  → {c['chapter_title'][:35]!r}")
+            print(f"     types={c['types']} topics={c['topics']}")
+            print(f"     text: {preview}...")
+
+    print("\nDone.")
+
+
+if __name__ == "__main__":
+    main()

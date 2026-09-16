@@ -83,7 +83,8 @@ def build_calibration_texts(n: int) -> list[str]:
     return texts
 
 
-def main():
+def main() -> None:
+    """CLI entry point: AWQ-quantize a merged model using calibration prompts sampled from the SFT data."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--input",  type=str, default=str(DEFAULT_IN))
     ap.add_argument("--output", type=str, default=str(DEFAULT_OUT))

@@ -98,6 +98,7 @@ _JUDGE_ERR_LOGGED = 0
 
 def judge_colreg_correct(client: OpenAI, scenario: str, question: str, rules: list[str],
                          ep: list[str], pred: str) -> float:
+    """LLM-judge correctness score in [0,1] for a COLREG scenario answer (nan on judge failure)."""
     global _JUDGE_ERR_LOGGED
     try:
         r = client.chat.completions.create(
@@ -151,7 +152,9 @@ def call_format_score(own_vessel: str, pred: str) -> float | None:
     return 0.0 if self_hail else 1.0
 
 
-def composite_colreg(sem, ans_rel, cov, chan, callfmt, colreg) -> float:
+def composite_colreg(sem: float, ans_rel: float, cov: float, chan: float,
+                     callfmt: float | None, colreg: float) -> float:
+    """Weighted average of the per-metric COLREG scores, skipping any nan/missing metric."""
     weights = {"SemSim": 0.10, "AnsRel": 0.10, "Cover": 0.15,
                "ChannelProc": 0.15, "CallFormatOK": 0.15, "ColregCorrect": 0.35}
     vals = {"SemSim": sem, "AnsRel": ans_rel, "Cover": cov,
@@ -168,6 +171,7 @@ def composite_colreg(sem, ans_rel, cov, chan, callfmt, colreg) -> float:
 
 @torch.inference_mode()
 def generate_colreg(tok, model, scenario: str, question: str, max_new_tokens: int = 400) -> tuple[str, float]:
+    """Greedy-decode one COLREG scenario answer; returns (answer_text, latency_seconds)."""
     messages = [
         {"role": "system", "content": SYSTEM_COLREG},
         {"role": "user",   "content": f"{scenario}\n\n{question}"},
@@ -185,7 +189,8 @@ def generate_colreg(tok, model, scenario: str, question: str, max_new_tokens: in
     return ans, dt
 
 
-def main():
+def main() -> None:
+    """CLI entry point: generate + score answers to the 498 held-out COLREG scenarios for one model."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", type=str, default=str(MODELS / "VHF" / "VHF-QWEN"))
     ap.add_argument("--tag", type=str, default=None)

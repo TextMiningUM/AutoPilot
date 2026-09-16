@@ -83,8 +83,8 @@ def load_lm(model_dir: str):
             attn_implementation="sdpa",
         )
         print("  loaded in bf16")
-    except Exception:
-        print("  bf16 failed — retrying in 4-bit NF4")
+    except Exception as e:
+        print(f"  bf16 failed ({type(e).__name__}: {e}) — retrying in 4-bit NF4")
         bnb = BitsAndBytesConfig(
             load_in_4bit=True, bnb_4bit_quant_type="nf4",
             bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
@@ -103,6 +103,7 @@ def load_lm(model_dir: str):
 
 @torch.inference_mode()
 def generate(tok, model, question: str, max_new_tokens: int = 512) -> tuple[str, float]:
+    """Greedy-decode one plain-prompt answer; returns (answer_text, latency_seconds)."""
     messages = [
         {"role": "system", "content": SYSTEM_PLAIN},
         {"role": "user",   "content": question},
@@ -128,11 +129,13 @@ PROWORDS   = ["MAYDAY", "PAN PAN", "PAN-PAN", "SECURITE", "SECURITÉ",
 
 
 def semsim(embedder, a: str, b: str) -> float:
+    """Cosine similarity between the embeddings of `a` and `b`."""
     ea, eb = embedder.encode([a, b], normalize_embeddings=True)
     return float(np.dot(ea, eb))
 
 
 def cover(embedder, pred: str, expected_points: list[str], thresh: float = 0.55) -> float:
+    """Fraction of `expected_points` that are semantically present (>= thresh) in `pred`."""
     if not expected_points: return math.nan
     pe = embedder.encode([pred], normalize_embeddings=True)[0]
     epe = embedder.encode(expected_points, normalize_embeddings=True)
@@ -171,7 +174,8 @@ Candidate: {p}"""
 _JUDGE_ERR_LOGGED = {"faith": 0, "correct": 0}  # rate-limit stderr noise
 
 
-def judge_faith(client, q, g, p) -> float | None:
+def judge_faith(client: OpenAI, q: str, g: str, p: str) -> float:
+    """LLM-judge: 1.0 if `p` doesn't contradict/invent facts beyond gold answer `g`, else 0.0 (nan on judge failure)."""
     try:
         r = client.chat.completions.create(
             model=JUDGE_MODEL, temperature=0.0,
@@ -186,7 +190,8 @@ def judge_faith(client, q, g, p) -> float | None:
         return math.nan
 
 
-def judge_correct(client, q, g, ep, p) -> float | None:
+def judge_correct(client: OpenAI, q: str, g: str, ep: list[str], p: str) -> float:
+    """LLM-judge correctness score in [0,1] for prediction `p` against gold `g` and expected points `ep` (nan on judge failure)."""
     try:
         r = client.chat.completions.create(
             model=JUDGE_MODEL, temperature=0.0,
@@ -202,6 +207,7 @@ def judge_correct(client, q, g, ep, p) -> float | None:
 
 
 def composite(m: dict) -> float:
+    """Weighted average of the per-metric scores in `m`, skipping any nan/missing metric."""
     weights = {"SemSim":0.15,"AnsRel":0.1,"Faith":0.15,
                "Correct":0.25,"Cover":0.15,"NumHit":0.1,"LitHit":0.1}
     num, den = 0.0, 0.0
@@ -226,7 +232,8 @@ def _latency_stats(sorted_vals: list[float]) -> dict:
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
-def main():
+def main() -> None:
+    """CLI entry point: generate + score answers to the 540 gold Q&A for one model and write results."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", type=str, default=str(MODELS / "VHF-QWEN"),
                     help="path to model dir (merged) or HF id")

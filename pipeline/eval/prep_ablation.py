@@ -48,6 +48,7 @@ SYSTEM_RAG_COT = (
 
 
 def stratified_sample(gold: list[dict], n: int, seed: int = 0) -> list[dict]:
+    """Pick `n` gold Q&A round-robin across section_ids, so no section dominates the ablation sample."""
     rng = random.Random(seed)
     by_sec: dict[str, list[dict]] = defaultdict(list)
     for g in gold:
@@ -86,7 +87,8 @@ def build_prompts(q: str, ctx: str) -> dict:
     return {"v0_base": v0, "v1_rag": v1, "v2_cot": v2, "v3_rag_cot": v3}
 
 
-def main():
+def main() -> None:
+    """CLI entry point: build the v0/v1/v2/v3 ablation prompt sets for a stratified gold sample."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=40, help="pilot sample size")
     ap.add_argument("--seed", type=int, default=0)

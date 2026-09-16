@@ -61,7 +61,8 @@ REFL_ADAPTER = VHF_MODELS / "vhf_qwen_reflect_lora"
 DEFAULT_OUT  = VHF_MODELS / "VHF-QWEN"
 
 
-def main():
+def main() -> None:
+    """CLI entry point: merge the SFT/DPO/reflection LoRA adapters into the base model."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--sft", action="store_true", help="apply SFT adapter (default: yes)")
     ap.add_argument("--dpo", action="store_true", help="apply DPO adapter (default: yes)")

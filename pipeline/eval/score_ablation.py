@@ -38,7 +38,8 @@ SUMMARY_FILE = CACHE / "ablation_summary.json"
 METRIC_KEYS = ["SemSim","AnsRel","Faith","Correct","Cover","NumHit","LitHit","Composite"]
 
 
-def main():
+def main() -> None:
+    """CLI entry point: score generated ablation answers with the shared metric suite and write a summary."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--skip-judge", action="store_true",
                     help="skip Faith+Correct (OpenAI) to iterate faster")

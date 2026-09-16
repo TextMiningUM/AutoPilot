@@ -42,6 +42,7 @@ SYSTEM = (
 
 
 def concept_signature(trace: dict) -> set[str]:
+    """Concepts/channels/prowords/regulations mentioned in a trace, used to pair related traces."""
     t = trace.get("trace") or {}
     sig = set(str(x).strip() for x in (trace.get("chunk_concepts") or []) if str(x).strip())
     for c in (t.get("channels") or []):
@@ -54,6 +55,7 @@ def concept_signature(trace: dict) -> set[str]:
 
 
 def summarize_trace(trace: dict) -> str:
+    """Condense one reasoning trace into a short fluent-prose summary for multi-hop answers."""
     t = trace.get("trace") or {}
     sentences: list[str] = []
     situation = _clean(t.get("situation"))
@@ -79,6 +81,7 @@ def summarize_trace(trace: dict) -> str:
 
 
 def compose_multihop_question(concept: str, tr_a: dict, tr_b: dict) -> str:
+    """Combine one question seed from each of two related traces into one cross-source question."""
     seeds_a = (tr_a["trace"].get("question_seeds") or [])
     seeds_b = (tr_b["trace"].get("question_seeds") or [])
     fa = seeds_a[0].get("text") if seeds_a else f"how is {concept} handled?"
@@ -93,6 +96,7 @@ def compose_multihop_question(concept: str, tr_a: dict, tr_b: dict) -> str:
 
 
 def compose_multihop_answer(concept: str, tr_a: dict, tr_b: dict) -> str:
+    """Compose the combined answer citing both sources' summaries and a merged recommendation."""
     sum_a = summarize_trace(tr_a)
     sum_b = summarize_trace(tr_b)
     kfs = []
@@ -108,7 +112,8 @@ def compose_multihop_answer(concept: str, tr_a: dict, tr_b: dict) -> str:
     )
 
 
-def main():
+def main() -> None:
+    """CLI entry point: pair related traces by shared concepts and write multi-hop Q&A rows."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--traces-file", type=str, nargs="+", default=[str(TRACES_FILE)],
                     help="one or more traces files -- pass both protocol and conversation "

@@ -77,6 +77,7 @@ Rules:
 
 
 def user_prompt(chunk: dict) -> str:
+    """Build the user-turn message describing one RAG chunk for the extraction prompt."""
     return (
         f"Source: {chunk['source_file']}\n"
         f"Chapter: {chunk['chapter_title']}\n"
@@ -88,19 +89,21 @@ def user_prompt(chunk: dict) -> str:
 
 
 def parse_response(raw: str) -> dict | None:
+    """Parse a JSON object from a model response, tolerating surrounding prose."""
     try:
         return json.loads(raw)
-    except Exception:
+    except json.JSONDecodeError:
         m = re.search(r"\{.*\}", raw, re.DOTALL)
         if not m:
             return None
         try:
             return json.loads(m.group(0))
-        except Exception:
+        except json.JSONDecodeError:
             return None
 
 
 def process_chunk(client: OpenAI, chunk: dict) -> tuple[str, dict | None, str | None]:
+    """Call the LLM to extract a reasoning trace from one chunk; returns (chunk_id, trace_or_None, error_or_None)."""
     try:
         resp = client.chat.completions.create(
             model=MODEL,
@@ -122,6 +125,7 @@ def process_chunk(client: OpenAI, chunk: dict) -> tuple[str, dict | None, str | 
 
 
 def load_done_ids(path: Path) -> set[str]:
+    """Read already-processed chunk_ids from an output JSONL file, for resume support."""
     if not path.exists():
         return set()
     done: set[str] = set()
@@ -129,12 +133,13 @@ def load_done_ids(path: Path) -> set[str]:
         for line in f:
             try:
                 done.add(json.loads(line)["chunk_id"])
-            except Exception:
+            except (json.JSONDecodeError, KeyError):
                 pass
     return done
 
 
-def main():
+def main() -> None:
+    """CLI entry point: mine reasoning traces from RAG chunks via the OpenAI API, with resume support."""
     load_env(W / ".env")
     if not os.environ.get("OPENAI_API_KEY"):
         raise SystemExit("OPENAI_API_KEY missing from .env")

@@ -96,7 +96,7 @@ def load_all() -> Dataset:
 
 
 # ── Tokenization to chat template ────────────────────────────────────────
-def tokenize_row(row, tok, max_len: int = 2048):
+def tokenize_row(row: dict, tok, max_len: int = 2048):
     """Turn messages -> input_ids + labels where labels are -100 on the system
     and user tokens, and equal to input_ids on assistant tokens (standard
     completion-only mask so the student learns to produce the assistant reply).
@@ -132,7 +132,8 @@ class CollatorPad:
 
 
 # ── Distillation training loop ───────────────────────────────────────────
-def train(args):
+def train(args: argparse.Namespace) -> None:
+    """Run logit-distillation training: frozen 4-bit teacher, LoRA student, KD + CE loss."""
     tok_t = AutoTokenizer.from_pretrained(str(TEACHER_DIR))
     tok_s = AutoTokenizer.from_pretrained(args.student_id if not Path(args.student_id).exists() else args.student_id)
     if tok_s.pad_token is None: tok_s.pad_token = tok_s.eos_token
@@ -264,7 +265,8 @@ def train(args):
     print(f"Done. Evaluate with:  python eval_finetuned.py --model {out_dir} --tag distill")
 
 
-def main():
+def main() -> None:
+    """CLI entry point: parse distillation args and run train()."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--student-id", type=str, default=DEFAULT_STUDENT,
                     help="student HF model id, or path to a local model (e.g. pruned VHF-QWEN)")

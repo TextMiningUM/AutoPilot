@@ -118,6 +118,7 @@ def load_jsonl_dataset(path: Path) -> Dataset:
 
 
 def load_all_sft() -> Dataset:
+    """Load, print row counts for, and shuffle all SFT JSONL files (Track 1 + Track 2) into one Dataset."""
     parts = []
     for p in SFT_DATASETS:
         if not p.exists():
@@ -189,7 +190,7 @@ def lora_config() -> LoraConfig:
 
 
 # ── Training config ──────────────────────────────────────────────────────
-def make_sft_config(args) -> SFTConfig:
+def make_sft_config(args: argparse.Namespace) -> SFTConfig:
     """SFT training hyperparameters.
 
     Effective batch size = per_device * grad_accum = 1 * 16 = 16
@@ -243,7 +244,8 @@ def make_sft_config(args) -> SFTConfig:
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
-def main():
+def main() -> None:
+    """CLI entry point: run SFT LoRA training on the base model."""
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("--epochs", type=int, default=1, help="training epochs (1 is enough; 3 overfits on 5963 rows)")
     ap.add_argument("--batch_size", type=int, default=1, help="per-device train batch (keep 1 on 8 GB VRAM)")
