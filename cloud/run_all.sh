@@ -76,7 +76,7 @@ run_stage  5 colreg_multihop   false -m pipeline.track1.build_multihop --traces-
 
 # Cloud GPUs have 24-48 GB VRAM so we can use larger settings than on the laptop.
 run_stage  6 sft            true  -m pipeline.train.train_sft       --epochs 1 --max_seq_length 2048 --save_steps 50
-run_stage  7 dpo            true  -m pipeline.train.train_dpo       --epochs 1 --max_length 2048     --save_steps 50
+run_stage  7 dpo            true  -m pipeline.train.train_dpo       --epochs 0.5 --beta 0.05 --max_length 2048 --save_steps 25
 run_stage  8 reflection     true  -m pipeline.train.train_reflection --epochs 2 --max_length 2048    --save_steps 50
 run_stage  9 merge          true  -m pipeline.train.merge_adapter
 

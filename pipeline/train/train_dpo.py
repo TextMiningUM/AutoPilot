@@ -51,15 +51,32 @@ Merge into base with merge_adapter.py --add-dpo.
 
 USAGE
 -----
-    .venv\\Scripts\\python.exe train_dpo.py                 # 1 epoch, beta=0.1
-    .venv\\Scripts\\python.exe train_dpo.py --beta 0.05     # more aggressive shift
+    .venv\Scripts\python.exe train_dpo.py                 # 0.5 epoch, beta=0.05 (see below)
+    .venv\Scripts\python.exe train_dpo.py --beta 0.1      # more aggressive shift
 
 KEY HYPERPARAMETER — beta
 -------------------------
 beta controls how strongly the model is pushed away from the reference.
-  * beta = 0.1  (default): moderate; safe start
+  * beta = 0.1  : moderate
   * beta = 0.5  : very aggressive; can destroy fluency
-  * beta = 0.01 : minimal shift; useful if reference is already good
+  * beta = 0.05 (default): minimal shift; appropriate when the reference (the
+    SFT model) is already good, which is the case here
+
+WHY THESE DEFAULTS CHANGED (post-mortem, first full run)
+----------------------------------------------------------
+With the previous defaults (epochs=1, beta=0.1), `rewards/accuracies` hit
+~0.97-1.0 by ~50% of the epoch and kept climbing for the rest of it, while
+BOTH `logps/chosen` and `logps/rejected` kept getting more negative (e.g.
+chosen -337 -> -404, rejected -377 -> -450) -- classic DPO over-optimization:
+once the (deterministic, easily-separable) synthetic perturbations are
+trivially distinguished, further training keeps suppressing likelihood
+broadly rather than refining the distinction, degrading general answer
+quality. Evaluating the resulting merged model showed it kept the SFT
+stage's fluent template style but the actual content became largely
+hallucinated (Faith dropped from 0.36 pre-DPO-track to 0.02). Lower beta
+(stronger pull toward the reference) and fewer steps (stop before the
+reward-accuracy plateau turns into over-optimization) are the standard
+fixes for this failure mode.
 """
 from __future__ import annotations
 import os, json, argparse
@@ -203,10 +220,10 @@ def make_dpo_config(args: argparse.Namespace) -> DPOConfig:
 def main() -> None:
     """CLI entry point: run DPO training on top of the merged SFT model."""
     ap = argparse.ArgumentParser()
-    ap.add_argument("--epochs", type=int, default=1)
+    ap.add_argument("--epochs", type=float, default=0.5)
     ap.add_argument("--grad_accum", type=int, default=16)
     ap.add_argument("--lr", type=float, default=5e-5)
-    ap.add_argument("--beta", type=float, default=0.1,
+    ap.add_argument("--beta", type=float, default=0.05,
                     help="DPO temperature; higher = larger shift from reference")
     ap.add_argument("--max_length", type=int, default=1024)
     ap.add_argument("--save_steps", type=int, default=25)
