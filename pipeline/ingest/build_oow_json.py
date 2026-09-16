@@ -37,9 +37,14 @@ JSON_OUT_DIR.mkdir(parents=True, exist_ok=True)
 PDF_FILE = paths.source_dir / "COLREG-Consolidated-2018.pdf"
 OUT_FILE = JSON_OUT_DIR / "colreg_consolidated_2018.json"
 
-PART_RE   = re.compile(r"^PART\s+([A-E])\s*[-\u2013]\s*(.+)$")
+PART_RE   = re.compile(r"^PART\s+([A-Z])\s*[-\u2013]\s*(.+)$")
 ARTICLE_RE = re.compile(r"^ARTICLE\s+([IVXLC]+)\s*$")
-RULE_RE   = re.compile(r"^(?:RULE|Rule)\s+(\d{1,2})\s*$")
+# Trailing content is optional: some rules have an amendment annotation on the
+# same line (e.g. "Rule 39 (Added by Res.A.1085(28))") -- without this, those
+# rules were silently swallowed into the tail of the PRECEDING rule's section
+# instead of getting their own (found via check_consistency_colreg.py's
+# invalid_rule_number check flagging Rules 39-41 as missing from the map).
+RULE_RE   = re.compile(r"^(?:RULE|Rule)\s+(\d{1,2})\b\s*(?:\(.+\))?\s*$")
 ANNEX_RE  = re.compile(r"^ANNEX\s+([IVX]+)\s*[-\u2013]?\s*(.*)$")
 SECTION_RE = re.compile(r"^Section\s+([IVX]+)\s*[-\u2013]?\s*(.*)$", re.IGNORECASE)
 # Top-level numbered headings inside an Annex (e.g. "1. Definition",
