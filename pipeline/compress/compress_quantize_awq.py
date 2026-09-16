@@ -52,15 +52,15 @@ from pathlib import Path
 
 from core import AgentPaths
 
-paths = AgentPaths.vhf()
+paths = AgentPaths.from_env()
 W = paths.workspace
 CACHE = paths.cache_dir
 MODELS = paths.models_root
 VHF_MODELS = paths.domain_models_dir
 os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
-DEFAULT_IN  = VHF_MODELS / "VHF-QWEN"
-DEFAULT_OUT = VHF_MODELS / "VHF-QWEN-awq-int4"
+DEFAULT_IN  = VHF_MODELS / f"{paths.domain}-QWEN"
+DEFAULT_OUT = VHF_MODELS / f"{paths.domain}-QWEN-awq-int4"
 SFT_RAG     = CACHE / "vhf_sft_rag.jsonl"
 
 

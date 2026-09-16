@@ -47,7 +47,7 @@ from peft import PeftModel
 
 from core import AgentPaths
 
-paths = AgentPaths.vhf()
+paths = AgentPaths.from_env()
 W = paths.workspace
 MODELS = paths.models_root
 VHF_MODELS = paths.domain_models_dir
@@ -55,10 +55,11 @@ VHF_MODELS.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
 MODEL_ID    = "Qwen/Qwen2.5-7B-Instruct"
-SFT_ADAPTER = VHF_MODELS / "vhf_qwen_sft_lora"
-DPO_ADAPTER = VHF_MODELS / "vhf_qwen_dpo_lora"
-REFL_ADAPTER = VHF_MODELS / "vhf_qwen_reflect_lora"
-DEFAULT_OUT  = VHF_MODELS / "VHF-QWEN"
+_PFX = paths.domain.lower()
+SFT_ADAPTER = VHF_MODELS / f"{_PFX}_qwen_sft_lora"
+DPO_ADAPTER = VHF_MODELS / f"{_PFX}_qwen_dpo_lora"
+REFL_ADAPTER = VHF_MODELS / f"{_PFX}_qwen_reflect_lora"
+DEFAULT_OUT  = VHF_MODELS / f"{paths.domain}-QWEN"
 
 
 def main() -> None:

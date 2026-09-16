@@ -21,11 +21,12 @@ from sentence_transformers import SentenceTransformer
 
 from core import AgentPaths, load_jsonl, clean as _clean
 
-paths = AgentPaths.vhf()
+paths = AgentPaths.from_env()
 W = paths.workspace
 CACHE = paths.cache_dir
+_PFX = paths.domain.lower()
 
-TRACES_FILE = CACHE / "vhf_reasoning_traces.jsonl"
+TRACES_FILE = CACHE / f"{_PFX}_reasoning_traces.jsonl"
 GOLD_FILE   = paths.gold_file
 OUT_FILE    = CACHE / "vhf_multihop.jsonl"
 
@@ -33,12 +34,20 @@ CONTAM_THRESH = 0.85
 MAX_PAIRS_PER_CONCEPT = 25
 RNG = random.Random(42)
 
-SYSTEM = (
-    "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
-    "Some questions require you to synthesize information from multiple reference sources. "
-    "Explain each source's contribution, then give a combined precise answer with correct "
-    "prowords and channel numbers."
-)
+SYSTEM = {
+    "VHF": (
+        "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
+        "Some questions require you to synthesize information from multiple reference sources. "
+        "Explain each source's contribution, then give a combined precise answer with correct "
+        "prowords and channel numbers."
+    ),
+    "OOW": (
+        "You are the Officer of the Watch, an AI navigation agent responsible for COLREG-compliant "
+        "collision avoidance. Some questions require you to synthesize information from multiple "
+        "reference sources. Explain each source's contribution, then give a combined precise answer "
+        "with correct rule citations."
+    ),
+}[paths.domain]
 
 
 def concept_signature(trace: dict) -> set[str]:
@@ -119,6 +128,8 @@ def main() -> None:
                     help="one or more traces files -- pass both protocol and conversation "
                          "traces to get cross-track multi-hop pairs")
     ap.add_argument("--out-file", type=str, default=str(OUT_FILE))
+    ap.add_argument("--gold-file", type=str, default=str(GOLD_FILE),
+                    help="primary held-out gold file to filter against (default: paths.gold_file)")
     ap.add_argument("--extra-gold-file", type=str, default=None,
                     help="optional 2nd held-out file to also filter against (e.g. vhf_colreg_scenarios.json)")
     ap.add_argument("--extra-gold-key", type=str, default="question")
@@ -152,7 +163,7 @@ def main() -> None:
 
     print("Loading embedder + gold-Q embeddings...")
     model = SentenceTransformer("all-MiniLM-L6-v2")
-    gold = json.loads(GOLD_FILE.read_text(encoding="utf-8"))
+    gold = json.loads(Path(args.gold_file).read_text(encoding="utf-8"))
     gold_questions = [g["question"] for g in gold]
     if args.extra_gold_file:
         extra = json.loads(Path(args.extra_gold_file).read_text(encoding="utf-8"))

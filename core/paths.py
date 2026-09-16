@@ -78,6 +78,31 @@ class AgentPaths:
         """Paths object pre-configured for the existing VHF agent layout."""
         return cls(domain="VHF", source_dirname="VHFProtocol", workspace=workspace)
 
+    @classmethod
+    def oow(cls, workspace: Path | str | None = None) -> "AgentPaths":
+        """Paths object pre-configured for the Officer of the Watch (OOW) agent layout."""
+        return cls(domain="OOW", source_dirname="OOW_Protocols", workspace=workspace)
+
+    @classmethod
+    def from_env(cls, workspace: Path | str | None = None) -> "AgentPaths":
+        """Paths object selected by the ``AUTOPILOT_DOMAIN`` env var (default ``"VHF"``).
+
+        Lets every pipeline script stay agnostic of which domain it's building
+        for: run the exact same ``python -m pipeline.xxx`` command with
+        ``AUTOPILOT_DOMAIN=OOW`` in the environment (or ``env=...`` on a
+        subprocess call from a notebook) instead of VHF's default, no CLI
+        flag threading required. Mirrors the existing ``AUTOPILOT_MODELS_DIR``
+        convention.
+        """
+        import os
+        name = os.environ.get("AUTOPILOT_DOMAIN", "VHF").upper()
+        factory = {"VHF": cls.vhf, "OOW": cls.oow}.get(name)
+        if factory is None:
+            raise ValueError(
+                f"Unknown AUTOPILOT_DOMAIN={name!r}; add an AgentPaths classmethod for it."
+            )
+        return factory(workspace=workspace)
+
     # ── data folders (per domain) ───────────────────────────────────────
     @property
     def data_root(self) -> Path:

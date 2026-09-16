@@ -12,7 +12,7 @@ while applying COLREG correctly.
 
 This script builds a SECOND, complementary eval set: realistic ship-encounter scenarios
 (head-on, crossing, overtaking, narrow channel, restricted visibility, TSS, vessel not
-under command, etc.) grounded in the actual COLREG rule text (Data/OfficeroftheWatch/
+under command, etc.) grounded in the actual COLREG rule text (Data/OOW/
 colregs_all.json), each requiring the agent to:
   1. pick the correct VHF channel(s) and procedure (hailing on 16, working channel,
      low power where conventional, etc.)
@@ -40,7 +40,7 @@ from core import AgentPaths, load_env
 
 paths = AgentPaths.vhf()
 W = paths.workspace
-COLREG_FILE = W / "Data" / "OfficeroftheWatch" / "colregs_all.json"
+COLREG_FILE = W / "Data" / "OOW" / "colregs_all.json"
 OUT_DIR     = paths.eval_dir
 OUT_FILE    = OUT_DIR / "vhf_colreg_scenarios.json"
 

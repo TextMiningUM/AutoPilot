@@ -62,16 +62,16 @@ from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
 from core import AgentPaths, load_messages_jsonl
 
-paths = AgentPaths.vhf()
+paths = AgentPaths.from_env()
 W = paths.workspace
 CACHE  = paths.cache_dir
 MODELS = paths.models_root
 VHF_MODELS = paths.domain_models_dir
 os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
-TEACHER_DIR       = VHF_MODELS / "VHF-QWEN"
+TEACHER_DIR       = VHF_MODELS / f"{paths.domain}-QWEN"
 DEFAULT_STUDENT   = "Qwen/Qwen2.5-1.5B-Instruct"
-DEFAULT_OUT       = VHF_MODELS / "DistillVHF-QWEN"
+DEFAULT_OUT       = VHF_MODELS / f"Distill{paths.domain}-QWEN"
 
 # Same combined Track 1 + Track 2 datasets as train_sft.py (see notebook § 12/§12.6)
 # -- the student should see everything the teacher was fine-tuned on.

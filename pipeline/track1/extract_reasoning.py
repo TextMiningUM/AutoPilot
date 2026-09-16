@@ -32,19 +32,20 @@ from openai import OpenAI
 
 from core import AgentPaths, load_env
 
-paths = AgentPaths.vhf()
+paths = AgentPaths.from_env()
 W = paths.workspace
 CACHE = paths.cache_dir
+_PFX = paths.domain.lower()
 
-CHUNKS_FILE = CACHE / "vhf_rag_chunks.json"
-OUT_FILE    = CACHE / "vhf_reasoning_traces.jsonl"
+CHUNKS_FILE = CACHE / f"{_PFX}_rag_chunks.json"
+OUT_FILE    = CACHE / f"{_PFX}_reasoning_traces.jsonl"
 
 MIN_TOKENS  = 40
 MAX_WORKERS = 6
 MODEL       = "gpt-4o-mini"
 
 
-SYSTEM_PROMPT = """You are extracting the reasoning structure of a VHF marine-radio reference excerpt.
+SYSTEM_PROMPT_VHF = """You are extracting the reasoning structure of a VHF marine-radio reference excerpt.
 A downstream AI assistant will be trained on the extracted reasoning to answer mariner questions
 correctly. Extract everything from the excerpt only — no external knowledge.
 
@@ -74,6 +75,42 @@ Rules:
 - question_seeds: 2-4 realistic questions a mariner might ask about THIS excerpt
 - Do not include markdown, code fences, or commentary outside the JSON.
 - If the excerpt is boilerplate (page footer, ToC, copyright, url list) return {"skip": true, "reason": "..."}"""
+
+SYSTEM_PROMPT_OOW = """You are extracting the reasoning structure of a COLREG / maritime collision-avoidance
+reference excerpt (rules of the road, watchkeeping, or navigation-agent doctrine). A downstream
+Officer-of-the-Watch AI assistant will be trained on the extracted reasoning to decide the correct
+give-way/stand-on behaviour and helm/engine response in a real encounter. Extract everything from
+the excerpt only — no external knowledge.
+
+Return STRICT JSON with this exact schema (field names are reused from the sibling VHF pipeline for
+mechanical compatibility -- see the mapping in parentheses):
+{
+  "situation": "one sentence describing the scenario/context the excerpt covers",
+  "trigger": "what event or condition makes this content apply (or null)",
+  "procedures": [
+    {"step": 1, "action": "concise imperative", "why": "rationale grounded in excerpt"}
+  ],
+  "constraints": ["precondition or rule that must hold", "..."],
+  "prowords_used": ["give-way vessel", "stand-on vessel", "risk of collision", "..."]  (vessel-role / situational tags, NOT VHF prowords),
+  "channels": ["Rule 15", "Rule 17", "..."]  (COLREG rule numbers engaged, NOT VHF channels),
+  "regulations": ["COLREG 1972", "IMO Res. A.1106", "..."]  (instruments/annexes cited),
+  "warnings": ["safety warning or prohibition", "..."],
+  "outcomes": ["expected result of following the procedure", "..."],
+  "key_facts": ["standalone factual statement 1", "standalone factual statement 2"],
+  "question_seeds": [
+    {"angle": "what|when|how|why|which|who", "text": "realistic OOW question"}
+  ]
+}
+
+Rules:
+- All fields are required. Use [] for lists that don't apply. Use null only for "trigger" if none.
+- procedures: only if the excerpt describes actions to take; empty [] otherwise
+- key_facts: 2-5 discrete facts an Officer of the Watch would need to know
+- question_seeds: 2-4 realistic questions an OOW might ask about THIS excerpt
+- Do not include markdown, code fences, or commentary outside the JSON.
+- If the excerpt is boilerplate (page footer, ToC, copyright, url list) return {"skip": true, "reason": "..."}"""
+
+SYSTEM_PROMPT = {"VHF": SYSTEM_PROMPT_VHF, "OOW": SYSTEM_PROMPT_OOW}[paths.domain]
 
 
 def user_prompt(chunk: dict) -> str:

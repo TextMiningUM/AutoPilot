@@ -17,15 +17,16 @@ from sentence_transformers import SentenceTransformer
 
 from core import AgentPaths
 
-paths = AgentPaths.vhf()
+paths = AgentPaths.from_env()
 WORKSPACE    = paths.workspace
 JSON_OUT_DIR = paths.json_dir
 CACHE_DIR    = paths.cache_dir
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+_PFX = paths.domain.lower()
 
-RAG_CHUNKS_FILE = CACHE_DIR / "vhf_rag_chunks.json"
-EMBEDDINGS_FILE = CACHE_DIR / "vhf_rag_embeddings.npy"
-IDS_FILE        = CACHE_DIR / "vhf_rag_chunk_ids.json"
+RAG_CHUNKS_FILE = CACHE_DIR / f"{_PFX}_rag_chunks.json"
+EMBEDDINGS_FILE = CACHE_DIR / f"{_PFX}_rag_embeddings.npy"
+IDS_FILE        = CACHE_DIR / f"{_PFX}_rag_chunk_ids.json"
 
 # ── Chunking parameters ───────────────────────────────────────────────────
 CHUNK_TARGET_TOKENS = 400

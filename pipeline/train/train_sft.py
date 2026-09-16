@@ -65,7 +65,7 @@ from trl import SFTTrainer, SFTConfig
 from core import AgentPaths, load_messages_jsonl
 
 # ── Paths ────────────────────────────────────────────────────────────────────────────────────────────────────
-paths = AgentPaths.vhf()
+paths = AgentPaths.from_env()
 W = paths.workspace
 CACHE = paths.cache_dir
 MODELS = paths.models_root
@@ -77,7 +77,8 @@ MODELS.mkdir(exist_ok=True)
 os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
 MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
-OUTPUT_DIR = VHF_MODELS / "vhf_qwen_sft_lora"
+_PFX = paths.domain.lower()
+OUTPUT_DIR = VHF_MODELS / f"{_PFX}_qwen_sft_lora"
 
 # The SFT datasets we built from the 30 protocol JSONs, kept in TWO clearly
 # labeled tracks (see notebook § 12 for the full rationale):

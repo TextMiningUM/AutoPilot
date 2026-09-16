@@ -19,15 +19,16 @@ from sentence_transformers import SentenceTransformer
 from pipeline.ingest.build_kg import kg_retrieve
 from core import AgentPaths, load_jsonl, clean as _clean, cap as _cap, decap as _decap
 
-paths = AgentPaths.vhf()
+paths = AgentPaths.from_env()
 W = paths.workspace
 CACHE = paths.cache_dir
+_PFX = paths.domain.lower()
 
-TRACES_FILE = CACHE / "vhf_reasoning_traces.jsonl"
-CHUNKS_FILE = CACHE / "vhf_rag_chunks.json"
-EMBS_FILE   = CACHE / "vhf_rag_embeddings.npy"
-IDS_FILE    = CACHE / "vhf_rag_chunk_ids.json"
-KG_FILE     = CACHE / "vhf_kg.json"
+TRACES_FILE = CACHE / f"{_PFX}_reasoning_traces.jsonl"
+CHUNKS_FILE = CACHE / f"{_PFX}_rag_chunks.json"
+EMBS_FILE   = CACHE / f"{_PFX}_rag_embeddings.npy"
+IDS_FILE    = CACHE / f"{_PFX}_rag_chunk_ids.json"
+KG_FILE     = CACHE / f"{_PFX}_kg.json"
 GOLD_FILE   = paths.gold_file
 
 DIRECT_OUT = CACHE / "vhf_sft_direct.jsonl"
@@ -38,20 +39,45 @@ STATS_OUT  = CACHE / "vhf_sft_stats.json"
 CONTAM_THRESH = 0.85
 DEDUP_THRESH  = 0.92
 
-SYSTEM_DIRECT = (
-    "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
-    "Answer accurately, use correct prowords (MAYDAY, PAN PAN, SECURITE, OVER, OUT, THIS IS), "
-    "cite VHF channel numbers, and follow ITU/IMO/GMDSS regulations. Be concise."
-)
-SYSTEM_COT = (
-    "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
-    "Think step by step through the situation, the applicable procedure, and the constraints, "
-    "then give a precise answer with correct prowords and channel numbers."
-)
-SYSTEM_RAG = (
-    "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
-    "Use ONLY the provided context excerpts. If the excerpts don't contain the answer, "
-    "say so explicitly. Use correct prowords and channel numbers exactly as they appear."
+_SYSTEM_BY_DOMAIN = {
+    "VHF": dict(
+        direct=(
+            "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
+            "Answer accurately, use correct prowords (MAYDAY, PAN PAN, SECURITE, OVER, OUT, THIS IS), "
+            "cite VHF channel numbers, and follow ITU/IMO/GMDSS regulations. Be concise."
+        ),
+        cot=(
+            "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
+            "Think step by step through the situation, the applicable procedure, and the constraints, "
+            "then give a precise answer with correct prowords and channel numbers."
+        ),
+        rag=(
+            "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
+            "Use ONLY the provided context excerpts. If the excerpts don't contain the answer, "
+            "say so explicitly. Use correct prowords and channel numbers exactly as they appear."
+        ),
+    ),
+    "OOW": dict(
+        direct=(
+            "You are the Officer of the Watch, an AI navigation agent responsible for COLREG-compliant "
+            "collision avoidance. Answer accurately, cite the correct COLREG rule number(s), and follow "
+            "the give-way/stand-on obligations exactly. Be concise."
+        ),
+        cot=(
+            "You are the Officer of the Watch, an AI navigation agent responsible for COLREG-compliant "
+            "collision avoidance. Think step by step through the encounter, the applicable rule(s), and "
+            "the give-way/stand-on obligations, then give a precise answer citing the rule number(s)."
+        ),
+        rag=(
+            "You are the Officer of the Watch, an AI navigation agent responsible for COLREG-compliant "
+            "collision avoidance. Use ONLY the provided context excerpts. If the excerpts don't contain "
+            "the answer, say so explicitly. Cite rule numbers exactly as they appear in the excerpts."
+        ),
+    ),
+}[paths.domain]
+SYSTEM_DIRECT = _SYSTEM_BY_DOMAIN["direct"]
+SYSTEM_COT    = _SYSTEM_BY_DOMAIN["cot"]
+SYSTEM_RAG    = _SYSTEM_BY_DOMAIN["rag"]
 )
 
 
@@ -172,6 +198,8 @@ def main() -> None:
                     help="reasoning traces to build from (default: protocol traces / Track 1)")
     ap.add_argument("--out-prefix", type=str, default="vhf_sft",
                     help="outputs become <prefix>_direct.jsonl / _cot.jsonl / _rag.jsonl / _stats.json")
+    ap.add_argument("--gold-file", type=str, default=str(GOLD_FILE),
+                    help="primary held-out gold file to filter against (default: paths.gold_file)")
     ap.add_argument("--extra-gold-file", type=str, default=None,
                     help="optional 2nd held-out file to also filter against (e.g. vhf_colreg_scenarios.json)")
     ap.add_argument("--extra-gold-key", type=str, default="question")
@@ -192,7 +220,7 @@ def main() -> None:
     ids    = json.loads(IDS_FILE.read_text(encoding="utf-8"))
     kg     = json.loads(KG_FILE.read_text(encoding="utf-8"))
     chunk_by_id = {c["chunk_id"]: c for c in chunks}
-    gold = json.loads(GOLD_FILE.read_text(encoding="utf-8"))
+    gold = json.loads(Path(args.gold_file).read_text(encoding="utf-8"))
 
     print("Loading embedder + gold-Q embeddings for contamination filter...")
     model = SentenceTransformer("all-MiniLM-L6-v2")

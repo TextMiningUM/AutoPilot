@@ -51,15 +51,15 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from core import AgentPaths
 
-paths = AgentPaths.vhf()
+paths = AgentPaths.from_env()
 W = paths.workspace
 CACHE = paths.cache_dir
 MODELS = paths.models_root
 VHF_MODELS = paths.domain_models_dir
 os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
-DEFAULT_IN  = VHF_MODELS / "VHF-QWEN"
-DEFAULT_OUT = VHF_MODELS / "VHF-QWEN-pruned"
+DEFAULT_IN  = VHF_MODELS / f"{paths.domain}-QWEN"
+DEFAULT_OUT = VHF_MODELS / f"{paths.domain}-QWEN-pruned"
 SFT_RAG     = CACHE / "vhf_sft_rag.jsonl"
 REPORT_FILE = CACHE / "vhf_qwen_prune_report.json"
 

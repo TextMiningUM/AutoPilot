@@ -47,7 +47,7 @@ from trl import SFTTrainer, SFTConfig
 
 from core import AgentPaths
 
-paths = AgentPaths.vhf()
+paths = AgentPaths.from_env()
 W = paths.workspace
 CACHE = paths.cache_dir
 MODELS = paths.models_root
@@ -56,9 +56,10 @@ VHF_MODELS.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
 MODEL_ID     = "Qwen/Qwen2.5-7B-Instruct"
-SFT_ADAPTER  = VHF_MODELS / "vhf_qwen_sft_lora"
-DPO_ADAPTER  = VHF_MODELS / "vhf_qwen_dpo_lora"
-OUTPUT_DIR   = VHF_MODELS / "vhf_qwen_reflect_lora"
+_PFX = paths.domain.lower()
+SFT_ADAPTER  = VHF_MODELS / f"{_PFX}_qwen_sft_lora"
+DPO_ADAPTER  = VHF_MODELS / f"{_PFX}_qwen_dpo_lora"
+OUTPUT_DIR   = VHF_MODELS / f"{_PFX}_qwen_reflect_lora"
 # Track 1 (protocol-derived) + Track 2 (mined from the 360 training
 # conversations -- see notebook § 12.6) reflection triples, trained together.
 REFL_FILES   = [

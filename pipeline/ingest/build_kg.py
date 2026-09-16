@@ -23,14 +23,15 @@ from sentence_transformers import SentenceTransformer
 
 from core import AgentPaths
 
-paths = AgentPaths.vhf()
+paths = AgentPaths.from_env()
 W = paths.workspace
 CACHE = paths.cache_dir
+_PFX = paths.domain.lower()
 
-CHUNKS_FILE = CACHE / "vhf_rag_chunks.json"
-EMBS_FILE   = CACHE / "vhf_rag_embeddings.npy"
-IDS_FILE    = CACHE / "vhf_rag_chunk_ids.json"
-KG_FILE     = CACHE / "vhf_kg.json"
+CHUNKS_FILE = CACHE / f"{_PFX}_rag_chunks.json"
+EMBS_FILE   = CACHE / f"{_PFX}_rag_embeddings.npy"
+IDS_FILE    = CACHE / f"{_PFX}_rag_chunk_ids.json"
+KG_FILE     = CACHE / f"{_PFX}_kg.json"
 
 # ── Concept aliases: query phrase -> canonical concept ────────────────────
 # Lets queries like "how do I DSC alert" resolve to Channel 70 automatically.

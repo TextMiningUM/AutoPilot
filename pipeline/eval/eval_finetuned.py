@@ -55,7 +55,7 @@ from openai import OpenAI
 
 from core import AgentPaths, load_env
 
-paths = AgentPaths.vhf()
+paths = AgentPaths.from_env()
 W = paths.workspace
 CACHE = paths.cache_dir
 MODELS = paths.models_root
@@ -63,11 +63,18 @@ os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
 GOLD_FILE = paths.gold_file
 
-SYSTEM_PLAIN = (
-    "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
-    "Answer accurately, use correct prowords, cite channel numbers, "
-    "follow ITU/IMO/GMDSS regulations. Be concise."
-)
+SYSTEM_PLAIN = {
+    "VHF": (
+        "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
+        "Answer accurately, use correct prowords, cite channel numbers, "
+        "follow ITU/IMO/GMDSS regulations. Be concise."
+    ),
+    "OOW": (
+        "You are the Officer of the Watch, an AI navigation agent responsible for COLREG-compliant "
+        "collision avoidance. Answer accurately, cite the correct COLREG rule number(s), and respect "
+        "give-way/stand-on obligations. Be concise."
+    ),
+}[paths.domain]
 
 
 # ── Qwen inference (loads only the LM) ───────────────────────────────────
@@ -251,10 +258,12 @@ def _latency_stats(sorted_vals: list[float]) -> dict:
 def main() -> None:
     """CLI entry point: generate + score answers to the 540 gold Q&A for one model and write results."""
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", type=str, default=str(MODELS / "VHF-QWEN"),
+    ap.add_argument("--model", type=str, default=str(paths.domain_models_dir / f"{paths.domain}-QWEN"),
                     help="path to model dir (merged) or HF id")
     ap.add_argument("--tag", type=str, default=None, help="tag for output filename")
     ap.add_argument("--n", type=int, default=None, help="how many gold Q's (default: all 540)")
+    ap.add_argument("--gold-file", type=str, default=str(GOLD_FILE),
+                    help="held-out gold Q&A file (default: paths.gold_file)")
     args = ap.parse_args()
 
     tag = args.tag or Path(args.model).name.replace("/", "_")
@@ -266,7 +275,7 @@ def main() -> None:
         raise SystemExit("OPENAI_API_KEY missing (needed for Faith/Correct)")
     judge = OpenAI()
 
-    gold = json.loads(GOLD_FILE.read_text(encoding="utf-8"))
+    gold = json.loads(Path(args.gold_file).read_text(encoding="utf-8"))
     if args.n: gold = gold[:args.n]
     print(f"Evaluating {len(gold)} questions")
 

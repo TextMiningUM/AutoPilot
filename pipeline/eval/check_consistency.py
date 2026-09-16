@@ -89,7 +89,7 @@ from pathlib import Path
 
 from core import AgentPaths
 
-paths = AgentPaths.vhf()
+paths = AgentPaths.from_env()
 
 # ── Level-1 canonical reference data (VHF domain) ──────────────────────────
 # ITU-R M.1172 / IMO SMCP standardized phonetic alphabet. Key = correct code
