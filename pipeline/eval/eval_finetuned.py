@@ -175,11 +175,27 @@ def semsim(embedder, a: str, b: str) -> float:
 
 
 def cover(embedder, pred: str, expected_points: list[str], thresh: float = 0.55) -> float:
-    """Fraction of `expected_points` that are semantically present (>= thresh) in `pred`."""
+    """Fraction of `expected_points` that are semantically present (>= thresh) in `pred`.
+
+    Compares each expected_point against every individual SENTENCE of `pred`,
+    not the whole-paragraph embedding: a long multi-topic answer's overall
+    embedding is diluted across everything it talks about, so a single-topic
+    expected_point rarely clears a fixed threshold against it even when the
+    point genuinely is covered by one sentence within pred. Taking the max
+    over sentences fixes that -- confirmed via the first full run, where
+    Cover was ~0 for 71% of rows across every model tag (i.e. not
+    discriminating between models at all, a sign of a broken metric rather
+    than genuinely uncovered content).
+    """
     if not expected_points: return math.nan
-    pe = embedder.encode([pred], normalize_embeddings=True)[0]
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', pred) if len(s.strip()) > 3]
+    if not sentences:
+        sentences = [pred]
+    se = embedder.encode(sentences, normalize_embeddings=True)
     epe = embedder.encode(expected_points, normalize_embeddings=True)
-    hits = (epe @ pe) >= thresh
+    sims = epe @ se.T  # (n_points, n_sentences)
+    best_per_point = sims.max(axis=1)
+    hits = best_per_point >= thresh
     return float(np.mean(hits))
 
 
@@ -200,7 +216,9 @@ def lit_hit(gold: str, pred: str) -> float:
 # ── OpenAI judge (Faith + Correct) ───────────────────────────────────────
 JUDGE_MODEL = "gpt-4o-mini"
 
-FAITH_PROMPT = """You are grading whether a candidate answer is faithful to a reference (gold) answer for a VHF marine radio question. Return JSON: {{"faith": 0 or 1, "reason": "..."}}. 1 = candidate does not contradict gold and its factual claims can be supported by gold. 0 = contradicts or invents facts not in gold.
+FAITH_PROMPT = """You are grading whether a candidate answer is faithful to a reference (gold) answer for a VHF marine radio question. Return JSON: {{"faith": 0 or 1, "reason": "..."}}.
+1 = the candidate's SPECIFIC, CHECKABLE claims (channel numbers, prowords, procedure steps, regulations, named facts) do not contradict the gold reference. Minor additional plausible elaboration, rephrasing, or general context that is not explicitly contradicted by gold should NOT count against faithfulness -- gold answers are terse examples, not an exhaustive list of every true statement.
+0 = the candidate contradicts the gold reference, or states a SPECIFIC checkable fact (wrong channel number, wrong proword, wrong procedure step, wrong regulation) that conflicts with or is unsupported by gold.
 Question: {q}
 Gold: {g}
 Candidate: {p}"""

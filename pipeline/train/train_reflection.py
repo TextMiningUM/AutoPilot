@@ -170,6 +170,9 @@ def main() -> None:
         bf16=True,
         max_length=args.max_length,
         packing=False,
+        # See train_sft.py's identical fix: TRL defaults to whole-sequence loss
+        # for conversational "messages" data unless this is set.
+        assistant_only_loss=True,
         logging_steps=5,
         save_steps=args.save_steps,
         save_total_limit=2,

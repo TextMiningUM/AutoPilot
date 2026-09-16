@@ -215,6 +215,13 @@ def make_sft_config(args: argparse.Namespace) -> SFTConfig:
         max_grad_norm=1.0,
         bf16=True,
         packing=False,
+        # TRL defaults to loss over the WHOLE sequence (system+user+assistant)
+        # for conversational "messages" data unless this is set -- since our
+        # system prompt is near-identical across ~1600+ rows, that silently
+        # dominated the gradient with a repetitive, low-diversity signal
+        # instead of the per-row assistant content. Confirmed via the first
+        # full run's regression (base 0.461 -> SFT-only 0.309 Composite).
+        assistant_only_loss=True,
         logging_steps=5,
         save_steps=args.save_steps,
         save_total_limit=3,
