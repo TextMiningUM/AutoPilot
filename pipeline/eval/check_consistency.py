@@ -45,21 +45,27 @@ candidate for a fix — high precision over recall.
 
 HOW FINDINGS GET RESOLVED
 --------------------------
-For each finding, the reviewer picks one of two fixes:
+This script only ever reports; it never edits a source file or a JSON on its
+own. For each finding the reviewer picks one of three paths:
 
   (a) FIX AT SOURCE (preferred whenever the bad claim is a clean, isolated
-      wrong word/number) — edit the source .txt/.md directly, delete the
-      stale JSON under Data/VHF/VHF_JSON/ (or just re-run § 8 with
-      force=True for that file), and rebuild §9-§12. This is a full,
-      residue-free fix.
-  (b) EXCLUDE THE SECTION — for a section where the bad claim is entangled
-      with otherwise-useful text and isn't worth a source edit, add its
-      section_id to consistency_exclusions.json (see § 8.7's
-      cleanup_all_jsons() in the notebook, which reads this file and drops
-      any listed section_id before chunking ever sees it). This guarantees
-      the flagged content can never reach ANY downstream chunk, reasoning
-      trace, or training row, without needing to touch every build_*.py
-      script individually.
+      wrong word/number and the source is a plain .txt/.md) — edit the file
+      directly, delete the stale JSON under Data/VHF/VHF_JSON/, and rebuild
+      §9-§12. This is a full, residue-free fix.
+  (b) NORMALIZE — for a section where the source can't be hand-edited (a
+      PDF) or a source-text edit isn't worth it, add a scoped
+      {section_id, find, replace} entry to consistency_normalizations.json.
+      § 8.7's cleanup_all_jsons() reads this file and rewrites only that
+      exact section's text before chunking, so the fix survives every
+      re-parse without touching the original file and with zero data loss.
+      This must stay scoped per section_id, never a blind find/replace over
+      the whole corpus — the same word can be a genuine misspelling in one
+      section and a legitimate designator name (e.g. "Search Pattern Alpha")
+      in another; only a human reviewing each finding can tell the two apart.
+  (c) EXCLUDE THE SECTION — for a section where the wrong claim can't be
+      cleanly separated from otherwise-useful text even with a normalization
+      rule, add its section_id to consistency_exclusions.json instead, which
+      the same cleanup pass reads and drops entirely before chunking.
 
 USAGE
 -----
@@ -189,7 +195,9 @@ def print_report(findings: list[dict]) -> None:
     print("\n" + "=" * 100)
     print("NEXT STEP: for each finding, either —")
     print("  (a) fix at source — edit the .txt/.md, delete the stale JSON, re-run § 8-§ 12; or")
-    print("  (b) exclude the section — add its section_id to consistency_exclusions.json so")
+    print("  (b) normalize — add a scoped {section_id, find, replace} entry to")
+    print("      consistency_normalizations.json (for PDFs, or when not worth a source edit); or")
+    print("  (c) exclude the section — add its section_id to consistency_exclusions.json so")
     print("      § 8.7's cleanup pass drops it before chunking ever sees it.")
     print("Re-run this script after adding any new source document — as many times as useful.")
     print("=" * 100)
