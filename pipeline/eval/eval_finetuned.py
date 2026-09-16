@@ -78,9 +78,12 @@ SYSTEM_PLAIN = {
 
 
 # ── Qwen inference (loads only the LM) ───────────────────────────────────
-def load_lm(model_dir: str):
-    """Loads a fine-tuned or base causal LM. Uses bf16 if the model fits;
-    falls back to 4-bit NF4 for the 7B on 8 GB VRAM. AWQ-quantized checkpoints
+def load_lm(model_dir: str, force_4bit: bool = False):
+    """Loads a fine-tuned or base causal LM. Uses bf16 if it fits without any
+    CPU offload; falls back to 4-bit NF4 for the 7B on 8 GB VRAM -- either on
+    request (force_4bit) or automatically if bf16 "succeeds" but silently
+    offloads part of the model to CPU (device_map="auto" doesn't raise in that
+    case, it just makes generation extremely slow). AWQ-quantized checkpoints
     (own quantization_config baked into config.json) are loaded as-is, since
     forcing bf16/BitsAndBytes on top of an existing AWQ config conflicts.
     """
@@ -96,26 +99,40 @@ def load_lm(model_dir: str):
         except (json.JSONDecodeError, OSError):
             pass
 
+    def _load_4bit():
+        bnb = BitsAndBytesConfig(
+            load_in_4bit=True, bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
+        )
+        m = AutoModelForCausalLM.from_pretrained(
+            model_dir, quantization_config=bnb, device_map="auto",
+            torch_dtype=torch.bfloat16, attn_implementation="sdpa",
+        )
+        print("  loaded in 4-bit NF4")
+        return m
+
     if is_awq:
         model = AutoModelForCausalLM.from_pretrained(model_dir, device_map="auto")
         print("  loaded (AWQ int4)")
+    elif force_4bit:
+        model = _load_4bit()
     else:
         try:
             model = AutoModelForCausalLM.from_pretrained(
                 model_dir, torch_dtype=torch.bfloat16, device_map="auto",
                 attn_implementation="sdpa",
             )
-            print("  loaded in bf16")
+            offloaded = any(str(d) in ("cpu", "disk") for d in getattr(model, "hf_device_map", {}).values())
+            if offloaded:
+                print("  bf16 loaded but offloaded part of the model to CPU/disk (would be very slow) -- retrying in 4-bit NF4")
+                del model
+                torch.cuda.empty_cache()
+                model = _load_4bit()
+            else:
+                print("  loaded in bf16")
         except Exception as e:
             print(f"  bf16 failed ({type(e).__name__}: {e}) — retrying in 4-bit NF4")
-            bnb = BitsAndBytesConfig(
-                load_in_4bit=True, bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
-            )
-            model = AutoModelForCausalLM.from_pretrained(
-                model_dir, quantization_config=bnb, device_map="auto",
-                torch_dtype=torch.bfloat16, attn_implementation="sdpa",
-            )
+            model = _load_4bit()
     model.eval()
     tok = AutoTokenizer.from_pretrained(model_dir)
     if tok.pad_token is None:
@@ -264,6 +281,10 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=None, help="how many gold Q's (default: all 540)")
     ap.add_argument("--gold-file", type=str, default=str(GOLD_FILE),
                     help="held-out gold Q&A file (default: paths.gold_file)")
+    ap.add_argument("--force-4bit", action="store_true",
+                    help="skip the bf16 attempt and load directly in 4-bit NF4 -- "
+                         "recommended on an 8GB laptop GPU, where bf16 silently "
+                         "offloads part of the model to CPU and generation crawls")
     args = ap.parse_args()
 
     tag = args.tag or Path(args.model).name.replace("/", "_")
@@ -280,7 +301,7 @@ def main() -> None:
     print(f"Evaluating {len(gold)} questions")
 
     # --- 1) Generation phase (only LM in VRAM) ---
-    tok, model = load_lm(args.model)
+    tok, model = load_lm(args.model, force_4bit=args.force_4bit)
     gen_records = []
     for i, g in enumerate(gold, 1):
         try:

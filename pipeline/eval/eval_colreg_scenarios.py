@@ -195,6 +195,8 @@ def main() -> None:
     ap.add_argument("--model", type=str, default=str(MODELS / "VHF" / "VHF-QWEN"))
     ap.add_argument("--tag", type=str, default=None)
     ap.add_argument("--n", type=int, default=None, help="how many scenarios (default: all)")
+    ap.add_argument("--force-4bit", action="store_true",
+                    help="skip the bf16 attempt and load directly in 4-bit NF4")
     args = ap.parse_args()
 
     tag = args.tag or Path(args.model).name.replace("/", "_")
@@ -212,7 +214,7 @@ def main() -> None:
     print(f"Evaluating {len(scenarios)} COLREG scenarios (Track 2: conversational compliance)")
 
     # --- 1) Generation phase (only LM in VRAM) ---
-    tok, model = load_lm(args.model)
+    tok, model = load_lm(args.model, force_4bit=args.force_4bit)
     gen_records = []
     for i, s in enumerate(scenarios, 1):
         try:
