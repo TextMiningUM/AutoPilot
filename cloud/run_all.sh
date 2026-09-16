@@ -7,6 +7,7 @@
 #
 # Usage:
 #   cd ~/AutoPilot && source .venv/bin/activate && bash cloud/run_all.sh
+#   RESUME_FROM=10 bash cloud/run_all.sh   # skip stages < 10 (e.g. after a reboot mid-chain)
 
 set -uo pipefail
 
@@ -14,6 +15,7 @@ WORKSPACE="$HOME/AutoPilot"
 LOG_DIR="$WORKSPACE/Data/VHF/VHF_Agents_Training/overnight_logs"
 MASTER="$LOG_DIR/_master.log"
 COLREG_EVAL="Data/VHF/VHF_Eval/vhf_colreg_scenarios.json"
+RESUME_FROM="${RESUME_FROM:-1}"
 
 cd "$WORKSPACE"
 mkdir -p "$LOG_DIR"
@@ -31,6 +33,11 @@ run_stage() {
 
     local tag="$(printf '%02d_%s' "$idx" "$name")"
     local log="$LOG_DIR/$tag.log"
+
+    if [ "$idx" -lt "$RESUME_FROM" ]; then
+        log "STAGE $tag  skipped (RESUME_FROM=$RESUME_FROM)"
+        return 0
+    fi
 
     log "================================================================================"
     log "STAGE $tag  required=$required"
