@@ -14,37 +14,71 @@ from sentence_transformers import SentenceTransformer
 from pipeline.ingest.build_kg import kg_retrieve
 from core import AgentPaths
 
-paths = AgentPaths.vhf()
+paths = AgentPaths.from_env()
 W = paths.workspace
 CACHE = paths.cache_dir
+_PFX = paths.domain.lower()
 
 GOLD_FILE   = paths.gold_file
-CHUNKS_FILE = CACHE / "vhf_rag_chunks.json"
-EMBS_FILE   = CACHE / "vhf_rag_embeddings.npy"
-IDS_FILE    = CACHE / "vhf_rag_chunk_ids.json"
-KG_FILE     = CACHE / "vhf_kg.json"
+CHUNKS_FILE = CACHE / f"{_PFX}_rag_chunks.json"
+EMBS_FILE   = CACHE / f"{_PFX}_rag_embeddings.npy"
+IDS_FILE    = CACHE / f"{_PFX}_rag_chunk_ids.json"
+KG_FILE     = CACHE / f"{_PFX}_kg.json"
 OUT_FILE    = CACHE / "ablation_prompts.json"
 
-SYSTEM_BASE = (
-    "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
-    "Answer accurately, use correct prowords (MAYDAY, PAN PAN, SECURITE, OVER, OUT, THIS IS), "
-    "cite VHF channel numbers, and follow ITU/IMO/GMDSS regulations. Be concise."
-)
-SYSTEM_COT = (
-    "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
-    "Think step by step through the situation, applicable procedure, and constraints "
-    "BEFORE giving your final answer. Use correct prowords and channel numbers."
-)
-SYSTEM_RAG = (
-    "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
-    "Use ONLY the provided context excerpts to answer. If the excerpts don't contain the answer, "
-    "say so. Use correct prowords and channel numbers exactly as they appear."
-)
-SYSTEM_RAG_COT = (
-    "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
-    "Read the excerpts. Think step by step through the situation, procedure, and constraints "
-    "using ONLY the excerpts. Then give a precise answer with correct prowords and channel numbers."
-)
+_ABLATION_PROMPTS = {
+    "VHF": dict(
+        base=(
+            "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
+            "Answer accurately, use correct prowords (MAYDAY, PAN PAN, SECURITE, OVER, OUT, THIS IS), "
+            "cite VHF channel numbers, and follow ITU/IMO/GMDSS regulations. Be concise."
+        ),
+        cot=(
+            "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
+            "Think step by step through the situation, applicable procedure, and constraints "
+            "BEFORE giving your final answer. Use correct prowords and channel numbers."
+        ),
+        rag=(
+            "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
+            "Use ONLY the provided context excerpts to answer. If the excerpts don't contain the answer, "
+            "say so. Use correct prowords and channel numbers exactly as they appear."
+        ),
+        rag_cot=(
+            "You are a VHF marine radio expert assisting a vessel's Auto Pilot. "
+            "Read the excerpts. Think step by step through the situation, procedure, and constraints "
+            "using ONLY the excerpts. Then give a precise answer with correct prowords and channel numbers."
+        ),
+        doc_label="VHF reference documents",
+    ),
+    "OOW": dict(
+        base=(
+            "You are the Officer of the Watch, an AI navigation agent responsible for COLREG-compliant "
+            "collision avoidance. Answer accurately, cite the correct COLREG rule number(s), and respect "
+            "give-way/stand-on obligations. Be concise."
+        ),
+        cot=(
+            "You are the Officer of the Watch, an AI navigation agent responsible for COLREG-compliant "
+            "collision avoidance. Think step by step through the encounter, applicable rule(s), and "
+            "give-way/stand-on obligations BEFORE giving your final answer. Cite the rule number(s)."
+        ),
+        rag=(
+            "You are the Officer of the Watch, an AI navigation agent responsible for COLREG-compliant "
+            "collision avoidance. Use ONLY the provided context excerpts to answer. If the excerpts don't "
+            "contain the answer, say so. Cite rule numbers exactly as they appear in the excerpts."
+        ),
+        rag_cot=(
+            "You are the Officer of the Watch, an AI navigation agent responsible for COLREG-compliant "
+            "collision avoidance. Read the excerpts. Think step by step through the encounter, rule(s), "
+            "and obligations using ONLY the excerpts. Then give a precise answer citing the rule number(s)."
+        ),
+        doc_label="COLREG reference documents",
+    ),
+}[paths.domain]
+SYSTEM_BASE    = _ABLATION_PROMPTS["base"]
+SYSTEM_COT     = _ABLATION_PROMPTS["cot"]
+SYSTEM_RAG     = _ABLATION_PROMPTS["rag"]
+SYSTEM_RAG_COT = _ABLATION_PROMPTS["rag_cot"]
+_DOC_LABEL     = _ABLATION_PROMPTS["doc_label"]
 
 
 def stratified_sample(gold: list[dict], n: int, seed: int = 0) -> list[dict]:
@@ -79,10 +113,10 @@ def format_context(hits: list[dict], chunk_by_id: dict[str, dict]) -> str:
 
 def build_prompts(q: str, ctx: str) -> dict:
     v0 = [{"role": "system", "content": SYSTEM_BASE}, {"role": "user", "content": q}]
-    v1_user = f"Context excerpts from VHF reference documents:\n\n{ctx}\n\nQuestion: {q}"
+    v1_user = f"Context excerpts from {_DOC_LABEL}:\n\n{ctx}\n\nQuestion: {q}"
     v1 = [{"role": "system", "content": SYSTEM_RAG}, {"role": "user", "content": v1_user}]
     v2 = [{"role": "system", "content": SYSTEM_COT},  {"role": "user", "content": q}]
-    v3_user = f"Context excerpts from VHF reference documents:\n\n{ctx}\n\nQuestion: {q}"
+    v3_user = f"Context excerpts from {_DOC_LABEL}:\n\n{ctx}\n\nQuestion: {q}"
     v3 = [{"role": "system", "content": SYSTEM_RAG_COT}, {"role": "user", "content": v3_user}]
     return {"v0_base": v0, "v1_rag": v1, "v2_cot": v2, "v3_rag_cot": v3}
 
@@ -93,9 +127,11 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=40, help="pilot sample size")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--k", type=int, default=3, help="retrieval top-k")
+    ap.add_argument("--gold-file", type=str, default=str(GOLD_FILE),
+                    help="held-out gold Q&A file (default: paths.gold_file)")
     args = ap.parse_args()
 
-    gold = json.loads(GOLD_FILE.read_text(encoding="utf-8"))
+    gold = json.loads(Path(args.gold_file).read_text(encoding="utf-8"))
     print(f"Total gold: {len(gold)}")
     sample = stratified_sample(gold, args.n, seed=args.seed)
     print(f"Stratified sample: n={len(sample)}")

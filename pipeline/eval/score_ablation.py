@@ -27,7 +27,7 @@ from pipeline.eval.eval_finetuned import (
 
 from core import AgentPaths
 
-paths = AgentPaths.vhf()
+paths = AgentPaths.from_env()
 W = paths.workspace
 CACHE = paths.cache_dir
 
