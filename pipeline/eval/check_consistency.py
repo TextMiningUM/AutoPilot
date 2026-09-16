@@ -23,6 +23,11 @@ citable, standardized answer:
      not "Beta"; ...) — see PHONETIC_ALPHABET below.
   2. Distress/urgency/safety call-sign repetition counts (MAYDAY x3,
      PAN PAN x3, SECURITE x3) — see REPEAT_PROWORDS below.
+  3. Standardized VHF digit pronunciation inside quoted digit-by-digit
+     readouts (positions, MMSI, POB counts) — e.g. "FIFE" not "FIVE",
+     "NINER" not "NINE" — see NUMBER_WORDS below. Only checked inside a
+     quote that already contains one correctly-pronounced digit, so this
+     never fires on ordinary prose numbers or whole-word channel names.
 
 Every hit is a FINDING for a human (or an LLM assistant) to review — this
 script never edits or drops anything on its own. See "HOW FINDINGS GET
@@ -106,9 +111,37 @@ REPEAT_PROWORDS: dict[str, int] = {
     "SECURITY": 3,
 }
 
+# Standardized VHF digit pronunciation (ITU/NATO). Only digits that actually
+# change from ordinary English are listed -- SIX, SEVEN and ZERO are already
+# spoken the same way. Key = correct word; value = the ordinary-English word
+# it must not be confused with inside a digit-by-digit readout.
+NUMBER_WORDS: dict[str, str] = {
+    "WUN":   "ONE",
+    "TOO":   "TWO",
+    "TREE":  "THREE",
+    "FOWER": "FOUR",
+    "FIFE":  "FIVE",
+    "AIT":   "EIGHT",
+    "NINER": "NINE",
+}
+# A quote only counts as a digit-by-digit readout (and is worth checking for
+# the ordinary-English variants above) if it already contains at least one
+# digit spoken in the standardized form -- this is what keeps the check from
+# firing on ordinary prose that happens to contain the word "one" or "four".
+_PHONETIC_NUMBER_SIGNAL_RE = re.compile(
+    r"\bZERO\b|\b" + r"\b|\b".join(NUMBER_WORDS) + r"\b"
+)
+
 
 def _variant_pattern(variant: str) -> re.Pattern:
     return re.compile(rf"(?<![A-Za-z]){re.escape(variant)}(?![A-Za-z])")
+
+
+# Shared quote-matching pattern for the two checks below. Must be generous
+# enough for a full worked transmission example (some run past 400 chars) --
+# a too-tight cap here silently drops the whole quote from being checked at
+# all, rather than just truncating what's shown, which is a much worse bug.
+_QUOTE_RE = re.compile(r'"([^"]{0,2000})"')
 
 
 def check_phonetic_variants(text: str) -> list[dict]:
@@ -134,7 +167,7 @@ def check_repeat_counts(text: str) -> list[dict]:
     consecutive times (only inside quoted transmission-like text, to avoid
     flagging ordinary narrative mentions of the word)."""
     findings = []
-    for quote in re.findall(r'"([^"]{0,400})"', text):
+    for quote in _QUOTE_RE.findall(text):
         for proword, expected in REPEAT_PROWORDS.items():
             pattern = re.compile(rf"\b{re.escape(proword)}\b(?:[\s,]+{re.escape(proword)}\b)+", re.IGNORECASE)
             for m in pattern.finditer(quote):
@@ -151,6 +184,31 @@ def check_repeat_counts(text: str) -> list[dict]:
     return findings
 
 
+def check_number_pronunciation(text: str) -> list[dict]:
+    """Find ordinary-English number words inside a quoted digit-by-digit
+    readout (position, MMSI, POB count, ...) that should use the standardized
+    VHF pronunciation instead. Only checks quotes that already contain at
+    least one correctly-pronounced digit (ZERO or one of NUMBER_WORDS), so
+    ordinary prose numbers and whole-word channel names (e.g. "Channel
+    Sixteen") are never flagged."""
+    findings = []
+    for quote in _QUOTE_RE.findall(text):
+        if not _PHONETIC_NUMBER_SIGNAL_RE.search(quote):
+            continue
+        for canonical, variant in NUMBER_WORDS.items():
+            for m in _variant_pattern(variant).finditer(quote):
+                start = max(0, m.start() - 60)
+                end = min(len(quote), m.end() + 60)
+                findings.append({
+                    "check":     "number_pronunciation",
+                    "canonical": canonical,
+                    "found":     variant,
+                    "reason":    f'Standardized VHF digit pronunciation is "{canonical}", not "{variant}", in a digit-by-digit readout',
+                    "snippet":   quote[start:end],
+                })
+    return findings
+
+
 def scan_document(doc: dict) -> list[dict]:
     """Run all Level-1 checks over every section of one parsed JSON document."""
     findings = []
@@ -159,7 +217,8 @@ def scan_document(doc: dict) -> list[dict]:
             text = section.get("text", "")
             if not text:
                 continue
-            hits = check_phonetic_variants(text) + check_repeat_counts(text)
+            hits = (check_phonetic_variants(text) + check_repeat_counts(text)
+                    + check_number_pronunciation(text))
             for h in hits:
                 h["source_file"] = doc.get("source_file", "?")
                 h["section_id"]  = section.get("section_id", "?")

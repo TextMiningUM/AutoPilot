@@ -1,5 +1,7 @@
 """Unit tests for pipeline/eval/check_consistency.py using synthetic section text."""
-from pipeline.eval.check_consistency import check_phonetic_variants, check_repeat_counts, scan_document
+from pipeline.eval.check_consistency import (
+    check_phonetic_variants, check_repeat_counts, check_number_pronunciation, scan_document,
+)
 
 
 def test_phonetic_variant_detected():
@@ -34,6 +36,29 @@ def test_narrative_mention_not_flagged():
     assert check_repeat_counts(text) == []
 
 
+def test_number_pronunciation_wrong_flagged_in_digit_readout():
+    text = 'Example: "POSITION FIVE ZERO DECIMAL ONE TWO NORTH, OVER."'
+    findings = check_number_pronunciation(text)
+    found = {f["found"] for f in findings}
+    assert found == {"FIVE", "ONE", "TWO"}
+    assert all(f["canonical"] in {"FIFE", "WUN", "TOO"} for f in findings)
+
+
+def test_number_pronunciation_correct_not_flagged():
+    text = 'Example: "POSITION FIFE ZERO DECIMAL WUN TOO NORTH, OVER."'
+    assert check_number_pronunciation(text) == []
+
+
+def test_number_pronunciation_ordinary_prose_not_flagged():
+    text = 'This is the fifth example in this guide, covering four different scenarios.'
+    assert check_number_pronunciation(text) == []
+
+
+def test_number_pronunciation_whole_word_channel_not_flagged():
+    text = 'Example: "STANDING BY ON CHANNEL SIXTEEN, OUT."'
+    assert check_number_pronunciation(text) == []
+
+
 def test_scan_document_attaches_section_metadata():
     doc = {
         "source_file": "fake.txt",
@@ -57,5 +82,9 @@ if __name__ == "__main__":
     test_repeat_count_wrong_flagged()
     test_repeat_count_correct_not_flagged()
     test_narrative_mention_not_flagged()
+    test_number_pronunciation_wrong_flagged_in_digit_readout()
+    test_number_pronunciation_correct_not_flagged()
+    test_number_pronunciation_ordinary_prose_not_flagged()
+    test_number_pronunciation_whole_word_channel_not_flagged()
     test_scan_document_attaches_section_metadata()
     print("OK — check_consistency.py behaves as expected.")
