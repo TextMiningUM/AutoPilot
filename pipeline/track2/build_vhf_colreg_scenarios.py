@@ -12,8 +12,8 @@ while applying COLREG correctly.
 
 This script builds a SECOND, complementary eval set: realistic ship-encounter scenarios
 (head-on, crossing, overtaking, narrow channel, restricted visibility, TSS, vessel not
-under command, etc.) grounded in the actual COLREG rule text (Data/OOW/
-colregs_all.json), each requiring the agent to:
+under command, etc.) grounded in the actual COLREG rule text (Data/OOW/OOW_JSON/
+colreg_consolidated_2018.json, produced by pipeline.ingest.build_oow_json), each requiring
   1. pick the correct VHF channel(s) and procedure (hailing on 16, working channel,
      low power where conventional, etc.)
   2. produce an actual radio transmission (prowords, "THIS IS ... OVER", station ID)
@@ -40,7 +40,10 @@ from core import AgentPaths, load_env
 
 paths = AgentPaths.vhf()
 W = paths.workspace
-COLREG_FILE = W / "Data" / "OOW" / "colregs_all.json"
+# Hierarchical JSON produced by pipeline.ingest.build_oow_json (COLREG-Consolidated-2018.pdf).
+# Not paths.vhf().json_dir -- this is the OOW-domain source, reused here as ground-truth rule
+# text for VHF's Track 2 scenarios; there is no separate flat colregs_all.json anymore.
+COLREG_FILE = W / "Data" / "OOW" / "OOW_JSON" / "colreg_consolidated_2018.json"
 OUT_DIR     = paths.eval_dir
 OUT_FILE    = OUT_DIR / "vhf_colreg_scenarios.json"
 
@@ -163,9 +166,24 @@ types, regions, bearings/ranges, and whether risk of collision is marginal or cl
 Do not include markdown or commentary outside the JSON array."""
 
 
+_RULE_TITLE_RE = re.compile(r"^Rule\s+(\d{1,2})\s*[-\u2013]?\s*(.*)$")
+
+
 def load_colreg_rules() -> dict[int, dict]:
-    records = json.loads(COLREG_FILE.read_text(encoding="utf-8"))
-    return {r["rule"]: r for r in records}
+    """Parse the hierarchical build_oow_json.py schema into {rule_number: {rule, title, text}},
+    the flat shape the rest of this module expects."""
+    doc = json.loads(COLREG_FILE.read_text(encoding="utf-8"))
+    rules_by_num: dict[int, dict] = {}
+    for chapter in doc["chapters"]:
+        for section in chapter["sections"]:
+            if section["type"] != "rule":
+                continue
+            m = _RULE_TITLE_RE.match(section["title"])
+            if not m:
+                continue
+            num = int(m.group(1))
+            rules_by_num[num] = {"rule": num, "title": m.group(2).strip(), "text": section["text"]}
+    return rules_by_num
 
 
 def user_prompt(category: dict, rules_by_num: dict[int, dict], batch_size: int) -> str:
