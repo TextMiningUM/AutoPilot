@@ -205,7 +205,9 @@ def kg_retrieve(query: str, model, embs: np.ndarray, ids: list[str], kg: dict,
     q_cons = query_concepts(query, kg)
     expanded_cons = set(q_cons)
     for c in q_cons:
-        for c2, _cnt in list(kg["concept_cooccur"].get(c, {}).items())[:5]:
+        # top-5 by co-occurrence WEIGHT — dict insertion order is first-seen, not strongest
+        neighbours = sorted(kg["concept_cooccur"].get(c, {}).items(), key=lambda kv: -kv[1])[:5]
+        for c2, _cnt in neighbours:
             expanded_cons.add(c2)
 
     id_to_idx = {cid: i for i, cid in enumerate(ids)}
