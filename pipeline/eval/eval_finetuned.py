@@ -303,6 +303,9 @@ def main() -> None:
                     help="skip the bf16 attempt and load directly in 4-bit NF4 -- "
                          "recommended on an 8GB laptop GPU, where bf16 silently "
                          "offloads part of the model to CPU and generation crawls")
+    ap.add_argument("--legacy", action="store_true",
+                    help="score with the old (pre-RAGAS) v1 metric suite instead of "
+                         "the claim-level suite in pipeline.eval.ragas_metrics")
     args = ap.parse_args()
 
     tag = args.tag or Path(args.model).name.replace("/", "_")
@@ -338,28 +341,55 @@ def main() -> None:
     print("\nLoading embedder for metrics...")
     embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
+    if args.legacy:
+        suite_stamp = {"metric_suite": "legacy_v1", "judge_model": JUDGE_MODEL}
+        keys = ["SemSim","AnsRel","Faith","Correct","Cover","NumHit","LitHit","Composite"]
+    else:
+        from pipeline.eval.ragas_metrics import (
+            RagasScorer, load_gold_claims, summary_stamp, CLOSED_METRICS,
+        )
+        claims_by_id = load_gold_claims(Path(args.gold_file))
+        if not claims_by_id:
+            raise SystemExit(
+                f"No gold_claims found next to {args.gold_file} -- run "
+                "pipeline.eval.enrich_gold_claims first, or pass --legacy.")
+        scorer = RagasScorer(judge, embedder, paths)
+        suite_stamp = summary_stamp()
+        keys = CLOSED_METRICS + ["NumericPrec", "NumericRec", "Composite"]
+
     print("Scoring...")
+    n_no_claims = 0
     with out_file.open("w", encoding="utf-8") as f:
         for i, r in enumerate(gen_records, 1):
-            m = {
-                "SemSim":  round(semsim(embedder, r["gold_answer"], r["answer"]), 3),
-                "AnsRel":  round(semsim(embedder, r["question"],    r["answer"]), 3),
-                "Cover":   round(cover(embedder, r["answer"], r["expected_points"]), 3)
-                                if r.get("expected_points") else None,
-                "NumHit":  round(num_hit(r["gold_answer"], r["answer"]), 3),
-                "LitHit":  round(lit_hit(r["gold_answer"], r["answer"]), 3),
-                "Faith":   judge_faith(judge, r["question"], r["gold_answer"], r["answer"]),
-                "Correct": judge_correct(judge, r["question"], r["gold_answer"],
-                                         r["expected_points"], r["answer"]),
-            }
-            m["Composite"] = round(composite(m), 3)
+            if args.legacy:
+                m = {
+                    "SemSim":  round(semsim(embedder, r["gold_answer"], r["answer"]), 3),
+                    "AnsRel":  round(semsim(embedder, r["question"],    r["answer"]), 3),
+                    "Cover":   round(cover(embedder, r["answer"], r["expected_points"]), 3)
+                                    if r.get("expected_points") else None,
+                    "NumHit":  round(num_hit(r["gold_answer"], r["answer"]), 3),
+                    "LitHit":  round(lit_hit(r["gold_answer"], r["answer"]), 3),
+                    "Faith":   judge_faith(judge, r["question"], r["gold_answer"], r["answer"]),
+                    "Correct": judge_correct(judge, r["question"], r["gold_answer"],
+                                             r["expected_points"], r["answer"]),
+                }
+                m["Composite"] = round(composite(m), 3)
+            else:
+                claims = claims_by_id.get(str(r["id"]))
+                if claims is None:
+                    n_no_claims += 1
+                    m = {"no_gold_claims": True}
+                else:
+                    m = scorer.score_row(r["question"], r["answer"], r["gold_answer"],
+                                         r.get("expected_points"), claims, contexts=None)
             row = {**r, "metrics": m}
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
             if i % 20 == 0 or i == len(gen_records):
-                print(f"  scored {i}/{len(gen_records)}  Composite={m['Composite']}", flush=True)
+                print(f"  scored {i}/{len(gen_records)}  Composite={m.get('Composite')}", flush=True)
+    if n_no_claims:
+        print(f"  [warn] {n_no_claims} rows skipped: no gold_claims yet (enrichment incomplete)")
 
     # --- 3) Summarize ---
-    keys = ["SemSim","AnsRel","Faith","Correct","Cover","NumHit","LitHit","Composite"]
     sums, cnts = {k: 0.0 for k in keys}, {k: 0 for k in keys}
     with out_file.open("r", encoding="utf-8") as f:
         for line in f:
@@ -374,6 +404,7 @@ def main() -> None:
     lat_stats = _latency_stats(latencies)
 
     summary = {"model": args.model, "tag": tag, "n": len(gen_records),
+               **suite_stamp,
                "means": means, "counts": cnts, "latency": lat_stats}
     summary_out.write_text(json.dumps(summary, indent=2))
 

@@ -154,7 +154,7 @@ def call_format_score(own_vessel: str, pred: str) -> float | None:
 
 def composite_colreg(sem: float, ans_rel: float, cov: float, chan: float,
                      callfmt: float | None, colreg: float) -> float:
-    """Weighted average of the per-metric COLREG scores, skipping any nan/missing metric."""
+    """(legacy v1) Weighted average of the per-metric COLREG scores, skipping any nan/missing metric."""
     weights = {"SemSim": 0.10, "AnsRel": 0.10, "Cover": 0.15,
                "ChannelProc": 0.15, "CallFormatOK": 0.15, "ColregCorrect": 0.35}
     vals = {"SemSim": sem, "AnsRel": ans_rel, "Cover": cov,
@@ -167,6 +167,29 @@ def composite_colreg(sem: float, ans_rel: float, cov: float, chan: float,
         num += w * v
         den += w
     return num / den if den > 0 else math.nan
+
+
+# Track 2 suite-v2 composite: behavioral graders keep the majority of the
+# weight (they are the point of this track); claim-level metrics replace the
+# embedding proxies. Fixed weights -- a nan judge call makes the row's
+# Composite nan (excluded + flagged) instead of silently re-weighting.
+# CallFormatOK None (no quoted transmission found) counts as 0.0: the system
+# prompt explicitly demands a quoted transmission.
+COMPOSITE_V2_WEIGHTS = {"ColregCorrect": 0.30, "AnswerCorrectness": 0.25,
+                        "ChannelProc": 0.15, "CallFormatOK": 0.10,
+                        "NumericF1": 0.10, "CorpusGrounded": 0.10}
+
+
+def composite_colreg_v2(m: dict) -> float:
+    num = 0.0
+    for k, w in COMPOSITE_V2_WEIGHTS.items():
+        v = m.get(k)
+        if k == "CallFormatOK" and v is None:
+            v = 0.0
+        if v is None or (isinstance(v, float) and math.isnan(v)):
+            return math.nan
+        num += w * v
+    return num / sum(COMPOSITE_V2_WEIGHTS.values())
 
 
 @torch.inference_mode()
@@ -197,6 +220,8 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=None, help="how many scenarios (default: all)")
     ap.add_argument("--force-4bit", action="store_true",
                     help="skip the bf16 attempt and load directly in 4-bit NF4")
+    ap.add_argument("--legacy", action="store_true",
+                    help="score with the old v1 metric suite instead of the RAGAS suite")
     args = ap.parse_args()
 
     tag = args.tag or Path(args.model).name.replace("/", "_")
@@ -232,31 +257,60 @@ def main() -> None:
     print("\nLoading embedder for metrics...")
     embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
+    if args.legacy:
+        suite_stamp = {"metric_suite": "legacy_v1", "judge_model": JUDGE_MODEL}
+        keys = ["SemSim", "AnsRel", "Cover", "ChannelProc", "CallFormatOK", "ColregCorrect", "Composite"]
+    else:
+        from pipeline.eval.ragas_metrics import RagasScorer, load_gold_claims, summary_stamp
+        claims_by_id = load_gold_claims(SCENARIOS_FILE)
+        if not claims_by_id:
+            raise SystemExit(f"No gold_claims next to {SCENARIOS_FILE} -- run "
+                             "pipeline.eval.enrich_gold_claims first, or pass --legacy.")
+        scorer = RagasScorer(judge, embedder, paths)
+        suite_stamp = summary_stamp()
+        keys = ["AnswerCorrectness", "CorpusGrounded", "AnswerRelevancy", "NumericF1",
+                "LitHit", "Cover", "ChannelProc", "CallFormatOK", "ColregCorrect", "Composite"]
+
     print("Scoring...")
+    n_no_claims = 0
     with out_file.open("w", encoding="utf-8") as f:
         for i, r in enumerate(gen_records, 1):
-            sem  = round(semsim(embedder, r["gold_answer"], r["answer"]), 3)
-            ans_rel = round(semsim(embedder, r["question"], r["answer"]), 3)
-            cov  = round(cover(embedder, r["answer"], r.get("expected_points", [])), 3) \
-                       if r.get("expected_points") else None
             chan = channel_procedure_score(r["answer"])
             cfmt = call_format_score(r.get("own_vessel", ""), r["answer"])
             creg = judge_colreg_correct(judge, r["scenario"], r["question"],
                                         r.get("colreg_rules", []), r.get("expected_points", []),
                                         r["answer"])
-            m = {
-                "SemSim": sem, "AnsRel": ans_rel, "Cover": cov,
-                "ChannelProc": chan, "CallFormatOK": cfmt,
-                "ColregCorrect": None if math.isnan(creg) else round(creg, 3),
-            }
-            m["Composite"] = round(composite_colreg(sem, ans_rel, cov, chan, cfmt, creg), 3)
+            if args.legacy:
+                sem  = round(semsim(embedder, r["gold_answer"], r["answer"]), 3)
+                ans_rel = round(semsim(embedder, r["question"], r["answer"]), 3)
+                cov  = round(cover(embedder, r["answer"], r.get("expected_points", [])), 3) \
+                           if r.get("expected_points") else None
+                m = {
+                    "SemSim": sem, "AnsRel": ans_rel, "Cover": cov,
+                    "ChannelProc": chan, "CallFormatOK": cfmt,
+                    "ColregCorrect": None if math.isnan(creg) else round(creg, 3),
+                }
+                m["Composite"] = round(composite_colreg(sem, ans_rel, cov, chan, cfmt, creg), 3)
+            else:
+                claims = claims_by_id.get(str(r["id"]))
+                if claims is None:
+                    n_no_claims += 1
+                    m = {"no_gold_claims": True}
+                else:
+                    m = scorer.score_row(r["question"], r["answer"], r["gold_answer"],
+                                         r.get("expected_points"), claims, contexts=None)
+                    m.pop("Composite", None)  # replaced by the Track 2 composite
+                    m.update({"ChannelProc": chan, "CallFormatOK": cfmt,
+                              "ColregCorrect": None if math.isnan(creg) else round(creg, 3)})
+                    m["Composite"] = round(composite_colreg_v2({**m, "ColregCorrect": creg}), 3)
             row = {**r, "metrics": m}
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
             if i % 20 == 0 or i == len(gen_records):
-                print(f"  scored {i}/{len(gen_records)}  Composite={m['Composite']}", flush=True)
+                print(f"  scored {i}/{len(gen_records)}  Composite={m.get('Composite')}", flush=True)
+    if n_no_claims:
+        print(f"  [warn] {n_no_claims} rows skipped: no gold_claims yet (enrichment incomplete)")
 
     # --- 3) Summarize ---
-    keys = ["SemSim", "AnsRel", "Cover", "ChannelProc", "CallFormatOK", "ColregCorrect", "Composite"]
     sums, cnts = {k: 0.0 for k in keys}, {k: 0 for k in keys}
     with out_file.open("r", encoding="utf-8") as f:
         for line in f:
@@ -273,7 +327,7 @@ def main() -> None:
     lat_stats = _latency_stats(latencies)
 
     summary = {"model": args.model, "tag": tag, "n": len(gen_records),
-               "track": "conversational_compliance",
+               "track": "conversational_compliance", **suite_stamp,
                "means": means, "counts": cnts, "latency": lat_stats}
     summary_out.write_text(json.dumps(summary, indent=2))
 
