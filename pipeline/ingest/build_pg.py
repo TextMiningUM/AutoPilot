@@ -69,7 +69,41 @@ _ALLCAPS_NAME_RE = re.compile(r"\b[A-Z][A-Z']{3,25}\b(?:,\s*\b[A-Z][A-Z']{3,25}\
 def normalize_action(action: str) -> str:
     a = _VESSEL_RE.sub("the other vessel", action)
     a = _ALLCAPS_NAME_RE.sub("the other vessel", a)
-    return re.sub(r"\s+", " ", a).strip()
+    a = re.sub(r"\s+", " ", a).strip()
+    return _detense(a)
+
+
+# conversation traces log steps in past tense ("Initiated a call"), reasoning
+# traces in imperative ("initiate a call") — normalize to imperative so the
+# same step clusters together and downstream prose ("the next step is to …")
+# stays grammatical.
+_DETENSE_MAP = {
+    "initiated": "initiate", "acknowledged": "acknowledge", "hailed": "hail",
+    "altered": "alter", "sounded": "sound", "confirmed": "confirm",
+    "responded": "respond", "requested": "request", "reduced": "reduce",
+    "maintained": "maintain", "reported": "report", "transmitted": "transmit",
+    "switched": "switch", "established": "establish", "agreed": "agree",
+    "expressed": "express", "stated": "state", "announced": "announce",
+    "notified": "notify", "monitored": "monitor", "contacted": "contact",
+    "called": "call", "informed": "inform", "communicated": "communicate",
+    "coordinated": "coordinate", "proposed": "propose", "suggested": "suggest",
+    "declined": "decline", "accepted": "accept", "verified": "verify",
+    "replied": "reply", "issued": "issue", "activated": "activate",
+    "adjusted": "adjust", "increased": "increase", "slowed": "slow",
+    "stopped": "stop", "waited": "wait", "listened": "listen",
+    "checked": "check", "identified": "identify", "signaled": "signal",
+    "signalled": "signal", "broadcasted": "broadcast", "broadcast": "broadcast",
+    "asked": "ask", "answered": "answer", "repeated": "repeat",
+}
+
+
+def _detense(a: str) -> str:
+    parts = a.split(" ", 1)
+    first = parts[0].lower()
+    if first in _DETENSE_MAP:
+        rest = f" {parts[1]}" if len(parts) > 1 else ""
+        return _DETENSE_MAP[first] + rest
+    return a
 
 
 FAMILY_RULES = [

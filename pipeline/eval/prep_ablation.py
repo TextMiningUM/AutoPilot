@@ -12,6 +12,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from pipeline.ingest.build_kg import kg_retrieve
+from pipeline.ingest.pg_guidance import ProceduralGraph, render_guidance
 from core import AgentPaths
 
 paths = AgentPaths.from_env()
@@ -24,6 +25,7 @@ CHUNKS_FILE = CACHE / f"{_PFX}_rag_chunks.json"
 EMBS_FILE   = CACHE / f"{_PFX}_rag_embeddings.npy"
 IDS_FILE    = CACHE / f"{_PFX}_rag_chunk_ids.json"
 KG_FILE     = CACHE / f"{_PFX}_kg.json"
+PG_FILE     = CACHE / f"{_PFX}_pg.json"
 OUT_FILE    = CACHE / "ablation_prompts.json"
 
 _ABLATION_PROMPTS = {
@@ -111,14 +113,19 @@ def format_context(hits: list[dict], chunk_by_id: dict[str, dict]) -> str:
     return "\n\n".join(parts) or "(no relevant excerpts found)"
 
 
-def build_prompts(q: str, ctx: str) -> dict:
+def build_prompts(q: str, ctx: str, pg_guidance_text: str | None = None) -> dict:
     v0 = [{"role": "system", "content": SYSTEM_BASE}, {"role": "user", "content": q}]
     v1_user = f"Context excerpts from {_DOC_LABEL}:\n\n{ctx}\n\nQuestion: {q}"
     v1 = [{"role": "system", "content": SYSTEM_RAG}, {"role": "user", "content": v1_user}]
     v2 = [{"role": "system", "content": SYSTEM_COT},  {"role": "user", "content": q}]
     v3_user = f"Context excerpts from {_DOC_LABEL}:\n\n{ctx}\n\nQuestion: {q}"
     v3 = [{"role": "system", "content": SYSTEM_RAG_COT}, {"role": "user", "content": v3_user}]
-    return {"v0_base": v0, "v1_rag": v1, "v2_cot": v2, "v3_rag_cot": v3}
+    prompts = {"v0_base": v0, "v1_rag": v1, "v2_cot": v2, "v3_rag_cot": v3}
+    if pg_guidance_text:
+        v4_user = f"{pg_guidance_text}\n\nQuestion: {q}"
+        prompts["v4_pg"] = [{"role": "system", "content": SYSTEM_BASE},
+                            {"role": "user", "content": v4_user}]
+    return prompts
 
 
 def main() -> None:
@@ -147,13 +154,22 @@ def main() -> None:
     print("Loading embedder (CPU-friendly for retrieval)...")
     model = SentenceTransformer("all-MiniLM-L6-v2")
 
+    # v4_pg: guidance rendered from the procedural graph, when one exists
+    graph = ProceduralGraph(PG_FILE, model) if PG_FILE.exists() else None
+    if graph is None:
+        print(f"  [v4_pg] {PG_FILE.name} not found -- run pipeline.ingest.build_pg to enable v4_pg")
+
     records = []
+    n_with_guidance = 0
     for i, g in enumerate(sample, 1):
         hits, q_cons, expanded = kg_retrieve(
             g["question"], model, embs, ids, kg, k=args.k, dense_n=20,
         )
         ctx = format_context(hits, chunk_by_id)
-        prompts = build_prompts(g["question"], ctx)
+        pg_text = render_guidance(g["question"], graph) if graph else None
+        if pg_text:
+            n_with_guidance += 1
+        prompts = build_prompts(g["question"], ctx, pg_text or None)
         records.append({
             "q_id":            g["id"],
             "section_id":      g["section_id"],
@@ -171,11 +187,16 @@ def main() -> None:
         if i % 10 == 0:
             print(f"  prepped {i}/{len(sample)}")
 
+    configs = ["v0_base", "v1_rag", "v2_cot", "v3_rag_cot"]
+    if graph:
+        configs.append("v4_pg")
+        print(f"  v4_pg guidance rendered for {n_with_guidance}/{len(records)} questions "
+              "(others fall back to the v0 prompt at run time)")
     OUT_FILE.write_text(json.dumps({
         "n": len(records),
         "seed": args.seed,
         "k": args.k,
-        "configs": ["v0_base", "v1_rag", "v2_cot", "v3_rag_cot"],
+        "configs": configs,
         "records": records,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\nSaved: {OUT_FILE}  ({OUT_FILE.stat().st_size/1024:.1f} KB)")

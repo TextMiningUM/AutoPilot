@@ -89,8 +89,8 @@ def load_done() -> set[tuple[str, str]]:
 def main() -> None:
     """CLI entry point: generate base-Qwen answers for each ablation config, with resume support."""
     ap = argparse.ArgumentParser()
-    ap.add_argument("--configs", nargs="+",
-                    default=["v0_base", "v1_rag", "v2_cot", "v3_rag_cot"])
+    ap.add_argument("--configs", nargs="+", default=None,
+                    help="default: the configs list stored in ablation_prompts.json")
     ap.add_argument("--max_new_tokens", type=int, default=512)
     args = ap.parse_args()
 
@@ -98,6 +98,8 @@ def main() -> None:
         raise SystemExit(f"Missing {PROMPTS_FILE}. Run prep_ablation.py first.")
     data = json.loads(PROMPTS_FILE.read_text(encoding="utf-8"))
     records = data["records"]
+    if args.configs is None:
+        args.configs = data.get("configs", ["v0_base", "v1_rag", "v2_cot", "v3_rag_cot"])
     print(f"Prompts loaded: {len(records)} Q's x {len(args.configs)} configs = "
           f"{len(records)*len(args.configs)} generations")
 
@@ -116,7 +118,9 @@ def main() -> None:
                 key = (cfg, rec["q_id"])
                 if key in done:
                     continue
-                messages = rec["prompts"][cfg]
+                # v4_pg falls back to the plain prompt for questions where no
+                # guidance path could be rendered (keeps the paired sample complete)
+                messages = rec["prompts"].get(cfg) or rec["prompts"]["v0_base"]
                 try:
                     ans, dt = generate(tok, mdl, messages, args.max_new_tokens)
                 except Exception as e:

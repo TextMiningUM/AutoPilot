@@ -53,7 +53,7 @@ PROBE_FILE = paths.cache_dir / "probe_set.json"
 SEED = 20260917
 
 AXES = ["wrong_channel", "wrong_proword", "missing_step",
-        "dropped_regulation", "dropped_warning"]
+        "dropped_regulation", "dropped_warning", "swapped_step_order"]
 
 _CHANNEL_RE = re.compile(r"\b([Cc]hannel\s+)(\d{1,2})\b")
 # COLREG "Rule N" plus the VHF-domain citation forms (ITU/SOLAS/GMDSS)
@@ -119,12 +119,23 @@ def perturb_dropped_warning(gold: str, rng: random.Random) -> str | None:
     return " ".join(s for i, s in enumerate(sents) if i != drop)
 
 
+def perturb_swapped_step_order(gold: str, rng: random.Random) -> str | None:
+    """Swap two adjacent sentences -- procedure order is safety-critical."""
+    sents = _sentences(gold)
+    if len(sents) < 3:
+        return None
+    i = rng.randrange(0, len(sents) - 1)
+    sents[i], sents[i + 1] = sents[i + 1], sents[i]
+    return " ".join(sents)
+
+
 PERTURBERS = {
     "wrong_channel": perturb_wrong_channel,
     "wrong_proword": perturb_wrong_proword,
     "missing_step": perturb_missing_step,
     "dropped_regulation": perturb_dropped_regulation,
     "dropped_warning": perturb_dropped_warning,
+    "swapped_step_order": perturb_swapped_step_order,
 }
 
 

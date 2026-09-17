@@ -104,6 +104,10 @@ SFT_DATASETS = {
         CACHE / "vhf_colreg_sft_cot.jsonl",
         CACHE / "vhf_colreg_sft_rag.jsonl",
         CACHE / "vhf_colreg_multihop.jsonl",
+        # Procedural-graph step-order data (build_pg.py -> build_pg_sft.py):
+        # next-step / prerequisite / walkthrough Q&A teaching the ORDER of
+        # procedure steps, which none of the sets above teach explicitly.
+        CACHE / "vhf_pg_sft.jsonl",
     ],
     "OOW": [
         # Track 1 -- COLREG rules & knowledge (single-turn Q->A)
@@ -117,6 +121,8 @@ SFT_DATASETS = {
         CACHE / "oow_incident_sft_direct.jsonl",
         CACHE / "oow_incident_sft_cot.jsonl",
         CACHE / "oow_incident_sft_rag.jsonl",
+        # Procedural-graph step-order data (small for OOW until Track 2 exists)
+        CACHE / "oow_pg_sft.jsonl",
     ],
 }[paths.domain]
 

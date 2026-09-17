@@ -310,6 +310,8 @@ class RagasScorer:
         self._cache_f = self.cache_path.open("a", encoding="utf-8")
         self._chunks: list[dict] | None = None
         self._chunk_emb: np.ndarray | None = None
+        self._pg = None            # ProceduralGraph, loaded lazily
+        self._pg_missing = False   # remembered so we don't retry every row
         self.n_calls = 0
 
     # ── LLM plumbing ─────────────────────────────────────────────────
@@ -471,6 +473,43 @@ class RagasScorer:
         sem = float(np.dot(emb[0], emb[1]))
         return round(0.75 * f1 + 0.25 * sem, 3)
 
+    # ── ProcOrder: step-order concordance against the Procedural Graph ──
+    def proc_order(self, answer: str) -> float:
+        """Do the answer's procedure steps respect the step ordering attested in
+        the domain's Procedural Graph (build_pg.py)? Answer sentences are
+        matched to PG nodes; each ordered pair of matched steps counts as
+        concordant when the graph has a NEXT-path in that direction, and as a
+        violation when it only has the REVERSE path. Pairs the graph knows
+        nothing about are neutral. Vacuous 1.0 with < 2 matched steps.
+        Reported alongside the suite, NOT in the composite until calibrated."""
+        if self._pg is None and not self._pg_missing:
+            from pipeline.ingest.pg_guidance import ProceduralGraph
+            pg_file = self.paths.cache_dir / f"{self.paths.domain.lower()}_pg.json"
+            if pg_file.exists():
+                self._pg = ProceduralGraph(pg_file, self.embedder)
+            else:
+                self._pg_missing = True
+        if self._pg is None:
+            return math.nan
+        from pipeline.ingest.pg_guidance import split_step_sentences
+        steps = split_step_sentences(answer)
+        nodes = [n for n in self._pg.match_many(steps) if n is not None]
+        # collapse immediate repeats (one step split across sentences)
+        nodes = [n for i, n in enumerate(nodes) if i == 0 or n != nodes[i - 1]]
+        if len(nodes) < 2:
+            return 1.0
+        concordant = violations = 0
+        for i in range(len(nodes) - 1):
+            u, v = nodes[i], nodes[i + 1]
+            fwd = self._pg.reachable(u, v)
+            bwd = self._pg.reachable(v, u)
+            if fwd:
+                concordant += 1
+            elif bwd:
+                violations += 1  # graph knows this order -- and it's reversed
+        total = concordant + violations
+        return round(concordant / total, 3) if total else 1.0
+
     # ── row scoring ──────────────────────────────────────────────────
     def score_row(self, question: str, answer: str, gold_answer: str,
                   expected_points: list[str] | None, gold_claims: list[dict],
@@ -486,6 +525,9 @@ class RagasScorer:
             "LitHit": round(lit_hit_claims(answer, real_claims(gold_claims)), 3),
             **numeric_f1(answer, real_claims(gold_claims)),
         }
+        po = self.proc_order(answer)
+        if not math.isnan(po):
+            m["ProcOrder"] = po
         if kind == "rag":
             m["Faithfulness"] = self.faithfulness(question, answer, contexts)
             m["ContextPrecision"] = self.context_precision(question, gold_answer, contexts)

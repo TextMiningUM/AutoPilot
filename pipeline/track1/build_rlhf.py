@@ -168,12 +168,25 @@ def perturb_drop_warning(trace: dict) -> str | None:
     return build_chosen_answer(trace, warnings=[])
 
 
+def perturb_swap_steps(trace: dict) -> str | None:
+    """Swap two adjacent procedure steps -- procedures are order-critical
+    (DSC alert BEFORE voice MAYDAY, hail on 16 BEFORE switching), so a
+    swapped order with otherwise identical content must be dispreferred."""
+    procs = trace.get("procedures") or []
+    if len(procs) < 2: return None
+    i = RNG.randint(0, len(procs) - 2)
+    swapped = list(procs)
+    swapped[i], swapped[i + 1] = swapped[i + 1], swapped[i]
+    return build_chosen_answer(trace, procs=swapped)
+
+
 PERTURBATIONS = [
     ("wrong_channel",   perturb_wrong_channel),
     ("wrong_proword",   perturb_wrong_proword),
     ("missing_step",    perturb_missing_step),
     ("drop_regulation", perturb_drop_regulation),
     ("drop_warning",    perturb_drop_warning),
+    ("swap_step_order", perturb_swap_steps),
 ]
 
 
