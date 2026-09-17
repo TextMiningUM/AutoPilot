@@ -44,7 +44,7 @@ _cache/eval_{tag}.jsonl     one line per question with answer + all metrics
 _cache/eval_{tag}_summary.json   aggregate metric means
 """
 from __future__ import annotations
-import os, json, argparse, math, re, time
+import os, json, argparse, math, re, time, gc
 from pathlib import Path
 
 import numpy as np
@@ -126,8 +126,17 @@ def load_lm(model_dir: str, force_4bit: bool = False):
             if offloaded:
                 print("  bf16 loaded but offloaded part of the model to CPU/disk (would be very slow) -- retrying in 4-bit NF4")
                 del model
+                gc.collect()
                 torch.cuda.empty_cache()
                 model = _load_4bit()
+                still_offloaded = any(str(d) in ("cpu", "disk") for d in getattr(model, "hf_device_map", {}).values())
+                if still_offloaded:
+                    raise RuntimeError(
+                        "4-bit NF4 load still offloaded part of the model to CPU/disk -- the failed "
+                        "bf16 attempt's VRAM likely wasn't fully released before this retry. Pass "
+                        "--force-4bit to skip the bf16 attempt entirely (recommended on an 8 GB GPU), "
+                        "or restart the process to clear stale GPU memory."
+                    )
             else:
                 print("  loaded in bf16")
         except Exception as e:
@@ -322,16 +331,18 @@ def main() -> None:
     print(f"Evaluating {len(gold)} questions")
 
     # --- 1) Generation phase (only LM in VRAM) ---
+    log_every = 1 if len(gold) <= 20 else 20
     tok, model = load_lm(args.model, force_4bit=args.force_4bit)
     gen_records = []
     for i, g in enumerate(gold, 1):
+        print(f"  [gen {i}/{len(gold)}] {g['id']}: {g['question'][:80]!r}", flush=True)
         try:
             ans, dt = generate(tok, model, g["question"])
         except Exception as e:
             ans, dt = f"[ERROR:{e}]", 0.0
         gen_records.append({**g, "answer": ans, "latency_s": round(dt, 2)})
-        if i % 20 == 0 or i == len(gold):
-            print(f"  gen {i}/{len(gold)}  last {dt:.1f}s", flush=True)
+        if i % log_every == 0 or i == len(gold):
+            print(f"  gen {i}/{len(gold)} done  last {dt:.1f}s", flush=True)
 
     # Free VRAM before loading embedder + calling judge
     del model
@@ -384,7 +395,7 @@ def main() -> None:
                                          r.get("expected_points"), claims, contexts=None)
             row = {**r, "metrics": m}
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
-            if i % 20 == 0 or i == len(gen_records):
+            if i % log_every == 0 or i == len(gen_records):
                 print(f"  scored {i}/{len(gen_records)}  Composite={m.get('Composite')}", flush=True)
     if n_no_claims:
         print(f"  [warn] {n_no_claims} rows skipped: no gold_claims yet (enrichment incomplete)")

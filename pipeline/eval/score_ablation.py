@@ -113,6 +113,7 @@ def main() -> None:
         suite_stamp = summary_stamp()
 
     n_no_claims = 0
+    log_every = 1 if len(records) <= 20 else 20
     with SCORED_FILE.open("w", encoding="utf-8") as f:
         for i, r in enumerate(records, 1):
             if args.legacy:
@@ -142,8 +143,8 @@ def main() -> None:
                                          r.get("expected_points"), claims,
                                          contexts=ctx or None)
             f.write(json.dumps({**r, "metrics": m}, ensure_ascii=False) + "\n")
-            if i % 20 == 0 or i == len(records):
-                print(f"  scored {i}/{len(records)}", flush=True)
+            if i % log_every == 0 or i == len(records):
+                print(f"  scored {i}/{len(records)}  cfg={r['config']}", flush=True)
     if n_no_claims:
         print(f"  [warn] {n_no_claims} rows had no gold_claims yet (enrichment incomplete)")
 

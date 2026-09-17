@@ -190,13 +190,14 @@ def mean_logprob(tok, model, system: str, question: str, answer: str) -> float:
 def run_dpo_probe(tok, model, system: str, items: list[dict]) -> dict:
     per_axis: dict[str, list[int]] = {a: [] for a in AXES}
     margins: dict[str, list[float]] = {a: [] for a in AXES}
+    log_every = 1 if len(items) <= 20 else 20
     for i, it in enumerate(items, 1):
         lp_good = mean_logprob(tok, model, system, it["question"], it["good"])
         lp_bad = mean_logprob(tok, model, system, it["question"], it["bad"])
         per_axis[it["axis"]].append(1 if lp_good > lp_bad else 0)
         margins[it["axis"]].append(lp_good - lp_bad)
-        if i % 20 == 0 or i == len(items):
-            print(f"  dpo probe {i}/{len(items)}", flush=True)
+        if i % log_every == 0 or i == len(items):
+            print(f"  dpo probe {i}/{len(items)}  axis={it['axis']}", flush=True)
     out = {}
     for a in AXES:
         wins = per_axis[a]
@@ -245,9 +246,10 @@ def run_reflection_probe(tok, model, system: str, items: list[dict], n: int) -> 
     print(f"  reflection probe on {len(usable)} items")
 
     revisions = []
+    log_every = 1 if len(usable) <= 20 else 10
     for i, it in enumerate(usable, 1):
         revisions.append(generate_revision(tok, model, system, it["question"], it["bad"]))
-        if i % 10 == 0 or i == len(usable):
+        if i % log_every == 0 or i == len(usable):
             print(f"  reflect gen {i}/{len(usable)}", flush=True)
 
     # generation done -> free VRAM before judge phase

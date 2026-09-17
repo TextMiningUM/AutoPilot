@@ -239,16 +239,18 @@ def main() -> None:
     print(f"Evaluating {len(scenarios)} COLREG scenarios (Track 2: conversational compliance)")
 
     # --- 1) Generation phase (only LM in VRAM) ---
+    log_every = 1 if len(scenarios) <= 20 else 20
     tok, model = load_lm(args.model, force_4bit=args.force_4bit)
     gen_records = []
     for i, s in enumerate(scenarios, 1):
+        print(f"  [gen {i}/{len(scenarios)}] {s['id']}: {s['question'][:80]!r}", flush=True)
         try:
             ans, dt = generate_colreg(tok, model, s["scenario"], s["question"])
         except Exception as e:
             ans, dt = f"[ERROR:{e}]", 0.0
         gen_records.append({**s, "answer": ans, "latency_s": round(dt, 2)})
-        if i % 20 == 0 or i == len(scenarios):
-            print(f"  gen {i}/{len(scenarios)}  last {dt:.1f}s", flush=True)
+        if i % log_every == 0 or i == len(scenarios):
+            print(f"  gen {i}/{len(scenarios)} done  last {dt:.1f}s", flush=True)
 
     del model
     torch.cuda.empty_cache()

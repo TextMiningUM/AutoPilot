@@ -146,7 +146,8 @@ def main() -> None:
                 }
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
                 f.flush()
-                if idx % 5 == 0 or idx == total:
+                log_every = 1 if total <= 20 else 5
+                if idx % log_every == 0 or idx == total:
                     rate = idx / (time.time() - t_start + 1e-9)
                     remain = (total - idx) / rate if rate > 0 else 0
                     print(f"  {idx}/{total}  cfg={cfg}  q={rec['q_id']}  "

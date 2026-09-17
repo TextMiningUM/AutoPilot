@@ -168,6 +168,7 @@ def main() -> None:
 
     records = []
     n_with_guidance = 0
+    log_every = 1 if len(sample) <= 20 else 10
     for i, g in enumerate(sample, 1):
         hits, q_cons, expanded = kg_retrieve(
             g["question"], model, embs, ids, kg, k=args.k, dense_n=20,
@@ -191,7 +192,7 @@ def main() -> None:
             "expanded_concepts":   expanded,
             "prompts": prompts,
         })
-        if i % 10 == 0:
+        if i % log_every == 0 or i == len(sample):
             print(f"  prepped {i}/{len(sample)}")
 
     configs = ["v0_base", "v1_rag", "v2_cot", "v3_rag_cot"]
