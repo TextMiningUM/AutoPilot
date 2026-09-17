@@ -2,9 +2,10 @@
 # Pulls:
 #   - _models/VHF/VHF-QWEN/         (merged model, ~14 GB)
 #   - _models/VHF/DistillVHF-QWEN/  (if distillation ran, ~3 GB)
-#   - Data/VHF/VHF_Agents_Training/eval_*_summary.json  (small)
-#   - Data/VHF/VHF_Agents_Training/eval_*_records.jsonl (small)
-#   - Data/VHF/VHF_Agents_Training/overnight_logs/      (training logs)
+#   - Data/VHF/VHF_Agents_Training/eval_*.jsonl + eval_*_summary.json (both tracks)
+#   - Data/VHF/VHF_Agents_Training/ablation_*.json(l) + probe_*.json  (suite v2 results)
+#   - Data/VHF/VHF_Agents_Training/ragas_judge_cache.jsonl            (merge back locally)
+#   - Data/VHF/VHF_Agents_Training/overnight_logs/                    (training logs)
 #
 # Usage:
 #   pwsh -File cloud/download_results.ps1 -Server <IP> -Port 22 [-User ubuntu] [-SkipMerged]
@@ -30,10 +31,16 @@ New-Item -ItemType Directory -Force -Path "$W\Data\VHF\VHF_Agents_Training"     
 Write-Host "Downloading results from ${sshTarget}:${RemotePath}"
 Write-Host ""
 
-# 1. Eval summaries + records (small, always download first)
-Write-Host "== 1/5 Eval summaries + records =="
+# 1. Eval summaries + answers (both tracks; suite v2 + legacy stamps), ablation, probes
+Write-Host "== 1/5 Eval + ablation + probe results (suite v2) =="
+& scp @sshOpts "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/eval_*.jsonl" "$W\Data\VHF\VHF_Agents_Training\"
 & scp @sshOpts "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/eval_*_summary.json" "$W\Data\VHF\VHF_Agents_Training\"
-& scp @sshOpts "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/eval_*_records.jsonl" "$W\Data\VHF\VHF_Agents_Training\"
+& scp @sshOpts "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/ablation_*.json" "$W\Data\VHF\VHF_Agents_Training\"
+& scp @sshOpts "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/ablation_scored.jsonl" "$W\Data\VHF\VHF_Agents_Training\"
+& scp @sshOpts "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/probe_*.json" "$W\Data\VHF\VHF_Agents_Training\"
+# Judge cache: pull to a separate file, don't overwrite the local one -- merge manually
+# (both sides may have scored different rows since the bundle was uploaded).
+& scp @sshOpts "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/ragas_judge_cache.jsonl" "$W\Data\VHF\VHF_Agents_Training\ragas_judge_cache_from_cloud.jsonl"
 
 # 2. Training logs
 Write-Host ""
@@ -70,6 +77,11 @@ if ($exists.Trim() -eq "yes") {
 
 Write-Host ""
 Write-Host "Download done."
+if (Test-Path "$W\Data\VHF\VHF_Agents_Training\ragas_judge_cache_from_cloud.jsonl") {
+    Write-Host ""
+    Write-Host "NOTE: cloud judge cache saved as ragas_judge_cache_from_cloud.jsonl -- append its lines"
+    Write-Host "      to ragas_judge_cache.jsonl (dedup by the 'k' field) to reuse those verdicts locally."
+}
 Write-Host ""
 Write-Host "Sanity check:"
 Get-ChildItem "$W\_models\VHF" -Directory | ForEach-Object {

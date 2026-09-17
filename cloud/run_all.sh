@@ -81,25 +81,30 @@ run_stage  8 reflection     true  -m pipeline.train.train_reflection --epochs 2 
 run_stage  9 merge          true  -m pipeline.train.merge_adapter
 
 log "--- Track 1 (rules/knowledge) + Track 2 (conversational compliance), every model tag ---"
+log "    (defaults to the claim-level suite v2 -- requires the *_claims.json gold files uploaded by upload_bundle.ps1)"
 run_stage 10 eval_qwen_base        false -m pipeline.eval.eval_finetuned --model Qwen/Qwen2.5-7B-Instruct --tag qwen_base --n 540
 run_stage 11 eval_qwen_base_colreg false -m pipeline.eval.eval_colreg_scenarios --model Qwen/Qwen2.5-7B-Instruct --tag qwen_base
 run_stage 12 eval_vhfqwen          false -m pipeline.eval.eval_finetuned --model _models/VHF/VHF-QWEN --tag vhf_qwen --n 540
 run_stage 13 eval_vhfqwen_colreg   false -m pipeline.eval.eval_colreg_scenarios --model _models/VHF/VHF-QWEN --tag vhf_qwen
 
+log "--- Stage-attribution probes (DPO axis win-rates incl. swap_step_order + reflection Delta) ---"
+run_stage 14 probe_qwen_base false -m pipeline.eval.probe_dpo --model Qwen/Qwen2.5-7B-Instruct --tag qwen_base
+run_stage 15 probe_vhfqwen   false -m pipeline.eval.probe_dpo --model _models/VHF/VHF-QWEN --tag vhf_qwen
+
 log "--- optional: AWQ int4 quantization (pip install autoawq may fail on some setups) ---"
-pip install -q autoawq 2>&1 | tee "$LOG_DIR/14_awq_install.log" || log "autoawq install failed -- skipping AWQ stage."
-run_stage 14 awq_quantize      false -m pipeline.compress.compress_quantize_awq --n-calibration 128 --skip-eval
-run_stage 15 eval_awq          false -m pipeline.eval.eval_finetuned --model _models/VHF/VHF-QWEN-awq-int4 --tag vhf_qwen_awq --n 540
-run_stage 16 eval_awq_colreg   false -m pipeline.eval.eval_colreg_scenarios --model _models/VHF/VHF-QWEN-awq-int4 --tag vhf_qwen_awq
+pip install -q autoawq 2>&1 | tee "$LOG_DIR/16_awq_install.log" || log "autoawq install failed -- skipping AWQ stage."
+run_stage 16 awq_quantize      false -m pipeline.compress.compress_quantize_awq --n-calibration 128 --skip-eval
+run_stage 17 eval_awq          false -m pipeline.eval.eval_finetuned --model _models/VHF/VHF-QWEN-awq-int4 --tag vhf_qwen_awq --n 540
+run_stage 18 eval_awq_colreg   false -m pipeline.eval.eval_colreg_scenarios --model _models/VHF/VHF-QWEN-awq-int4 --tag vhf_qwen_awq
 
-run_stage 17 prune             false -m pipeline.compress.compress_prune --n-prune 4
-run_stage 18 distill           false -m pipeline.compress.compress_distill --merge-final
-run_stage 19 eval_distill      false -m pipeline.eval.eval_finetuned --model _models/VHF/DistillVHF-QWEN --tag distill_vhf --n 540
-run_stage 20 eval_distill_colreg false -m pipeline.eval.eval_colreg_scenarios --model _models/VHF/DistillVHF-QWEN --tag distill_vhf
+run_stage 19 prune             false -m pipeline.compress.compress_prune --n-prune 4
+run_stage 20 distill           false -m pipeline.compress.compress_distill --merge-final
+run_stage 21 eval_distill      false -m pipeline.eval.eval_finetuned --model _models/VHF/DistillVHF-QWEN --tag distill_vhf --n 540
+run_stage 22 eval_distill_colreg false -m pipeline.eval.eval_colreg_scenarios --model _models/VHF/DistillVHF-QWEN --tag distill_vhf
 
-log "--- prompt-injection ablation (base Qwen: no-context / RAG / CoT / RAG+CoT), full 540, Track 1 only ---"
-run_stage 21 ablation_prep  false -m pipeline.eval.prep_ablation --n 540
-run_stage 22 ablation_run   false -m pipeline.eval.run_ablation
-run_stage 23 ablation_score false -m pipeline.eval.score_ablation
+log "--- prompt-injection ablation (base Qwen: V0-V4 incl. PG guidance if vhf_pg.json is present), full 540, Track 1 only ---"
+run_stage 23 ablation_prep  false -m pipeline.eval.prep_ablation --n 540
+run_stage 24 ablation_run   false -m pipeline.eval.run_ablation
+run_stage 25 ablation_score false -m pipeline.eval.score_ablation
 
 log "===== CLOUD CHAIN DONE ====="

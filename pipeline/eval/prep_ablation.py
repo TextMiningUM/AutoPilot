@@ -136,7 +136,14 @@ def main() -> None:
     ap.add_argument("--k", type=int, default=3, help="retrieval top-k")
     ap.add_argument("--gold-file", type=str, default=str(GOLD_FILE),
                     help="held-out gold Q&A file (default: paths.gold_file)")
+    ap.add_argument("--tag", type=str, default="",
+                    help="suffix for ablation_prompts/answers/scored/summary filenames -- pass "
+                         "e.g. 'smoke' so a small smoke-test sample never shares (and never gets "
+                         "silently combined with) a full run's accumulated answers file")
     args = ap.parse_args()
+    global OUT_FILE
+    if args.tag:
+        OUT_FILE = CACHE / f"ablation_prompts_{args.tag}.json"
 
     gold = json.loads(Path(args.gold_file).read_text(encoding="utf-8"))
     print(f"Total gold: {len(gold)}")

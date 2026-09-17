@@ -1,11 +1,10 @@
-# Upload the minimal training-data bundle to a cloud GPU pod via scp.
-# Only sends what's needed:
-#   - Data/VHF/VHF_Agents_Training/*.jsonl  (SFT/DPO/reflection datasets)
-#   - Data/VHF/VHF_Eval/vhf_gold_answers.json
-#   - .env  (optional; needed only if you want to run eval judge on the pod)
+# Upload the minimal training-data + eval bundle to a cloud GPU pod via scp.
+# Everything train_sft.py / train_dpo.py / train_reflection.py / the ablation /
+# the suite-v2 eval scripts need to run unattended on the pod, nothing more
+# (no raw source PDFs/TXT, no _json/ intermediate, no local model weights).
 #
 # Usage:
-#   pwsh -File cloud/upload_bundle.ps1 -Server <IP_OR_HOSTNAME> -Port 22 [-User ubuntu] [-Env]
+#   pwsh -File cloud/upload_bundle.ps1 -Server <IP_OR_HOSTNAME> -Port 22 [-User ubuntu] [-IncludeEnv]
 
 param(
     [Parameter(Mandatory=$true)] [string]$Server,
@@ -24,44 +23,70 @@ $sshTarget = "${User}@${Server}"
 $sshOpts   = "-p", $Port, "-i", $KeyPath, "-o", "StrictHostKeyChecking=no"
 $scpOpts   = "-P", $Port, "-i", $KeyPath, "-o", "StrictHostKeyChecking=no"
 
-Write-Host "Uploading training bundle to ${sshTarget}:${RemotePath}"
+$TRAIN_DIR = "Data\VHF\VHF_Agents_Training"
+$EVAL_DIR  = "Data\VHF\VHF_Eval"
+
+function Send-File([string]$relPath) {
+    $local = Join-Path $W $relPath
+    if (-not (Test-Path $local)) {
+        Write-Host "  [skip] $relPath (not found locally)" -ForegroundColor Yellow
+        return
+    }
+    $remoteDir = "$RemotePath/" + (Split-Path $relPath -Parent).Replace('\', '/')
+    & scp @scpOpts $local "${sshTarget}:${remoteDir}/"
+}
+
+Write-Host "Uploading VHF training + eval bundle to ${sshTarget}:${RemotePath}"
 Write-Host ""
 
-# Make sure the target dirs exist on the pod.
-& ssh @sshOpts $sshTarget "mkdir -p $RemotePath/Data/VHF/VHF_Agents_Training $RemotePath/Data/VHF/VHF_Eval"
+& ssh @sshOpts $sshTarget "mkdir -p $RemotePath/$($TRAIN_DIR.Replace('\','/')) $RemotePath/$($EVAL_DIR.Replace('\','/'))"
 
-# 1. Training-data JSONL (SFT + DPO + reflection + multihop + traces)
-Write-Host "== 1/3 Training datasets =="
-& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_sft_direct.jsonl")    "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_sft_cot.jsonl")       "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_sft_rag.jsonl")       "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_multihop.jsonl")      "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_dpo_pairs.jsonl")     "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_reflection.jsonl")    "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_reasoning_traces.jsonl") "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
+Write-Host "== 1/6 Track 1 + Track 2 + PG training data (SFT/DPO/reflection) =="
+foreach ($f in @(
+    "vhf_sft_direct.jsonl", "vhf_sft_cot.jsonl", "vhf_sft_rag.jsonl", "vhf_multihop.jsonl",
+    "vhf_conversations.jsonl",
+    "vhf_colreg_sft_direct.jsonl", "vhf_colreg_sft_cot.jsonl", "vhf_colreg_sft_rag.jsonl",
+    "vhf_colreg_multihop.jsonl",
+    "vhf_pg_sft.jsonl",
+    "vhf_dpo_pairs.jsonl", "vhf_colreg_dpo_pairs.jsonl",
+    "vhf_reflection.jsonl", "vhf_colreg_reflection.jsonl"
+)) { Send-File "$TRAIN_DIR\$f" }
 
-# 2. RAG/KG cache (needed if you want to run eval with RAG on the pod)
 Write-Host ""
-Write-Host "== 2/3 RAG/KG cache =="
-& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_rag_chunks.json")     "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_rag_embeddings.npy")  "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_rag_chunk_ids.json")  "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
-& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Agents_Training\vhf_kg.json")             "${sshTarget}:${RemotePath}/Data/VHF/VHF_Agents_Training/"
+Write-Host "== 2/6 Reasoning traces (needed if the pod re-runs any build_* stage, e.g. run_all.sh's Track 2 mining) =="
+foreach ($f in @("vhf_reasoning_traces.jsonl", "vhf_conversation_traces.jsonl")) {
+    Send-File "$TRAIN_DIR\$f"
+}
 
-# 3. Held-out eval assets
 Write-Host ""
-Write-Host "== 3/3 Eval assets =="
-& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Eval\vhf_gold_answers.json")    "${sshTarget}:${RemotePath}/Data/VHF/VHF_Eval/"
-& scp @scpOpts (Join-Path $W "Data\VHF\VHF_Eval\VHF Exam Questions.txt")   "${sshTarget}:${RemotePath}/Data/VHF/VHF_Eval/"
+Write-Host "== 3/6 RAG / KG / Procedural Graph cache (ablation V1/V3/V4 configs, CorpusGrounded retrieval) =="
+foreach ($f in @(
+    "vhf_rag_chunks.json", "vhf_rag_embeddings.npy", "vhf_rag_chunk_ids.json",
+    "vhf_kg.json", "vhf_pg.json", "probe_set.json"
+)) { Send-File "$TRAIN_DIR\$f" }
 
-# 4. Optional: .env with OPENAI_API_KEY for eval judge
+Write-Host ""
+Write-Host "== 4/6 Held-out eval assets + gold_claims (suite v2 requires the *_claims.json siblings) =="
+foreach ($f in @(
+    "vhf_gold_answers.json", "vhf_gold_answers_claims.json",
+    "vhf_colreg_scenarios.json", "vhf_colreg_scenarios_claims.json",
+    "VHF Exam Questions.txt"
+)) { Send-File "$EVAL_DIR\$f" }
+
+Write-Host ""
+Write-Host "== 5/6 Judge cache (re-scoring reuses cached verdicts instead of re-paying for judge calls) =="
+Send-File "$TRAIN_DIR\ragas_judge_cache.jsonl"
+
+Write-Host ""
+Write-Host "== 6/6 .env (OPENAI_API_KEY for judge calls; ANTHROPIC_API_KEY only needed if re-enriching gold claims) =="
 if ($IncludeEnv) {
-    Write-Host ""
-    Write-Host "== .env (contains OPENAI_API_KEY) =="
-    & scp @scpOpts (Join-Path $W ".env") "${sshTarget}:${RemotePath}/.env"
+    Send-File ".env"
+} else {
+    Write-Host "  Skipped (pass -IncludeEnv to send it)."
 }
 
 Write-Host ""
 Write-Host "Upload done."
 Write-Host "On the pod, verify:"
-Write-Host "  ssh -p $Port ${sshTarget} 'ls -lh $RemotePath/Data/VHF/VHF_Agents_Training/*.jsonl'"
+Write-Host "  ssh -p $Port ${sshTarget} 'ls -lh $RemotePath/Data/VHF/VHF_Agents_Training/*.jsonl $RemotePath/Data/VHF/VHF_Agents_Training/*.json'"
+Write-Host "  ssh -p $Port ${sshTarget} 'ls -lh $RemotePath/Data/VHF/VHF_Eval/'"

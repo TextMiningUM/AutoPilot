@@ -71,7 +71,16 @@ def main() -> None:
     ap.add_argument("--gold-file", type=Path, default=None,
                     help="gold file whose _claims enrichment to use (default: paths.gold_file; "
                          "OOW uses Data/OOW/OOW_Eval/colreg_qa_500_normalised.json)")
+    ap.add_argument("--tag", type=str, default="",
+                    help="must match prep_ablation.py/run_ablation.py's --tag -- keeps a "
+                         "smoke-test sample's scoring separate from a full run's")
     args = ap.parse_args()
+    global ANSWERS_FILE, PROMPTS_FILE, SCORED_FILE, SUMMARY_FILE
+    if args.tag:
+        ANSWERS_FILE = CACHE / f"ablation_answers_{args.tag}.jsonl"
+        PROMPTS_FILE = CACHE / f"ablation_prompts_{args.tag}.json"
+        SCORED_FILE  = CACHE / f"ablation_scored_{args.tag}.jsonl"
+        SUMMARY_FILE = CACHE / f"ablation_summary_{args.tag}.json"
 
     load_env(W / ".env")
     if not os.environ.get("OPENAI_API_KEY") and not (args.legacy and args.skip_judge):

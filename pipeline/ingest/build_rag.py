@@ -155,9 +155,34 @@ def build_chunks_for_document(doc: dict) -> list[dict]:
     return chunks
 
 
+def _outputs_stale() -> bool:
+    """True if any output is missing, or any JSON in JSON_OUT_DIR is newer than
+    the oldest output -- same mtime convention as build_vhf_json.py's cleanup
+    pass and the notebook's KG staleness check."""
+    outputs = (RAG_CHUNKS_FILE, EMBEDDINGS_FILE, IDS_FILE)
+    if not all(p.exists() for p in outputs):
+        return True
+    oldest_output_mtime = min(p.stat().st_mtime for p in outputs)
+    return any(p.stat().st_mtime > oldest_output_mtime
+               for p in JSON_OUT_DIR.glob("*.json") if not p.name.startswith("_"))
+
+
 def main() -> None:
     """Load the embedder, chunk every document in _json/, embed the chunks, and
-    write chunks/embeddings/ids to _cache/ (plus a retrieval smoke test)."""
+    write chunks/embeddings/ids to _cache/ (plus a retrieval smoke test).
+    Skips the whole rebuild if outputs already exist and are newer than every
+    source JSON -- pass --force to rebuild unconditionally."""
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--force", action="store_true", help="rebuild even if outputs look up to date")
+    args = ap.parse_args()
+
+    if not args.force and not _outputs_stale():
+        chunks = json.loads(RAG_CHUNKS_FILE.read_text(encoding="utf-8"))
+        print(f"Up to date -- {len(chunks)} chunks, {EMBEDDINGS_FILE.name} unchanged. "
+              f"Pass --force to rebuild anyway.")
+        return
+
     global model, tokenizer
 
     # ── Load embedder + tokenizer ─────────────────────────────────────────

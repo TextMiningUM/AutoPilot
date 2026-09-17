@@ -92,7 +92,14 @@ def main() -> None:
     ap.add_argument("--configs", nargs="+", default=None,
                     help="default: the configs list stored in ablation_prompts.json")
     ap.add_argument("--max_new_tokens", type=int, default=512)
+    ap.add_argument("--tag", type=str, default="",
+                    help="must match prep_ablation.py's --tag -- keeps smoke-test answers in "
+                         "their own file, never appended to a full run's ablation_answers.jsonl")
     args = ap.parse_args()
+    global PROMPTS_FILE, ANSWERS_FILE
+    if args.tag:
+        PROMPTS_FILE = CACHE / f"ablation_prompts_{args.tag}.json"
+        ANSWERS_FILE = CACHE / f"ablation_answers_{args.tag}.jsonl"
 
     if not PROMPTS_FILE.exists():
         raise SystemExit(f"Missing {PROMPTS_FILE}. Run prep_ablation.py first.")
