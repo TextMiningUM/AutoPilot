@@ -104,10 +104,18 @@ SFT_ADAPTER = VHF_MODELS / f"{_PFX}_qwen_sft_lora"
 OUTPUT_DIR  = VHF_MODELS / f"{_PFX}_qwen_dpo_lora"
 # Track 1 (protocol-derived) + Track 2 (mined from the 360 training
 # conversations -- see notebook § 12.6) preference pairs, trained together.
-DPO_FILES   = [
-    CACHE / "vhf_dpo_pairs.jsonl",
-    CACHE / "vhf_colreg_dpo_pairs.jsonl",
-]
+DPO_FILES   = {
+    "VHF": [
+        CACHE / "vhf_dpo_pairs.jsonl",
+        CACHE / "vhf_colreg_dpo_pairs.jsonl",
+    ],
+    "OOW": [
+        CACHE / "oow_dpo_pairs.jsonl",
+        # Real accident-report chosen/rejected pairs (build_rlhf.py run against
+        # oow_incident_reasoning_traces.jsonl -- see extract_incident_reasoning.py).
+        CACHE / "oow_incident_dpo_pairs.jsonl",
+    ],
+}[paths.domain]
 
 
 # ── Data ─────────────────────────────────────────────────────────────────

@@ -62,10 +62,18 @@ DPO_ADAPTER  = VHF_MODELS / f"{_PFX}_qwen_dpo_lora"
 OUTPUT_DIR   = VHF_MODELS / f"{_PFX}_qwen_reflect_lora"
 # Track 1 (protocol-derived) + Track 2 (mined from the 360 training
 # conversations -- see notebook § 12.6) reflection triples, trained together.
-REFL_FILES   = [
-    CACHE / "vhf_reflection.jsonl",
-    CACHE / "vhf_colreg_reflection.jsonl",
-]
+REFL_FILES   = {
+    "VHF": [
+        CACHE / "vhf_reflection.jsonl",
+        CACHE / "vhf_colreg_reflection.jsonl",
+    ],
+    "OOW": [
+        CACHE / "oow_reflection.jsonl",
+        # Real accident-report reflection triples (build_reflection.py run against
+        # oow_incident_reasoning_traces.jsonl -- see extract_incident_reasoning.py).
+        CACHE / "oow_incident_reflection.jsonl",
+    ],
+}[paths.domain]
 
 
 def load_reflection() -> Dataset:

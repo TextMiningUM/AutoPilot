@@ -124,6 +124,14 @@ class AgentPaths:
         return self.data_root / f"{self.domain}_JSON"
 
     @property
+    def incidents_dir(self) -> Path:
+        """Raw accident/incident-investigation report PDFs (manually collected,
+        not auto-created by mkdirs). Screened for relevance before any of
+        their text enters the training pipeline -- see
+        pipeline.ingest.screen_incidents."""
+        return self.data_root / f"{self.domain}_Incidents"
+
+    @property
     def cache_dir(self) -> Path:
         """RAG chunks, embeddings, KG, traces, SFT/DPO/reflection JSONL."""
         return self.data_root / f"{self.domain}_Agents_Training"

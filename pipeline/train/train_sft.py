@@ -84,26 +84,41 @@ OUTPUT_DIR = VHF_MODELS / f"{_PFX}_qwen_sft_lora"
 # labeled tracks (see notebook § 12 for the full rationale):
 # NOTE: gold eval data (vhf_gold_answers.json / vhf_colreg_scenarios.json) is
 # deliberately NOT included in either track.
-SFT_DATASETS = [
-    # Track 1 -- rules & knowledge (single-turn Q->A, evaluated in § 16)
-    CACHE / "vhf_sft_direct.jsonl",
-    CACHE / "vhf_sft_cot.jsonl",
-    CACHE / "vhf_sft_rag.jsonl",
-    CACHE / "vhf_multihop.jsonl",
-    # Track 2 -- conversational compliance (multi-turn incoming/outgoing VHF
-    # dialogues, evaluated in § 16.5). Kept as its own file (never merged into
-    # the Track 1 JSONLs) so each track's contribution stays traceable.
-    CACHE / "vhf_conversations.jsonl",
-    # Track 2 (continued) -- agentic training data MINED from the 360 training
-    # conversations (never the held-out vhf_colreg_scenarios.json eval set) via
-    # extract_conversation_reasoning.py + build_sft.py/build_multihop.py, so
-    # Track 2 also gets RAG/CoT-style single-turn Q->A and cross-track
-    # multi-hop pairs, not just raw dialogue (see notebook § 12.6).
-    CACHE / "vhf_colreg_sft_direct.jsonl",
-    CACHE / "vhf_colreg_sft_cot.jsonl",
-    CACHE / "vhf_colreg_sft_rag.jsonl",
-    CACHE / "vhf_colreg_multihop.jsonl",
-]
+SFT_DATASETS = {
+    "VHF": [
+        # Track 1 -- rules & knowledge (single-turn Q->A, evaluated in § 16)
+        CACHE / "vhf_sft_direct.jsonl",
+        CACHE / "vhf_sft_cot.jsonl",
+        CACHE / "vhf_sft_rag.jsonl",
+        CACHE / "vhf_multihop.jsonl",
+        # Track 2 -- conversational compliance (multi-turn incoming/outgoing VHF
+        # dialogues, evaluated in § 16.5). Kept as its own file (never merged into
+        # the Track 1 JSONLs) so each track's contribution stays traceable.
+        CACHE / "vhf_conversations.jsonl",
+        # Track 2 (continued) -- agentic training data MINED from the 360 training
+        # conversations (never the held-out vhf_colreg_scenarios.json eval set) via
+        # extract_conversation_reasoning.py + build_sft.py/build_multihop.py, so
+        # Track 2 also gets RAG/CoT-style single-turn Q->A and cross-track
+        # multi-hop pairs, not just raw dialogue (see notebook § 12.6).
+        CACHE / "vhf_colreg_sft_direct.jsonl",
+        CACHE / "vhf_colreg_sft_cot.jsonl",
+        CACHE / "vhf_colreg_sft_rag.jsonl",
+        CACHE / "vhf_colreg_multihop.jsonl",
+    ],
+    "OOW": [
+        # Track 1 -- COLREG rules & knowledge (single-turn Q->A)
+        CACHE / "oow_sft_direct.jsonl",
+        CACHE / "oow_sft_cot.jsonl",
+        CACHE / "oow_sft_rag.jsonl",
+        CACHE / "oow_multihop.jsonl",
+        # Real accident-report excerpts (screen_incidents.py -> build_incident_excerpts.py ->
+        # extract_incident_reasoning.py -> build_sft.py), same rule-text schema, kept as its
+        # own file for traceability like VHF's Track 1/Track 2 split.
+        CACHE / "oow_incident_sft_direct.jsonl",
+        CACHE / "oow_incident_sft_cot.jsonl",
+        CACHE / "oow_incident_sft_rag.jsonl",
+    ],
+}[paths.domain]
 
 
 
