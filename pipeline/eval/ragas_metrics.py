@@ -82,6 +82,11 @@ RAG_METRICS = ["AnswerCorrectness", "Faithfulness", "ContextPrecision",
                "ContextRecall", "AnswerRelevancy", "NumericF1", "LitHit", "Cover"]
 CLOSED_METRICS = ["AnswerCorrectness", "CorpusGrounded", "AnswerRelevancy",
                   "NumericF1", "LitHit", "Cover"]
+# diagnostic P/R splits, free embedding metrics + ProcOrder: reported in every
+# summary, never weighted in the composite (AnswerCorrectness/NumericF1 already
+# carry their F1s; SemSim is already blended 1/4 inside AnswerCorrectness)
+DETAIL_METRICS = ["ClaimPrec", "ClaimRec", "ClaimF1", "NumericPrec", "NumericRec",
+                  "SemSim", "AnsRelCos", "ProcOrder"]
 
 COMPOSITE_WEIGHTS = {
     "rag": {"AnswerCorrectness": 0.35, "Faithfulness": 0.20, "ContextRecall": 0.10,
@@ -450,28 +455,42 @@ class RagasScorer:
 
     def answer_correctness(self, question: str, answer: str, gold_answer: str,
                            gold_claims: list[dict]) -> float:
-        """RAGAS answer correctness: claim-level F1 blended with semantic
+        """RAGAS answer correctness scalar: claim-level F1 blended with semantic
         similarity (0.75 * F1 + 0.25 * SemSim)."""
+        return self.answer_correctness_detail(question, answer, gold_answer,
+                                              gold_claims)["AnswerCorrectness"]
+
+    def answer_correctness_detail(self, question: str, answer: str, gold_answer: str,
+                                  gold_claims: list[dict]) -> dict:
+        """Full claim-level comparison: ClaimPrec (candidate statements supported
+        by gold — the hallucination side), ClaimRec (gold claims covered — the
+        completeness side), ClaimF1, and the blended AnswerCorrectness scalar."""
+        nanrow = {"AnswerCorrectness": math.nan, "ClaimPrec": math.nan,
+                  "ClaimRec": math.nan, "ClaimF1": math.nan}
         claims = real_claims(gold_claims)
         if not claims:
-            return math.nan
+            return nanrow
         stmts = self.statements(question, answer)
         if stmts is None:
-            return math.nan
+            return nanrow
         stmt_block = "\n".join(f"- {s}" for s in stmts) if stmts else "- (no substantive statements)"
         claim_block = "\n".join(f"- {c['claim']}" for c in claims)
         out = self._judge("correct", CORRECTNESS_PROMPT.format(
             q=question, claims=claim_block, stmts=stmt_block))
         if not out:
-            return math.nan
+            return nanrow
         tp = len(out.get("TP", []))
         fp = len(out.get("FP", []))
         fn = len(out.get("FN", []))
+        prec = tp / (tp + fp) if (tp + fp) else 0.0
+        rec = tp / (tp + fn) if (tp + fn) else 0.0
         f1 = tp / (tp + 0.5 * (fp + fn)) if (tp + fp + fn) else 0.0
         emb = self.embedder.encode([gold_answer, answer], normalize_embeddings=True,
                                    show_progress_bar=False)
         sem = float(np.dot(emb[0], emb[1]))
-        return round(0.75 * f1 + 0.25 * sem, 3)
+        return {"AnswerCorrectness": round(0.75 * f1 + 0.25 * sem, 3),
+                "ClaimPrec": round(prec, 3), "ClaimRec": round(rec, 3),
+                "ClaimF1": round(f1, 3)}
 
     # ── ProcOrder: step-order concordance against the Procedural Graph ──
     def proc_order(self, answer: str) -> float:
@@ -517,9 +536,14 @@ class RagasScorer:
         """All suite-v2 metrics for one answer. contexts=None → closed-book."""
         from pipeline.eval.eval_finetuned import cover  # reused unchanged
         kind = "rag" if contexts else "closed"
+        # free embedding diagnostics (the old suite's SemSim/AnsRel, kept visible)
+        emb = self.embedder.encode([gold_answer, answer, question],
+                                   normalize_embeddings=True, show_progress_bar=False)
         m: dict[str, float | None] = {
+            "SemSim": round(float(np.dot(emb[0], emb[1])), 3),
+            "AnsRelCos": round(float(np.dot(emb[2], emb[1])), 3),
             "AnswerRelevancy": self.answer_relevancy(question, answer),
-            "AnswerCorrectness": self.answer_correctness(question, answer, gold_answer, gold_claims),
+            **self.answer_correctness_detail(question, answer, gold_answer, gold_claims),
             "Cover": (round(cover(self.embedder, answer, expected_points), 3)
                       if expected_points else 1.0),
             "LitHit": round(lit_hit_claims(answer, real_claims(gold_claims)), 3),

@@ -91,7 +91,7 @@ def main() -> None:
     else:
         from pipeline.eval.ragas_metrics import (
             RagasScorer, load_gold_claims, summary_stamp, paired_bootstrap,
-            RAG_METRICS, CLOSED_METRICS,
+            RAG_METRICS, CLOSED_METRICS, DETAIL_METRICS,
         )
         gold_file = args.gold_file or paths.gold_file
         claims_by_id = load_gold_claims(gold_file)
@@ -100,7 +100,7 @@ def main() -> None:
                              "pipeline.eval.enrich_gold_claims first, or pass --legacy.")
         contexts_by_qid = _load_contexts_by_qid()
         scorer = RagasScorer(judge, embedder, paths)
-        metric_keys = sorted(set(RAG_METRICS + CLOSED_METRICS)) + ["Composite"]
+        metric_keys = sorted(set(RAG_METRICS + CLOSED_METRICS)) + DETAIL_METRICS + ["Composite"]
         suite_stamp = summary_stamp()
 
     n_no_claims = 0

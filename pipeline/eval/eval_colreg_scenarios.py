@@ -268,8 +268,10 @@ def main() -> None:
                              "pipeline.eval.enrich_gold_claims first, or pass --legacy.")
         scorer = RagasScorer(judge, embedder, paths)
         suite_stamp = summary_stamp()
-        keys = ["AnswerCorrectness", "CorpusGrounded", "AnswerRelevancy", "NumericF1",
-                "LitHit", "Cover", "ChannelProc", "CallFormatOK", "ColregCorrect", "Composite"]
+        keys = ["AnswerCorrectness", "ClaimPrec", "ClaimRec", "ClaimF1",
+                "CorpusGrounded", "AnswerRelevancy", "NumericF1", "NumericPrec", "NumericRec",
+                "LitHit", "Cover", "SemSim", "AnsRelCos", "ProcOrder",
+                "ChannelProc", "CallFormatOK", "ColregCorrect", "Composite"]
 
     print("Scoring...")
     n_no_claims = 0

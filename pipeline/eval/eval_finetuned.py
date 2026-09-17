@@ -346,7 +346,7 @@ def main() -> None:
         keys = ["SemSim","AnsRel","Faith","Correct","Cover","NumHit","LitHit","Composite"]
     else:
         from pipeline.eval.ragas_metrics import (
-            RagasScorer, load_gold_claims, summary_stamp, CLOSED_METRICS,
+            RagasScorer, load_gold_claims, summary_stamp, CLOSED_METRICS, DETAIL_METRICS,
         )
         claims_by_id = load_gold_claims(Path(args.gold_file))
         if not claims_by_id:
@@ -355,7 +355,7 @@ def main() -> None:
                 "pipeline.eval.enrich_gold_claims first, or pass --legacy.")
         scorer = RagasScorer(judge, embedder, paths)
         suite_stamp = summary_stamp()
-        keys = CLOSED_METRICS + ["NumericPrec", "NumericRec", "Composite"]
+        keys = CLOSED_METRICS + DETAIL_METRICS + ["Composite"]
 
     print("Scoring...")
     n_no_claims = 0
