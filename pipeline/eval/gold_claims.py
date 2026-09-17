@@ -38,9 +38,10 @@ DIRECTION_ROLES = {"turn_direction", "pass_side", "light_colour"}
 
 QA_FLAG_PREFIX = "QA_FLAG:"
 
-# 3-10 real claims per the enrichment prompt; +QA_FLAG and a little model
-# leeway on rich records before we reject outright.
-MIN_CLAIMS, MAX_CLAIMS = 1, 14
+# The enrichment prompt asks for 3-10 claims, but genuinely rich gold records
+# (channel tables, multi-step procedures) legitimately decompose into 15-22
+# atoms — capping those would force lossy merging, so the ceiling is generous.
+MIN_CLAIMS, MAX_CLAIMS = 1, 24
 
 
 def validate_claims(claims: object) -> list[str]:
