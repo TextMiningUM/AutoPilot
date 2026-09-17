@@ -104,8 +104,14 @@ def load_lm(model_dir: str, force_4bit: bool = False):
             load_in_4bit=True, bnb_4bit_quant_type="nf4",
             bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
         )
+        # Force everything onto the single GPU rather than device_map="auto" -- "auto"
+        # estimates free VRAM at load time and will offload a few layers to CPU/disk if
+        # it judges the margin too tight (e.g. another process still holding a few hundred
+        # MB), which then makes bitsandbytes refuse to proceed at all (ValueError: "Some
+        # modules are dispatched on the CPU or the disk"). A 7B model in 4-bit NF4 fits
+        # comfortably in 8 GB on its own, so there's no reason to let "auto" hedge here.
         m = AutoModelForCausalLM.from_pretrained(
-            model_dir, quantization_config=bnb, device_map="auto",
+            model_dir, quantization_config=bnb, device_map={"": 0},
             torch_dtype=torch.bfloat16, attn_implementation="sdpa",
         )
         print("  loaded in 4-bit NF4")
