@@ -53,7 +53,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 
-from core import AgentPaths, load_env
+from core import AgentPaths, load_env, EMBEDDER_MODEL
 
 paths = AgentPaths.from_env()
 W = paths.workspace
@@ -356,7 +356,7 @@ def main() -> None:
 
     # --- 2) Metric phase (embedder on CPU/GPU; API calls to judge) ---
     print("\nLoading embedder for metrics...")
-    embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    embedder = SentenceTransformer(EMBEDDER_MODEL)
 
     if args.legacy:
         suite_stamp = {"metric_suite": "legacy_v1", "judge_model": JUDGE_MODEL}

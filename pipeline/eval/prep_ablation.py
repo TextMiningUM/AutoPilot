@@ -4,7 +4,7 @@ Loads only the CPU embedder (sentence-transformer). Does NOT load Qwen.
 Writes _cache/ablation_prompts.json for the inference stage.
 """
 from __future__ import annotations
-import json, argparse, random
+import json, argparse, os, random
 from collections import defaultdict
 from pathlib import Path
 
@@ -13,7 +13,7 @@ from sentence_transformers import SentenceTransformer
 
 from pipeline.ingest.build_kg import kg_retrieve
 from pipeline.ingest.pg_guidance import ProceduralGraph, render_guidance
-from core import AgentPaths
+from core import AgentPaths, load_env, EMBEDDER_MODEL
 
 paths = AgentPaths.from_env()
 W = paths.workspace
@@ -133,6 +133,40 @@ def format_context(hits: list[dict], chunk_by_id: dict[str, dict]) -> str:
     return "\n\n".join(parts) or "(no relevant excerpts found)"
 
 
+_HYDE_SYSTEM = {
+    "VHF": ("Write a brief, plausible-sounding hypothetical answer (2-3 sentences) to the "
+           "following VHF marine radio / GMDSS question, in the style of a reference manual. "
+           "It does not need to be factually correct -- it only needs to use realistic "
+           "terminology (channel numbers, prowords, procedures) so it can be used as a "
+           "retrieval query."),
+    "OOW": ("Write a brief, plausible-sounding hypothetical answer (2-3 sentences) to the "
+           "following COLREG question, in the style of a reference manual. It does not need "
+           "to be factually correct -- it only needs to use realistic terminology (rule "
+           "numbers, give-way/stand-on, manoeuvres) so it can be used as a retrieval query."),
+}[paths.domain]
+
+
+def hyde_expand(question: str, client) -> str:
+    """HyDE (Gao et al. 2022): embed a short hypothetical answer instead of the bare question
+    for retrieval -- answer-shaped text sits closer in embedding space to the chunks that
+    actually contain the answer than the question text does. Falls back to the plain question
+    on any failure (missing client, API error) so retrieval quality never regresses below
+    today's baseline."""
+    if client is None:
+        return question
+    try:
+        r = client.chat.completions.create(
+            model="gpt-4o-mini", temperature=0.3, max_tokens=120,
+            messages=[{"role": "system", "content": _HYDE_SYSTEM},
+                     {"role": "user", "content": question}],
+        )
+        text = (r.choices[0].message.content or "").strip()
+        return text or question
+    except Exception as e:
+        print(f"  [hyde] failed ({type(e).__name__}: {e}) -- using plain question", flush=True)
+        return question
+
+
 def build_prompts(q: str, ctx: str, pg_guidance: dict[str, str | None] | None = None) -> dict:
     v0 = [{"role": "system", "content": SYSTEM_BASE}, {"role": "user", "content": q}]
     v1_user = f"Context excerpts from {_DOC_LABEL}:\n\n{ctx}\n\nQuestion: {q}"
@@ -185,7 +219,16 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=40, help="pilot sample size")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--k", type=int, default=3, help="retrieval top-k")
+    ap.add_argument("--k", type=int, default=6, help="retrieval top-k")
+    ap.add_argument("--dense-n", type=int, default=40, help="pre-boost dense candidate pool size")
+    ap.add_argument("--use-hyde", action="store_true",
+                    help="enable HyDE query expansion (Track 1 only): ask gpt-4o-mini for a short "
+                         "hypothetical answer and embed THAT for retrieval instead of the bare "
+                         "question. Off by default -- a recall@k diagnostic on this domain (measured "
+                         "under the all-MiniLM-L6-v2 embedder, still the best available evidence) "
+                         "showed HyDE's invented specifics (channel numbers, prowords) steer "
+                         "retrieval AWAY from the real source chunk more often than they help, "
+                         "dropping recall@6 from 0.425 to 0.290")
     ap.add_argument("--gold-file", type=str, default=None,
                     help="held-out gold file (default: paths.gold_file, or the Track 2 "
                          "scenarios file when --track2 is set)")
@@ -222,7 +265,19 @@ def main() -> None:
     chunk_by_id = {c["chunk_id"]: c for c in chunks}
 
     print("Loading embedder (CPU-friendly for retrieval)...")
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    model = SentenceTransformer(EMBEDDER_MODEL)
+
+    # HyDE query expansion (Track 1 only, opt-in -- see --use-hyde help for why it's off by
+    # default). Track 2's retrieval_query is already a rich scenario/situation description
+    # anyway, not a bare question needing hypothetical expansion.
+    hyde_client = None
+    if not args.track2 and args.use_hyde:
+        load_env(W / ".env")
+        if os.environ.get("OPENAI_API_KEY"):
+            from openai import OpenAI
+            hyde_client = OpenAI()
+        else:
+            print("  [hyde] OPENAI_API_KEY missing -- falling back to plain-question retrieval")
 
     # v4_pg (merged graph) plus, when built, source-scoped extra PGs -- each gets its
     # own ablation config so its individual contribution is separately measurable
@@ -244,8 +299,9 @@ def main() -> None:
     log_every = 1 if len(sample) <= 20 else 10
     for i, g in enumerate(sample, 1):
         retrieval_query = _track2_situation_text(g) if args.track2 else g["question"]
+        kg_query = hyde_expand(retrieval_query, hyde_client) if hyde_client else retrieval_query
         hits, q_cons, expanded = kg_retrieve(
-            retrieval_query, model, embs, ids, kg, k=args.k, dense_n=20,
+            kg_query, model, embs, ids, kg, k=args.k, dense_n=args.dense_n,
         )
         ctx = format_context(hits, chunk_by_id)
         pg_texts: dict[str, str | None] = {}

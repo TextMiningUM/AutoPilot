@@ -118,7 +118,7 @@ from pathlib import Path
 
 import numpy as np
 
-from core import AgentPaths, load_env
+from core import AgentPaths, load_env, EMBEDDER_MODEL, CONTAM_THRESH
 
 paths = AgentPaths.oow()
 W = paths.workspace
@@ -129,7 +129,6 @@ TRACES_OUT = CACHE / "oow_scenario_reasoning_traces.jsonl"
 MODEL_DEFAULT = "claude-sonnet-4-5"
 BATCH_SIZE_DEFAULT = 15
 MAX_TOKENS_DEFAULT = 6000
-CONTAM_THRESH = 0.85  # same threshold used by every other builder in this repo
 
 OWN_NAME = "LLM_SHIP"
 CONTACT_NAME_POOL = ["RANDOM_TS1", "RANDOM_TS2", "RANDOM_TS3"]
@@ -785,7 +784,7 @@ def filter_contamination(train_recs: list[dict], gold_questions: list[str]) -> l
     shared sentence structure (false-positive-drops almost everything), whereas Track 1's
     naturally differently-phrased exam Q&A scores 0.48-0.57, a genuinely meaningful signal."""
     from sentence_transformers import SentenceTransformer
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    model = SentenceTransformer(EMBEDDER_MODEL)
     gold_embs = model.encode(gold_questions, normalize_embeddings=True, batch_size=64,
                              show_progress_bar=False)
     texts = [r.get("gold_answer", "") for r in train_recs]

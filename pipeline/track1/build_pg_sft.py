@@ -32,7 +32,7 @@ from pathlib import Path
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from core import AgentPaths, decap as _decap
+from core import AgentPaths, decap as _decap, EMBEDDER_MODEL, CONTAM_THRESH
 from pipeline.ingest.build_pg import sample_path
 
 paths = AgentPaths.from_env()
@@ -43,7 +43,6 @@ PG_FILE = CACHE / f"{_PFX}_pg.json"
 OUT_FILE = CACHE / f"{_PFX}_pg_sft.jsonl"
 GOLD_FILE = paths.gold_file
 
-CONTAM_THRESH = 0.85
 MIN_SUPPORT = 1        # every edge came from a real trace step pair
 RNG = random.Random(13)
 
@@ -159,7 +158,7 @@ def main() -> None:
 
     # mandatory contamination filter against BOTH held-out eval files
     print("Contamination check...")
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    model = SentenceTransformer(EMBEDDER_MODEL)
     gold = json.loads(Path(args.gold_file).read_text(encoding="utf-8"))
     gold_questions = [g["question"] for g in gold]
     if args.extra_gold_file:

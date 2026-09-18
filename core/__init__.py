@@ -15,10 +15,16 @@ from core.paths import AgentPaths
 from core.io import load_jsonl, load_env, load_messages_jsonl
 from core.prose import clean, cap, decap, steps_sentence
 from core.dry_run import add_dry_run_arg, write_stub_output
+from core.embedding import (
+    EMBEDDER_MODEL, QUERY_PREFIX,
+    CONTAM_THRESH, DEDUP_THRESH, CANON_THRESH, MATCH_THRESH, ANCHOR_THRESH,
+)
 
 __all__ = [
     "AgentPaths",
     "load_jsonl", "load_env", "load_messages_jsonl",
     "clean", "cap", "decap", "steps_sentence",
     "add_dry_run_arg", "write_stub_output",
+    "EMBEDDER_MODEL", "QUERY_PREFIX",
+    "CONTAM_THRESH", "DEDUP_THRESH", "CANON_THRESH", "MATCH_THRESH", "ANCHOR_THRESH",
 ]

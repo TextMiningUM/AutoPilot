@@ -46,7 +46,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from core import AgentPaths, load_env
+from core import AgentPaths, load_env, EMBEDDER_MODEL, CANON_THRESH
 
 paths = AgentPaths.from_env()
 os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
@@ -161,7 +161,7 @@ def apply_edits(pg_dict: dict, edits: list[dict], graph) -> dict | None:
     applied = 0
 
     def node_for(label: str, create: bool) -> str | None:
-        nid, _sim = graph.match(label, thresh=0.85)
+        nid, _sim = graph.match(label, thresh=CANON_THRESH)
         if nid is not None:
             return nid
         if not create:
@@ -237,7 +237,7 @@ def main() -> None:
     train_pool = gold[args.val_n:]
 
     client = OpenAI()
-    embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    embedder = SentenceTransformer(EMBEDDER_MODEL)
     scorer = RagasScorer(client, embedder, paths)
     tok, model = load_lm(args.model, force_4bit=args.force_4bit)
 

@@ -367,9 +367,10 @@ class RagasScorer:
         f = self.paths.cache_dir / f"{self.paths.domain.lower()}_rag_chunks.json"
         self._chunks = json.loads(f.read_text(encoding="utf-8"))
         emb_f = self.paths.cache_dir / f"{self.paths.domain.lower()}_ragas_chunk_emb.npy"
+        expected_dim = self.embedder.get_sentence_embedding_dimension()
         if emb_f.exists():
             emb = np.load(emb_f)
-            if emb.shape[0] == len(self._chunks):
+            if emb.shape == (len(self._chunks), expected_dim):
                 self._chunk_emb = emb
                 return
         print(f"  [ragas] embedding {len(self._chunks)} corpus chunks (one-off)...", flush=True)
@@ -611,7 +612,7 @@ def _pilot(answers_file: Path, n: int) -> None:
     import os
     from openai import OpenAI
     from sentence_transformers import SentenceTransformer
-    from core import AgentPaths, load_env
+    from core import AgentPaths, load_env, EMBEDDER_MODEL
     from pipeline.eval.eval_finetuned import (
         semsim, cover, num_hit, lit_hit, judge_faith, judge_correct, composite,
     )
@@ -621,7 +622,7 @@ def _pilot(answers_file: Path, n: int) -> None:
     if not os.environ.get("OPENAI_API_KEY"):
         raise SystemExit("OPENAI_API_KEY missing")
     client = OpenAI()
-    embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    embedder = SentenceTransformer(EMBEDDER_MODEL)
     scorer = RagasScorer(client, embedder, paths)
 
     claims_by_id = load_gold_claims(paths.gold_file)
@@ -677,14 +678,14 @@ def _rescore(answers_file: Path, gold_file: Path | None) -> None:
     import os
     from openai import OpenAI
     from sentence_transformers import SentenceTransformer
-    from core import AgentPaths, load_env
+    from core import AgentPaths, load_env, EMBEDDER_MODEL
 
     paths = AgentPaths.from_env()
     load_env(paths.env_file)
     if not os.environ.get("OPENAI_API_KEY"):
         raise SystemExit("OPENAI_API_KEY missing")
     client = OpenAI()
-    embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    embedder = SentenceTransformer(EMBEDDER_MODEL)
     scorer = RagasScorer(client, embedder, paths)
 
     rows = [json.loads(l) for l in answers_file.open(encoding="utf-8") if l.strip()]

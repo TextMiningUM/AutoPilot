@@ -21,7 +21,7 @@ from typing import Iterable
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from core import AgentPaths
+from core import AgentPaths, EMBEDDER_MODEL, QUERY_PREFIX
 
 paths = AgentPaths.from_env()
 W = paths.workspace
@@ -194,7 +194,7 @@ def kg_retrieve(query: str, model, embs: np.ndarray, ids: list[str], kg: dict,
                 cooccur_boost: float = 0.08) -> tuple[list[dict], list[str], list[str]]:
     """Hybrid dense + concept-graph retrieval: dense top-`dense_n` pool, boosted by
     concept and co-occurring-concept matches, then truncated to the top `k`."""
-    qe = model.encode([query], normalize_embeddings=True)[0]
+    qe = model.encode([QUERY_PREFIX + query], normalize_embeddings=True)[0]
     dense_scores = embs @ qe  # cosine (unit-norm)
 
     # 1) Dense pool
@@ -277,7 +277,7 @@ def main() -> None:
 
     # Smoke test
     print("\nLoading embedder for retrieval smoke test...")
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    model = SentenceTransformer(EMBEDDER_MODEL)
 
     QUERIES = [
         "What is VHF Channel 70 used for?",

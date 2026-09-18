@@ -44,7 +44,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from core import AgentPaths, load_env
+from core import AgentPaths, load_env, EMBEDDER_MODEL
 
 paths = AgentPaths.from_env()
 os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
@@ -253,7 +253,7 @@ def run_reflection_probe(tok, model, system: str, items: list[dict], n: int) -> 
             print(f"  reflect gen {i}/{len(usable)}", flush=True)
 
     # generation done -> free VRAM before judge phase
-    embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    embedder = SentenceTransformer(EMBEDDER_MODEL)
     scorer = RagasScorer(OpenAI(), embedder, paths)
     deltas, draft_scores, rev_scores = [], [], []
     for it, rev in zip(usable, revisions):

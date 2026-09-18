@@ -2,7 +2,7 @@
 import json, numpy as np
 from sentence_transformers import SentenceTransformer
 
-from core import AgentPaths
+from core import AgentPaths, EMBEDDER_MODEL
 
 CACHE = AgentPaths.vhf().cache_dir
 chunks = json.loads((CACHE / "vhf_rag_chunks.json").read_text(encoding="utf-8"))
@@ -11,7 +11,7 @@ ids    = json.loads((CACHE / "vhf_rag_chunk_ids.json").read_text(encoding="utf-8
 cbi    = {c["chunk_id"]: c for c in chunks}
 print(f"Loaded: {len(chunks)} chunks, embeddings {embs.shape}")
 
-model  = SentenceTransformer("all-MiniLM-L6-v2")
+model  = SentenceTransformer(EMBEDDER_MODEL)
 
 QUERIES = [
     "What is VHF Channel 70 used for?",

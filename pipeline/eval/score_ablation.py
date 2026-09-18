@@ -34,7 +34,7 @@ from pipeline.eval.eval_finetuned import (
     judge_faith, judge_correct, composite,
 )
 
-from core import AgentPaths
+from core import AgentPaths, EMBEDDER_MODEL
 
 paths = AgentPaths.from_env()
 W = paths.workspace
@@ -102,7 +102,7 @@ def main() -> None:
     judge = None if (args.legacy and args.skip_judge) else OpenAI()
 
     print("Loading embedder...")
-    embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    embedder = SentenceTransformer(EMBEDDER_MODEL)
 
     with ANSWERS_FILE.open("r", encoding="utf-8") as f:
         records = [json.loads(l) for l in f if l.strip()]

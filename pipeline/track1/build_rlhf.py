@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from core import AgentPaths, load_jsonl, clean as _clean, cap as _cap, decap as _decap
+from core import AgentPaths, load_jsonl, clean as _clean, cap as _cap, decap as _decap, EMBEDDER_MODEL, CONTAM_THRESH
 
 paths = AgentPaths.from_env()
 W = paths.workspace
@@ -32,7 +32,6 @@ TRACES_FILE = CACHE / f"{_PFX}_reasoning_traces.jsonl"
 GOLD_FILE   = paths.gold_file
 OUT_FILE    = CACHE / "vhf_dpo_pairs.jsonl"
 
-CONTAM_THRESH = 0.85
 RNG = random.Random(7)
 
 SYSTEM = {
@@ -210,7 +209,7 @@ def main() -> None:
     print(f"Usable traces: {len(traces)}")
 
     print("Loading embedder + gold-Q embeddings...")
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    model = SentenceTransformer(EMBEDDER_MODEL)
     gold = json.loads(Path(args.gold_file).read_text(encoding="utf-8"))
     gold_questions = [g["question"] for g in gold]
     if args.extra_gold_file:

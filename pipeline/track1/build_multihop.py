@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from core import AgentPaths, load_jsonl, clean as _clean
+from core import AgentPaths, load_jsonl, clean as _clean, EMBEDDER_MODEL, CONTAM_THRESH
 
 paths = AgentPaths.from_env()
 W = paths.workspace
@@ -30,7 +30,6 @@ TRACES_FILE = CACHE / f"{_PFX}_reasoning_traces.jsonl"
 GOLD_FILE   = paths.gold_file
 OUT_FILE    = CACHE / "vhf_multihop.jsonl"
 
-CONTAM_THRESH = 0.85
 MAX_PAIRS_PER_CONCEPT = 25
 RNG = random.Random(42)
 
@@ -162,7 +161,7 @@ def main() -> None:
     print(f"After skipping generic concepts: {len(interesting)}")
 
     print("Loading embedder + gold-Q embeddings...")
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    model = SentenceTransformer(EMBEDDER_MODEL)
     gold = json.loads(Path(args.gold_file).read_text(encoding="utf-8"))
     gold_questions = [g["question"] for g in gold]
     if args.extra_gold_file:

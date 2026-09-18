@@ -17,7 +17,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from pipeline.ingest.build_kg import kg_retrieve
-from core import AgentPaths, load_jsonl, clean as _clean, cap as _cap, decap as _decap
+from core import AgentPaths, load_jsonl, clean as _clean, cap as _cap, decap as _decap, EMBEDDER_MODEL, CONTAM_THRESH, DEDUP_THRESH
 
 paths = AgentPaths.from_env()
 W = paths.workspace
@@ -35,9 +35,6 @@ DIRECT_OUT = CACHE / "vhf_sft_direct.jsonl"
 COT_OUT    = CACHE / "vhf_sft_cot.jsonl"
 RAG_OUT    = CACHE / "vhf_sft_rag.jsonl"
 STATS_OUT  = CACHE / "vhf_sft_stats.json"
-
-CONTAM_THRESH = 0.85
-DEDUP_THRESH  = 0.92
 
 _SYSTEM_BY_DOMAIN = {
     "VHF": dict(
@@ -222,7 +219,7 @@ def main() -> None:
     gold = json.loads(Path(args.gold_file).read_text(encoding="utf-8"))
 
     print("Loading embedder + gold-Q embeddings for contamination filter...")
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    model = SentenceTransformer(EMBEDDER_MODEL)
     gold_questions = [g["question"] for g in gold]
     if args.extra_gold_file:
         extra = json.loads(Path(args.extra_gold_file).read_text(encoding="utf-8"))

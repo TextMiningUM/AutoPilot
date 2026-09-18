@@ -15,7 +15,7 @@ from typing import Optional
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from core import AgentPaths
+from core import AgentPaths, EMBEDDER_MODEL
 
 paths = AgentPaths.from_env()
 WORKSPACE    = paths.workspace
@@ -186,9 +186,9 @@ def main() -> None:
     global model, tokenizer
 
     # ── Load embedder + tokenizer ─────────────────────────────────────────
-    print("Loading all-MiniLM-L6-v2...", flush=True)
+    print("Loading embedder...", flush=True)
     t0 = time.time()
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    model = SentenceTransformer(EMBEDDER_MODEL)
     tokenizer = model.tokenizer
     print(f"  ready in {time.time()-t0:.1f}s", flush=True)
 

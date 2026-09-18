@@ -44,7 +44,7 @@ from pathlib import Path
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from core import AgentPaths
+from core import AgentPaths, EMBEDDER_MODEL, CANON_THRESH
 from core.io import load_jsonl
 
 paths = AgentPaths.from_env()
@@ -54,7 +54,6 @@ _PFX = paths.domain.lower()
 
 PG_FILE = CACHE / f"{_PFX}_pg.json"
 
-CANON_THRESH = 0.80   # cos-sim above which two step actions are the same node
 MAX_ATTR = 3          # attribute strings kept per edge (most frequent first)
 MAX_SOURCES = 5
 
@@ -321,7 +320,7 @@ def build_pg(records: list[dict], model) -> dict:
     return {
         "nodes": nodes,
         "edges": edges,
-        "params": {"canon_thresh": CANON_THRESH, "embedder": "all-MiniLM-L6-v2"},
+        "params": {"canon_thresh": CANON_THRESH, "embedder": EMBEDDER_MODEL},
         "stats": {
             "n_traces": len(records),
             "n_steps": len(all_actions),
@@ -382,7 +381,7 @@ def main() -> None:
         raise SystemExit("No traces with >=2 ordered procedure steps found.")
 
     print("Loading embedder...")
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    model = SentenceTransformer(EMBEDDER_MODEL)
     pg = build_pg(records, model)
 
     out_file.write_text(json.dumps(pg, ensure_ascii=False, indent=1), encoding="utf-8")

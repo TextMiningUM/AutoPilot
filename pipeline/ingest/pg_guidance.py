@@ -25,8 +25,8 @@ import numpy as np
 
 # question/answer text → family, mirroring build_pg.FAMILY_RULES
 from pipeline.ingest.build_pg import FAMILY_RULES
+from core import QUERY_PREFIX, MATCH_THRESH, ANCHOR_THRESH
 
-MATCH_THRESH = 0.72   # min cos-sim for text -> PG-node matching
 MAX_HOPS = 3          # reachability horizon for ordering checks / neighborhoods
 
 
@@ -56,7 +56,8 @@ class ProceduralGraph:
         emb = None
         if emb_file is not None and emb_file.exists():
             emb = np.load(emb_file)
-            if emb.shape[0] != len(self.labels):
+            expected_dim = embedder.get_sentence_embedding_dimension()
+            if emb.shape != (len(self.labels), expected_dim):
                 emb = None
         if emb is None:
             emb = embedder.encode(self.labels, normalize_embeddings=True,
@@ -68,7 +69,7 @@ class ProceduralGraph:
     # ── matching / localization (paper's Match step) ─────────────────
     def match(self, text: str, thresh: float = MATCH_THRESH) -> tuple[str | None, float]:
         """Best-matching node id for a free-text step/action, or None."""
-        e = self.embedder.encode([text], normalize_embeddings=True,
+        e = self.embedder.encode([QUERY_PREFIX + text], normalize_embeddings=True,
                                  show_progress_bar=False)[0]
         sims = self.node_emb @ e
         i = int(np.argmax(sims))
@@ -77,7 +78,7 @@ class ProceduralGraph:
     def match_many(self, texts: list[str], thresh: float = MATCH_THRESH) -> list[str | None]:
         if not texts:
             return []
-        embs = self.embedder.encode(texts, normalize_embeddings=True,
+        embs = self.embedder.encode([QUERY_PREFIX + t for t in texts], normalize_embeddings=True,
                                     batch_size=64, show_progress_bar=False)
         sims = embs @ self.node_emb.T
         out = []
@@ -154,7 +155,7 @@ def render_guidance(question: str, graph: ProceduralGraph,
     family-scoped step sequence anchored at the question's best-matching node,
     plus the strongest conditions and pitfalls along that path."""
     family = classify_text_family(question)
-    anchor, _sim = graph.match(question, thresh=0.35)  # anchor is best-effort
+    anchor, _sim = graph.match(question, thresh=ANCHOR_THRESH)  # anchor is best-effort
     fam = family if family != "general" else None
 
     # walk: from anchor (or the family's most-attested start) along highest support

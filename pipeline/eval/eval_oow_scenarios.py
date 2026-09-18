@@ -55,7 +55,7 @@ from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 
 from pipeline.eval.eval_finetuned import load_env, load_lm, _latency_stats
-from core import AgentPaths
+from core import AgentPaths, EMBEDDER_MODEL
 
 paths = AgentPaths.oow()
 W = paths.workspace
@@ -195,7 +195,7 @@ def main() -> None:
             raise SystemExit("OPENAI_API_KEY missing (needed for the RAGAS suite v2 judge)")
         judge = OpenAI()
         print("\nLoading embedder for metrics...")
-        embedder = SentenceTransformer("all-MiniLM-L6-v2")
+        embedder = SentenceTransformer(EMBEDDER_MODEL)
         from pipeline.eval.ragas_metrics import RagasScorer, load_gold_claims, summary_stamp
         claims_by_id = load_gold_claims(SCENARIOS_FILE)
         if not claims_by_id:

@@ -57,7 +57,7 @@ from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 
 from pipeline.eval.eval_finetuned import load_env, load_lm, semsim, cover, _latency_stats
-from core import AgentPaths
+from core import AgentPaths, EMBEDDER_MODEL
 
 paths = AgentPaths.vhf()
 W = paths.workspace
@@ -257,7 +257,7 @@ def main() -> None:
 
     # --- 2) Metric phase (embedder + judge) ---
     print("\nLoading embedder for metrics...")
-    embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    embedder = SentenceTransformer(EMBEDDER_MODEL)
 
     if args.legacy:
         suite_stamp = {"metric_suite": "legacy_v1", "judge_model": JUDGE_MODEL}
