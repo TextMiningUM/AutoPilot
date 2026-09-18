@@ -151,7 +151,27 @@ def collect_steps(trace_files: list[Path]) -> list[dict]:
                 if len(action) < 5:
                     continue
                 steps.append({"action": normalize_action(action),
-                              "why": (p.get("why") or "").strip()})
+                              "why": (p.get("why") or "").strip(), "is_failure": False})
+            # Incident traces (extract_incident_reasoning.py) carry an additive
+            # "incident" sub-object: `procedures` is what SHOULD have happened,
+            # `actual_actions_taken` is what actually happened (the failure). Append
+            # one synthetic terminal step for the failure, labeled by fault_type and
+            # carrying avoidance_summary as its "why" -- this becomes a real NEXT edge
+            # (last-correct-step -> failure-step) whose `pitfalls` attribute is
+            # genuine incident-derived counterfactual guidance, not rule-text alone.
+            # is_failure=True lets consumers (build_pg_sft.py) skip treating this as a
+            # recommended next action -- it is a cautionary node, not a procedure step.
+            inc = t.get("incident") or {}
+            actual = inc.get("actual_actions_taken") or []
+            if actual:
+                fault_types = ", ".join(inc.get("fault_type") or ["unspecified"])
+                failure_action = f"failed: {actual[0].get('action', '').strip()} ({fault_types})"
+                if len(failure_action) > 10:
+                    steps.append({
+                        "action": normalize_action(failure_action),
+                        "why": (inc.get("avoidance_summary") or "").strip(),
+                        "is_failure": True,
+                    })
             if len(steps) < 2:
                 continue
             out.append({
@@ -229,6 +249,7 @@ def build_pg(records: list[dict], model) -> dict:
 
     node_families: dict[int, Counter] = defaultdict(Counter)
     node_count: Counter = Counter()
+    node_failure_count: Counter = Counter()
     edge_support: Counter = Counter()
     edge_guidance: dict[tuple, Counter] = defaultdict(Counter)
     edge_condition: dict[tuple, Counter] = defaultdict(Counter)
@@ -244,9 +265,11 @@ def build_pg(records: list[dict], model) -> dict:
         for s in r["steps"]:
             ids.append(node_of[idx])
             idx += 1
-        for nid in ids:
+        for nid, s in zip(ids, r["steps"]):
             node_families[nid][r["family"]] += 1
             node_count[nid] += 1
+            if s.get("is_failure"):
+                node_failure_count[nid] += 1
         start_count[ids[0]] += 1
         end_count[ids[-1]] += 1
         for k in range(len(ids) - 1):
@@ -275,6 +298,11 @@ def build_pg(records: list[dict], model) -> dict:
             "families": dict(node_families[nid]),
             "n_starts": start_count.get(nid, 0),
             "n_ends": end_count.get(nid, 0),
+            # True if this node is (ever) a cautionary "what actually went wrong"
+            # step mined from an incident's actual_actions_taken, not a recommended
+            # procedure step -- consumers generating "next step" imitation data
+            # (build_pg_sft.py) must exclude edges INTO these nodes.
+            "is_failure": node_failure_count[nid] > 0,
         }
 
     edges = []
@@ -318,7 +346,10 @@ def sample_path(pg: dict, family: str, max_len: int = 8) -> list[str]:
     cur = starts.most_common(1)[0][0]
     path, seen = [cur], {cur}
     for _ in range(max_len - 1):
-        nxt = [e for e in fam_edges if e["u"] == cur and e["v"] not in seen]
+        # never walk into a cautionary "what went wrong" node -- a walkthrough
+        # narrates the recommended procedure, not an incident's failure point.
+        nxt = [e for e in fam_edges if e["u"] == cur and e["v"] not in seen
+              and not pg["nodes"][e["v"]].get("is_failure")]
         if not nxt:
             break
         best = max(nxt, key=lambda e: e["support"])
@@ -330,14 +361,20 @@ def sample_path(pg: dict, family: str, max_len: int = 8) -> list[str]:
 
 def main() -> None:
     default_traces = [CACHE / f"{_PFX}_reasoning_traces.jsonl"]
-    for extra in (f"{_PFX}_conversation_traces.jsonl", f"{_PFX}_incident_reasoning_traces.jsonl"):
+    for extra in (f"{_PFX}_conversation_traces.jsonl", f"{_PFX}_incident_reasoning_traces.jsonl",
+                 f"{_PFX}_scenario_reasoning_traces.jsonl"):
         if (CACHE / extra).exists():
             default_traces.append(CACHE / extra)
 
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     ap.add_argument("--traces-file", type=Path, nargs="+", default=default_traces,
                     help="trace JSONL files to mine (default: all trace files in cache_dir)")
+    ap.add_argument("--out-file", type=Path, default=None,
+                    help="output PG path (default: <cache>/<pfx>_pg.json) -- override to build "
+                         "a source-specific PG (e.g. oow_pg_incident.json) from a scoped "
+                         "--traces-file subset without touching the merged default graph")
     args = ap.parse_args()
+    out_file = args.out_file or PG_FILE
 
     print(f"Building Procedural Graph for domain {paths.domain}")
     records = collect_steps(args.traces_file)
@@ -348,9 +385,9 @@ def main() -> None:
     model = SentenceTransformer("all-MiniLM-L6-v2")
     pg = build_pg(records, model)
 
-    PG_FILE.write_text(json.dumps(pg, ensure_ascii=False, indent=1), encoding="utf-8")
+    out_file.write_text(json.dumps(pg, ensure_ascii=False, indent=1), encoding="utf-8")
     s = pg["stats"]
-    print(f"\nSaved {PG_FILE}")
+    print(f"\nSaved {out_file}")
     print(f"  traces={s['n_traces']}  steps={s['n_steps']}  nodes={s['n_nodes']}  edges={s['n_edges']}")
     print(f"  families: {s['families']}")
 

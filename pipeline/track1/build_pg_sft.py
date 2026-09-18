@@ -86,6 +86,13 @@ def edge_rows(pg: dict) -> list[dict]:
     for e in pg["edges"]:
         if e["support"] < MIN_SUPPORT:
             continue
+        # Cautionary "what actually went wrong" nodes (build_pg.py's incident
+        # failure-step enrichment) are never a recommended next action -- skip
+        # them here (they still work fine as pitfalls in pg_guidance.py's
+        # render_guidance() and as ProcOrder match targets, just not as an
+        # imitation-learning "do this next" answer).
+        if pg["nodes"][e["v"]].get("is_failure"):
+            continue
         fam = max(e["families"], key=e["families"].get)
         fam_phrase = FAMILY_PHRASE.get(fam, FAMILY_PHRASE["general"])
         u = _decap(pg["nodes"][e["u"]]["label"].rstrip("."))
@@ -139,9 +146,14 @@ def main() -> None:
     ap.add_argument("--gold-file", type=str, default=str(GOLD_FILE))
     ap.add_argument("--extra-gold-file", type=str, default=None)
     ap.add_argument("--extra-gold-key", type=str, default="question")
+    ap.add_argument("--pg-file", type=Path, default=PG_FILE,
+                    help="which PG to mine (default: merged <pfx>_pg.json) -- pass a "
+                         "source-specific PG (e.g. oow_pg_incident.json) with --out-file to "
+                         "produce a separate, traceable SFT file for that source alone")
+    ap.add_argument("--out-file", type=Path, default=OUT_FILE)
     args = ap.parse_args()
 
-    pg = json.loads(PG_FILE.read_text(encoding="utf-8"))
+    pg = json.loads(args.pg_file.read_text(encoding="utf-8"))
     rows = edge_rows(pg) + walkthrough_rows(pg)
     print(f"Raw PG rows: {len(rows)}")
 
@@ -167,7 +179,7 @@ def main() -> None:
         kept.append(r)
     print(f"kept={len(kept)}  contam_dropped={dropped}")
 
-    with OUT_FILE.open("w", encoding="utf-8") as f:
+    with args.out_file.open("w", encoding="utf-8") as f:
         for i, r in enumerate(kept):
             f.write(json.dumps({
                 "id": f"pgsft_{i:05d}",
@@ -183,7 +195,7 @@ def main() -> None:
     kinds = {}
     for r in kept:
         kinds[r["kind"]] = kinds.get(r["kind"], 0) + 1
-    print(f"Wrote {OUT_FILE.name}  rows={len(kept)}  per kind: {kinds}")
+    print(f"Wrote {args.out_file.name}  rows={len(kept)}  per kind: {kinds}")
 
 
 if __name__ == "__main__":

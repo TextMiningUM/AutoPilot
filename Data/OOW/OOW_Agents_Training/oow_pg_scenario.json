@@ -1,0 +1,184 @@
+{
+ "nodes": {
+  "pg_0000": {
+   "label": "Assess the fused contact picture (bearing/range/CPA/TCPA) against own-ship's course and speed.",
+   "n_occurrences": 360,
+   "families": {
+    "colreg_encounter": 360
+   },
+   "n_starts": 360,
+   "n_ends": 0,
+   "is_failure": false
+  },
+  "pg_0001": {
+   "label": "Determine own-ship's role: give way.",
+   "n_occurrences": 360,
+   "families": {
+    "colreg_encounter": 360
+   },
+   "n_starts": 0,
+   "n_ends": 0,
+   "is_failure": false
+  },
+  "pg_0002": {
+   "label": "Execute the action: alter_course (+30 degrees to starboard, lookahead distance 200 m).",
+   "n_occurrences": 241,
+   "families": {
+    "colreg_encounter": 241
+   },
+   "n_starts": 0,
+   "n_ends": 241,
+   "is_failure": false
+  },
+  "pg_0003": {
+   "label": "Execute the action: stop.",
+   "n_occurrences": 29,
+   "families": {
+    "colreg_encounter": 29
+   },
+   "n_starts": 0,
+   "n_ends": 29,
+   "is_failure": false
+  },
+  "pg_0004": {
+   "label": "Execute the action: maintain_course.",
+   "n_occurrences": 90,
+   "families": {
+    "colreg_encounter": 90
+   },
+   "n_starts": 0,
+   "n_ends": 90,
+   "is_failure": false
+  }
+ },
+ "edges": [
+  {
+   "u": "pg_0000",
+   "rel": "NEXT",
+   "v": "pg_0001",
+   "support": 360,
+   "condition": [
+    "Minimum CPA stays above the safe-distance threshold.",
+    "Minimum CPA to BOTH targets stays above the safe-distance threshold.",
+    "Own-ship alters course to starboard (not port)."
+   ],
+   "guidance": [
+    "Rule 15, Rule 16 governs this encounter.",
+    "Rule 15, Rule 17 governs this encounter.",
+    "Rule 14, Rule 15, Rule 16 governs this encounter."
+   ],
+   "pitfalls": [
+    "Own-ship alters course to starboard (not port).",
+    "Own-ship avoids crossing ahead of the target.",
+    "Own-ship does not alter to port toward the target if she must eventually act."
+   ],
+   "families": {
+    "colreg_encounter": 360
+   },
+   "sources": [
+    "oow_scenario_generator::head_on",
+    "oow_scenario_generator::crossing_give_way_fine",
+    "oow_scenario_generator::crossing_give_way_broad",
+    "oow_scenario_generator::crossing_give_way_abeam",
+    "oow_scenario_generator::crossing_stand_on_fine"
+   ]
+  },
+  {
+   "u": "pg_0001",
+   "rel": "NEXT",
+   "v": "pg_0002",
+   "support": 241,
+   "condition": [
+    "Minimum CPA stays above the safe-distance threshold.",
+    "Minimum CPA to BOTH targets stays above the safe-distance threshold.",
+    "Own-ship's approach is from more than 22.5deg abaft the target's beam."
+   ],
+   "guidance": [
+    "The chosen action must comply with the applicable COLREG rule(s) above."
+   ],
+   "pitfalls": [
+    "Own-ship keeps clear of the target throughout the pass (does not cut in front).",
+    "The manoeuvre for TS1 (starboard give-way) does not create a new close-quarters situation with TS2.",
+    "Own-ship alters course to starboard (not port)."
+   ],
+   "families": {
+    "colreg_encounter": 241
+   },
+   "sources": [
+    "oow_scenario_generator::overtaking_give_way",
+    "oow_scenario_generator::crossing_give_way_broad",
+    "oow_scenario_generator::crossing_give_way_abeam",
+    "oow_scenario_generator::double_crossing_squeeze",
+    "oow_scenario_generator::head_on"
+   ]
+  },
+  {
+   "u": "pg_0001",
+   "rel": "NEXT",
+   "v": "pg_0004",
+   "support": 90,
+   "condition": [
+    "Minimum CPA stays above the safe-distance threshold.",
+    "Own-ship holds course and speed initially.",
+    "Own-ship does not alter to port toward the target if she must eventually act."
+   ],
+   "guidance": [
+    "The chosen action must comply with the applicable COLREG rule(s) above."
+   ],
+   "pitfalls": [
+    "Own-ship does not alter to port toward the target if she must eventually act.",
+    "If the target never gives way, own-ship takes late avoiding action under Rule 17(b)."
+   ],
+   "families": {
+    "colreg_encounter": 90
+   },
+   "sources": [
+    "oow_scenario_generator::crossing_stand_on_fine",
+    "oow_scenario_generator::crossing_stand_on_broad",
+    "oow_scenario_generator::overtaking_stand_on"
+   ]
+  },
+  {
+   "u": "pg_0001",
+   "rel": "NEXT",
+   "v": "pg_0003",
+   "support": 29,
+   "condition": [
+    "Minimum CPA to BOTH targets stays above the safe-distance threshold.",
+    "Minimum CPA stays above the safe-distance threshold.",
+    "Own-ship finds a single trajectory keeping a safe CPA from all three targets."
+   ],
+   "guidance": [
+    "The chosen action must comply with the applicable COLREG rule(s) above."
+   ],
+   "pitfalls": [
+    "Own-ship does not alter to port toward the port-side target while manoeuvring.",
+    "Own-ship avoids crossing ahead of the target.",
+    "Own-ship alters course to starboard (not port)."
+   ],
+   "families": {
+    "colreg_encounter": 29
+   },
+   "sources": [
+    "oow_scenario_generator::converging_cluster",
+    "oow_scenario_generator::headon_plus_crossing",
+    "oow_scenario_generator::overtake_plus_crossing",
+    "oow_scenario_generator::crossing_give_way_fine",
+    "oow_scenario_generator::head_on"
+   ]
+  }
+ ],
+ "params": {
+  "canon_thresh": 0.8,
+  "embedder": "all-MiniLM-L6-v2"
+ },
+ "stats": {
+  "n_traces": 360,
+  "n_steps": 1080,
+  "n_nodes": 5,
+  "n_edges": 4,
+  "families": {
+   "colreg_encounter": 360
+  }
+ }
+}

@@ -300,7 +300,8 @@ class RagasScorer:
     """All suite-v2 metrics for one domain. Judge calls cached on disk by
     content hash, so re-scoring and reruns are almost free."""
 
-    def __init__(self, client, embedder, paths, judge_model: str = JUDGE_MODEL):
+    def __init__(self, client, embedder, paths, judge_model: str = JUDGE_MODEL,
+                pg_file: Path | None = None):
         self.client = client
         self.embedder = embedder
         self.paths = paths
@@ -317,6 +318,10 @@ class RagasScorer:
         self._chunk_emb: np.ndarray | None = None
         self._pg = None            # ProceduralGraph, loaded lazily
         self._pg_missing = False   # remembered so we don't retry every row
+        # Defaults to the merged <domain>_pg.json; pass e.g. oow_pg_scenario.json for a
+        # ProcOrder signal scoped to one source (Track 2 scenario answers should almost
+        # always match that PG's near-trivial assess->role->execute backbone).
+        self._pg_file = pg_file or (paths.cache_dir / f"{paths.domain.lower()}_pg.json")
         self.n_calls = 0
 
     # ── LLM plumbing ─────────────────────────────────────────────────
@@ -503,9 +508,8 @@ class RagasScorer:
         Reported alongside the suite, NOT in the composite until calibrated."""
         if self._pg is None and not self._pg_missing:
             from pipeline.ingest.pg_guidance import ProceduralGraph
-            pg_file = self.paths.cache_dir / f"{self.paths.domain.lower()}_pg.json"
-            if pg_file.exists():
-                self._pg = ProceduralGraph(pg_file, self.embedder)
+            if self._pg_file.exists():
+                self._pg = ProceduralGraph(self._pg_file, self.embedder)
             else:
                 self._pg_missing = True
         if self._pg is None:

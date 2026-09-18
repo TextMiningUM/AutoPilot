@@ -201,7 +201,11 @@ def main() -> None:
         if not claims_by_id:
             raise SystemExit(f"No gold_claims next to {SCENARIOS_FILE} -- run "
                              "pipeline.eval.enrich_gold_claims first, or pass --legacy.")
-        scorer = RagasScorer(judge, embedder, paths)
+        # Scenario-scoped PG (build_pg.py --traces-file oow_scenario_reasoning_traces.jsonl)
+        # for ProcOrder -- falls back to the merged PG if it hasn't been built yet.
+        scenario_pg = CACHE / "oow_pg_scenario.json"
+        scorer = RagasScorer(judge, embedder, paths,
+                             pg_file=scenario_pg if scenario_pg.exists() else None)
         suite_stamp = summary_stamp()
         keys += ["AnswerCorrectness", "ClaimPrec", "ClaimRec", "ClaimF1", "CorpusGrounded",
                 "AnswerRelevancy", "NumericF1", "NumericPrec", "NumericRec", "LitHit", "Cover",

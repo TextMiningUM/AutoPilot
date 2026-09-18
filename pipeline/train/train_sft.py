@@ -127,8 +127,11 @@ SFT_DATASETS = {
         # variant: there's no Track 2 retrieval corpus for this data to ground against.
         CACHE / "oow_scenario_sft_direct.jsonl",
         CACHE / "oow_scenario_sft_cot.jsonl",
-        # Procedural-graph step-order data (small for OOW until Track 2 exists)
+        # Procedural-graph step-order data: merged graph (rule+incident+scenario
+        # traces, build_pg.py) plus a dedicated incident-only file so its "what
+        # actually went wrong" pitfalls stay traceable, same Track1/Track2 convention.
         CACHE / "oow_pg_sft.jsonl",
+        CACHE / "oow_pg_incident_sft.jsonl",
     ],
 }[paths.domain]
 

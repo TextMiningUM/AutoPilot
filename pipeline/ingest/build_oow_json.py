@@ -78,6 +78,32 @@ CONCEPT_KEYWORDS = {
     "safe speed":            ["safe speed"],
     "lookout":               ["proper look-out", "look-out"],
     "action to avoid collision": ["action to avoid collision"],
+    # Incident-report vocabulary (build_incident_excerpts.py reuses tag_text() on
+    # accident-investigation excerpts -- these terms describe HUMAN-FACTORS causes
+    # real incidents attribute failures to, which the COLREG-rule keywords above
+    # never mention, so without these every incident chunk went untagged (see
+    # notebook's OOW § 4/§ 8 KG/PG quality investigation). Aligned with the fixed
+    # fault_type vocabulary in extract_incident_reasoning.py so KG concepts and
+    # incident fault categories use the same vocabulary.
+    "lookout_failure":       ["failed to maintain a proper look-out", "inadequate lookout",
+                              "no lookout was posted", "lookout was not maintained"],
+    "distraction":           ["distracted by", "was distracted", "preoccupied with"],
+    "equipment_failure":     ["equipment failure", "malfunctioned", "failed to operate",
+                              "instrument failure", "radar failure"],
+    "procedural_failure":    ["failed to follow", "did not comply with", "procedure was not followed",
+                              "deviated from standard procedure"],
+    "communication_failure": ["failed to communicate", "no vhf contact", "miscommunication",
+                              "communication breakdown", "failed to establish contact"],
+    "fatigue":               ["fatigue", "fatigued", "asleep", "excessive hours", "watchkeeper was tired"],
+    "environmental":         ["heavy weather", "poor visibility", "adverse weather", "sea state"],
+    "radar_arpa":            ["radar", "arpa", "plotting"],
+    "ais":                   ["ais", "automatic identification system"],
+    "bridge_resource_management": ["bridge resource management", "brm", "bridge team"],
+    "grounding":              ["grounding", "ran aground", "grounded"],
+    "collision":              ["collision occurred", "vessels collided", "struck the"],
+    "casualty":               ["casualty", "fatality", "injured", "loss of life"],
+    "investigation_finding":  ["investigation found", "contributing factor", "root cause",
+                              "recommendation", "lessons learned"],
 }
 
 

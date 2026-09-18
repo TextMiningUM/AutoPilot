@@ -133,7 +133,7 @@ def format_context(hits: list[dict], chunk_by_id: dict[str, dict]) -> str:
     return "\n\n".join(parts) or "(no relevant excerpts found)"
 
 
-def build_prompts(q: str, ctx: str, pg_guidance_text: str | None = None) -> dict:
+def build_prompts(q: str, ctx: str, pg_guidance: dict[str, str | None] | None = None) -> dict:
     v0 = [{"role": "system", "content": SYSTEM_BASE}, {"role": "user", "content": q}]
     v1_user = f"Context excerpts from {_DOC_LABEL}:\n\n{ctx}\n\nQuestion: {q}"
     v1 = [{"role": "system", "content": SYSTEM_RAG}, {"role": "user", "content": v1_user}]
@@ -141,15 +141,17 @@ def build_prompts(q: str, ctx: str, pg_guidance_text: str | None = None) -> dict
     v3_user = f"Context excerpts from {_DOC_LABEL}:\n\n{ctx}\n\nQuestion: {q}"
     v3 = [{"role": "system", "content": SYSTEM_RAG_COT}, {"role": "user", "content": v3_user}]
     prompts = {"v0_base": v0, "v1_rag": v1, "v2_cot": v2, "v3_rag_cot": v3}
-    if pg_guidance_text:
-        v4_user = f"{pg_guidance_text}\n\nQuestion: {q}"
-        prompts["v4_pg"] = [{"role": "system", "content": SYSTEM_BASE},
-                            {"role": "user", "content": v4_user}]
+    for cfg_name, text in (pg_guidance or {}).items():
+        if not text:
+            continue
+        user = f"{text}\n\nQuestion: {q}"
+        prompts[cfg_name] = [{"role": "system", "content": SYSTEM_BASE},
+                             {"role": "user", "content": user}]
     return prompts
 
 
 def build_prompts_track2(situation: str, question: str, ctx: str,
-                         pg_guidance_text: str | None = None) -> dict:
+                         pg_guidance: dict[str, str | None] | None = None) -> dict:
     """Track 2 (scenario) variant of build_prompts(): same V0..V4 shape, but the system
     prompt is ALWAYS the fixed Track 2 response-format contract (SYSTEM_COLREG/SYSTEM_OOW)
     -- only the USER turn gains a CoT instruction and/or RAG context, so CoT/RAG configs
@@ -169,9 +171,12 @@ def build_prompts_track2(situation: str, question: str, ctx: str,
         "v3_rag_cot": [{"role": "system", "content": system},
                        {"role": "user", "content": rag_instr + cot_instr + base_user}],
     }
-    if pg_guidance_text:
-        prompts["v4_pg"] = [{"role": "system", "content": system},
-                            {"role": "user", "content": f"{pg_guidance_text}\n\n{base_user}"}]
+    if pg_guidance:
+        for cfg_name, text in pg_guidance.items():
+            if not text:
+                continue
+            prompts[cfg_name] = [{"role": "system", "content": system},
+                                 {"role": "user", "content": f"{text}\n\n{base_user}"}]
     return prompts
 
 
@@ -219,13 +224,23 @@ def main() -> None:
     print("Loading embedder (CPU-friendly for retrieval)...")
     model = SentenceTransformer("all-MiniLM-L6-v2")
 
-    # v4_pg: guidance rendered from the procedural graph, when one exists
-    graph = ProceduralGraph(PG_FILE, model) if PG_FILE.exists() else None
-    if graph is None:
-        print(f"  [v4_pg] {PG_FILE.name} not found -- run pipeline.ingest.build_pg to enable v4_pg")
+    # v4_pg (merged graph) plus, when built, source-scoped extra PGs -- each gets its
+    # own ablation config so its individual contribution is separately measurable
+    # (notebook § 11's KG/PG quality investigation).
+    pg_configs: list[tuple[str, Path]] = [("v4_pg", PG_FILE)]
+    for cfg_name, suffix in (("v5_pg_incident", "incident"), ("v6_pg_scenario", "scenario")):
+        f = CACHE / f"{_PFX}_pg_{suffix}.json"
+        if f.exists():
+            pg_configs.append((cfg_name, f))
+    graphs: dict[str, ProceduralGraph] = {}
+    for cfg_name, f in pg_configs:
+        if f.exists():
+            graphs[cfg_name] = ProceduralGraph(f, model)
+        else:
+            print(f"  [{cfg_name}] {f.name} not found -- run pipeline.ingest.build_pg to enable it")
 
     records = []
-    n_with_guidance = 0
+    n_with_guidance: dict[str, int] = {cfg: 0 for cfg in graphs}
     log_every = 1 if len(sample) <= 20 else 10
     for i, g in enumerate(sample, 1):
         retrieval_query = _track2_situation_text(g) if args.track2 else g["question"]
@@ -233,13 +248,16 @@ def main() -> None:
             retrieval_query, model, embs, ids, kg, k=args.k, dense_n=20,
         )
         ctx = format_context(hits, chunk_by_id)
-        pg_text = render_guidance(g["question"], graph) if graph else None
-        if pg_text:
-            n_with_guidance += 1
+        pg_texts: dict[str, str | None] = {}
+        for cfg_name, graph in graphs.items():
+            text = render_guidance(retrieval_query, graph)
+            pg_texts[cfg_name] = text or None
+            if text:
+                n_with_guidance[cfg_name] += 1
         if args.track2:
-            prompts = build_prompts_track2(_track2_situation_text(g), g["question"], ctx, pg_text or None)
+            prompts = build_prompts_track2(_track2_situation_text(g), g["question"], ctx, pg_texts)
         else:
-            prompts = build_prompts(g["question"], ctx, pg_text or None)
+            prompts = build_prompts(g["question"], ctx, pg_texts)
         record = {
             "q_id":            g["id"],
             group_field:       g[group_field],
@@ -269,10 +287,10 @@ def main() -> None:
             print(f"  prepped {i}/{len(sample)}")
 
     configs = ["v0_base", "v1_rag", "v2_cot", "v3_rag_cot"]
-    if graph:
-        configs.append("v4_pg")
-        print(f"  v4_pg guidance rendered for {n_with_guidance}/{len(records)} questions "
-              "(others fall back to the v0 prompt at run time)")
+    for cfg_name in graphs:
+        configs.append(cfg_name)
+        print(f"  {cfg_name} guidance rendered for {n_with_guidance[cfg_name]}/{len(records)} "
+              "questions (others fall back to the v0 prompt at run time)")
     OUT_FILE.write_text(json.dumps({
         "n": len(records),
         "seed": args.seed,

@@ -124,7 +124,13 @@ def main() -> None:
             raise SystemExit(f"No gold_claims next to {gold_file} -- run "
                              "pipeline.eval.enrich_gold_claims first, or pass --legacy.")
         contexts_by_qid = _load_contexts_by_qid()
-        scorer = RagasScorer(judge, embedder, paths)
+        # Scenario-scoped PG for Track2 ProcOrder (OOW only -- VHF has no per-source
+        # PG split yet); falls back to the merged PG if not built.
+        pg_override = None
+        if args.track2 and paths.domain == "OOW":
+            scenario_pg = CACHE / "oow_pg_scenario.json"
+            pg_override = scenario_pg if scenario_pg.exists() else None
+        scorer = RagasScorer(judge, embedder, paths, pg_file=pg_override)
         metric_keys = sorted(set(RAG_METRICS + CLOSED_METRICS)) + DETAIL_METRICS + ["Composite"]
         suite_stamp = summary_stamp()
         track2_extra_keys: list[str] = []
