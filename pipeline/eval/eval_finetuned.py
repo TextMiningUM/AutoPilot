@@ -153,6 +153,10 @@ def load_lm(model_dir: str, force_4bit: bool = False):
     tok = AutoTokenizer.from_pretrained(model_dir)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
+    # Left-padding is required for batched decoder-only generation: every sequence's real
+    # content must end at the same index so new tokens are appended in the same position
+    # across the batch.
+    tok.padding_side = "left"
     print(f"  VRAM: {torch.cuda.memory_allocated()/1024**3:.2f} GB")
     return tok, model
 
@@ -175,6 +179,30 @@ def generate(tok, model, question: str, max_new_tokens: int = 512) -> tuple[str,
     dt = time.time() - t0
     ans = tok.decode(out[0, inp["input_ids"].shape[1]:], skip_special_tokens=True).strip()
     return ans, dt
+
+
+@torch.inference_mode()
+def generate_batch(tok, model, questions: list[str], max_new_tokens: int = 512) -> tuple[list[str], float]:
+    """Greedy-decode a BATCH of plain-prompt questions in one model.generate() call
+    (left-padded); returns (answer_texts, total_batch_latency_seconds). Autoregressive
+    decoding is memory-bandwidth-bound, not compute-bound, so batching gives close to
+    linear throughput scaling until VRAM runs out -- see run_ablation.py's generate_batch."""
+    texts = [tok.apply_chat_template(
+                [{"role": "system", "content": SYSTEM_PLAIN}, {"role": "user", "content": q}],
+                tokenize=False, add_generation_prompt=True)
+             for q in questions]
+    inp = tok(texts, return_tensors="pt", padding=True, truncation=True, max_length=2048).to(model.device)
+    t0 = time.time()
+    out = model.generate(
+        **inp, max_new_tokens=max_new_tokens,
+        do_sample=False, temperature=1.0, top_p=1.0,
+        pad_token_id=tok.pad_token_id,
+    )
+    dt = time.time() - t0
+    prompt_len = inp["input_ids"].shape[1]
+    answers = [tok.decode(out[i, prompt_len:], skip_special_tokens=True).strip()
+              for i in range(len(questions))]
+    return answers, dt
 
 
 # ── Metrics (Tutorial 13 § 7.9) ──────────────────────────────────────────
@@ -327,6 +355,8 @@ def main() -> None:
                          "the summary from whatever rows are currently in eval_{tag}.jsonl. Use "
                          "this to check progress (or final results) after killing a long run early "
                          "or after a crash, without waiting for or triggering more generation.")
+    ap.add_argument("--batch-size", type=int, default=8,
+                    help="how many questions to generate per model.generate() call. Lower this if you hit OOM.")
     args = ap.parse_args()
 
     tag = args.tag or Path(args.model).name.replace("/", "_")
@@ -357,19 +387,23 @@ def main() -> None:
     pending = [g for g in gold if str(g["id"]) not in done_gen]
     if pending:
         tok, model = load_lm(args.model, force_4bit=args.force_4bit)
+        bs = args.batch_size
         with gen_file.open("a", encoding="utf-8") as gf:
-            for i, g in enumerate(pending, 1):
-                print(f"  [gen {i}/{len(pending)}] {g['id']}: {g['question'][:80]!r}", flush=True)
+            for start in range(0, len(pending), bs):
+                batch = pending[start:start + bs]
+                print(f"  [gen {start+1}-{start+len(batch)}/{len(pending)}] batch of {len(batch)}...", flush=True)
                 try:
-                    ans, dt = generate(tok, model, g["question"])
+                    answers, dt = generate_batch(tok, model, [g["question"] for g in batch])
                 except Exception as e:
-                    ans, dt = f"[ERROR:{e}]", 0.0
-                row = {**g, "answer": ans, "latency_s": round(dt, 2)}
-                done_gen[str(g["id"])] = row
-                gf.write(json.dumps(row, ensure_ascii=False) + "\n")
+                    answers, dt = [f"[ERROR:{e}]"] * len(batch), 0.0
+                for g, ans in zip(batch, answers):
+                    row = {**g, "answer": ans, "latency_s": round(dt / len(batch), 2)}
+                    done_gen[str(g["id"])] = row
+                    gf.write(json.dumps(row, ensure_ascii=False) + "\n")
                 gf.flush()
-                if i % log_every == 0 or i == len(pending):
-                    print(f"  gen {i}/{len(pending)} done  last {dt:.1f}s", flush=True)
+                i = start + len(batch)
+                if i % log_every < bs or i == len(pending):
+                    print(f"  gen {i}/{len(pending)} done  batch took {dt:.1f}s", flush=True)
         # Free VRAM before loading embedder + calling judge
         del model
         torch.cuda.empty_cache()

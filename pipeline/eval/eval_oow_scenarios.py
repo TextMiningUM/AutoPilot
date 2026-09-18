@@ -56,6 +56,7 @@ from openai import OpenAI
 
 from pipeline.eval.eval_finetuned import load_env, load_lm, _latency_stats
 from core import AgentPaths, EMBEDDER_MODEL
+from core.io import load_jsonl_keyed
 
 paths = AgentPaths.oow()
 W = paths.workspace
@@ -103,6 +104,31 @@ def generate_oow(tok, model, situation_report: str, question: str, max_new_token
     dt = time.time() - t0
     ans = tok.decode(out[0, inp["input_ids"].shape[1]:], skip_special_tokens=True).strip()
     return ans, dt
+
+
+@torch.inference_mode()
+def generate_oow_batch(tok, model, situation_reports: list[str], questions: list[str],
+                       max_new_tokens: int = 300) -> tuple[list[str], float]:
+    """Greedy-decode a BATCH of OOW Track 2 scenarios in one model.generate() call
+    (left-padded); returns (answer_texts, total_batch_latency_seconds). See
+    run_ablation.py's generate_batch / eval_finetuned.py's generate_batch."""
+    texts = [tok.apply_chat_template(
+                [{"role": "system", "content": SYSTEM_OOW},
+                 {"role": "user", "content": f"{sr}\n\n{q}"}],
+                tokenize=False, add_generation_prompt=True)
+             for sr, q in zip(situation_reports, questions)]
+    inp = tok(texts, return_tensors="pt", padding=True, truncation=True, max_length=2048).to(model.device)
+    t0 = time.time()
+    out = model.generate(
+        **inp, max_new_tokens=max_new_tokens,
+        do_sample=False, temperature=1.0, top_p=1.0,
+        pad_token_id=tok.pad_token_id,
+    )
+    dt = time.time() - t0
+    prompt_len = inp["input_ids"].shape[1]
+    answers = [tok.decode(out[i, prompt_len:], skip_special_tokens=True).strip()
+              for i in range(len(situation_reports))]
+    return answers, dt
 
 
 def parse_action(answer: str) -> str | None:
@@ -158,10 +184,13 @@ def main() -> None:
                     help="skip the bf16 attempt and load directly in 4-bit NF4")
     ap.add_argument("--legacy", action="store_true",
                     help="skip the RAGAS suite v2 -- rule-based metrics only (no judge/embedder needed)")
+    ap.add_argument("--batch-size", type=int, default=8,
+                    help="how many scenarios to generate per model.generate() call. Lower this if you hit OOM.")
     args = ap.parse_args()
 
     tag = args.tag or Path(args.model).name.replace("/", "_")
     out_file    = CACHE / f"eval_{tag}_colreg.jsonl"
+    gen_file    = CACHE / f"eval_{tag}_colreg_gen.jsonl"
     summary_out = CACHE / f"eval_{tag}_colreg_summary.json"
 
     scenarios = json.loads(SCENARIOS_FILE.read_text(encoding="utf-8"))
@@ -169,22 +198,41 @@ def main() -> None:
         scenarios = scenarios[:args.n]
     print(f"Evaluating {len(scenarios)} OOW scenarios (Track 2: applied helm/engine-order decisions)")
 
-    # --- 1) Generation phase (only LM in VRAM) ---
+    # --- 1) Generation phase (only LM in VRAM) -- resume-safe: rows already in gen_file
+    # (from a prior crash/interrupt) are reused instead of re-generated.
     log_every = 1 if len(scenarios) <= 20 else 20
-    tok, model = load_lm(args.model, force_4bit=args.force_4bit)
-    gen_records = []
-    for i, s in enumerate(scenarios, 1):
-        print(f"  [gen {i}/{len(scenarios)}] {s['id']}: {s['category']}", flush=True)
-        try:
-            ans, dt = generate_oow(tok, model, s["situation_report"], s["question"])
-        except Exception as e:
-            ans, dt = f"[ERROR:{e}]", 0.0
-        gen_records.append({**s, "answer": ans, "latency_s": round(dt, 2)})
-        if i % log_every == 0 or i == len(scenarios):
-            print(f"  gen {i}/{len(scenarios)} done  last {dt:.1f}s", flush=True)
-
-    del model
-    torch.cuda.empty_cache()
+    done_gen = load_jsonl_keyed(gen_file, "id")
+    if done_gen:
+        print(f"  [resume] {len(done_gen)}/{len(scenarios)} generation(s) already on disk ({gen_file.name})")
+    pending = [s for s in scenarios if str(s["id"]) not in done_gen]
+    if pending:
+        tok, model = load_lm(args.model, force_4bit=args.force_4bit)
+        bs = args.batch_size
+        with gen_file.open("a", encoding="utf-8") as gf:
+            for start in range(0, len(pending), bs):
+                batch = pending[start:start + bs]
+                print(f"  [gen {start+1}-{start+len(batch)}/{len(pending)}] batch of {len(batch)}...", flush=True)
+                try:
+                    answers, dt = generate_oow_batch(
+                        tok, model,
+                        [s["situation_report"] for s in batch],
+                        [s["question"] for s in batch],
+                    )
+                except Exception as e:
+                    answers, dt = [f"[ERROR:{e}]"] * len(batch), 0.0
+                for s, ans in zip(batch, answers):
+                    row = {**s, "answer": ans, "latency_s": round(dt / len(batch), 2)}
+                    done_gen[str(s["id"])] = row
+                    gf.write(json.dumps(row, ensure_ascii=False) + "\n")
+                gf.flush()
+                i = start + len(batch)
+                if i % log_every < bs or i == len(pending):
+                    print(f"  gen {i}/{len(pending)} done  batch took {dt:.1f}s", flush=True)
+        del model
+        torch.cuda.empty_cache()
+    else:
+        print("  [resume] all generations already on disk -- skipping model load")
+    gen_records = [done_gen[str(s["id"])] for s in scenarios]
 
     # --- 2) Metric phase (rule-based always; RAGAS suite v2 unless --legacy) ---
     keys = ["ActionCorrect", "DirectionCorrect", "RuleCite"]
