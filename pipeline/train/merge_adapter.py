@@ -45,7 +45,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
 
-from core import AgentPaths
+from core import AgentPaths, add_dry_run_arg, write_stub_output
 
 paths = AgentPaths.from_env()
 W = paths.workspace
@@ -74,6 +74,7 @@ def main() -> None:
     ap.add_argument("--sft-dir", type=str, default=None, help="override SFT_ADAPTER")
     ap.add_argument("--dpo-dir", type=str, default=None, help="override DPO_ADAPTER")
     ap.add_argument("--reflect-dir", type=str, default=None, help="override REFL_ADAPTER")
+    add_dry_run_arg(ap)
     args = ap.parse_args()
 
     global SFT_ADAPTER, DPO_ADAPTER, REFL_ADAPTER
@@ -89,6 +90,16 @@ def main() -> None:
         args.sft = args.dpo = args.reflect = True
     if args.sft_only:
         args.dpo = args.reflect = False
+
+    if args.dry_run:
+        for enabled, name, adapter in [(args.sft, "SFT", SFT_ADAPTER),
+                                        (args.dpo, "DPO", DPO_ADAPTER),
+                                        (args.reflect, "reflection", REFL_ADAPTER)]:
+            if enabled and not adapter.exists():
+                raise SystemExit(f"[dry-run] {name} adapter not found at {adapter}.")
+        print("[dry-run] All required adapter dirs exist -- skipping base-model load/merge.")
+        write_stub_output(Path(args.output))
+        return
 
     out = Path(args.output)
     if (out / "config.json").exists() and not args.force:

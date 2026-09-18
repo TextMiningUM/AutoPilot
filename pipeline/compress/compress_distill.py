@@ -60,7 +60,8 @@ from datasets import concatenate_datasets, Dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, get_cosine_schedule_with_warmup
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
-from core import AgentPaths, load_messages_jsonl
+from core import AgentPaths, load_messages_jsonl, add_dry_run_arg, write_stub_output
+from pipeline.train.train_sft import SFT_DATASETS
 
 paths = AgentPaths.from_env()
 W = paths.workspace
@@ -73,19 +74,10 @@ TEACHER_DIR       = VHF_MODELS / f"{paths.domain}-QWEN"
 DEFAULT_STUDENT   = "Qwen/Qwen3-1.7B"
 DEFAULT_OUT       = VHF_MODELS / f"Distill{paths.domain}-QWEN"
 
-# Same combined Track 1 + Track 2 datasets as train_sft.py (see notebook § 12/§12.6)
-# -- the student should see everything the teacher was fine-tuned on.
-SFT_DATASETS = [
-    CACHE / "vhf_sft_direct.jsonl",
-    CACHE / "vhf_sft_cot.jsonl",
-    CACHE / "vhf_sft_rag.jsonl",
-    CACHE / "vhf_multihop.jsonl",
-    CACHE / "vhf_conversations.jsonl",
-    CACHE / "vhf_colreg_sft_direct.jsonl",
-    CACHE / "vhf_colreg_sft_cot.jsonl",
-    CACHE / "vhf_colreg_sft_rag.jsonl",
-    CACHE / "vhf_colreg_multihop.jsonl",
-]
+# Imported (not duplicated) from train_sft.py -- already domain-aware (VHF vs OOW
+# file lists) via paths.domain, so the student always sees exactly what the
+# teacher was fine-tuned on and the two lists can never silently drift apart.
+
 
 
 def load_all() -> Dataset:
@@ -296,6 +288,7 @@ def main() -> None:
                     help="override TEACHER_DIR (e.g. a _smoke-suffixed merged model)")
     ap.add_argument("--max-steps", type=int, default=-1,
                     help="cap total optimizer steps (for smoke tests); -1 = unlimited")
+    add_dry_run_arg(ap)
     args = ap.parse_args()
 
     global TEACHER_DIR
@@ -308,6 +301,12 @@ def main() -> None:
 
     if not TEACHER_DIR.exists():
         raise SystemExit(f"Teacher {TEACHER_DIR} not found. Run merge_adapter.py first.")
+
+    if args.dry_run:
+        ds = load_all()
+        print(f"[dry-run] teacher dir exists, {len(ds)} distillation rows validated OK.")
+        write_stub_output(Path(args.output), tokenizer_source=TEACHER_DIR)
+        return
 
     train(args)
 

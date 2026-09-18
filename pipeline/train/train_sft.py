@@ -62,7 +62,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import LoraConfig, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 
-from core import AgentPaths, load_messages_jsonl
+from core import AgentPaths, load_messages_jsonl, add_dry_run_arg, write_stub_output
 
 # ── Paths ────────────────────────────────────────────────────────────────────────────────────────────────────
 paths = AgentPaths.from_env()
@@ -293,6 +293,7 @@ def main() -> None:
     ap.add_argument("--force", action="store_true", help="retrain even if an adapter already exists in OUTPUT_DIR")
     ap.add_argument("--out-dir", type=str, default=None,
                     help="override OUTPUT_DIR (e.g. a _smoke-suffixed path for pipeline sanity checks)")
+    add_dry_run_arg(ap)
     args = ap.parse_args()
 
     global OUTPUT_DIR
@@ -311,6 +312,11 @@ def main() -> None:
     # --- Data ---
     print("\nLoading SFT datasets...")
     train_ds = load_all_sft()
+
+    if args.dry_run:
+        print(f"[dry-run] {len(train_ds)} SFT rows loaded and validated OK.")
+        write_stub_output(OUTPUT_DIR)
+        return
 
     # --- Tokenizer ---
     tok = AutoTokenizer.from_pretrained(MODEL_ID)

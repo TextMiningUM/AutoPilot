@@ -50,7 +50,7 @@ from __future__ import annotations
 import os, json, argparse, random
 from pathlib import Path
 
-from core import AgentPaths
+from core import AgentPaths, add_dry_run_arg, write_stub_output
 
 paths = AgentPaths.from_env()
 W = paths.workspace
@@ -61,7 +61,7 @@ os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
 DEFAULT_IN  = VHF_MODELS / f"{paths.domain}-QWEN"
 DEFAULT_OUT = VHF_MODELS / f"{paths.domain}-QWEN-awq-int4"
-SFT_RAG     = CACHE / "vhf_sft_rag.jsonl"
+SFT_RAG     = CACHE / f"{paths.domain.lower()}_sft_rag.jsonl"
 
 
 def build_calibration_texts(n: int) -> list[str]:
@@ -95,7 +95,20 @@ def main() -> None:
                     help="no-op here (this script never evaluates) -- accepted so "
                          "run_all.sh's uniform 'quantize --skip-eval' call doesn't error out; "
                          "run eval_finetuned.py separately as printed below")
+    add_dry_run_arg(ap)
     args = ap.parse_args()
+
+    in_dir  = Path(args.input)
+    out_dir = Path(args.output)
+    if not in_dir.exists():
+        raise SystemExit(f"Input model not found: {in_dir}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.dry_run:
+        calib = build_calibration_texts(args.n_calibration)
+        print(f"[dry-run] input model dir exists, {len(calib)} calibration texts validated OK.")
+        write_stub_output(out_dir, tokenizer_source=in_dir)
+        return
 
     try:
         from awq import AutoAWQForCausalLM
@@ -105,12 +118,6 @@ def main() -> None:
             "autoawq not installed. Run:\n"
             "  pip install autoawq"
         )
-
-    in_dir  = Path(args.input)
-    out_dir = Path(args.output)
-    if not in_dir.exists():
-        raise SystemExit(f"Input model not found: {in_dir}")
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Loading {in_dir} for AWQ quantization...")
     tok = AutoTokenizer.from_pretrained(str(in_dir), trust_remote_code=True)

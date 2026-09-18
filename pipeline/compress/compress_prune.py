@@ -49,7 +49,7 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-from core import AgentPaths
+from core import AgentPaths, add_dry_run_arg, write_stub_output
 
 paths = AgentPaths.from_env()
 W = paths.workspace
@@ -60,8 +60,8 @@ os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
 DEFAULT_IN  = VHF_MODELS / f"{paths.domain}-QWEN"
 DEFAULT_OUT = VHF_MODELS / f"{paths.domain}-QWEN-pruned"
-SFT_RAG     = CACHE / "vhf_sft_rag.jsonl"
-REPORT_FILE = CACHE / "vhf_qwen_prune_report.json"
+SFT_RAG     = CACHE / f"{paths.domain.lower()}_sft_rag.jsonl"
+REPORT_FILE = CACHE / f"{paths.domain.lower()}_qwen_prune_report.json"
 
 
 def load_model(path: Path):
@@ -140,11 +140,18 @@ def main() -> None:
     ap.add_argument("--n-calib", type=int, default=32, help="calibration prompts")
     ap.add_argument("--measure-only", action="store_true",
                     help="print BI scores and exit — no pruning, no save")
+    add_dry_run_arg(ap)
     args = ap.parse_args()
 
     in_dir = Path(args.input)
     if not in_dir.exists():
         raise SystemExit(f"Input model not found: {in_dir}")
+
+    if args.dry_run:
+        prompts = calibration_prompts(args.n_calib)
+        print(f"[dry-run] input model dir exists, {len(prompts)} calibration prompts validated OK.")
+        write_stub_output(Path(args.output), tokenizer_source=in_dir)
+        return
 
     tok, model = load_model(in_dir)
     prompts = calibration_prompts(args.n_calib)

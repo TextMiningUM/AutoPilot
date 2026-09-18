@@ -45,7 +45,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import LoraConfig, PeftModel, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 
-from core import AgentPaths
+from core import AgentPaths, add_dry_run_arg, write_stub_output
 
 paths = AgentPaths.from_env()
 W = paths.workspace
@@ -147,6 +147,7 @@ def main() -> None:
                     help="override OUTPUT_DIR (e.g. a _smoke-suffixed path for pipeline sanity checks)")
     ap.add_argument("--sft-dir", type=str, default=None, help="override SFT_ADAPTER")
     ap.add_argument("--dpo-dir", type=str, default=None, help="override DPO_ADAPTER")
+    add_dry_run_arg(ap)
     args = ap.parse_args()
 
     global OUTPUT_DIR, SFT_ADAPTER, DPO_ADAPTER
@@ -170,6 +171,12 @@ def main() -> None:
         raise SystemExit("Need both SFT and DPO adapters before this stage.")
 
     train_ds = load_reflection()
+
+    if args.dry_run:
+        print(f"[dry-run] {len(train_ds)} reflection rows loaded and validated OK.")
+        write_stub_output(OUTPUT_DIR)
+        return
+
     tok = AutoTokenizer.from_pretrained(str(SFT_ADAPTER))
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
