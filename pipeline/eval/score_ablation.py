@@ -69,18 +69,32 @@ def main() -> None:
     ap.add_argument("--skip-judge", action="store_true",
                     help="(legacy only) skip Faith+Correct to iterate faster")
     ap.add_argument("--gold-file", type=Path, default=None,
-                    help="gold file whose _claims enrichment to use (default: paths.gold_file; "
-                         "OOW uses Data/OOW/OOW_Eval/colreg_qa_500_normalised.json)")
+                    help="gold file whose _claims enrichment to use (default: paths.gold_file, or "
+                         "the Track 2 scenarios file when --track2 is set; OOW Track1 uses "
+                         "Data/OOW/OOW_Eval/colreg_qa_500_normalised.json)")
+    ap.add_argument("--track2", action="store_true",
+                    help="score the Track 2 (scenario) ablation files, adding the same "
+                         "behavioral/rule-based metrics eval_colreg_scenarios.py/"
+                         "eval_oow_scenarios.py compute at eval time")
     ap.add_argument("--tag", type=str, default="",
                     help="must match prep_ablation.py/run_ablation.py's --tag -- keeps a "
                          "smoke-test sample's scoring separate from a full run's")
     args = ap.parse_args()
     global ANSWERS_FILE, PROMPTS_FILE, SCORED_FILE, SUMMARY_FILE
+    prompts_stem = "ablation_prompts_track2" if args.track2 else "ablation_prompts"
+    answers_stem = "ablation_answers_track2" if args.track2 else "ablation_answers"
+    scored_stem  = "ablation_scored_track2" if args.track2 else "ablation_scored"
+    summary_stem = "ablation_summary_track2" if args.track2 else "ablation_summary"
+    if args.track2:
+        ANSWERS_FILE = CACHE / f"{answers_stem}.jsonl"
+        PROMPTS_FILE = CACHE / f"{prompts_stem}.json"
+        SCORED_FILE  = CACHE / f"{scored_stem}.jsonl"
+        SUMMARY_FILE = CACHE / f"{summary_stem}.json"
     if args.tag:
-        ANSWERS_FILE = CACHE / f"ablation_answers_{args.tag}.jsonl"
-        PROMPTS_FILE = CACHE / f"ablation_prompts_{args.tag}.json"
-        SCORED_FILE  = CACHE / f"ablation_scored_{args.tag}.jsonl"
-        SUMMARY_FILE = CACHE / f"ablation_summary_{args.tag}.json"
+        ANSWERS_FILE = CACHE / f"{answers_stem}_{args.tag}.jsonl"
+        PROMPTS_FILE = CACHE / f"{prompts_stem}_{args.tag}.json"
+        SCORED_FILE  = CACHE / f"{scored_stem}_{args.tag}.jsonl"
+        SUMMARY_FILE = CACHE / f"{summary_stem}_{args.tag}.json"
 
     load_env(W / ".env")
     if not os.environ.get("OPENAI_API_KEY") and not (args.legacy and args.skip_judge):
@@ -102,7 +116,9 @@ def main() -> None:
             RagasScorer, load_gold_claims, summary_stamp, paired_bootstrap,
             RAG_METRICS, CLOSED_METRICS, DETAIL_METRICS,
         )
-        gold_file = args.gold_file or paths.gold_file
+        default_gold = (paths.eval_file(f"{paths.domain.lower()}_colreg_scenarios.json")
+                        if args.track2 else paths.gold_file)
+        gold_file = args.gold_file or default_gold
         claims_by_id = load_gold_claims(gold_file)
         if not claims_by_id:
             raise SystemExit(f"No gold_claims next to {gold_file} -- run "
@@ -111,6 +127,20 @@ def main() -> None:
         scorer = RagasScorer(judge, embedder, paths)
         metric_keys = sorted(set(RAG_METRICS + CLOSED_METRICS)) + DETAIL_METRICS + ["Composite"]
         suite_stamp = summary_stamp()
+        track2_extra_keys: list[str] = []
+        if args.track2:
+            if paths.domain == "VHF":
+                from pipeline.eval.eval_colreg_scenarios import (
+                    channel_procedure_score, call_format_score, judge_colreg_correct,
+                    composite_colreg_v2,
+                )
+                track2_extra_keys = ["ChannelProc", "CallFormatOK", "ColregCorrect"]
+            else:
+                from pipeline.eval.eval_oow_scenarios import (
+                    action_correct_score, direction_correct_score, rule_cite_score,
+                )
+                track2_extra_keys = ["ActionCorrect", "DirectionCorrect", "RuleCite"]
+            metric_keys += track2_extra_keys
 
     n_no_claims = 0
     log_every = 1 if len(records) <= 20 else 20
@@ -142,6 +172,24 @@ def main() -> None:
                     m = scorer.score_row(r["question"], r["answer"], r["gold_answer"],
                                          r.get("expected_points"), claims,
                                          contexts=ctx or None)
+                    if args.track2:
+                        if paths.domain == "VHF":
+                            chan = channel_procedure_score(r["answer"])
+                            cfmt = call_format_score(r.get("own_vessel", ""), r["answer"])
+                            creg = judge_colreg_correct(judge, r.get("scenario", ""), r["question"],
+                                                        r.get("colreg_rules", []),
+                                                        r.get("expected_points", []), r["answer"])
+                            m["ChannelProc"] = chan
+                            m["CallFormatOK"] = cfmt
+                            m["ColregCorrect"] = None if math.isnan(creg) else round(creg, 3)
+                            m["Composite"] = round(composite_colreg_v2({**m, "ColregCorrect": creg}), 3)
+                        else:
+                            m["ActionCorrect"] = action_correct_score(r["answer"], r.get("correct_action", ""))
+                            m["DirectionCorrect"] = direction_correct_score(
+                                r["answer"], r.get("correct_action", ""), r.get("correct_action_params", {}))
+                            m["RuleCite"] = rule_cite_score(r["answer"], r.get("colreg_rules", []))
+                            # OOW has no unified Track2 composite (mirrors eval_oow_scenarios.py's
+                            # own behaviour) -- the claim-based Composite above is kept as-is.
             f.write(json.dumps({**r, "metrics": m}, ensure_ascii=False) + "\n")
             if i % log_every == 0 or i == len(records):
                 print(f"  scored {i}/{len(records)}  cfg={r['config']}", flush=True)

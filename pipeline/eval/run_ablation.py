@@ -92,14 +92,21 @@ def main() -> None:
     ap.add_argument("--configs", nargs="+", default=None,
                     help="default: the configs list stored in ablation_prompts.json")
     ap.add_argument("--max_new_tokens", type=int, default=512)
+    ap.add_argument("--track2", action="store_true",
+                    help="read/write the Track 2 (scenario) ablation files instead of Track 1's")
     ap.add_argument("--tag", type=str, default="",
                     help="must match prep_ablation.py's --tag -- keeps smoke-test answers in "
                          "their own file, never appended to a full run's ablation_answers.jsonl")
     args = ap.parse_args()
     global PROMPTS_FILE, ANSWERS_FILE
+    prompts_stem = "ablation_prompts_track2" if args.track2 else "ablation_prompts"
+    answers_stem = "ablation_answers_track2" if args.track2 else "ablation_answers"
+    if args.track2:
+        PROMPTS_FILE = CACHE / f"{prompts_stem}.json"
+        ANSWERS_FILE = CACHE / f"{answers_stem}.jsonl"
     if args.tag:
-        PROMPTS_FILE = CACHE / f"ablation_prompts_{args.tag}.json"
-        ANSWERS_FILE = CACHE / f"ablation_answers_{args.tag}.jsonl"
+        PROMPTS_FILE = CACHE / f"{prompts_stem}_{args.tag}.json"
+        ANSWERS_FILE = CACHE / f"{answers_stem}_{args.tag}.jsonl"
 
     if not PROMPTS_FILE.exists():
         raise SystemExit(f"Missing {PROMPTS_FILE}. Run prep_ablation.py first.")
@@ -135,15 +142,26 @@ def main() -> None:
                 row = {
                     "config":  cfg,
                     "q_id":    rec["q_id"],
-                    "section_id":    rec["section_id"],
-                    "section_title": rec["section_title"],
-                    "type":          rec["type"],
                     "question":      rec["question"],
                     "gold_answer":   rec["gold_answer"],
                     "expected_points": rec["expected_points"],
                     "answer":        ans,
                     "latency_s":     round(dt, 2),
                 }
+                if args.track2:
+                    row["colreg_rules"] = rec.get("colreg_rules", [])
+                    row["category"] = rec.get("category", "")
+                    if "scenario" in rec:
+                        row["scenario"] = rec["scenario"]
+                        row["own_vessel"] = rec.get("own_vessel", "")
+                    if "situation_report" in rec:
+                        row["situation_report"] = rec["situation_report"]
+                        row["correct_action"] = rec.get("correct_action")
+                        row["correct_action_params"] = rec.get("correct_action_params", {})
+                else:
+                    row["section_id"] = rec["section_id"]
+                    row["section_title"] = rec["section_title"]
+                    row["type"] = rec["type"]
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
                 f.flush()
                 log_every = 1 if total <= 20 else 5
