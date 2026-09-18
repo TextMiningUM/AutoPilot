@@ -1,0 +1,36 @@
+
+In een windows app die met streamlit is gemaakt
+Tekst to Tekst simulator
+We laden een missie in.
+We gebruiken de kaarten van OpenSeaMap als overlay (moet dat met folium?)
+Plotly kan de beweginenlaaten zien.
+Ergens in het scherm zien we de missie (in tekst) 
+De agents worden aangeroepen VHF en OOW en die krijgendemissie te zien en geven aan wat er gedaanmoet worden. 
+De modellen die we gebruiken zijnOOW en VHF
+Ik wil de Imazu missies gebruiken
+Ik wil ook een validatie functie voor het gedrag van de agents maken die hierop gebaseerd is:
+  COLREGS compliance metrics — Woerner, Benjamin, Novitzky & Leonard (MIT) built a framework to quantify and evaluate the otherwise subjective nature of COLREGS, providing a path toward standardized evaluation and certification of protocol-constrained collision avoidance systems, and separately validated it with on-water field trials of up to five simultaneously interacting autonomous vessels across 10 complex scenarios (6,150+ vehicle-pair encounters), scored on spatial efficiency, temporal efficiency, protocol compliance, and safety. This MIT group's software stack is MOOS-IvP, a genuinely open-source, field-tested marine autonomy platform — worth a look if you want a real vehicle-in-the-loop testbed rather than a pure simulator. uitmmit 
+  A useful engineering-side pushback worth reading: a GitHub issue thread arguing COLREGS as a rule system was written for human judgement, and encoded as data and evaluated by a pure function, it fails formal verification in classifiable ways — pairwise rules that don't compose for three vessels among them — i.e., the multi-vessel composability problem is real and unsolved, not just an implementation detail. GitHub
+
+I also tried something myself to punish zigzagging and stopping.
+
+Woerner, Benjamin, Novitzky & Leonard (MIT, Autonomous Robots 2019) — use  four axes you mention: safety, protocol compliance, spatial efficiency, temporal efficiency, validated with 6,150+ real vessel encounters on the water. I do not have access to their exact formulas, so I used their structure as a proven starting point and developed it myself — plus your two extra axes (number of maneuvers, smoothness).
+
+The core of the design — and why "standing still" actually scores poorly: two hard gates, not one big weighted sum. With a naive weighted sum, "standing still" scored 0.70 — much too high, exactly your concern. The fix: (1) a collision = always 0.0, regardless of everything else; (2) failure to arrive = a maximum of 0.2, regardless of how "neat" the partial trajectory looked. Only trips that are both safe and arrive are assessed on the full weighted mix. I actually tested this, not just wrote it — five synthetic trajectories specifically designed to break the function (standstill, smooth-efficient, jerky-zigzag, real collision, unnecessary large detour), and that found two real bugs:
+
+The "standstill wins falsely" error mentioned above.
+
+The maneuver counter completely missed a continuous zigzag (counted it as 1 maneuver instead of dozens) — a continuous series of small opposing corrections never returns to "smooth," so the original logic saw it as one continuous maneuver. Fixed by also counting a direction reversal within a maneuver as a separate event. Final result, correctly ordered:
+
+Scenario Score
+Collision 0.000
+Standing still / never arriving 0.200
+Large unnecessary detour 0.791
+Jerky zigzag (but fast/direct) 0.799
+Smooth, purposeful, one clean maneuver 0.947
+
+Kun je een ontwerp maken.
+De app komt hier te staan: C:\Users\jcsch\Documents\Python\Auto Pilot\Data\Basic Simulator
+
+Ikheb alvast eenData folder gemaakt.
+Ook staat er ideeën en missies en andere zaken in de sub folder. 

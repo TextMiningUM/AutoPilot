@@ -321,10 +321,16 @@ def main() -> None:
     ap.add_argument("--legacy", action="store_true",
                     help="score with the old (pre-RAGAS) v1 metric suite instead of "
                          "the claim-level suite in pipeline.eval.ragas_metrics")
+    ap.add_argument("--summarize-only", action="store_true",
+                    help="skip generation and scoring entirely -- just recompute and print/save "
+                         "the summary from whatever rows are currently in eval_{tag}.jsonl. Use "
+                         "this to check progress (or final results) after killing a long run early "
+                         "or after a crash, without waiting for or triggering more generation.")
     args = ap.parse_args()
 
     tag = args.tag or Path(args.model).name.replace("/", "_")
     out_file    = CACHE / f"eval_{tag}.jsonl"
+    gen_file    = CACHE / f"eval_{tag}_gen.jsonl"
     summary_out = CACHE / f"eval_{tag}_summary.json"
 
     load_env(W / ".env")
@@ -336,23 +342,39 @@ def main() -> None:
     if args.n: gold = gold[:args.n]
     print(f"Evaluating {len(gold)} questions")
 
-    # --- 1) Generation phase (only LM in VRAM) ---
-    log_every = 1 if len(gold) <= 20 else 20
-    tok, model = load_lm(args.model, force_4bit=args.force_4bit)
-    gen_records = []
-    for i, g in enumerate(gold, 1):
-        print(f"  [gen {i}/{len(gold)}] {g['id']}: {g['question'][:80]!r}", flush=True)
-        try:
-            ans, dt = generate(tok, model, g["question"])
-        except Exception as e:
-            ans, dt = f"[ERROR:{e}]", 0.0
-        gen_records.append({**g, "answer": ans, "latency_s": round(dt, 2)})
-        if i % log_every == 0 or i == len(gold):
-            print(f"  gen {i}/{len(gold)} done  last {dt:.1f}s", flush=True)
+    if args.summarize_only:
+        _summarize_and_exit(out_file, summary_out, args, keys_for_legacy=args.legacy)
+        return
 
-    # Free VRAM before loading embedder + calling judge
-    del model
-    torch.cuda.empty_cache()
+    # --- 1) Generation phase (only LM in VRAM) -- resume-safe: rows already in gen_file
+    # (from a prior crash/interrupt) are reused instead of re-generated, and the model is
+    # loaded only if there's at least one question still pending.
+    log_every = 1 if len(gold) <= 20 else 20
+    done_gen = load_jsonl_keyed(gen_file, "id")
+    if done_gen:
+        print(f"  [resume] {len(done_gen)}/{len(gold)} generation(s) already on disk ({gen_file.name})")
+    pending = [g for g in gold if str(g["id"]) not in done_gen]
+    if pending:
+        tok, model = load_lm(args.model, force_4bit=args.force_4bit)
+        with gen_file.open("a", encoding="utf-8") as gf:
+            for i, g in enumerate(pending, 1):
+                print(f"  [gen {i}/{len(pending)}] {g['id']}: {g['question'][:80]!r}", flush=True)
+                try:
+                    ans, dt = generate(tok, model, g["question"])
+                except Exception as e:
+                    ans, dt = f"[ERROR:{e}]", 0.0
+                row = {**g, "answer": ans, "latency_s": round(dt, 2)}
+                done_gen[str(g["id"])] = row
+                gf.write(json.dumps(row, ensure_ascii=False) + "\n")
+                gf.flush()
+                if i % log_every == 0 or i == len(pending):
+                    print(f"  gen {i}/{len(pending)} done  last {dt:.1f}s", flush=True)
+        # Free VRAM before loading embedder + calling judge
+        del model
+        torch.cuda.empty_cache()
+    else:
+        print("  [resume] all generations already on disk -- skipping model load")
+    gen_records = [done_gen[str(g["id"])] for g in gold]
 
     # --- 2) Metric phase (embedder on CPU/GPU; API calls to judge) ---
     print("\nLoading embedder for metrics...")
@@ -376,8 +398,12 @@ def main() -> None:
 
     print("Scoring...")
     n_no_claims = 0
-    with out_file.open("w", encoding="utf-8") as f:
-        for i, r in enumerate(gen_records, 1):
+    done_scored = load_jsonl_keyed(out_file, "id")
+    if done_scored:
+        print(f"  [resume] {len(done_scored)}/{len(gen_records)} scored row(s) already on disk ({out_file.name})")
+    to_score = [r for r in gen_records if str(r["id"]) not in done_scored]
+    with out_file.open("a", encoding="utf-8") as f:
+        for i, r in enumerate(to_score, 1):
             if args.legacy:
                 m = {
                     "SemSim":  round(semsim(embedder, r["gold_answer"], r["answer"]), 3),
@@ -401,15 +427,25 @@ def main() -> None:
                                          r.get("expected_points"), claims, contexts=None)
             row = {**r, "metrics": m}
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
-            if i % log_every == 0 or i == len(gen_records):
-                print(f"  scored {i}/{len(gen_records)}  Composite={m.get('Composite')}", flush=True)
+            f.flush()
+            if i % log_every == 0 or i == len(to_score):
+                print(f"  scored {i}/{len(to_score)}  Composite={m.get('Composite')}", flush=True)
     if n_no_claims:
         print(f"  [warn] {n_no_claims} rows skipped: no gold_claims yet (enrichment incomplete)")
 
-    # --- 3) Summarize ---
+    # --- 3) Summarize (reads whatever is currently in out_file, i.e. resume-safe too) ---
+    _write_summary(out_file, summary_out, args.model, tag, keys, suite_stamp, gen_records)
+
+
+def _write_summary(out_file: Path, summary_out: Path, model: str, tag: str, keys: list[str],
+                   suite_stamp: dict, gen_records: list[dict]) -> None:
+    """Aggregate whatever rows currently exist in `out_file` into a summary -- safe to call
+    on a partial file (after a crash or early interruption), not just a fully-scored one."""
     sums, cnts = {k: 0.0 for k in keys}, {k: 0 for k in keys}
+    n_rows = 0
     with out_file.open("r", encoding="utf-8") as f:
         for line in f:
+            n_rows += 1
             m = json.loads(line)["metrics"]
             for k in keys:
                 v = m.get(k)
@@ -420,13 +456,13 @@ def main() -> None:
     latencies = sorted(r["latency_s"] for r in gen_records if r.get("latency_s"))
     lat_stats = _latency_stats(latencies)
 
-    summary = {"model": args.model, "tag": tag, "n": len(gen_records),
+    summary = {"model": model, "tag": tag, "n": n_rows,
                **suite_stamp,
                "means": means, "counts": cnts, "latency": lat_stats}
     summary_out.write_text(json.dumps(summary, indent=2))
 
     print("\n" + "=" * 60)
-    print(f"Evaluation summary — {tag} (n={len(gen_records)})")
+    print(f"Evaluation summary — {tag} (n={n_rows})")
     print("=" * 60)
     for k in keys:
         v = means[k]
@@ -434,6 +470,24 @@ def main() -> None:
         print(f"  {k:<10} {v_str}    (n={cnts[k]})")
     print(f"\nDetails: {out_file}")
     print(f"Summary: {summary_out}")
+
+
+def _summarize_and_exit(out_file: Path, summary_out: Path, args, keys_for_legacy: bool) -> None:
+    """--summarize-only entry point: no model/embedder/judge loaded, just aggregates
+    whatever is currently on disk in `out_file`."""
+    if not out_file.exists():
+        raise SystemExit(f"{out_file} does not exist yet -- nothing scored so far.")
+    if keys_for_legacy:
+        suite_stamp = {"metric_suite": "legacy_v1", "judge_model": JUDGE_MODEL}
+        keys = ["SemSim","AnsRel","Faith","Correct","Cover","NumHit","LitHit","Composite"]
+    else:
+        from pipeline.eval.ragas_metrics import summary_stamp, CLOSED_METRICS, DETAIL_METRICS
+        suite_stamp = summary_stamp()
+        keys = CLOSED_METRICS + DETAIL_METRICS + ["Composite"]
+    rows = list(load_jsonl(out_file))
+    gen_records = [{**r, "latency_s": r.get("latency_s")} for r in rows]
+    tag = args.tag or Path(args.model).name.replace("/", "_")
+    _write_summary(out_file, summary_out, args.model, tag, keys, suite_stamp, gen_records)
 
 
 if __name__ == "__main__":

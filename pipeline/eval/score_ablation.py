@@ -106,6 +106,19 @@ def main() -> None:
 
     with ANSWERS_FILE.open("r", encoding="utf-8") as f:
         records = [json.loads(l) for l in f if l.strip()]
+
+    # run_ablation.py APPENDS to ANSWERS_FILE and never prunes it, so re-running prep_ablation.py
+    # with a different --n/seed (e.g. a smaller smoke sample) leaves older questions' answers
+    # sitting in the file forever. prep_ablation.py OVERWRITES PROMPTS_FILE on every run, so its
+    # q_ids are always exactly the current sample -- restrict scoring to those, not the full
+    # historical answers file.
+    if PROMPTS_FILE.exists():
+        current_qids = {str(r["q_id"]) for r in json.loads(PROMPTS_FILE.read_text(encoding="utf-8"))["records"]}
+        n_before = len(records)
+        records = [r for r in records if str(r["q_id"]) in current_qids]
+        if len(records) < n_before:
+            print(f"  [filter] {n_before - len(records)} stale answers from earlier "
+                  f"--n/seed samples excluded (not in current {PROMPTS_FILE.name})")
     print(f"Records to score: {len(records)}")
 
     if args.legacy:
@@ -244,10 +257,13 @@ def main() -> None:
     SUMMARY_FILE.write_text(json.dumps(summary, indent=2))
 
     # ── Print comparison table ──────────────────────────────────────────
-    header = f"{'Metric':<18}" + "".join(f"{c:>14}" for c in configs)
-    print("\n" + "=" * (18 + 14 * len(configs)))
+    # Column width must fit the longest config name (e.g. "v5_pg_incident" is 14 chars) --
+    # a fixed width narrower than that runs headers together with no separating space.
+    col_w = max((len(c) for c in configs), default=14) + 2
+    header = f"{'Metric':<18}" + "".join(f"{c:>{col_w}}" for c in configs)
+    print("\n" + "=" * (18 + col_w * len(configs)))
     print(f"Ablation comparison (higher is better) [{suite_stamp.get('metric_suite')}]")
-    print("=" * (18 + 14 * len(configs)))
+    print("=" * (18 + col_w * len(configs)))
     print(header)
     print("-" * len(header))
     for k in metric_keys:
@@ -259,7 +275,7 @@ def main() -> None:
             if base is not None and v is not None and c != configs[0]:
                 delta = v - base
                 s += f" ({delta:+.3f})"
-            row += f"{s:>14}"
+            row += f"{s:>{col_w}}"
         print(row)
 
     print(f"\nDetails: {SCORED_FILE}")

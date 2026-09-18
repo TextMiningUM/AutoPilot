@@ -28,6 +28,21 @@ def load_jsonl(path: Path) -> Iterator[dict]:
                 continue
 
 
+def load_jsonl_keyed(path: Path, key: str) -> dict[str, dict]:
+    """Load an existing JSONL file into ``{str(row[key]): row}`` (``{}`` if the file
+    doesn't exist), skipping rows missing `key`. Used by resume-safe generation/scoring
+    loops: check ``str(item_id) in done`` to skip work already completed before a crash
+    or a deliberate early interruption, instead of starting over from scratch."""
+    if not path.exists():
+        return {}
+    done: dict[str, dict] = {}
+    for row in load_jsonl(path):
+        k = row.get(key)
+        if k is not None:
+            done[str(k)] = row
+    return done
+
+
 def load_env(path: Path) -> None:
     """Minimal .env loader: sets os.environ from KEY=VALUE lines, never overwriting existing vars."""
     if not path.exists():

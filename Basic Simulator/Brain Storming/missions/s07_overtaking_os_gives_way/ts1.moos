@@ -1,0 +1,129 @@
+//-------------------------------------------------
+// MOOS-IvP vehicle community: ts1  // target ship (straight-line only)
+// Auto-generated — verify sharing-layer blocks against your MOOS-IvP version.
+//-------------------------------------------------
+ServerHost = localhost
+ServerPort = 9002
+Community  = ts1
+
+MOOSTimeWarp = 4
+
+LatOrigin  = 43.8253
+LongOrigin = -70.3304
+
+//------------------------------------------
+ProcessConfig = ANTLER
+{
+  MSBetweenLaunches = 200
+  Run = MOOSDB          @ NewConsole = false
+  Run = pShare           @ NewConsole = false
+  Run = pHostInfo        @ NewConsole = false
+  Run = uFldNodeBroker    @ NewConsole = false
+  Run = pNodeReporter      @ NewConsole = false
+  Run = uSimMarine        @ NewConsole = false
+  Run = pMarinePID        @ NewConsole = false
+  Run = pHelmIvP           @ NewConsole = false
+  Run = pLogger            @ NewConsole = false
+}
+
+//------------------------------------------
+ProcessConfig = pShare
+{
+  AppTick    = 2
+  CommsTick  = 2
+  input      = route = localhost:9202
+}
+
+//------------------------------------------
+ProcessConfig = pHostInfo
+{
+  AppTick    = 1
+  CommsTick  = 1
+}
+
+//------------------------------------------
+ProcessConfig = uFldNodeBroker
+{
+  AppTick   = 1
+  CommsTick = 1
+
+  TRY_SHORE_HOST      = localhost
+  TRY_SHORE_PORT       = 9000
+  TRY_SHORE_COMMUNITY  = shoreside
+
+  BRIDGE  = src=VIEW_POLYGON
+  BRIDGE  = src=VIEW_POINT
+  BRIDGE  = src=VIEW_SEGLIST
+  BRIDGE  = src=APPCAST
+  BRIDGE  = src=NODE_REPORT_LOCAL, alias=NODE_REPORT
+  BRIDGE  = src=NODE_MESSAGE_LOCAL, alias=NODE_MESSAGE
+}
+
+//------------------------------------------
+ProcessConfig = pNodeReporter
+{
+  AppTick    = 2
+  CommsTick  = 2
+
+  vessel_type = SHIP
+}
+
+//------------------------------------------
+ProcessConfig = uSimMarine
+{
+  AppTick    = 10
+  CommsTick  = 10
+
+  START_POS  = 0.0,700.0,0.0,1.0
+  PREFIX     = NAV
+  MODEL_TYPE = holo
+}
+
+//------------------------------------------
+ProcessConfig = pMarinePID
+{
+  AppTick     = 10
+  CommsTick   = 10
+
+  VERBOSE        = false
+  DEPTH_CONTROL  = false
+  ACTIVE_START   = true
+
+  YAW_PID_KP              = 1.2
+  YAW_PID_KD               = 0.0
+  YAW_PID_KI                = 0.3
+  YAW_PID_INTEGRAL_LIMIT     = 0.07
+
+  SPEED_PID_KP             = 1.0
+  SPEED_PID_KD              = 0.0
+  SPEED_PID_KI               = 0.0
+  SPEED_PID_INTEGRAL_LIMIT    = 0.07
+
+  MAXRUDDER    = 100
+  MAXTHRUST    = 100
+  SPEED_FACTOR  = 20
+}
+
+//------------------------------------------
+ProcessConfig = pHelmIvP
+{
+  AppTick    = 4
+  CommsTick  = 4
+
+  Behaviors   = ts1.bhv
+  Verbose     = quiet
+  Domain      = course:0:359:360
+  Domain      = speed:0:5:26
+}
+
+//------------------------------------------
+ProcessConfig = pLogger
+{
+  AppTick        = 10
+  CommsTick      = 10
+  File           = LOG_TS1
+  PATH           = ./
+  SyncLog        = true @ 0.2
+  AsyncLog       = true
+  WildCardLogging = true
+}

@@ -1,0 +1,87 @@
+//-------------------------------------------------
+// Behavior file for OWN-SHIP under test: opship
+//-------------------------------------------------
+initialize   DEPLOY  = true
+initialize   RETURN  = false
+initialize   MODE    = ACTIVE
+
+set MODE = ACTIVE {
+  DEPLOY = true
+  RETURN = false
+} INACTIVE
+
+//----------------------------------------------
+Behavior = BHV_Waypoint
+{
+  name         = transit
+  pwt          = 100
+  condition    = MODE==ACTIVE
+  perpetual    = true
+
+  updates      = WPT_UPDATE
+  speed        = 2.5
+  capture_radius = 25
+  slip_radius    = 50
+  points         = 0,2400
+  repeat         = 0
+}
+
+Behavior = BHV_AvoidCollision
+{
+  name         = avoid_ts1
+  pwt          = 300
+  condition    = MODE==ACTIVE
+  updates      = CONTACT_INFO_TS1
+  contact      = ts1
+  on_no_contact_ok = true
+  extrapolate       = true
+  decay             = 30,60
+
+  // NOTE: verify parameter names/ranges against your installed
+  // BHV_AvoidCollision version (pHelmIvP --alist / behavior --help).
+  // Reasonable starting point:
+  pwt_outer_dist   = 200
+  pwt_inner_dist   = 50
+  completed_dist   = 350
+  collision_distance = 25
+}
+
+Behavior = BHV_AvoidCollision
+{
+  name         = avoid_ts2
+  pwt          = 300
+  condition    = MODE==ACTIVE
+  updates      = CONTACT_INFO_TS2
+  contact      = ts2
+  on_no_contact_ok = true
+  extrapolate       = true
+  decay             = 30,60
+
+  // NOTE: verify parameter names/ranges against your installed
+  // BHV_AvoidCollision version (pHelmIvP --alist / behavior --help).
+  // Reasonable starting point:
+  pwt_outer_dist   = 200
+  pwt_inner_dist   = 50
+  completed_dist   = 350
+  collision_distance = 25
+}
+
+Behavior = BHV_AvoidCollision
+{
+  name         = avoid_ts3
+  pwt          = 300
+  condition    = MODE==ACTIVE
+  updates      = CONTACT_INFO_TS3
+  contact      = ts3
+  on_no_contact_ok = true
+  extrapolate       = true
+  decay             = 30,60
+
+  // NOTE: verify parameter names/ranges against your installed
+  // BHV_AvoidCollision version (pHelmIvP --alist / behavior --help).
+  // Reasonable starting point:
+  pwt_outer_dist   = 200
+  pwt_inner_dist   = 50
+  completed_dist   = 350
+  collision_distance = 25
+}

@@ -113,11 +113,60 @@ def _finalise_chunk(sections, chapter, doc, tokens) -> dict:
     }
 
 
+def _split_oversized_section(section: dict, max_tokens: int) -> list[dict]:
+    """Split a single section whose OWN text already exceeds max_tokens into
+    several smaller sections (same metadata, sliced text). Needed for
+    incident-report excerpts (build_incident_excerpts.py emits each report's
+    whole Analysis/Conclusions/Findings excerpt as ONE section, sometimes
+    several pages long) -- chunk_chapter()'s merge loop only ever checked
+    the budget when ADDING a section to a chunk, never when a single seed
+    section was already over budget on its own, so these came out as
+    unsplit 10-30K-character chunks (confirmed: 6 retrieved OOW incident
+    chunks combined into an 80KB ablation prompt, ~20K tokens before the
+    4096-token truncation, turning a normal ~30s generation into ~18 min)."""
+    text = section["text"]
+    paras = [p for p in re.split(r"\n\s*\n", text) if p.strip()] or [text]
+    pieces: list[str] = []
+    cur, cur_tokens = "", 0
+    for p in paras:
+        p_tokens = token_count(p)
+        if p_tokens > max_tokens:
+            # a single paragraph alone is still oversized -- fall back to sentences
+            for s in re.split(r"(?<=[.!?])\s+", p):
+                s_tokens = token_count(s)
+                if cur_tokens + s_tokens > max_tokens and cur:
+                    pieces.append(cur.strip())
+                    cur, cur_tokens = "", 0
+                cur += (" " if cur else "") + s
+                cur_tokens += s_tokens
+            continue
+        if cur_tokens + p_tokens > max_tokens and cur:
+            pieces.append(cur.strip())
+            cur, cur_tokens = "", 0
+        cur += ("\n\n" if cur else "") + p
+        cur_tokens += p_tokens
+    if cur.strip():
+        pieces.append(cur.strip())
+    out = []
+    for i, piece in enumerate(pieces):
+        sub = dict(section)
+        sub["text"] = piece
+        sub["section_id"] = f"{section['section_id']}_p{i + 1}"
+        out.append(sub)
+    return out
+
+
 def chunk_chapter(chapter: dict, doc: dict) -> list[dict]:
     """Merge a chapter's sections into token-budgeted, topic-coherent chunks."""
-    sections = chapter.get("sections", [])
-    if not sections:
+    raw_sections = chapter.get("sections", [])
+    if not raw_sections:
         return []
+    sections = []
+    for s in raw_sections:
+        if token_count(s["text"]) > CHUNK_MAX_TOKENS:
+            sections.extend(_split_oversized_section(s, CHUNK_MAX_TOKENS))
+        else:
+            sections.append(s)
     out = []
     i = 0
     while i < len(sections):

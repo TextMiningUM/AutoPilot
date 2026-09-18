@@ -42,6 +42,7 @@ def load_qwen():
         quantization_config=bnb,
         device_map="auto",
         torch_dtype=torch.bfloat16,
+        attn_implementation="sdpa",
     )
     mdl.eval()
     print(f"  VRAM allocated: {torch.cuda.memory_allocated()/1024**3:.2f} GB")
@@ -132,6 +133,11 @@ def main() -> None:
                 key = (cfg, rec["q_id"])
                 if key in done:
                     continue
+                # Print BEFORE generating (not just after) -- otherwise a genuinely stuck/hung
+                # generation looks identical to a slow-but-working one: no output at all until
+                # the NEXT item completes. This line is what tells you which (config, q_id) is
+                # currently in progress if it seems stuck.
+                print(f"  [{idx}/{total}] starting cfg={cfg} q={rec['q_id']}...", end="", flush=True)
                 # v4_pg falls back to the plain prompt for questions where no
                 # guidance path could be rendered (keeps the paired sample complete)
                 messages = rec["prompts"].get(cfg) or rec["prompts"]["v0_base"]
@@ -164,12 +170,7 @@ def main() -> None:
                     row["type"] = rec["type"]
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
                 f.flush()
-                log_every = 1 if total <= 20 else 5
-                if idx % log_every == 0 or idx == total:
-                    rate = idx / (time.time() - t_start + 1e-9)
-                    remain = (total - idx) / rate if rate > 0 else 0
-                    print(f"  {idx}/{total}  cfg={cfg}  q={rec['q_id']}  "
-                          f"lat={dt:.1f}s  ETA={remain/60:.1f}min", flush=True)
+                print(f" done in {dt:.1f}s", flush=True)
 
     print(f"\nDone in {(time.time()-t_start)/60:.1f} min")
     print(f"Output: {ANSWERS_FILE}  ({ANSWERS_FILE.stat().st_size/1024:.1f} KB)")

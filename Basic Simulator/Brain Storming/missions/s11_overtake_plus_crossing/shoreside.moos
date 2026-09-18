@@ -1,0 +1,83 @@
+//-------------------------------------------------
+// MOOS-IvP shoreside community for scenario: s11_overtake_plus_crossing
+// Auto-generated — verify sharing-layer blocks against your MOOS-IvP version.
+//-------------------------------------------------
+ServerHost = localhost
+ServerPort = 9000
+Community  = shoreside
+
+MOOSTimeWarp = 4
+
+LatOrigin  = 43.8253
+LongOrigin = -70.3304
+
+//------------------------------------------
+ProcessConfig = ANTLER
+{
+  MSBetweenLaunches = 200
+  Run = MOOSDB          @ NewConsole = false
+  Run = pShare           @ NewConsole = false
+  Run = pHostInfo        @ NewConsole = false
+  Run = uFldShoreBroker   @ NewConsole = false
+  Run = pMarineViewer     @ NewConsole = false
+  Run = pLogger           @ NewConsole = false
+}
+
+//------------------------------------------
+ProcessConfig = pShare
+{
+  AppTick    = 2
+  CommsTick  = 2
+  input      = route = localhost:9200
+}
+
+//------------------------------------------
+ProcessConfig = pHostInfo
+{
+  AppTick    = 1
+  CommsTick  = 1
+}
+
+//------------------------------------------
+ProcessConfig = uFldShoreBroker
+{
+  AppTick   = 1
+  CommsTick = 1
+
+  QBRIDGE   = DEPLOY, RETURN, NODE_REPORT, NODE_MESSAGE, APPCAST_REQ
+}
+
+//------------------------------------------
+ProcessConfig = pMarineViewer
+{
+  AppTick    = 4
+  CommsTick  = 4
+
+  TIFF_FILE            = forrest19.tif
+  set_pan_x             = 0
+  set_pan_y             = 0
+  zoom                  = 0.75
+  vehicles_shape_scale  = 1.5
+  vehicles_name_mode    = names
+
+  appcast_viewable = true
+  scope             = NODE_REPORT_LOCAL
+  scope             = COLLISION_ALERT
+
+  action = MENU_KEY=deploy # DEPLOY_ALL=true
+  action = MENU_KEY=return # RETURN_ALL=true
+
+  comms_pulse_viewable_all = true
+}
+
+//------------------------------------------
+ProcessConfig = pLogger
+{
+  AppTick        = 4
+  CommsTick      = 4
+  File           = LOG_SHORESIDE_S11_OVERTAKE_PLUS_CROSSING
+  PATH           = ./
+  SyncLog        = true @ 0.2
+  AsyncLog       = true
+  WildCardLogging = true
+}
