@@ -5,6 +5,18 @@ Loads ONLY Qwen. The embedder / KG / sentence-transformer are NOT loaded here
 
 Resume-safe: skips (config, q_id) pairs already present in the output file.
 
+Two speed-ups on top of the naive one-prompt-at-a-time loop:
+  1. Prompt dedup: v4_pg/v5_pg_incident/v6_pg_scenario fall back to the exact
+     v0_base prompt for questions with no renderable PG guidance path (see
+     prep_ablation.py). A fallback prompt is byte-identical to v0_base's, so
+     greedy-decoding it again always reproduces the same answer -- we cache
+     answers by prompt content and reuse them instead of re-generating.
+  2. Batched generation: prompts for a config are grouped into batches (left
+     padding) and generated in one model.generate() call instead of one at a
+     time -- autoregressive decoding is memory-bandwidth-bound, not compute-
+     bound, so batching gives close to linear throughput scaling until VRAM
+     runs out.
+
 Writes _cache/ablation_answers.jsonl (one line per (config, q_id)).
 """
 from __future__ import annotations
@@ -37,6 +49,12 @@ def load_qwen():
         bnb_4bit_use_double_quant=True,
     )
     tok = AutoTokenizer.from_pretrained(MODEL_ID)
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
+    # Left-padding is required for batched decoder-only generation: every
+    # sequence's real content must end at the same index so new tokens are
+    # appended in the same position across the batch.
+    tok.padding_side = "left"
     mdl = AutoModelForCausalLM.from_pretrained(
         MODEL_ID,
         quantization_config=bnb,
@@ -50,10 +68,14 @@ def load_qwen():
 
 
 @torch.inference_mode()
-def generate(tok, mdl, messages: list[dict], max_new_tokens: int = 512) -> tuple[str, float]:
-    """Greedy-decode one answer from a chat-formatted message list; returns (answer_text, latency_seconds)."""
-    text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    inp = tok(text, return_tensors="pt", truncation=True, max_length=4096).to(mdl.device)
+def generate_batch(tok, mdl, messages_list: list[list[dict]],
+                   max_new_tokens: int = 512) -> tuple[list[str], float]:
+    """Greedy-decode a BATCH of chat-formatted message lists in one model.generate()
+    call; returns (answer_texts, total_batch_latency_seconds)."""
+    texts = [tok.apply_chat_template(m, tokenize=False, add_generation_prompt=True)
+             for m in messages_list]
+    inp = tok(texts, return_tensors="pt", padding=True, truncation=True,
+              max_length=4096).to(mdl.device)
     t0 = time.time()
     out = mdl.generate(
         **inp,
@@ -61,30 +83,74 @@ def generate(tok, mdl, messages: list[dict], max_new_tokens: int = 512) -> tuple
         do_sample=False,
         temperature=1.0,
         top_p=1.0,
-        pad_token_id=tok.eos_token_id,
+        pad_token_id=tok.pad_token_id,
     )
     dt = time.time() - t0
-    new_tokens = out[0, inp["input_ids"].shape[1]:]
-    ans = tok.decode(new_tokens, skip_special_tokens=True).strip()
-    return ans, dt
+    prompt_len = inp["input_ids"].shape[1]
+    answers = [tok.decode(out[i, prompt_len:], skip_special_tokens=True).strip()
+              for i in range(len(messages_list))]
+    return answers, dt
 
 
-def load_done() -> set[tuple[str, str]]:
-    """Read already-completed (config, q_id) pairs from ANSWERS_FILE, for resume support."""
+def load_done() -> dict[tuple[str, str], dict]:
+    """Read already-completed (config, q_id) -> row from ANSWERS_FILE, for resume support."""
     if not ANSWERS_FILE.exists():
-        return set()
-    done: set[tuple[str, str]] = set()
+        return {}
+    done: dict[tuple[str, str], dict] = {}
     skipped = 0
     with ANSWERS_FILE.open("r", encoding="utf-8") as f:
         for line in f:
             try:
                 r = json.loads(line)
-                done.add((r["config"], r["q_id"]))
+                done[(r["config"], r["q_id"])] = r
             except (json.JSONDecodeError, KeyError):
                 skipped += 1
     if skipped:
         print(f"  [load_done] skipped {skipped} malformed line(s) in {ANSWERS_FILE.name}")
     return done
+
+
+def _resolve_messages(rec: dict, cfg: str) -> list[dict]:
+    """Same fallback rule prep_ablation.py's PG configs rely on: use cfg's own
+    prompt if it was rendered, else fall back to the plain v0_base prompt."""
+    return rec["prompts"].get(cfg) or rec["prompts"]["v0_base"]
+
+
+def _prompt_key(messages: list[dict]) -> str:
+    """Content-based cache key -- two (config, q_id) pairs with byte-identical
+    prompts always produce the same greedy-decoded answer, so their generation
+    can be skipped in favor of a cached reuse."""
+    return json.dumps(messages, sort_keys=True, ensure_ascii=False)
+
+
+def _row_for(cfg: str, rec: dict, ans: str, dt: float, track2: bool,
+            reused: bool = False) -> dict:
+    row = {
+        "config":  cfg,
+        "q_id":    rec["q_id"],
+        "question":      rec["question"],
+        "gold_answer":   rec["gold_answer"],
+        "expected_points": rec["expected_points"],
+        "answer":        ans,
+        "latency_s":     round(dt, 2),
+    }
+    if reused:
+        row["reused_prompt"] = True  # dedup hit -- no fresh generation happened
+    if track2:
+        row["colreg_rules"] = rec.get("colreg_rules", [])
+        row["category"] = rec.get("category", "")
+        if "scenario" in rec:
+            row["scenario"] = rec["scenario"]
+            row["own_vessel"] = rec.get("own_vessel", "")
+        if "situation_report" in rec:
+            row["situation_report"] = rec["situation_report"]
+            row["correct_action"] = rec.get("correct_action")
+            row["correct_action_params"] = rec.get("correct_action_params", {})
+    else:
+        row["section_id"] = rec["section_id"]
+        row["section_title"] = rec["section_title"]
+        row["type"] = rec["type"]
+    return row
 
 
 def main() -> None:
@@ -93,6 +159,10 @@ def main() -> None:
     ap.add_argument("--configs", nargs="+", default=None,
                     help="default: the configs list stored in ablation_prompts.json")
     ap.add_argument("--max_new_tokens", type=int, default=512)
+    ap.add_argument("--batch-size", type=int, default=8,
+                    help="prompts per model.generate() call -- autoregressive decoding is "
+                         "memory-bandwidth-bound, not compute-bound, so batching gives near-"
+                         "linear throughput until VRAM runs out. Lower this if you hit OOM.")
     ap.add_argument("--track2", action="store_true",
                     help="read/write the Track 2 (scenario) ablation files instead of Track 1's")
     ap.add_argument("--tag", type=str, default="",
@@ -115,66 +185,80 @@ def main() -> None:
     records = data["records"]
     if args.configs is None:
         args.configs = data.get("configs", ["v0_base", "v1_rag", "v2_cot", "v3_rag_cot"])
-    print(f"Prompts loaded: {len(records)} Q's x {len(args.configs)} configs = "
-          f"{len(records)*len(args.configs)} generations")
+    total = len(records) * len(args.configs)
+    print(f"Prompts loaded: {len(records)} Q's x {len(args.configs)} configs = {total} generations")
 
     done = load_done()
     print(f"Already done: {len(done)}")
 
+    # Pre-populate the prompt-dedup cache from anything already on disk (resume case).
+    records_by_qid = {r["q_id"]: r for r in records}
+    prompt_cache: dict[str, tuple[str, float]] = {}
+    for (cfg, qid), row in done.items():
+        rec = records_by_qid.get(qid)
+        if rec is None:
+            continue
+        key = _prompt_key(_resolve_messages(rec, cfg))
+        prompt_cache.setdefault(key, (row["answer"], row.get("latency_s", 0.0)))
+
     tok, mdl = load_qwen()
 
-    total = len(records) * len(args.configs)
     idx = 0
+    n_reused = 0
     t_start = time.time()
     with ANSWERS_FILE.open("a", encoding="utf-8") as f:
         for cfg in args.configs:
+            # Pass 1: resolve everything already done or dedup-cacheable for this
+            # config without touching the model at all.
+            pending: list[tuple[dict, list[dict], str]] = []
             for rec in records:
-                idx += 1
                 key = (cfg, rec["q_id"])
                 if key in done:
                     continue
-                # Print BEFORE generating (not just after) -- otherwise a genuinely stuck/hung
-                # generation looks identical to a slow-but-working one: no output at all until
-                # the NEXT item completes. This line is what tells you which (config, q_id) is
-                # currently in progress if it seems stuck.
-                print(f"  [{idx}/{total}] starting cfg={cfg} q={rec['q_id']}...", end="", flush=True)
-                # v4_pg falls back to the plain prompt for questions where no
-                # guidance path could be rendered (keeps the paired sample complete)
-                messages = rec["prompts"].get(cfg) or rec["prompts"]["v0_base"]
-                try:
-                    ans, dt = generate(tok, mdl, messages, args.max_new_tokens)
-                except Exception as e:
-                    ans, dt = f"[GEN_ERROR: {e}]", 0.0
-                row = {
-                    "config":  cfg,
-                    "q_id":    rec["q_id"],
-                    "question":      rec["question"],
-                    "gold_answer":   rec["gold_answer"],
-                    "expected_points": rec["expected_points"],
-                    "answer":        ans,
-                    "latency_s":     round(dt, 2),
-                }
-                if args.track2:
-                    row["colreg_rules"] = rec.get("colreg_rules", [])
-                    row["category"] = rec.get("category", "")
-                    if "scenario" in rec:
-                        row["scenario"] = rec["scenario"]
-                        row["own_vessel"] = rec.get("own_vessel", "")
-                    if "situation_report" in rec:
-                        row["situation_report"] = rec["situation_report"]
-                        row["correct_action"] = rec.get("correct_action")
-                        row["correct_action_params"] = rec.get("correct_action_params", {})
-                else:
-                    row["section_id"] = rec["section_id"]
-                    row["section_title"] = rec["section_title"]
-                    row["type"] = rec["type"]
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
-                f.flush()
-                print(f" done in {dt:.1f}s", flush=True)
+                messages = _resolve_messages(rec, cfg)
+                msg_key = _prompt_key(messages)
+                cached = prompt_cache.get(msg_key)
+                idx += 1
+                if cached is not None:
+                    ans, dt = cached
+                    f.write(json.dumps(_row_for(cfg, rec, ans, dt, args.track2, reused=True),
+                                       ensure_ascii=False) + "\n")
+                    f.flush()
+                    done[key] = {"config": cfg, "q_id": rec["q_id"], "answer": ans, "latency_s": dt}
+                    n_reused += 1
+                    print(f"  [{idx}/{total}] cfg={cfg} q={rec['q_id']} -- reused cached answer "
+                         f"(identical prompt already generated)")
+                    continue
+                pending.append((rec, messages, msg_key))
 
-    print(f"\nDone in {(time.time()-t_start)/60:.1f} min")
+            # Pass 2: batch-generate whatever's left for this config.
+            for start in range(0, len(pending), args.batch_size):
+                batch = pending[start:start + args.batch_size]
+                recs = [b[0] for b in batch]
+                msgs_list = [b[1] for b in batch]
+                msg_keys = [b[2] for b in batch]
+                qids = ", ".join(str(r["q_id"]) for r in recs)
+                print(f"  [{idx - len(pending) + start + 1}-{idx - len(pending) + start + len(batch)}"
+                     f"/{total}] cfg={cfg} batch of {len(batch)} (q={qids})...", end="", flush=True)
+                try:
+                    answers, dt_total = generate_batch(tok, mdl, msgs_list, args.max_new_tokens)
+                except Exception as e:
+                    answers = [f"[GEN_ERROR: {e}]"] * len(batch)
+                    dt_total = 0.0
+                dt_each = dt_total / len(batch) if batch else 0.0
+                for rec, ans, msg_key in zip(recs, answers, msg_keys):
+                    prompt_cache[msg_key] = (ans, dt_each)
+                    f.write(json.dumps(_row_for(cfg, rec, ans, dt_each, args.track2),
+                                       ensure_ascii=False) + "\n")
+                    done[(cfg, rec["q_id"])] = {"config": cfg, "q_id": rec["q_id"],
+                                               "answer": ans, "latency_s": dt_each}
+                f.flush()
+                print(f" done in {dt_total:.1f}s ({dt_each:.1f}s/item avg)", flush=True)
+
+    print(f"\nDone in {(time.time()-t_start)/60:.1f} min  ({n_reused} reused via prompt dedup)")
     print(f"Output: {ANSWERS_FILE}  ({ANSWERS_FILE.stat().st_size/1024:.1f} KB)")
 
 
 if __name__ == "__main__":
     main()
+
