@@ -5,7 +5,7 @@ train_sft.py — Stage 1 of the VHF-QWEN fine-tune pipeline
 
 WHAT THIS SCRIPT DOES
 ---------------------
-Supervised Fine-Tuning (SFT) of Qwen2.5-7B-Instruct on the VHF training corpus.
+Supervised Fine-Tuning (SFT) of Qwen3-8B on the VHF training corpus.
 This is the "domain-adaptation" stage: we teach the base model what VHF radio
 procedures, prowords, channels, GMDSS/ITU regulations look like, using
 carefully constructed instruction-response pairs.
@@ -76,7 +76,7 @@ MODELS.mkdir(exist_ok=True)
 # Keep the HF hub cache local to this project so we don't fill %USERPROFILE%.
 os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
-MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
+MODEL_ID = "Qwen/Qwen3-8B"
 _PFX = paths.domain.lower()
 OUTPUT_DIR = VHF_MODELS / f"{_PFX}_qwen_sft_lora"
 
@@ -121,6 +121,12 @@ SFT_DATASETS = {
         CACHE / "oow_incident_sft_direct.jsonl",
         CACHE / "oow_incident_sft_cot.jsonl",
         CACHE / "oow_incident_sft_rag.jsonl",
+        # Track 2 -- applied helm/engine-order decisions, mined from the deterministic
+        # MOOS-scenario reasoning traces (build_oow_scenarios.py), own file for
+        # traceability like VHF's Track 1/Track 2 split (notebook § 6.5). No _rag
+        # variant: there's no Track 2 retrieval corpus for this data to ground against.
+        CACHE / "oow_scenario_sft_direct.jsonl",
+        CACHE / "oow_scenario_sft_cot.jsonl",
         # Procedural-graph step-order data (small for OOW until Track 2 exists)
         CACHE / "oow_pg_sft.jsonl",
     ],
@@ -157,7 +163,7 @@ def load_all_sft() -> Dataset:
 
 # ── Model + LoRA config ──────────────────────────────────────────────────
 def load_base_model_4bit():
-    """Load Qwen2.5-7B in 4-bit NF4. Frozen; only LoRA on top is trained.
+    """Load Qwen3-8B in 4-bit NF4. Frozen; only LoRA on top is trained.
 
     NF4 = "NormalFloat 4-bit", the QLoRA-recommended quantization scheme.
     Double quantization saves another ~0.4 bits/param on average.
@@ -285,7 +291,14 @@ def main() -> None:
     ap.add_argument("--max_steps", type=int, default=-1, help="cap total steps (for smoke tests); -1 = unlimited")
     ap.add_argument("--resume", action="store_true", help="continue from latest checkpoint in output_dir")
     ap.add_argument("--force", action="store_true", help="retrain even if an adapter already exists in OUTPUT_DIR")
+    ap.add_argument("--out-dir", type=str, default=None,
+                    help="override OUTPUT_DIR (e.g. a _smoke-suffixed path for pipeline sanity checks)")
     args = ap.parse_args()
+
+    global OUTPUT_DIR
+    if args.out_dir:
+        OUTPUT_DIR = Path(args.out_dir)
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     print("=" * 70)
     print("VHF-QWEN — Stage 1 SFT (Supervised Fine-Tuning with QLoRA)")

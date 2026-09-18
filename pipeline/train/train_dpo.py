@@ -98,7 +98,7 @@ VHF_MODELS = paths.domain_models_dir
 VHF_MODELS.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
-MODEL_ID    = "Qwen/Qwen2.5-7B-Instruct"
+MODEL_ID    = "Qwen/Qwen3-8B"
 _PFX = paths.domain.lower()
 SFT_ADAPTER = VHF_MODELS / f"{_PFX}_qwen_sft_lora"
 OUTPUT_DIR  = VHF_MODELS / f"{_PFX}_qwen_dpo_lora"
@@ -113,8 +113,9 @@ DPO_FILES   = {
         CACHE / "oow_dpo_pairs.jsonl",
         # Real accident-report chosen/rejected pairs (build_rlhf.py run against
         # oow_incident_reasoning_traces.jsonl -- see extract_incident_reasoning.py).
-        CACHE / "oow_incident_dpo_pairs.jsonl",
-    ],
+        CACHE / "oow_incident_dpo_pairs.jsonl",        # Track 2 -- applied helm/engine-order decisions (build_rlhf.py run against
+        # the deterministic MOOS-scenario reasoning traces, notebook § 6.5).
+        CACHE / "oow_scenario_dpo_pairs.jsonl",    ],
 }[paths.domain]
 
 
@@ -237,7 +238,18 @@ def main() -> None:
     ap.add_argument("--save_steps", type=int, default=25)
     ap.add_argument("--max_steps", type=int, default=-1, help="-1 = unlimited")
     ap.add_argument("--force", action="store_true", help="retrain even if an adapter already exists in OUTPUT_DIR")
+    ap.add_argument("--out-dir", type=str, default=None,
+                    help="override OUTPUT_DIR (e.g. a _smoke-suffixed path for pipeline sanity checks)")
+    ap.add_argument("--sft-dir", type=str, default=None,
+                    help="override SFT_ADAPTER (the input adapter this stage builds on)")
     args = ap.parse_args()
+
+    global OUTPUT_DIR, SFT_ADAPTER
+    if args.out_dir:
+        OUTPUT_DIR = Path(args.out_dir)
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    if args.sft_dir:
+        SFT_ADAPTER = Path(args.sft_dir)
 
     print("=" * 70)
     print("VHF-QWEN — Stage 2 DPO (preference tuning on channel/proword/step perturbations)")

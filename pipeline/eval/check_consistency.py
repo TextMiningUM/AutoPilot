@@ -134,7 +134,12 @@ _PHONETIC_NUMBER_SIGNAL_RE = re.compile(
 
 
 def _variant_pattern(variant: str) -> re.Pattern:
-    return re.compile(rf"(?<![A-Za-z]){re.escape(variant)}(?![A-Za-z])")
+    # Excludes matches immediately followed by whitespace + a capitalized word (e.g.
+    # "Beta Offshore", "Alpha Marine") -- almost always a compound proper noun (a real
+    # company/vessel name), not a genuine phonetic-alphabet spelling issue. Found via
+    # a real false positive in OOW incident reports: "Beta Offshore" is an actual
+    # pipeline-operator company name, not a mis-spelled "BRAVO".
+    return re.compile(rf"(?<![A-Za-z]){re.escape(variant)}(?![A-Za-z])(?!\s+[A-Z][a-z])")
 
 
 # Shared quote-matching pattern for the two checks below. Must be generous

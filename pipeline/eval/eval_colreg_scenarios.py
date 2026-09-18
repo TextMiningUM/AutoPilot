@@ -39,7 +39,7 @@ Composite     : weighted mean, ColregCorrect weighted heaviest (this track
 USAGE
 -----
     python eval_colreg_scenarios.py --model _models/VHF/VHF-QWEN --tag vhf_qwen
-    python eval_colreg_scenarios.py --model Qwen/Qwen2.5-7B-Instruct --tag qwen_base
+    python eval_colreg_scenarios.py --model Qwen/Qwen3-8B --tag qwen_base
     python eval_colreg_scenarios.py --n 50   # smoke test
 
 OUTPUT

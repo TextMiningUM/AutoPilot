@@ -44,7 +44,7 @@ This does:
 - clones the AutoPilot repo
 - creates a venv
 - installs torch (cu124) + transformers + peft + trl + bitsandbytes
-- downloads Qwen2.5-7B-Instruct to `_models/hf_cache/`
+- downloads Qwen3-8B to `_models/hf_cache/`
 
 Takes ~5 min.
 

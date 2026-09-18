@@ -28,7 +28,7 @@ There are exactly two places this project runs, and they have **different respon
 
 **Rule of thumb: never launch actual model training/compression/distillation locally.** Verify data changes locally (fast, free, no GPU risk), then push to git and run the real training chain only on the cloud.
 
-`AUTOPILOT_MODELS_DIR` env var (used by `train_sft.py`, `merge_adapter.py`, `compress_*.py`, `eval_finetuned.py`) points at a shared cloud model-storage location when set, so multiple users/clones on the pod don't each download/merge their own multi-GB copy of Qwen2.5-7B; falls back to the repo-local `_models/` when unset (laptop use).
+`AUTOPILOT_MODELS_DIR` env var (used by `train_sft.py`, `merge_adapter.py`, `compress_*.py`, `eval_finetuned.py`) points at a shared cloud model-storage location when set, so multiple users/clones on the pod don't each download/merge their own multi-GB copy of Qwen3-8B; falls back to the repo-local `_models/` when unset (laptop use).
 
 The cloud pod also runs a multi-user **JupyterHub** (`/etc/jupyterhub/jupyterhub_config.py`) so the notebook can be opened there interactively too — but see the next section for why the heavy chain doesn't run through it.
 

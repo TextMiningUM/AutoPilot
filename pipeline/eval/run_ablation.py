@@ -1,4 +1,4 @@
-"""Ablation step 2 — run Qwen2.5-7B-Instruct in 4-bit NF4 on precomputed prompts.
+"""Ablation step 2 — run Qwen3-8B in 4-bit NF4 on precomputed prompts.
 
 Loads ONLY Qwen. The embedder / KG / sentence-transformer are NOT loaded here
 (they already ran in prep_ablation.py). This keeps VRAM below 8 GB on RTX 4070.
@@ -24,11 +24,11 @@ os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 PROMPTS_FILE = CACHE / "ablation_prompts.json"
 ANSWERS_FILE = CACHE / "ablation_answers.jsonl"
 
-MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
+MODEL_ID = "Qwen/Qwen3-8B"
 
 
 def load_qwen():
-    """Load the base Qwen2.5-7B-Instruct model in 4-bit NF4 for ablation inference."""
+    """Load the base Qwen3-8B model in 4-bit NF4 for ablation inference."""
     print(f"Loading {MODEL_ID} in 4-bit NF4...")
     bnb = BitsAndBytesConfig(
         load_in_4bit=True,

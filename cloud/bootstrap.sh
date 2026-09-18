@@ -60,13 +60,13 @@ mkdir -p Data/VHF/VHF_Eval
 mkdir -p _models/hf_cache
 mkdir -p _models/VHF
 
-# Pre-download Qwen2.5-7B so training starts immediately once data arrives
+# Pre-download Qwen3-8B so training starts immediately once data arrives
 echo ""
-echo "=== Pre-downloading Qwen2.5-7B-Instruct (~5 GB in 4-bit, ~14 GB in bf16) ==="
+echo "=== Pre-downloading Qwen3-8B (~5 GB in 4-bit, ~16 GB in bf16) ==="
 python -c "
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
-mid = 'Qwen/Qwen2.5-7B-Instruct'
+mid = 'Qwen/Qwen3-8B'
 print('Tokenizer...'); AutoTokenizer.from_pretrained(mid, cache_dir='_models/hf_cache')
 print('Model in bf16 (memory-map, no VRAM alloc)...')
 AutoModelForCausalLM.from_pretrained(mid, cache_dir='_models/hf_cache', torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)

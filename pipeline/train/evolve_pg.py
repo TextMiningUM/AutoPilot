@@ -29,7 +29,7 @@ checked against pg meta (printed at the end).
 GPU-bound (model inference per round): run on the cloud pod, or locally with
 --force-4bit and the small default batch sizes.
 
-    python -X utf8 -m pipeline.train.evolve_pg --model Qwen/Qwen2.5-7B-Instruct --force-4bit
+    python -X utf8 -m pipeline.train.evolve_pg --model Qwen/Qwen3-8B --force-4bit
 Writes: <cache>/<pfx>_pg_evolved.json + <cache>/pg_evolution_log.json
 """
 from __future__ import annotations
@@ -203,7 +203,7 @@ def apply_edits(pg_dict: dict, edits: list[dict], graph) -> dict | None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
-    ap.add_argument("--model", type=str, default="Qwen/Qwen2.5-7B-Instruct")
+    ap.add_argument("--model", type=str, default="Qwen/Qwen3-8B")
     ap.add_argument("--rounds", type=int, default=3)
     ap.add_argument("--train-n", type=int, default=12)
     ap.add_argument("--val-n", type=int, default=16)

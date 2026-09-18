@@ -24,8 +24,8 @@ Block Influence:
 
 Low BI ⇒ layer barely transforms its input ⇒ safe to drop.
 
-Qwen2.5-7B has 28 transformer blocks.  Pruning 4-6 of them typically loses
-<3% quality and gains ~15-20% inference speed.
+Qwen3-8B has 36 transformer blocks.  Pruning 4-6 of them typically loses
+<3% quality and gains ~10-15% inference speed.
 
 IMPORTANT: after pruning you MUST run distillation to recover quality.
 This script only produces the pruned checkpoint; run compress_distill.py next.

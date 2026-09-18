@@ -25,7 +25,7 @@ The probe set is deterministic (seeded) and cached in
 <cache_dir>/probe_set.json, so every checkpoint is scored on identical items.
 
 USAGE (run per checkpoint, cloud or --force-4bit locally)
-    python -X utf8 -m pipeline.eval.probe_dpo --model Qwen/Qwen2.5-7B-Instruct --tag qwen_base
+    python -X utf8 -m pipeline.eval.probe_dpo --model Qwen/Qwen3-8B --tag qwen_base
     python -X utf8 -m pipeline.eval.probe_dpo --model _models/VHF/VHF-QWEN-SFT --tag sft_only --probe dpo
 
 OUTPUT

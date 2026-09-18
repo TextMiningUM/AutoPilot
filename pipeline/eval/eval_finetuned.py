@@ -35,7 +35,7 @@ is worse than an awkward correct one.
 USAGE
 -----
     python eval_finetuned.py --model _models/VHF-QWEN
-    python eval_finetuned.py --model Qwen/Qwen2.5-7B-Instruct --tag base
+    python eval_finetuned.py --model Qwen/Qwen3-8B --tag base
     python eval_finetuned.py --n 50    # smoke test with 50 questions
 
 OUTPUT

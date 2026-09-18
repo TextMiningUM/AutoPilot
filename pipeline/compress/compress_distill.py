@@ -7,7 +7,7 @@ WHAT THIS SCRIPT DOES
 ---------------------
 Trains a SMALLER "student" model to imitate the merged VHF-QWEN "teacher".
 The student can be:
-  (a) a fresh smaller Qwen model — e.g. Qwen2.5-1.5B-Instruct  (default)
+  (a) a fresh smaller Qwen model — e.g. Qwen3-1.7B  (default)
   (b) the pruned VHF-QWEN from compress_prune.py, to recover its quality
 
 The trained result is saved as _models/DistillVHF-QWEN/.
@@ -27,7 +27,7 @@ structure gives the student more signal per token than hard labels alone.
 
 Why train the student with LoRA + QLoRA?
 ----------------------------------------
-Even Qwen2.5-1.5B needs ~6 GB VRAM for full fine-tune with adam.  QLoRA
+Even Qwen3-1.7B needs ~6 GB VRAM for full fine-tune with adam.  QLoRA
 brings it under 3 GB, leaving room for the teacher (~5 GB in 4-bit NF4) in
 the same process.  Total VRAM peak: ~8 GB on RTX 4070.
 
@@ -38,7 +38,7 @@ No trl needed because the custom KD loss is implemented inline.
 
 USAGE
 -----
-    python compress_distill.py                          # default: 1.5B student
+    python compress_distill.py                          # default: 1.7B student
     python compress_distill.py --student-id Qwen/Qwen2.5-3B-Instruct
     python compress_distill.py --student _models/VHF-QWEN-pruned   # recover pruned
     python compress_distill.py --alpha 0.7 --temperature 3.0
@@ -70,7 +70,7 @@ VHF_MODELS = paths.domain_models_dir
 os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
 TEACHER_DIR       = VHF_MODELS / f"{paths.domain}-QWEN"
-DEFAULT_STUDENT   = "Qwen/Qwen2.5-1.5B-Instruct"
+DEFAULT_STUDENT   = "Qwen/Qwen3-1.7B"
 DEFAULT_OUT       = VHF_MODELS / f"Distill{paths.domain}-QWEN"
 
 # Same combined Track 1 + Track 2 datasets as train_sft.py (see notebook § 12/§12.6)
@@ -210,8 +210,8 @@ def train(args: argparse.Namespace) -> None:
             # Mask: only positions where label != -100 contribute
             mask = (batch["labels"] != -100).float()
             # KD loss (KL of soft distributions). Teacher/student can have a
-            # slightly different padded vocab size (e.g. Qwen2.5-7B vs 1.5B,
-            # 152064 vs 151936) even with the "same" tokenizer -- the extra
+            # slightly different padded vocab size (e.g. Qwen3-8B vs 1.7B)
+            # even with the "same" tokenizer -- the extra
             # rows are unused/reserved embedding slots, so truncating both to
             # the common vocab before softmax is a safe, standard fix.
             common_vocab = min(t_logits.size(-1), s_logits.size(-1))
@@ -246,6 +246,10 @@ def train(args: argparse.Namespace) -> None:
                           f"loss={float(loss):.4f}  kd={kd_m:.4f}  ce={ce_m:.4f}  "
                           f"lr={sched.get_last_lr()[0]:.2e}", flush=True)
                     running = {"kd": 0.0, "ce": 0.0, "n": 0}
+                if args.max_steps > 0 and step >= args.max_steps:
+                    break
+        if args.max_steps > 0 and step >= args.max_steps:
+            break
 
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -288,7 +292,15 @@ def main() -> None:
                     help="softmax temperature for KD; 2-4 is typical")
     ap.add_argument("--merge-final",action="store_true",
                     help="merge LoRA into base at the end for standalone deployment")
+    ap.add_argument("--teacher-dir", type=str, default=None,
+                    help="override TEACHER_DIR (e.g. a _smoke-suffixed merged model)")
+    ap.add_argument("--max-steps", type=int, default=-1,
+                    help="cap total optimizer steps (for smoke tests); -1 = unlimited")
     args = ap.parse_args()
+
+    global TEACHER_DIR
+    if args.teacher_dir:
+        TEACHER_DIR = Path(args.teacher_dir)
 
     print("=" * 70)
     print("DistillVHF-QWEN — Knowledge Distillation from VHF-QWEN")

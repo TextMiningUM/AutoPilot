@@ -6,7 +6,7 @@ merge_adapter.py — merge SFT + DPO + Reflection LoRA adapters into VHF-QWEN
 WHAT THIS SCRIPT DOES
 ---------------------
 Takes the three LoRA adapters produced by the three training stages, applies
-each one to the base Qwen2.5-7B-Instruct weights, and saves the result as a
+each one to the base Qwen3-8B weights, and saves the result as a
 single self-contained "VHF-QWEN" model directory.
 
 The output is a normal HuggingFace model directory — no PEFT/LoRA dependency
@@ -25,8 +25,8 @@ for a different one.  Keep the adapter directories around if you might.
 
 MEMORY NOTE
 -----------
-Merging dequantizes the base weights to fp16 briefly.  Qwen2.5-7B in fp16
-is about 14 GB.  This will spill into shared GPU/CPU memory on an 8 GB VRAM
+Merging dequantizes the base weights to fp16 briefly.  Qwen3-8B in fp16
+is about 16 GB.  This will spill into shared GPU/CPU memory on an 8 GB VRAM
 laptop; it works but is slow.  For faster merging, do it on a bigger GPU or
 in the cloud, then copy the merged directory to your laptop.
 
@@ -54,7 +54,7 @@ VHF_MODELS = paths.domain_models_dir
 VHF_MODELS.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
-MODEL_ID    = "Qwen/Qwen2.5-7B-Instruct"
+MODEL_ID    = "Qwen/Qwen3-8B"
 _PFX = paths.domain.lower()
 SFT_ADAPTER = VHF_MODELS / f"{_PFX}_qwen_sft_lora"
 DPO_ADAPTER = VHF_MODELS / f"{_PFX}_qwen_dpo_lora"
@@ -71,7 +71,18 @@ def main() -> None:
     ap.add_argument("--sft-only", action="store_true", help="only SFT (skip DPO+reflect)")
     ap.add_argument("--output", type=str, default=str(DEFAULT_OUT))
     ap.add_argument("--force", action="store_true", help="re-merge even if --output already contains a merged model")
+    ap.add_argument("--sft-dir", type=str, default=None, help="override SFT_ADAPTER")
+    ap.add_argument("--dpo-dir", type=str, default=None, help="override DPO_ADAPTER")
+    ap.add_argument("--reflect-dir", type=str, default=None, help="override REFL_ADAPTER")
     args = ap.parse_args()
+
+    global SFT_ADAPTER, DPO_ADAPTER, REFL_ADAPTER
+    if args.sft_dir:
+        SFT_ADAPTER = Path(args.sft_dir)
+    if args.dpo_dir:
+        DPO_ADAPTER = Path(args.dpo_dir)
+    if args.reflect_dir:
+        REFL_ADAPTER = Path(args.reflect_dir)
 
     # If no explicit stage flags, apply all three by default.
     if not (args.sft or args.dpo or args.reflect):
