@@ -54,6 +54,7 @@ from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 
 from core import AgentPaths, load_env, EMBEDDER_MODEL
+from core.io import load_jsonl_keyed
 
 paths = AgentPaths.from_env()
 W = paths.workspace
