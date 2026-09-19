@@ -177,10 +177,10 @@ run_stage 32 gap_analysis      false -m pipeline.eval.analyze_gaps \
     --eval-file "$CACHE_DIR/eval_oow_qwen_base_${TAG}.jsonl" --group-by section_id
 run_stage 33 consistency_check false -m pipeline.eval.check_consistency
 
-log "--- § 13 / § 13.1: fine-tune OOW-QWEN (SFT -> DPO -> Reflection -> merge), TAG=$TAG (max_steps=3) ---"
-run_stage 34 sft         true -m pipeline.train.train_sft       --max_steps 3 --out-dir "$SFT_DIR" --force
-run_stage 35 dpo         true -m pipeline.train.train_dpo       --max_steps 3 --out-dir "$DPO_DIR" --sft-dir "$SFT_DIR" --force
-run_stage 36 reflection  true -m pipeline.train.train_reflection --max_steps 3 --out-dir "$REFLECT_DIR" \
+log "--- § 13 / § 13.1: fine-tune OOW-QWEN (SFT -> DPO -> Reflection -> merge), TAG=$TAG ---"
+run_stage 34 sft         true -m pipeline.train.train_sft       --out-dir "$SFT_DIR" --force
+run_stage 35 dpo         true -m pipeline.train.train_dpo       --out-dir "$DPO_DIR" --sft-dir "$SFT_DIR" --force
+run_stage 36 reflection  true -m pipeline.train.train_reflection --out-dir "$REFLECT_DIR" \
     --sft-dir "$SFT_DIR" --dpo-dir "$DPO_DIR" --force
 run_stage 37 merge       true -m pipeline.train.merge_adapter --output "$MERGED_DIR" \
     --sft-dir "$SFT_DIR" --dpo-dir "$DPO_DIR" --reflect-dir "$REFLECT_DIR" --force
@@ -202,7 +202,7 @@ run_stage 41 probe_oowqwen   false -m pipeline.eval.probe_dpo \
 log "--- § 14: AWQ int4 quantization (pip install autoawq may fail on some setups), TAG=$TAG ---"
 pip install -q autoawq 2>&1 | tee "$LOG_DIR/42_awq_install.log" || log "autoawq install failed -- skipping AWQ stage."
 run_stage 42 awq_quantize    false -m pipeline.compress.compress_quantize_awq \
-    --input "$MERGED_DIR" --output "$AWQ_DIR" --n-calibration 4
+    --input "$MERGED_DIR" --output "$AWQ_DIR"
 run_stage 43 eval_awq        false -m pipeline.eval.eval_finetuned \
     --model "$AWQ_DIR" --tag "oow_qwen_awq_${TAG}" --gold-file "$NORM_FILE" --force-4bit --n "$N"
 run_stage 44 eval_awq_colreg false -m pipeline.eval.eval_oow_scenarios \
@@ -210,15 +210,15 @@ run_stage 44 eval_awq_colreg false -m pipeline.eval.eval_oow_scenarios \
 
 log "--- § 14.1: layer pruning (ShortGPT-style), TAG=$TAG ---"
 run_stage 45 prune             false -m pipeline.compress.compress_prune \
-    --n-prune 4 --input "$MERGED_DIR" --output "$PRUNED_DIR" --n-calib 4
+    --n-prune 4 --input "$MERGED_DIR" --output "$PRUNED_DIR"
 run_stage 46 eval_pruned        false -m pipeline.eval.eval_finetuned \
     --model "$PRUNED_DIR" --tag "oow_qwen_pruned_${TAG}" --gold-file "$NORM_FILE" --force-4bit --n "$N"
 run_stage 47 eval_pruned_colreg false -m pipeline.eval.eval_oow_scenarios \
     --model "$PRUNED_DIR" --tag "oow_qwen_pruned_${TAG}" --force-4bit --n "$N"
 
-log "--- § 14.2: knowledge distillation -> DistillOOW-QWEN, TAG=$TAG (max-steps=3) ---"
+log "--- § 14.2: knowledge distillation -> DistillOOW-QWEN, TAG=$TAG ---"
 run_stage 48 distill            true  -m pipeline.compress.compress_distill \
-    --max-steps 3 --teacher-dir "$MERGED_DIR" --output "$DISTILL_DIR"
+    --teacher-dir "$MERGED_DIR" --output "$DISTILL_DIR"
 run_stage 49 eval_distill        false -m pipeline.eval.eval_finetuned \
     --model "$DISTILL_DIR" --tag "distill_oow_qwen_${TAG}" --gold-file "$NORM_FILE" --force-4bit --n "$N"
 run_stage 50 eval_distill_colreg false -m pipeline.eval.eval_oow_scenarios \
