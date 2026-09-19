@@ -1,0 +1,143 @@
+"""Precompute an LLM-driven mission run and save it as a replayable log.
+
+Calls the OOW agent only every DECISION_INTERVAL (fixed at 10) steps, dead-reckoning at the
+last decision in between; the streamlit UI's "LLM driven" mode then just scrubs through the
+saved trajectory instead of calling the (slow) model live -- that per-step latency is why
+Full Run felt unusable interactively (see repo memory, Basic Simulator section).
+
+Every agent parameter used (config, thinking, max_new_tokens, k, system prompt, dt) is
+stored alongside the trajectory, so multiple variations of the SAME mission can be run
+under different --tag values and compared side by side later.
+
+Run one:
+    python -m app.run_llm_scenario --missions s01_head_on --configs v3_rag_cot
+
+Run a batch overnight (sequential -- only one GPU):
+    python -m app.run_llm_scenario --configs bare_qwen v3_rag_cot v4_pg --tag baseline
+"""
+from __future__ import annotations
+import argparse
+import json
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+APP_DIR = Path(__file__).resolve().parent
+ROOT = APP_DIR.parent
+REPO_ROOT = ROOT.parent
+for p in (ROOT, REPO_ROOT):
+    if str(p) not in sys.path:
+        sys.path.insert(0, str(p))
+
+from app.missions import list_mission_ids, load_mission
+from app.simulation import Simulation, COLLISION_RADIUS_M
+from app.agents import ask_oow, MODEL_CONFIGS, SYSTEM_OOW_AGENT
+from app.llm_runs import RUNS_DIR, run_log_path
+
+# Fixed, not a CLI option -- keeps every generated log directly comparable (asking the agent
+# more/less often would itself be a confound when comparing configs/tags against each other).
+DECISION_INTERVAL = 10
+
+
+def run_one(mission_id: str, config: str, tag: str = "default",
+           dt: float = 10.0, max_steps: int = 200, enable_thinking: bool = False,
+           max_new_tokens: int = 256, k: int = 4, use_rag: bool = True,
+           system_prompt: str | None = None, force: bool = False) -> Path:
+    out_path = run_log_path(mission_id, config, tag)
+    if out_path.exists() and not force:
+        print(f"  [skip] {out_path.name} already exists (use --force to overwrite)")
+        return out_path
+
+    mission = load_mission(mission_id)
+    sim = Simulation(mission)
+    checkpoints: list[dict] = []
+    effective_k = k if use_rag else 0
+    outcome = "max_steps_reached"
+    step = 0
+
+    for step in range(max_steps):
+        if sim.reached_goal():
+            outcome = "reached_goal"
+            break
+        if sim.min_cpa_now() < COLLISION_RADIUS_M:
+            outcome = "collision"
+            break
+        if step % DECISION_INTERVAL == 0:
+            decision, debug = ask_oow(
+                mission, sim.own, config=config, system_prompt=system_prompt,
+                max_new_tokens=max_new_tokens, enable_thinking=enable_thinking, k=effective_k,
+            )
+            checkpoints.append({
+                "step": step, "time": sim.t,
+                "situation_report": debug.get("situation"),
+                "decision": decision,
+                "debug": {kk: vv for kk, vv in debug.items() if kk != "situation"},
+            })
+            sim.apply_action(decision)
+        sim.step(dt)
+
+    log = {
+        "mission_id": mission_id, "config": config, "tag": tag,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "params": {
+            "decision_interval": DECISION_INTERVAL, "dt": dt, "max_steps": max_steps,
+            "enable_thinking": enable_thinking, "max_new_tokens": max_new_tokens,
+            "k": k, "use_rag": use_rag,
+            "system_prompt": system_prompt or SYSTEM_OOW_AGENT,
+            "system_prompt_is_custom": system_prompt is not None,
+        },
+        "outcome": {"verdict": outcome, "final_step": step, "final_time_s": sim.t},
+        "trajectory": sim.trajectory,
+        "checkpoints": checkpoints,
+    }
+    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(log, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"  [done] {out_path.name}  outcome={outcome}  steps={step}  checkpoints={len(checkpoints)}")
+    return out_path
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--missions", nargs="+", default=None,
+                    help="mission ids to run (default: all missions)")
+    ap.add_argument("--configs", nargs="+", default=["v3_rag_cot"], choices=list(MODEL_CONFIGS),
+                    help="one or more of the 8 model configs (see app.agents.MODEL_CONFIGS)")
+    ap.add_argument("--tag", default="default",
+                    help="distinguishes variations of the same mission+config -- e.g. run the "
+                         "same config twice with --tag thinking_on --enable-thinking vs the "
+                         "default, then compare both logs for the same mission")
+    ap.add_argument("--dt", type=float, default=10.0, help="simulation time step (s)")
+    ap.add_argument("--max-steps", type=int, default=200)
+    ap.add_argument("--enable-thinking", action="store_true",
+                    help="enable Qwen3's native hidden reasoning channel (slower)")
+    ap.add_argument("--max-new-tokens", type=int, default=256)
+    ap.add_argument("--k", type=int, default=4, help="RAG chunks for v1_rag/v3_rag_cot")
+    ap.add_argument("--no-rag", action="store_true", help="force k=0 regardless of --k")
+    ap.add_argument("--system-prompt-file", type=Path, default=None,
+                    help="path to a text file with a custom system prompt override "
+                         "(default: agents.SYSTEM_OOW_AGENT)")
+    ap.add_argument("--force", action="store_true", help="overwrite existing logs")
+    args = ap.parse_args()
+
+    missions = args.missions or list_mission_ids()
+    system_prompt = (args.system_prompt_file.read_text(encoding="utf-8")
+                     if args.system_prompt_file else None)
+
+    jobs = [(m, c) for m in missions for c in args.configs]
+    print(f"Queued {len(jobs)} run(s): {len(missions)} mission(s) x {len(args.configs)} config(s), "
+         f"tag={args.tag!r}")
+    for i, (mission_id, config) in enumerate(jobs, 1):
+        print(f"[{i}/{len(jobs)}] {mission_id} / {config}")
+        t0 = time.time()
+        run_one(
+            mission_id, config, tag=args.tag,
+            dt=args.dt, max_steps=args.max_steps, enable_thinking=args.enable_thinking,
+            max_new_tokens=args.max_new_tokens, k=args.k, use_rag=not args.no_rag,
+            system_prompt=system_prompt, force=args.force,
+        )
+        print(f"  took {time.time() - t0:.1f}s")
+
+
+if __name__ == "__main__":
+    main()

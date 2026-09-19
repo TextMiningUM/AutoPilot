@@ -19,6 +19,13 @@ def _color_for(vehicle: str, targets_order: list[str]) -> str:
     return _PALETTE[idx % len(_PALETTE)]
 
 
+def _arrow_size(speed: float, base: float = 14.0, scale: float = 4.0,
+               min_size: float = 12.0, max_size: float = 34.0) -> float:
+    """Marker size for a vessel's direction arrow -- grows with speed so a glance at the
+    plot shows relative speed, not just heading."""
+    return max(min_size, min(max_size, base + speed * scale))
+
+
 def trajectory_bounds(trajectory: list[dict], mission: Mission,
                        pad_frac: float = 0.12) -> tuple[tuple[float, float], tuple[float, float]]:
     """Fixed x/y axis range spanning the WHOLE trajectory (+ goal), so playback frames
@@ -37,15 +44,16 @@ def trajectory_figure(trajectory: list[dict], mission: Mission,
                        x_range: tuple[float, float] | None = None,
                        y_range: tuple[float, float] | None = None,
                        current_time: float | None = None,
-                       total_time: float | None = None) -> go.Figure:
-    data: dict[str, list[tuple[float, float, float]]] = defaultdict(list)
+                       total_time: float | None = None,
+                       collision: dict | None = None) -> go.Figure:
+    data: dict[str, list[tuple[float, float, float, float, float]]] = defaultdict(list)
     for row in trajectory:
-        data[row["vehicle"]].append((row["time"], row["x"], row["y"]))
+        data[row["vehicle"]].append((row["time"], row["x"], row["y"], row["heading"], row["speed"]))
     for v in data:
         data[v].sort(key=lambda p: p[0])
 
     targets_order = [t.name for t in mission.targets]
-    all_times = sorted({t for series in data.values() for t, _, _ in series})
+    all_times = sorted({p[0] for series in data.values() for p in series})
 
     fig = go.Figure()
 
@@ -67,13 +75,29 @@ def trajectory_figure(trajectory: list[dict], mission: Mission,
         name="goal",
     ))
 
-    # current-position markers
+    # current-position markers -- arrow points along heading (0=north/+y, clockwise, matching
+    # the sim's compass-bearing convention), sized by speed so relative speed reads at a glance
     for name, series in data.items():
         last = series[-1]
+        _, lx, ly, lhdg, lspd = last
         fig.add_trace(go.Scatter(
-            x=[last[1]], y=[last[2]], mode="markers+text", text=[name],
-            textposition="top center", marker=dict(size=15, color=_color_for(name, targets_order)),
+            x=[lx], y=[ly], mode="markers+text", text=[name],
+            textposition="top center",
+            marker=dict(size=_arrow_size(lspd), symbol="arrow", angle=lhdg,
+                       color=_color_for(name, targets_order),
+                       line=dict(width=1, color="rgba(0,0,0,0.35)")),
             name=name,
+            hovertext=[f"{name}: heading {lhdg:.0f}\u00b0, speed {lspd:.2f} m/s"],
+            hoverinfo="text",
+        ))
+
+    if collision is not None:
+        fig.add_trace(go.Scatter(
+            x=[collision["x"]], y=[collision["y"]], mode="markers+text",
+            text=["\U0001F4A5 COLLISION"], textposition="bottom center",
+            textfont=dict(color="#d32f2f", size=14),
+            marker=dict(size=24, symbol="x", color="#ff1744", line=dict(width=3, color="#7a0000")),
+            name="collision",
         ))
 
     if current_time is None and all_times:
@@ -93,17 +117,29 @@ def trajectory_figure(trajectory: list[dict], mission: Mission,
         yaxis["range"] = list(y_range)
         yaxis["autorange"] = False
 
+    annotations = []
+    if time_label:
+        annotations.append(dict(
+            text=f"<b>{time_label}</b>", x=0.01, y=0.99, xref="paper", yref="paper",
+            xanchor="left", yanchor="top", showarrow=False, font=dict(size=15, color="#0b3d63"),
+            bgcolor="rgba(255,255,255,0.75)", bordercolor="#0b3d63", borderwidth=1, borderpad=4,
+        ))
+    if collision is not None:
+        annotations.append(dict(
+            text=f"<b>\U0001F4A5 COLLISION with {collision['vehicle']} at t={collision['time']:.0f}s "
+                 f"(range {collision['range_m']:.0f}m)</b>",
+            x=0.5, y=1.06, xref="paper", yref="paper", xanchor="center", yanchor="bottom",
+            showarrow=False, font=dict(size=13, color="#ffffff"),
+            bgcolor="#d32f2f", bordercolor="#7a0000", borderwidth=1, borderpad=6,
+        ))
+
     fig.update_layout(
         title=title or f"{mission.name} ({mission.id})",
         xaxis=xaxis, yaxis=yaxis,
         legend=dict(orientation="h", yanchor="top", y=-0.14, xanchor="center", x=0.5),
         margin=dict(l=10, r=10, t=60, b=10),
         height=580,
-        annotations=[dict(
-            text=f"<b>{time_label}</b>", x=0.01, y=0.99, xref="paper", yref="paper",
-            xanchor="left", yanchor="top", showarrow=False, font=dict(size=15, color="#0b3d63"),
-            bgcolor="rgba(255,255,255,0.75)", bordercolor="#0b3d63", borderwidth=1, borderpad=4,
-        )] if time_label else [],
+        annotations=annotations,
     )
     return fig
 

@@ -78,23 +78,38 @@ def contact_line(own: Vessel, tgt: Vessel) -> dict:
 
 
 def narrate(mission: Mission, own: Vessel) -> str:
-    """Situation report text handed to the OOW agent -- own-ship state, goal,
-    and every target's range/bearing/CPA/TCPA/encounter classification."""
-    lines = [f"Own-ship at ({own.x:.1f}, {own.y:.1f}), heading {own.heading:.1f}, "
-             f"speed {own.speed:.2f} m/s."]
+    """Situation report text handed to the OOW agent -- own-ship state, goal, and every
+    target's range/bearing/heading/speed/CPA/TCPA. Deliberately leaves out encounter
+    classification, applicable rule(s), and the quiet tag: those are exactly what the
+    agent is being asked to work out, so handing them over in the prompt would leak the
+    answer instead of testing whether the model can derive it. contact_line() still
+    computes/returns them (used elsewhere, e.g. the Evaluation panel's degeneracy check).
+    Also reports the mission's nominal/rated speed (mission.own_ship.speed, the ORIGINAL
+    starting speed -- distinct from `own.speed`, which mutates as the run progresses) and
+    an ETA-at-current-speed: without a speed reference point or any sense of time cost, the
+    model had no basis to ever consider speed_up over hold_course (observed: 0/1697 decisions
+    across the full sweep ever chose speed_up)."""
     gx, gy = mission.goal
     _, goal_rng = bearing_and_range(own.x, own.y, gx, gy)
+    nominal_speed = mission.own_ship.speed
+    lines = [f"Own-ship at ({own.x:.1f}, {own.y:.1f}), heading {own.heading:.1f}, "
+             f"speed {own.speed:.2f} m/s (nominal/rated speed for this mission: "
+             f"{nominal_speed:.2f} m/s)."]
     lines.append(f"Mission goal at ({gx:.1f}, {gy:.1f}), {goal_rng:.0f}m away.")
+    if own.speed > 0:
+        eta = goal_rng / own.speed
+        lines.append(f"At current speed, ETA to goal \u2248 {eta:.0f}s if heading straight there.")
+    else:
+        lines.append("At current speed (stopped), the goal will never be reached.")
     if not mission.targets:
         lines.append("No contacts tracked.")
     else:
         lines.append(f"{len(mission.targets)} contact(s):")
         for tgt in mission.targets:
             c = contact_line(own, tgt)
-            tag = " [no risk of collision -- quiet]" if c["quiet"] else ""
             lines.append(
                 f"  - {c['name']}: range {c['range_m']:.0f}m, rel.bearing {c['rel_bearing_deg']:.1f} deg, "
                 f"heading {c['heading']:.1f}, speed {c['speed']:.2f}, CPA {c['cpa_m']:.0f}m, "
-                f"TCPA {c['tcpa_s']:.0f}s, encounter={c['encounter']}, rules={c['rules']}{tag}"
+                f"TCPA {c['tcpa_s']:.0f}s"
             )
     return "\n".join(lines)

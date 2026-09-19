@@ -161,7 +161,7 @@ def heading_delta(h1, h0):
     return (h1 - h0 + 540) % 360 - 180
 
 
-def manoeuvre_and_smoothness_axes(own, heading_deadband_deg=3.0,
+def manoeuvre_and_smoothness_axes(own, heading_rate_deadband_deg_s=0.6,
                                    max_reasonable_manoeuvres=6,
                                    max_reasonable_heading_rate=5.0,
                                    max_reasonable_speed_rate=1.0):
@@ -175,7 +175,15 @@ def manoeuvre_and_smoothness_axes(own, heading_deadband_deg=3.0,
     manoeuvre instead of the many discrete corrections they actually are;
     confirmed against a synthetic zigzag trajectory during testing, where
     the sign-reversal check was the difference between counting 1
-    manoeuvre and correctly counting dozens)."""
+    manoeuvre and correctly counting dozens).
+
+    The deadband is a heading-RATE threshold (deg/s), not a raw per-step
+    degrees threshold -- comparing dt-scaled degrees against a fixed
+    constant previously made manoeuvre/smoothness scores dependent on the
+    trajectory's sampling interval dt (the Basic Simulator's adjustable
+    1-60s time-step slider), so identical maneuvering behaviour scored
+    differently just from a different dt. A rate-based threshold is
+    dt-invariant by construction."""
     if len(own) < 2:
         return {"manoeuvre_count": 0, "manoeuvre_score": 1.0,
                 "mean_abs_heading_rate": 0.0, "mean_abs_speed_rate": 0.0,
@@ -191,10 +199,11 @@ def manoeuvre_and_smoothness_axes(own, heading_deadband_deg=3.0,
         t1, x1, y1, h1, s1 = own[i]
         dt = max(1e-6, t1 - t0)
         dh = heading_delta(h1, h0)
-        heading_rates.append(abs(dh) / dt)
+        heading_rate = dh / dt
+        heading_rates.append(abs(heading_rate))
         speed_rates.append(abs(s1 - s0) / dt)
 
-        above_deadband = abs(dh) > heading_deadband_deg / max(1.0, dt / 5.0)
+        above_deadband = abs(heading_rate) > heading_rate_deadband_deg_s
         sign = (1 if dh > 0 else -1) if above_deadband else 0
 
         if above_deadband:
