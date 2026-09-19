@@ -104,8 +104,10 @@ possible and no zigzagging. Ground your reasoning in the provided COLREG excerpt
 guidance where given. If no target poses a real risk of collision, recommend holding course -- \
 but if your current speed is below the nominal/rated speed given for this mission, consider \
 speeding up instead of just holding your current pace: reaching the goal sooner (when safe) is \
-part of efficient progress too, not just the shortest path. What order do you give to the helm? \
-Reply with ONLY a JSON object, no other text:
+part of efficient progress too, not just the shortest path. If you already manoeuvred to avoid a \
+target and no target now poses a risk, do not just keep holding that avoidance heading \
+indefinitely -- steer back toward the goal bearing given in the situation report. What order do \
+you give to the helm? Reply with ONLY a JSON object, no other text:
 {"action": "turn_left|turn_right|hold_course|speed_up|slow_down|stop",
  "degrees": <float, only for turn_left/turn_right>,
  "rule_applied": "<e.g. Rule 15, or 'none' if no rule applies>",

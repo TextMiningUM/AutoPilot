@@ -88,14 +88,22 @@ def narrate(mission: Mission, own: Vessel) -> str:
     starting speed -- distinct from `own.speed`, which mutates as the run progresses) and
     an ETA-at-current-speed: without a speed reference point or any sense of time cost, the
     model had no basis to ever consider speed_up over hold_course (observed: 0/1697 decisions
-    across the full sweep ever chose speed_up)."""
+    across the full sweep ever chose speed_up).
+    Also reports the goal BEARING and how many degrees off-course the current heading is:
+    observed runs (e.g. s06_crossing_port_fine) where the model correctly avoided a target
+    then held that avoidance heading forever, drifting thousands of metres past the goal --
+    only the goal's DISTANCE was ever given, never a bearing/heading number the model could
+    act on to steer back once clear."""
     gx, gy = mission.goal
-    _, goal_rng = bearing_and_range(own.x, own.y, gx, gy)
+    goal_brg, goal_rng = bearing_and_range(own.x, own.y, gx, gy)
+    off_course = relative_bearing(own.heading, goal_brg)
     nominal_speed = mission.own_ship.speed
     lines = [f"Own-ship at ({own.x:.1f}, {own.y:.1f}), heading {own.heading:.1f}, "
              f"speed {own.speed:.2f} m/s (nominal/rated speed for this mission: "
              f"{nominal_speed:.2f} m/s)."]
-    lines.append(f"Mission goal at ({gx:.1f}, {gy:.1f}), {goal_rng:.0f}m away.")
+    side = "starboard" if off_course > 0 else "port"
+    lines.append(f"Mission goal at ({gx:.1f}, {gy:.1f}), {goal_rng:.0f}m away, bearing "
+                f"{goal_brg:.1f} deg ({abs(off_course):.0f} deg to {side} of current heading).")
     if own.speed > 0:
         eta = goal_rng / own.speed
         lines.append(f"At current speed, ETA to goal \u2248 {eta:.0f}s if heading straight there.")
