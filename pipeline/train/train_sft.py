@@ -127,6 +127,13 @@ SFT_DATASETS = {
         # variant: there's no Track 2 retrieval corpus for this data to ground against.
         CACHE / "oow_scenario_sft_direct.jsonl",
         CACHE / "oow_scenario_sft_cot.jsonl",
+        # Track 2 (continued) -- same, but from the Leo MOOS-trajectory dataset (7928
+        # real bridge states, richer situations -- build_oow_scenarios_leo.py, notebook
+        # § 6.5.1). Kept in its own oow_scenario_Leo_* files (never merged into the
+        # plain oow_scenario_* files) for independent traceability, per explicit user
+        # direction -- currently a small reviewed sample (n=25), not the full 7928.
+        CACHE / "oow_scenario_Leo_sft_direct.jsonl",
+        CACHE / "oow_scenario_Leo_sft_cot.jsonl",
         # Procedural-graph step-order data: merged graph (rule+incident+scenario
         # traces, build_pg.py) plus a dedicated incident-only file so its "what
         # actually went wrong" pitfalls stay traceable, same Track1/Track2 convention.

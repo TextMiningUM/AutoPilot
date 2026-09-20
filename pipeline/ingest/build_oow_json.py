@@ -1,13 +1,24 @@
-"""COLREG-Consolidated-2018.pdf -> structured JSON (OOW § 8 equivalent).
+"""COLREG-Consolidated-2018.pdf + supplementary OOW_Protocols docs -> structured JSON.
 
-VHF's § 8 (source-document -> JSON) lives entirely as in-notebook cells because it
-has to cope with ~30 heterogeneous documents (txt/md/pdf, many publishers, no fixed
-structure). OOW's Track 1 source is a single, very regularly structured official
-text (Convention Articles I-IX, then PART A-E / Rule 1-38, then Annexes I-IV), so a
-small standalone parser is simpler and more robust than forcing it through the
-generic multi-document classifier.
+OOW's Track 1 core source is a single, very regularly structured official text
+(Convention Articles I-IX, then PART A-E / Rule 1-38, then Annexes I-IV), so a small
+standalone parser (`parse_document`/`main`) is simpler and more robust than forcing it
+through a generic multi-document classifier -- unlike VHF's ~45 heterogeneous documents
+(txt/md/pdf, many publishers, no fixed structure), which do need one (see
+`build_vhf_json.py`).
 
-Output schema matches the convention `pipeline/ingest/build_rag.py` expects:
+`build_extra_docs()` (called from `main()` too) handles everything else dropped into
+OOW_Protocols/ that ISN'T the COLREG text -- currently a handful of navigation-maths/
+radar-plotting reference docs (bearings, CPA/TCPA, compass conventions) added to fix a
+confirmed TCPA-misread gap found via Basic Simulator mission runs (see
+`Data/basic_nav_knowledge_gaps.json`). These are few and each has its own clear
+structure, so -- same reasoning as the COLREG parser -- each gets its own small,
+specific parser (`parse_markdown_doc` for the plain-heading .md references,
+`parse_radar_workbook` for the "Lesson N.N" PDF, `parse_navmath_drills` for the
+already-Q&A-shaped drill set) rather than one generic classifier for just five files.
+
+Output schema matches the convention `pipeline/ingest/build_rag.py` expects (one JSON
+per document, glob'd automatically -- no wiring needed elsewhere):
     {
       "document_id": "colreg_consolidated_2018",
       "source_file": "COLREG-Consolidated-2018.pdf",
@@ -99,11 +110,29 @@ CONCEPT_KEYWORDS = {
     "radar_arpa":            ["radar", "arpa", "plotting"],
     "ais":                   ["ais", "automatic identification system"],
     "bridge_resource_management": ["bridge resource management", "brm", "bridge team"],
-    "grounding":              ["grounding", "ran aground", "grounded"],
+    # Bare "grounded" dropped: false-positives on "grounded in <source>" (a citation
+    # phrase, not the nautical sense) once nav_maths_drills.json's explanation fields
+    # (which all start "Grounded in the tdgil.com ...") were added -- "grounding"/"ran
+    # aground" alone still catch real incident-report groundings just as well.
+    "grounding":              ["grounding", "ran aground"],
     "collision":              ["collision occurred", "vessels collided", "struck the"],
     "casualty":               ["casualty", "fatality", "injured", "loss of life"],
     "investigation_finding":  ["investigation found", "contributing factor", "root cause",
                               "recommendation", "lessons learned"],
+    # Navigation-maths/radar-plotting vocabulary (compass_directions_reference.md,
+    # tdgil_bearings.md, tdgil_cpa.md, free_radar_workbook.pdf, nav_maths_drills.json --
+    # see build_extra_docs()) -- added alongside those docs since none of the COLREG-rule
+    # or incident-report keywords above ever appear in them, which would otherwise leave
+    # every section of these new docs completely untagged (same KG/PG quality problem
+    # already found and fixed for incident-report vocabulary, see the notebook's § 4).
+    "true_bearing":       ["true bearing", "true north"],
+    "magnetic_bearing":   ["magnetic bearing", "variation", "magnetic north", "declination"],
+    "relative_bearing":   ["relative bearing"],
+    "cpa_tcpa":           ["closest point of approach", " cpa ", "tcpa", "time to closest point"],
+    "radar_plotting":     ["relative motion line", " rml ", " drm ", " srm ", "six-minute rule",
+                          "6-minute rule", "6 minute rule", "transfer plot"],
+    "compass_convention": ["compass rose", "clockwise", "counter-clockwise", "counterclockwise",
+                          "compass convention"],
 }
 
 
@@ -241,6 +270,177 @@ def parse_document(pdf_path: Path) -> dict:
     }
 
 
+# ── Supplementary docs (build_extra_docs) ──────────────────────────────────
+# Everything in OOW_Protocols/ that isn't the COLREG text -- see module docstring.
+
+_MD_HEADING_RE = re.compile(r"^(#{1,3})\s+(.+?)\s*$")
+
+
+def parse_markdown_doc(md_path: Path, document_id: str, source_type: str, publisher: str) -> dict:
+    """Generic '#'/'##'/'###' heading splitter for plain-prose reference docs -- level-1
+    headings start a new chapter, level-2/3 start a new section within it. Good enough for
+    these few hand-written/fetched reference docs; COLREG's own regularly-structured text
+    still gets its dedicated `parse_document()` above, same reasoning as the module
+    docstring (a handful of clearly-structured docs don't need a generic classifier)."""
+    lines = md_path.read_text(encoding="utf-8").splitlines()
+    chapters: list[dict] = []
+    cur_chapter: dict | None = None
+    cur_section: dict | None = None
+    cur_lines: list[str] = []
+
+    def flush_section():
+        nonlocal cur_section, cur_lines
+        if cur_section is not None:
+            text = "\n".join(cur_lines).strip()
+            if text:
+                concepts, topics = tag_text(text)
+                cur_section.update(text=text, concepts=concepts, topics=topics, pages=[])
+                cur_chapter["sections"].append(cur_section)
+        cur_section, cur_lines = None, []
+
+    def ensure_chapter(title: str):
+        nonlocal cur_chapter
+        flush_section()
+        cur_chapter = {"title": title, "sections": []}
+        chapters.append(cur_chapter)
+
+    ensure_chapter(md_path.stem.replace("_", " ").title())  # replaced by the first real H1, if any
+    for raw in lines:
+        line = raw.rstrip()
+        if line.strip() == "---":
+            continue
+        m = _MD_HEADING_RE.match(line)
+        if m:
+            level, title = len(m.group(1)), m.group(2).strip()
+            if level == 1:
+                ensure_chapter(title)
+            else:
+                flush_section()
+                cur_section = {"section_id": stable_id(document_id, title), "title": title, "type": "reference"}
+        else:
+            if cur_section is None:
+                cur_section = {"section_id": stable_id(document_id, cur_chapter["title"], len(cur_chapter["sections"])),
+                               "title": cur_chapter["title"], "type": "reference"}
+            cur_lines.append(line)
+    flush_section()
+    chapters = [c for c in chapters if c["sections"]]
+    return {"document_id": document_id, "source_file": md_path.name, "source_type": source_type,
+           "publisher": publisher, "language": "en", "chapters": chapters}
+
+
+_LESSON_RE = re.compile(r"^Lesson\s+(\d+\.\d+)\s+(.+)$")
+_TOC_DOTLEADER_RE = re.compile(r"\.{4,}")
+
+
+def parse_radar_workbook(pdf_path: Path) -> dict:
+    """free_radar_workbook.pdf-specific: splits on its "Lesson N.N <title>" headings (each
+    appears twice -- once in the Table of Contents with a dot-leader, once as the real
+    heading -- so ToC lines are dropped by the dot-leader regex before matching)."""
+    pages = extract_pages(pdf_path)
+    chapters = [{"title": "Radar Plotting Workbook", "sections": []}]
+    cur_section: dict | None = None
+    cur_lines: list[str] = []
+    cur_pages: set[int] = set()
+
+    def flush():
+        nonlocal cur_section, cur_lines, cur_pages
+        if cur_section is not None:
+            text = "\n".join(cur_lines).strip()
+            if text:
+                concepts, topics = tag_text(text)
+                cur_section.update(text=text, concepts=concepts, topics=topics, pages=sorted(cur_pages))
+                chapters[0]["sections"].append(cur_section)
+        cur_section, cur_lines, cur_pages = None, [], set()
+
+    for page_idx, lines in enumerate(pages, start=1):
+        for line in lines:
+            if _TOC_DOTLEADER_RE.search(line):
+                continue
+            m = _LESSON_RE.match(line)
+            if m:
+                flush()
+                num, title = m.group(1), m.group(2).strip()
+                cur_section = {"section_id": stable_id("radar_lesson", num), "title": f"Lesson {num} {title}",
+                              "type": "procedure"}
+                cur_pages.add(page_idx)
+            elif cur_section is not None:
+                cur_lines.append(line)
+                cur_pages.add(page_idx)
+            # else: front-matter/title-page text before Lesson 1.1 -- dropped.
+    flush()
+    return {"document_id": "free_radar_workbook", "source_file": pdf_path.name, "source_type": "workbook",
+           "publisher": "Columbia Pacific Maritime", "language": "en", "chapters": chapters}
+
+
+def parse_navmath_drills(json_path: Path) -> dict:
+    """nav_maths_drills.json is already {id, category, topic, question, answer, explanation,
+    difficulty} Q&A -- unlike the prose docs above, there's nothing to chunk-detect; each
+    drill becomes its own 'qa'-type section (grouped into chapters by `category`) so it still
+    flows through § 3-§ 6 exactly like every other document instead of needing a bespoke
+    bypass into SFT data."""
+    drills = json.loads(json_path.read_text(encoding="utf-8"))
+    by_category: dict[str, list[dict]] = {}
+    for d in drills:
+        by_category.setdefault(d.get("category", "General"), []).append(d)
+
+    chapters = []
+    for category, items in by_category.items():
+        sections = []
+        for d in items:
+            text = f"Q: {d['question']}\nA: {d['answer']}"
+            if d.get("explanation"):
+                text += f"\n(Why: {d['explanation']})"
+            concepts, topics = tag_text(text)
+            sections.append({"section_id": stable_id("navmath", d["id"]), "title": d.get("topic", d["id"]),
+                             "type": "qa", "text": text, "concepts": concepts, "topics": topics, "pages": []})
+        chapters.append({"title": category, "sections": sections})
+    return {"document_id": "nav_maths_drills", "source_file": json_path.name, "source_type": "drill_qa",
+           "publisher": "Auto Pilot project (derived from tdgil.com)", "language": "en", "chapters": chapters}
+
+
+_EXTRA_MD_DOCS = [
+    ("compass_directions_reference.md", "compass_directions_reference", "reference", "Auto Pilot project"),
+    ("tdgil_bearings.md", "tdgil_bearings", "guide", "tdgil.com"),
+    ("tdgil_cpa.md", "tdgil_cpa", "guide", "tdgil.com"),
+]
+
+
+def build_extra_docs() -> None:
+    """Parses every non-COLREG doc in OOW_Protocols/ (see module docstring) into its own
+    JSON file under OOW_JSON/ -- build_rag.py globs every *.json there, so no further
+    wiring is needed for these to flow into § 3 (RAG)/§ 4 (KG)/§ 5 (reasoning traces)."""
+    for filename, doc_id, source_type, publisher in _EXTRA_MD_DOCS:
+        md_path = paths.source_dir / filename
+        if not md_path.exists():
+            print(f"  [skip] {filename} not found")
+            continue
+        doc = parse_markdown_doc(md_path, doc_id, source_type, publisher)
+        n_sections = sum(len(c["sections"]) for c in doc["chapters"])
+        out = JSON_OUT_DIR / f"{doc_id}.json"
+        out.write_text(json.dumps(doc, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"Parsed {filename}: {len(doc['chapters'])} chapters, {n_sections} sections -> {out.name}")
+
+    radar_pdf = paths.source_dir / "free_radar_workbook.pdf"
+    if radar_pdf.exists():
+        doc = parse_radar_workbook(radar_pdf)
+        n_sections = sum(len(c["sections"]) for c in doc["chapters"])
+        out = JSON_OUT_DIR / "free_radar_workbook.json"
+        out.write_text(json.dumps(doc, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"Parsed free_radar_workbook.pdf: {n_sections} sections -> {out.name}")
+    else:
+        print("  [skip] free_radar_workbook.pdf not found")
+
+    drills_file = paths.source_dir / "nav_maths_drills.json"
+    if drills_file.exists():
+        doc = parse_navmath_drills(drills_file)
+        n_sections = sum(len(c["sections"]) for c in doc["chapters"])
+        out = JSON_OUT_DIR / "nav_maths_drills.json"
+        out.write_text(json.dumps(doc, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"Parsed nav_maths_drills.json: {len(doc['chapters'])} categories, {n_sections} sections -> {out.name}")
+    else:
+        print("  [skip] nav_maths_drills.json not found")
+
+
 def main() -> None:
     if not PDF_FILE.exists():
         raise SystemExit(f"Not found: {PDF_FILE}")
@@ -251,6 +451,9 @@ def main() -> None:
         print(f"  {c['title']:<60} sections={len(c['sections'])}")
     OUT_FILE.write_text(json.dumps(doc, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Saved: {OUT_FILE}")
+
+    print()
+    build_extra_docs()
 
 
 if __name__ == "__main__":

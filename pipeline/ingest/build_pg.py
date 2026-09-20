@@ -378,7 +378,7 @@ def sample_path(pg: dict, family: str, max_len: int = 8) -> list[str]:
 def main() -> None:
     default_traces = [CACHE / f"{_PFX}_reasoning_traces.jsonl"]
     for extra in (f"{_PFX}_conversation_traces.jsonl", f"{_PFX}_incident_reasoning_traces.jsonl",
-                 f"{_PFX}_scenario_reasoning_traces.jsonl"):
+                 f"{_PFX}_scenario_reasoning_traces.jsonl", f"{_PFX}_scenario_Leo_reasoning_traces.jsonl"):
         if (CACHE / extra).exists():
             default_traces.append(CACHE / extra)
 

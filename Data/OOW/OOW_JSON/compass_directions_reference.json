@@ -1,0 +1,148 @@
+{
+  "document_id": "compass_directions_reference",
+  "source_file": "compass_directions_reference.md",
+  "source_type": "reference",
+  "publisher": "Auto Pilot project",
+  "language": "en",
+  "chapters": [
+    {
+      "title": "Directions, Degrees, and the Compass Rose — A Reference for Autopilot Navigation Logic",
+      "sections": [
+        {
+          "section_id": "oow_d5dac406",
+          "title": "Directions, Degrees, and the Compass Rose — A Reference for Autopilot Navigation Logic",
+          "type": "reference",
+          "text": "This document explains the concept of direction and degrees from first principles, then gives the\nfull 32-point compass table. It's written to be unambiguous enough to hard-code into an autopilot's\nnavigation logic, including the specific convention mismatches that most commonly cause silent bugs.",
+          "concepts": [],
+          "topics": [],
+          "pages": []
+        },
+        {
+          "section_id": "oow_c09b7120",
+          "title": "1. What a \"direction\" actually is",
+          "type": "reference",
+          "text": "A direction on a horizontal plane (the sea surface, a chart, a radar screen) is an **angle measured\nfrom a reference direction**. Three things must be fixed before a number like \"090°\" means anything:\n\n1. **The reference direction** (what is 0°?)\n2. **The rotational sense** (does the angle increase clockwise or counter-clockwise?)\n3. **The reference frame** (is this angle measured relative to the Earth, or relative to the vessel's own bow?)\n\nGet any one of these three wrong and a perfectly correct-looking number points the wrong way. This is\nthe root cause of the \"heading/axis confusion\" class of bug: two systems can both use \"0 to 360\ndegrees\" and still disagree, because they picked different answers to (1) and (2).",
+          "concepts": [
+            "compass_convention",
+            "investigation_finding",
+            "radar_arpa"
+          ],
+          "topics": [
+            "compass_convention",
+            "investigation_finding",
+            "radar_arpa"
+          ],
+          "pages": []
+        },
+        {
+          "section_id": "oow_ba3fa4fa",
+          "title": "2. The compass convention (what marine navigation uses)",
+          "type": "reference",
+          "text": "Marine and aviation navigation universally uses:\n\n- **Reference direction: True North (0°)**\n- **Rotational sense: CLOCKWISE**\n- Values run from **000° to 359°** (by convention written as three digits, e.g. \"005°\" not \"5°\")\n- 090° = East, 180° = South, 270° = West, back to 360°/000° = North\n\nThis is **not** the convention used in ordinary mathematics/trigonometry, where:\n\n- **Reference direction: positive x-axis (typically \"East\" on a standard plot, 0°)**\n- **Rotational sense: COUNTER-clockwise**\n- 90° = \"up\" (North on a plot), 180° = \"left\" (West), 270° = \"down\" (South)\n\n**These two conventions are genuinely different, not just relabeled.** If your autopilot's internal\nmath uses standard trigonometric functions (`sin`, `cos`, `atan2`) without explicitly converting, it\nis extremely easy to silently mix compass-convention input data with math-convention formulas and get\na heading that's rotated and/or mirrored from what was intended. This is very likely the source of any\nlingering \"heading/axis confusion\" in a system whose CPA/TCPA and bearing math was written using raw\ntrig functions.",
+          "concepts": [
+            "compass_convention",
+            "cpa_tcpa",
+            "true_bearing"
+          ],
+          "topics": [
+            "compass_convention",
+            "cpa_tcpa",
+            "true_bearing"
+          ],
+          "pages": []
+        },
+        {
+          "section_id": "oow_e2b53db5",
+          "title": "How to convert between them, exactly",
+          "type": "reference",
+          "text": "If `compass_heading` is in the marine convention (0°=North, clockwise) and you need to feed it into a\nstandard math `sin`/`cos` call where 0°=East and angles increase counter-clockwise:\n\n```\nmath_angle_deg = (90 - compass_heading) % 360\n```\n\nAnd the reverse:\n\n```\ncompass_heading_deg = (90 - math_angle_deg) % 360\n```\n\n**However**, a cleaner and less error-prone approach — and the one already used consistently\nthroughout this project's own code (`narrate.py`, `colreg_llm_bridge_paused.py`,\n`evaluate_run.py`) — is to **never convert to math convention at all**, and instead build your own\ncompass-native vector functions directly:\n\n```python\ndef compass_vector(heading_deg, magnitude):\n    \"\"\"Returns (x, y) with x=East-positive, y=North-positive, given a\n    compass heading (0=North, clockwise) — no East/North convention\n    mismatch possible, because sin gives the East component and cos\n    gives the North component directly from a compass angle.\"\"\"\n    h = math.radians(heading_deg)\n    x = magnitude * math.sin(h)   # East component\n    y = magnitude * math.cos(h)   # North component\n    return x, y\n```\n\nThis works because, for a compass angle measured clockwise from North, the sine of the angle gives the\neastward component and the cosine gives the northward component — directly, with no 90-degree offset\nneeded. **This is the exact formula already used throughout this project.** If your autopilot's x/y\naxes are defined as x=East, y=North, this formula needs no conversion step at all — which is precisely\nwhy it's the safest one to standardize on. If your axes are defined some other way (e.g. x=North,\ny=East, or a screen-style y-axis pointing \"down\"), that's a *fourth* convention choice that must also\nbe fixed and documented, on top of the three listed in Section 1.",
+          "concepts": [
+            "compass_convention"
+          ],
+          "topics": [
+            "compass_convention"
+          ],
+          "pages": []
+        },
+        {
+          "section_id": "oow_b2337a9c",
+          "title": "3. True, Magnetic, Compass, and Relative bearing — four different reference frames",
+          "type": "reference",
+          "text": "The word \"bearing\" alone is ambiguous until you say which of these four it is:\n\n| Type | Reference (0°) | Notes |\n|---|---|---|\n| **True bearing** | True North (geographic North Pole) | What a GPS/chart gives you. Stable, does not depend on location. |\n| **Magnetic bearing** | Magnetic North (where a compass needle points) | Differs from True North by an amount called **variation**, which changes by location and slowly drifts year to year. |\n| **Compass bearing** | Wherever the ship's physical compass actually points | Differs from Magnetic North by **deviation** (local magnetic interference from the ship itself — engines, electronics, steel hull). Rarely relevant for a software autopilot working from GPS/AIS data, but very relevant for a human reading a physical compass. |\n| **Relative bearing** | The vessel's own current heading (bow = 0°) | Changes constantly as the vessel turns, even if the target's true bearing hasn't changed. This is what \"the contact is at 045° relative\" means. |\n\n**For a software autopilot working from GPS/AIS positions, you almost always want True bearing for\nabsolute reference and Relative bearing for collision-avoidance geometry** (since COLREG rules like\nRule 13's \"abaft the beam\" test are defined relative to the vessel's own heading, not to True North).\nMagnetic/Compass bearings matter for human-readable output (e.g. VHF radio calls referencing a compass\nheading) but should not be used internally for geometry calculations, since variation adds an\nunnecessary and location-dependent source of error to a calculation GPS already gives you in True terms.",
+          "concepts": [
+            "ais",
+            "magnetic_bearing",
+            "relative_bearing",
+            "true_bearing"
+          ],
+          "topics": [
+            "ais",
+            "magnetic_bearing",
+            "relative_bearing",
+            "true_bearing"
+          ],
+          "pages": []
+        },
+        {
+          "section_id": "oow_4a209a3c",
+          "title": "Converting between True and Relative bearing",
+          "type": "reference",
+          "text": "```\nrelative_bearing = (true_bearing_to_target − own_true_heading + 360) mod 360\ntrue_bearing_to_target = (own_true_heading + relative_bearing) mod 360\n```\n\nThis is the **R + S = T** rule referenced in the earlier navigation-maths drill set: Relative bearing\n+ Ship's heading = True bearing (all in the 0–360° clockwise form). Note that this project's own code\nuses a **signed** variant of relative bearing (range −180° to +180°, positive = starboard, negative =\nport) rather than the raw 0–360° form — both are mathematically equivalent, but mixing them without\nconverting is another common source of sign errors; see the earlier `nav_maths_drills.json` set for\nextensive drilling on exactly this conversion.",
+          "concepts": [
+            "compass_convention",
+            "relative_bearing",
+            "true_bearing"
+          ],
+          "topics": [
+            "compass_convention",
+            "relative_bearing",
+            "true_bearing"
+          ],
+          "pages": []
+        },
+        {
+          "section_id": "oow_1c991f7d",
+          "title": "4. Heading vs. Course vs. Track vs. Bearing — four terms that are NOT interchangeable",
+          "type": "reference",
+          "text": "An autopilot that treats these as synonyms will make real navigation errors, especially in wind or\ncurrent:\n\n- **Heading**: the direction the vessel's **bow is pointing**, right now. What the compass reads.\n- **Course** (or Course Over Ground, COG): the direction the vessel is **actually moving** over the\n  sea/ground, which can differ from heading due to wind, current, or leeway pushing the vessel\n  sideways.\n- **Track**: the path already sailed, or the intended path to be sailed (a planned route).\n- **Bearing**: the direction *to* some other point or object (a waypoint, a contact, a hazard) —\n  never the vessel's own direction of travel.\n\nIn calm conditions with no current, heading and course are the same. In any real-world condition with\nwind or current, they diverge, and an autopilot steering purely by heading (bow direction) without\ncorrecting for course (actual movement) will drift off its intended track. This project's simulated\nscenarios have generally assumed heading = course for simplicity (no wind/current modeled), which is a\nreasonable simplification for testing COLREG decision logic in isolation, but it is a simplification —\nworth flagging explicitly if this autopilot is ever tested against real-world or wind/current-modeled\nconditions, since the heading/course distinction becomes operationally important there.",
+          "concepts": [],
+          "topics": [],
+          "pages": []
+        },
+        {
+          "section_id": "oow_7d1dc53a",
+          "title": "5. The compass rose: how the 32 named points are built",
+          "type": "reference",
+          "text": "The named points of the compass are not arbitrary labels — they're built from a small, regular\npattern, which is worth understanding rather than memorizing as 32 unrelated strings:\n\n1. **4 cardinal points** — North, East, South, West — every 90°.\n2. **4 intercardinal (ordinal) points** — Northeast, Southeast, Southwest, Northwest — exactly\n   halfway between each pair of cardinals (45°, 135°, 225°, 315°).\n3. **8 additional points** splitting each cardinal-to-intercardinal gap in half — named by combining\n   the two points they sit between, closer one first: e.g. between North (000°) and Northeast (045°)\n   sits North-Northeast (022.5°) — \"North\" first because it's closer to North than to Northeast.\n4. **16 more points** (\"by\" points) splitting every remaining 22.5° gap in half, named as \"[nearest\n   main point] by [direction toward the next point]\" — e.g. between North (000°) and\n   North-Northeast (022.5°) sits North by East (011.25°).\n\nThat's 4 + 4 + 8 + 16 = 32 points, each exactly 11.25° apart (360° / 32 = 11.25°).",
+          "concepts": [],
+          "topics": [],
+          "pages": []
+        },
+        {
+          "section_id": "oow_40db7399",
+          "title": "6. Full 32-point compass table",
+          "type": "reference",
+          "text": "| Degrees | Direction Name | Abbreviation |\n|---|---|---|\n| 000.00° | North | N |\n| 011.25° | North by East | N by E |\n| 022.50° | North-Northeast | NNE |\n| 033.75° | Northeast by North | NE by N |\n| 045.00° | Northeast | NE |\n| 056.25° | Northeast by East | NE by E |\n| 067.50° | East-Northeast | ENE |\n| 078.75° | East by North | E by N |\n| 090.00° | East | E |\n| 101.25° | East by South | E by S |\n| 112.50° | East-Southeast | ESE |\n| 123.75° | Southeast by East | SE by E |\n| 135.00° | Southeast | SE |\n| 146.25° | Southeast by South | SE by S |\n| 157.50° | South-Southeast | SSE |\n| 168.75° | South by East | S by E |\n| 180.00° | South | S |\n| 191.25° | South by West | S by W |\n| 202.50° | South-Southwest | SSW |\n| 213.75° | Southwest by South | SW by S |\n| 225.00° | Southwest | SW |\n| 236.25° | Southwest by West | SW by W |\n| 247.50° | West-Southwest | WSW |\n| 258.75° | West by South | W by S |\n| 270.00° | West | W |\n| 281.25° | West by North | W by N |\n| 292.50° | West-Northwest | WNW |\n| 303.75° | Northwest by West | NW by W |\n| 315.00° | Northwest | NW |\n| 326.25° | Northwest by North | NW by N |\n| 337.50° | North-Northwest | NNW |\n| 348.75° | North by West | N by W |\n| 360.00° | North (wraps back to 000.00°) | N |",
+          "concepts": [],
+          "topics": [],
+          "pages": []
+        },
+        {
+          "section_id": "oow_5dde8ba9",
+          "title": "7. Practical notes for an autopilot implementation",
+          "type": "reference",
+          "text": "- **Always store and compute headings/bearings as True (0–360°, clockwise from North)** internally.\n  Convert to Magnetic only at the point of human-readable output, if needed, and never for internal\n  geometry.\n- **Never mix the signed (−180 to +180) and unsigned (0 to 360) relative bearing forms** without an\n  explicit, named conversion step. Pick one as the canonical internal form (this project uses signed)\n  and convert at the boundary whenever external data arrives in the other form.\n- **Normalize angle differences correctly.** A naive `heading2 - heading1` breaks at the 000°/360°\n  wraparound (e.g. 350° to 010° is a 20° turn, not a 340° turn). Always compute angle differences as:\n  ```\n  diff = (heading2 - heading1 + 540) % 360 - 180\n  ```\n  which correctly returns a value in (−180°, +180°] regardless of where the wraparound falls. This\n  exact formula is already used throughout this project's own `heading_delta()` function.\n- **Round only for display, never for storage or intermediate calculation.** The 32-point compass\n  names are a human-readable convenience (useful for VHF radio phrasing, e.g. \"the contact bears\n  approximately Northeast\"), not a precision an autopilot should compute with internally — always keep\n  full-precision degrees for any actual steering or collision-avoidance math, and only snap to the\n  nearest named point when generating human-facing text.",
+          "concepts": [
+            "compass_convention",
+            "relative_bearing"
+          ],
+          "topics": [
+            "compass_convention",
+            "relative_bearing"
+          ],
+          "pages": []
+        }
+      ]
+    }
+  ]
+}

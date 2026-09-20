@@ -115,7 +115,11 @@ DPO_FILES   = {
         # oow_incident_reasoning_traces.jsonl -- see extract_incident_reasoning.py).
         CACHE / "oow_incident_dpo_pairs.jsonl",        # Track 2 -- applied helm/engine-order decisions (build_rlhf.py run against
         # the deterministic MOOS-scenario reasoning traces, notebook § 6.5).
-        CACHE / "oow_scenario_dpo_pairs.jsonl",    ],
+        CACHE / "oow_scenario_dpo_pairs.jsonl",
+        # Track 2 (continued) -- Leo MOOS-trajectory sample (notebook § 6.5.1),
+        # kept separate from the plain oow_scenario_* pairs above for traceability.
+        CACHE / "oow_scenario_Leo_dpo_pairs.jsonl",
+    ],
 }[paths.domain]
 
 
