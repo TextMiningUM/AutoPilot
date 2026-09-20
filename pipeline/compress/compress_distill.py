@@ -194,10 +194,15 @@ def train(args: argparse.Namespace) -> None:
             with torch.no_grad():
                 t_out = teacher(input_ids=batch["input_ids"],
                                 attention_mask=batch["attention_mask"])
-                t_logits = t_out.logits.float()
+                # Keep logits in bf16 (the models' native dtype) instead of upcasting to
+                # float32 -- with a ~152k vocab these tensors are the single biggest VRAM
+                # consumer in the whole loop (teacher + student + the KD intermediate all
+                # scale with vocab size), and bf16 log-softmax/kl_div is standard/stable
+                # enough for this use. This alone roughly halves peak VRAM on the A30.
+                t_logits = t_out.logits
             s_out = student(input_ids=batch["input_ids"],
                             attention_mask=batch["attention_mask"])
-            s_logits = s_out.logits.float()
+            s_logits = s_out.logits
 
             # Mask: only positions where label != -100 contribute
             mask = (batch["labels"] != -100).float()

@@ -203,6 +203,9 @@ log "--- § 14: AWQ int4 quantization (pip install autoawq may fail on some setu
 pip install -q autoawq 2>&1 | tee "$LOG_DIR/42_awq_install.log" || log "autoawq install failed -- skipping AWQ stage."
 run_stage 42 awq_quantize    false -m pipeline.compress.compress_quantize_awq \
     --input "$MERGED_DIR" --output "$AWQ_DIR"
+# transformers' AWQ loader needs gptqmodel now (autoawq alone is no longer enough) --
+# install it right before the first stage that LOADS the quantized model.
+pip install -q gptqmodel 2>&1 | tee "$LOG_DIR/43_gptqmodel_install.log" || log "gptqmodel install failed -- AWQ eval stages will likely fail."
 run_stage 43 eval_awq        false -m pipeline.eval.eval_finetuned \
     --model "$AWQ_DIR" --tag "oow_qwen_awq_${TAG}" --gold-file "$NORM_FILE" --force-4bit --n "$N"
 run_stage 44 eval_awq_colreg false -m pipeline.eval.eval_oow_scenarios \
@@ -217,8 +220,12 @@ run_stage 47 eval_pruned_colreg false -m pipeline.eval.eval_oow_scenarios \
     --model "$PRUNED_DIR" --tag "oow_qwen_pruned_${TAG}" --force-4bit --n "$N"
 
 log "--- § 14.2: knowledge distillation -> DistillOOW-QWEN, TAG=$TAG ---"
+# Teacher (8B, 4-bit) + student (1.7B, bf16) + KD-loss tensors over a ~152k vocab
+# came within ~200MB of OOMing the A30's 24GB -- shrink the sequence length and
+# reduce allocator fragmentation rather than relying on bf16 logits alone.
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 run_stage 48 distill            true  -m pipeline.compress.compress_distill \
-    --teacher-dir "$MERGED_DIR" --output "$DISTILL_DIR"
+    --teacher-dir "$MERGED_DIR" --output "$DISTILL_DIR" --max-len 512
 run_stage 49 eval_distill        false -m pipeline.eval.eval_finetuned \
     --model "$DISTILL_DIR" --tag "distill_oow_qwen_${TAG}" --gold-file "$NORM_FILE" --force-4bit --n "$N"
 run_stage 50 eval_distill_colreg false -m pipeline.eval.eval_oow_scenarios \
