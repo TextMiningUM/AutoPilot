@@ -91,18 +91,21 @@ def contact_line(own: Vessel, tgt: Vessel) -> dict:
     }
 
 
-def narrate(mission: Mission, own: Vessel) -> str:
+def narrate(mission: Mission, own: Vessel, cruise_speed_mps: float | None = None) -> str:
     """Situation report text handed to the OOW agent -- own-ship state, goal, and every
     target's range/bearing/heading/speed/CPA/TCPA. Deliberately leaves out encounter
     classification, applicable rule(s), and the quiet tag: those are exactly what the
     agent is being asked to work out, so handing them over in the prompt would leak the
     answer instead of testing whether the model can derive it. contact_line() still
     computes/returns them (used elsewhere, e.g. the Evaluation panel's degeneracy check).
-    Also reports the mission's nominal/rated speed (mission.own_ship.speed, the ORIGINAL
-    starting speed -- distinct from `own.speed`, which mutates as the run progresses) and
-    an ETA-at-current-speed: without a speed reference point or any sense of time cost, the
-    model had no basis to ever consider speed_up over hold_course (observed: 0/1697 decisions
-    across the full sweep ever chose speed_up).
+    Also reports a nominal/rated speed reference (mission.own_ship.speed by default -- the
+    mission's ORIGINAL starting speed, distinct from `own.speed`, which mutates as the run
+    progresses -- or `cruise_speed_mps` when given, e.g. from the live simulator's
+    VesselConstraints/sidebar "Cruise speed" setting, so a user-configured resume speed
+    actually reaches the agent instead of always falling back to whatever speed the mission
+    file happened to start at) and an ETA-at-current-speed: without a speed reference point
+    or any sense of time cost, the model had no basis to ever consider speed_up over
+    hold_course (observed: 0/1697 decisions across the full sweep ever chose speed_up).
     Also reports the goal BEARING and how many degrees off-course the current heading is:
     observed runs (e.g. s06_crossing_port_fine) where the model correctly avoided a target
     then held that avoidance heading forever, drifting thousands of metres past the goal --
@@ -111,7 +114,7 @@ def narrate(mission: Mission, own: Vessel) -> str:
     gx, gy = mission.goal
     goal_brg, goal_rng = bearing_and_range(own.x, own.y, gx, gy)
     off_course = relative_bearing(own.heading, goal_brg)
-    nominal_speed = mission.own_ship.speed
+    nominal_speed = cruise_speed_mps if cruise_speed_mps is not None else mission.own_ship.speed
     lines = [f"Own-ship at ({own.x:.1f}, {own.y:.1f}), heading {own.heading:.1f}, "
              f"speed {own.speed:.2f} m/s (nominal/rated speed for this mission: "
              f"{nominal_speed:.2f} m/s)."]

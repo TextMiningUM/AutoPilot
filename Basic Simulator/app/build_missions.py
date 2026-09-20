@@ -8,15 +8,26 @@ Run with: python -m app.build_missions   (from the Basic Simulator/ folder)
 """
 from __future__ import annotations
 import json
+from functools import partial
 from pathlib import Path
 
 from app.geometry import compute_target, same_line_target, bearing_range_to_xy
+from app.simulation import VesselConstraints
 
 APP_DIR = Path(__file__).resolve().parent
 ROOT = APP_DIR.parent
 MISSIONS_DIR = ROOT / "Data" / "missions"
 
 V_OS = 2.5  # m/s, ~4.9 kn, own-ship nominal speed -- same as generate_moos_scenarios.py
+
+# Every compute_target()/same_line_target() call below is bound to the LIVE turn_rate_deg_s the
+# simulator actually enforces (app.simulation.VesselConstraints), via functools.partial rather
+# than repeating the kwarg at all ~13 call sites -- so every generated scenario is guaranteed
+# maneuverable (own-ship has time to turn before impact, see app.geometry.min_feasible_time_s)
+# and stays that way automatically if the default turn_rate_deg_s ever changes.
+_turn_rate_deg_s = VesselConstraints().turn_rate_deg_s
+compute_target = partial(compute_target, turn_rate_deg_s=_turn_rate_deg_s)
+same_line_target = partial(same_line_target, turn_rate_deg_s=_turn_rate_deg_s)
 
 
 def mission(sid, name, rule_refs, os_role, description, pass_criteria,

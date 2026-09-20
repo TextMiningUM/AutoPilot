@@ -31,7 +31,7 @@ for p in (ROOT, REPO_ROOT):
         sys.path.insert(0, str(p))
 
 from app.missions import list_mission_ids, load_mission
-from app.simulation import Simulation, COLLISION_RADIUS_M
+from app.simulation import Simulation, VesselConstraints, COLLISION_RADIUS_M
 from app.agents import ask_oow, MODEL_CONFIGS, SYSTEM_OOW_AGENT, effective_generation_params
 from app.llm_runs import RUNS_DIR, run_log_path
 
@@ -50,7 +50,16 @@ def run_one(mission_id: str, config: str, tag: str = "default",
         return out_path
 
     mission = load_mission(mission_id)
-    sim = Simulation(mission)
+    # time_step_s matches --dt (not VesselConstraints' own default) so the agent's per-step
+    # turn-degrees estimate in the prompt (see agents.build_oow_prompt) stays accurate
+    # regardless of what --dt this run actually uses. cruise_speed_mps matches the mission's
+    # OWN designed speed (not VesselConstraints' generic 10.0 m/s default) -- this CLI has no
+    # live sidebar for a user to deliberately set a different resume speed, so overriding
+    # narrate()'s nominal-speed reference with a mismatched constant would just be wrong
+    # (reproduced: told the model s01_head_on's nominal speed was 10 m/s when the mission
+    # actually runs at 2.5 m/s).
+    constraints = VesselConstraints(time_step_s=dt, cruise_speed_mps=mission.own_ship.speed)
+    sim = Simulation(mission, constraints)
     checkpoints: list[dict] = []
     effective_k = k if use_rag else 0
     outcome = "max_steps_reached"
@@ -73,6 +82,7 @@ def run_one(mission_id: str, config: str, tag: str = "default",
             decision, debug = ask_oow(
                 mission, sim.own, config=config, system_prompt=system_prompt,
                 max_new_tokens=max_new_tokens, enable_thinking=enable_thinking, k=effective_k,
+                constraints=constraints,
             )
             # Per-checkpoint progress -- without this, a slow config (e.g. RAG+CoT combined,
             # which can take 10x longer per call than CoT alone) looked indistinguishable

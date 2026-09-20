@@ -39,8 +39,10 @@ from app.agents import MODEL_CONFIGS
 from app.run_llm_scenario import run_one
 from app.llm_runs import RUNS_DIR, load_run
 from app.evaluation import score_trajectory
+from app.simulation import VesselConstraints
 
 SUMMARY_FILE = RUNS_DIR / "_sweep_summary.json"
+_DEFAULT_MIN_CPA_M = VesselConstraints().min_cpa_m
 
 
 def score_one(mission, log: dict) -> dict:
@@ -52,6 +54,7 @@ def score_one(mission, log: dict) -> dict:
     result = score_trajectory(
         log["trajectory"], start_xy=(mission.own_ship.x, mission.own_ship.y),
         goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
+        safe_distance_m=_DEFAULT_MIN_CPA_M,
     )
     return {
         "config": log["config"], "tag": log["tag"],

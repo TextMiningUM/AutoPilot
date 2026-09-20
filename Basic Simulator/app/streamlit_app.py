@@ -22,7 +22,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from app.missions import list_mission_ids, load_mission
-from app.simulation import Simulation, project_scenario, find_collision
+from app.simulation import Simulation, VesselConstraints, project_scenario, find_collision
 from app.narrate import narrate, contact_line, bearing_and_range, relative_bearing, cpa_tcpa
 from app.viz_plotly import trajectory_figure, trajectory_bounds, animated_trajectory_figure
 from app.evaluation import score_trajectory
@@ -142,12 +142,33 @@ from app.agents import MODEL_CONFIGS, SYSTEM_OOW_AGENT, ask_oow
 from app.llm_runs import list_runs_for_mission, load_run, checkpoint_at_or_before, list_run_sets, BASE_RUNS_DIR
 
 # ── Session state ─────────────────────────────────────────────────────────
+def build_vessel_constraints() -> VesselConstraints:
+    """Reads the sidebar's Ship performance/Mission/Simulation widgets straight out of
+    session_state (same one-render-lag pattern as dt_slider/wide_plot elsewhere in this
+    file -- on the very first run these keys don't exist yet, hence the defaults, which
+    match each widget's own `value=`) into one VesselConstraints -- the single source of
+    truth the kinematics layer (app/simulation.py) and the OOW agent's prompt both read,
+    instead of each hardcoding its own copy of these numbers."""
+    g = st.session_state.get
+    return VesselConstraints(
+        max_speed_mps=g("ship_max_speed", 10.0),
+        max_rudder_angle_deg=g("ship_max_turn_rate_pct", 30.0),
+        max_acceleration_mps2=g("ship_max_accel", 0.2),
+        max_deceleration_mps2=g("ship_max_decel", 0.2),
+        turn_rate_deg_s=g("ship_turn_rate_deg_s", 3.0),
+        cruise_speed_mps=g("mission_cruise_speed", 10.0),
+        min_cpa_m=g("mission_min_cpa", 500.0),
+        time_step_s=g("dt_slider", 10.0),
+    )
+
+
+# ── Session state ─────────────────────────────────────────────────────────────────────────
 mission_ids = list_mission_ids()
 if "mission_id" not in st.session_state:
     st.session_state.mission_id = mission_ids[0]
 if "sim" not in st.session_state or st.session_state.get("_loaded_mission_id") != st.session_state.mission_id:
     mission = load_mission(st.session_state.mission_id)
-    st.session_state.sim = Simulation(mission)
+    st.session_state.sim = Simulation(mission, build_vessel_constraints())
     st.session_state.mission = mission
     st.session_state._loaded_mission_id = st.session_state.mission_id
     st.session_state.last_decision = None
@@ -158,6 +179,10 @@ if "sim" not in st.session_state or st.session_state.get("_loaded_mission_id") !
     st.session_state._agent_detail_cp_i = None
 
 sim: Simulation = st.session_state.sim
+# Refreshed every rerun (not just at mission load/reset) so a sidebar tweak -- e.g. testing
+# a slower turn_rate_deg_s -- takes effect on the very next step without losing the ship's
+# current position/heading/speed the way constructing a brand-new Simulation would.
+sim.constraints = build_vessel_constraints()
 mission = st.session_state.mission
 
 
@@ -562,14 +587,21 @@ with plot_col:
 # ── Sidebar ───────────────────────────────────────────────────────────────
 with st.sidebar:
     st.header("Ship performance")
-    st.caption("Not wired into the physics yet -- stored here to bring into the simulation later.")
+    st.caption("Feeds the kinematics layer (VesselConstraints) that rate-limits own-ship's "
+              "heading/speed changes -- see the Simulation section below for the time step "
+              "these per-second rates are applied over.")
     sp1, sp2 = st.columns(2)
     sp1.number_input("Max speed (m/s)", min_value=0.0, value=10.0, step=0.5, key="ship_max_speed")
-    sp2.number_input("Max turn rate (%)", min_value=0.0, value=30.0, step=1.0, key="ship_max_turn_rate_pct")
+    sp2.number_input("Max rudder angle (deg)", min_value=0.0, value=30.0, step=1.0, key="ship_max_turn_rate_pct",
+                     help="Informational only -- not yet enforced as a heading-change limit. "
+                          "turn_rate_deg_s below is the one actual limit on how fast heading "
+                          "can change per step.")
     sp3, sp4 = st.columns(2)
     sp3.number_input("Max acceleration (m/s\u00b2)", min_value=0.0, value=0.2, step=0.05, key="ship_max_accel")
     sp4.number_input("Max deceleration (m/s\u00b2)", min_value=0.0, value=0.2, step=0.05, key="ship_max_decel")
-    st.number_input("Turn rate (deg/s)", min_value=0.0, value=3.0, step=0.5, key="ship_turn_rate_deg_s")
+    st.number_input("Turn rate (deg/s)", min_value=0.0, value=3.0, step=0.5, key="ship_turn_rate_deg_s",
+                    help="The only actively-enforced limit on how many degrees own-ship's "
+                         "heading may change per simulation step.")
     st.divider()
 
     st.header("Mission")
@@ -588,7 +620,7 @@ with st.sidebar:
         st.markdown(mission.as_text())
 
     if st.button("\U0001F504 Reset mission playback", use_container_width=True):
-        st.session_state.sim = Simulation(mission)
+        st.session_state.sim = Simulation(mission, build_vessel_constraints())
         st.session_state.last_decision = None
         st.session_state.last_debug = None
         st.session_state.llm_compliance_violations = None
@@ -657,7 +689,8 @@ with st.sidebar:
 
     st.divider()
     st.header("Manual helm")
-    degrees = st.slider("Turn amount (deg)", 1.0, 90.0, 15.0, step=1.0)
+    _max_rudder = sim.constraints.max_rudder_angle_deg
+    degrees = st.slider("Turn amount (deg)", 1.0, _max_rudder, min(15.0, _max_rudder), step=1.0)
     st.caption(
         "Each control also advances the simulation by one time step -- steering used to just "
         "change heading/speed without moving, which is why it felt like every click 'stopped' "
@@ -810,7 +843,7 @@ with side_panel:
                 decision, debug = ask_oow(mission, sim.own, config=model_config,
                                           system_prompt=st.session_state.get("custom_system_prompt"),
                                           max_new_tokens=int(max_new_tokens), enable_thinking=enable_thinking,
-                                          k=effective_k)
+                                          k=effective_k, constraints=sim.constraints)
             st.session_state.last_decision = decision
             st.session_state.last_debug = debug
 
@@ -913,6 +946,7 @@ with plot_col:
         result = score_trajectory(
             eval_traj, start_xy=(mission.own_ship.x, mission.own_ship.y),
             goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
+            safe_distance_m=sim.constraints.min_cpa_m,
             llm_violations=llm_violations if not stale else None,
         )
         verdict = result["verdict"]

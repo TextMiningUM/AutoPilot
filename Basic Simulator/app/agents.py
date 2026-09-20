@@ -57,6 +57,7 @@ from pipeline.eval.prep_ablation import format_context
 
 from app.missions import Mission, Vessel
 from app.narrate import contact_line, narrate
+from app.simulation import VesselConstraints
 
 MODEL_ID = "Qwen/Qwen3-8B"
 
@@ -271,16 +272,29 @@ def _pg_match_query(mission: Mission, own: Vessel) -> str:
 
 def build_oow_prompt(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
                      system_prompt: str | None = None,
-                     k: int = 6, dense_n: int = 40) -> tuple[list[dict], dict]:
+                     k: int = 6, dense_n: int = 40,
+                     constraints: VesselConstraints | None = None) -> tuple[list[dict], dict]:
     """Returns (messages, debug_info) for the selected MODEL_CONFIGS key.
     `system_prompt`, if given, overrides SYSTEM_OOW_AGENT for every config except
     bare_qwen (which always keeps its own separate, deliberately minimal prompt as the
     true ablation baseline). debug_info exposes what was retrieved, for the Agent panel
-    so a user can see WHY the agent decided what it decided."""
+    so a user can see WHY the agent decided what it decided.
+    `constraints`, if given (the live simulator's VesselConstraints -- see
+    app/simulation.py), tells the agent own-ship's ACTUAL physical envelope so it doesn't
+    recommend something the kinematics layer can't deliver: turn_rate_deg_s (the only turn
+    limit actually enforced -- max_rudder_angle_deg is informational only), max_speed_mps
+    (a hard ceiling -- speed_up has no effect once already there) and
+    max_acceleration_mps2/max_deceleration_mps2 (speed changes gradually, not instantly),
+    and min_cpa_m (this mission's configured safe-passing distance -- without this the
+    model has NO numeric anchor for what counts as a real collision risk; observed
+    v0_base/v1_rag calling a 17m CPA "safe" and colliding as a direct result).
+    cruise_speed_mps is threaded into narrate()'s nominal/rated-speed reference instead of
+    a separate line here (see app/narrate.py). Never added for bare_qwen -- that config is
+    the deliberate zero-extra-framing ablation floor."""
     if config not in _CONFIG_SPECS:
         raise ValueError(f"Unknown model config {config!r}; choose one of {list(MODEL_CONFIGS)}")
     spec = _CONFIG_SPECS[config]
-    situation = narrate(mission, own)
+    situation = narrate(mission, own, cruise_speed_mps=constraints.cruise_speed_mps if constraints else None)
 
     if spec["bare"]:
         user_msg = f"Situation:\n{situation}\n\nRecommend exactly ONE manoeuvre as the specified JSON object."
@@ -307,6 +321,18 @@ def build_oow_prompt(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
     user_parts = []
     if spec["cot"]:
         user_parts.append(COT_INSTR)
+    if constraints is not None:
+        per_step = constraints.turn_rate_deg_s * constraints.time_step_s
+        user_parts.append(
+            f"Own-ship's physical limits: heading changes at most {constraints.turn_rate_deg_s:.1f} "
+            f"deg/s (~{per_step:.0f} deg per {constraints.time_step_s:.0f}s step; max rudder angle "
+            f"{constraints.max_rudder_angle_deg:.0f} deg is informational only, not yet a hard limit). "
+            f"Speed is capped at {constraints.max_speed_mps:.1f} m/s, changing gradually "
+            f"({constraints.max_acceleration_mps2:.2f} m/s\u00b2 up / {constraints.max_deceleration_mps2:.2f} "
+            "m/s\u00b2 down) -- speed_up/slow_down are not instant. This mission's safe passing distance is "
+            f"{constraints.min_cpa_m:.0f}m: CPA below that is a real collision risk, CPA well above it is "
+            "safe regardless of how small it looks."
+        )
     if pg_text:
         user_parts.append(f"Procedure guidance:\n{pg_text}")
     if ctx is not None:
@@ -387,20 +413,22 @@ def effective_generation_params(config: str, enable_thinking: bool, max_new_toke
     values, which previously showed "Thinking: off" even on runs where it was actually forced on."""
     spec = _CONFIG_SPECS.get(config, {})
     if spec.get("cot") or spec.get("pg"):
-        return True, max(max_new_tokens, 2048)
+        return True, max(max_new_tokens, 3072)
     return enable_thinking, max_new_tokens
 
 
 def ask_oow(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
            system_prompt: str | None = None, max_new_tokens: int = 256,
-           enable_thinking: bool = False, k: int = 6) -> tuple[dict, dict]:
+           enable_thinking: bool = False, k: int = 6,
+           constraints: VesselConstraints | None = None) -> tuple[dict, dict]:
     """Returns (decision_json, debug_info). `config` is one of MODEL_CONFIGS's keys;
     `system_prompt`, if given, overrides SYSTEM_OOW_AGENT (see build_oow_prompt).
     `max_new_tokens`/`enable_thinking` control generation speed (see _generate); `k`
     controls how many RAG chunks get injected for v1_rag/v3_rag_cot -- each retrieved
     chunk adds ~500 tokens to the PROMPT (not the response), so this is the main knob
     for why those two configs are slower to first-token than the others: a longer
-    prompt costs more prefill time even though max_new_tokens/generation is unchanged."""
+    prompt costs more prefill time even though max_new_tokens/generation is unchanged.
+    `constraints`, if given, is forwarded to build_oow_prompt() -- see its docstring."""
     # CoT configs (v2_cot/v3_rag_cot) instruct the model to "think step by step... BEFORE
     # giving your final answer", but the JSON schema's "reasoning" field is capped at 1-2
     # sentences -- with enable_thinking=False (the default, since Qwen3's native <think>
@@ -411,9 +439,13 @@ def ask_oow(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
     # NOTE: 512 was NOT enough -- verified on s01-s12 (busy, multi-contact scenarios) that
     # the <think> block routinely ran past 512 tokens without ever closing, truncating
     # before the JSON and falling back to the hold_course parse-error default every single
-    # time (100% collision rate, not a real quality signal). 2048 gives real headroom.
+    # time (100% collision rate, not a real quality signal). 2048 gave real headroom until
+    # the physical-limits paragraph (see build_oow_prompt) gave the model more to reason
+    # about and pushed some generations past 2048 too (same parse-error/hold_course failure
+    # mode, reproduced on s01_head_on/v2_cot) -- bumped to 3072.
     enable_thinking, max_new_tokens = effective_generation_params(config, enable_thinking, max_new_tokens)
-    messages, debug = build_oow_prompt(mission, own, config=config, system_prompt=system_prompt, k=k)
+    messages, debug = build_oow_prompt(mission, own, config=config, system_prompt=system_prompt, k=k,
+                                       constraints=constraints)
     tok, mdl = _load_qwen()
     raw = _generate(tok, mdl, messages, max_new_tokens=max_new_tokens, enable_thinking=enable_thinking)
     decision = _parse_json_action(raw)
