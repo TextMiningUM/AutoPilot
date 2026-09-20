@@ -47,16 +47,23 @@ import math
 import os
 import random
 import sys
+import time
 from pathlib import Path
 
-from core import AgentPaths, load_env, CONTAM_THRESH
-from pipeline.track2.build_oow_scenarios import (
-    SYSTEM_OOW, FIXED_QUESTION, render_all, render_wrong_all, filter_contamination,
-)
+import numpy as np
+
+from core import AgentPaths, load_env, CONTAM_THRESH, EMBEDDER_MODEL
+from pipeline.track2.build_oow_scenarios import SYSTEM_OOW, FIXED_QUESTION, render_batch, render_wrong_all
 
 paths = AgentPaths.oow()
 CACHE = paths.cache_dir
 LEO_FILE = paths.workspace / "Data" / "OOW" / "OOW_Scenarios_Leo" / "moos_temporal_narratives_final.jsonl"
+# One JSON line per fully-rendered record (gold_answer + wrong_answer already set),
+# appended after EACH batch completes -- a crash/interrupt partway through a long run
+# (e.g. --n 7928 is ~530 sequential batches, hours unattended) only loses the single
+# in-flight batch, not everything already done. Re-running the same --n/--seed skips
+# every leo_id already in here instead of re-spending API calls on it.
+CHECKPOINT_FILE = CACHE / "oow_scenario_Leo_checkpoint.jsonl"
 
 ROLE_PHRASE = {
     "give_way": "we are the give-way vessel",
@@ -240,6 +247,47 @@ def write_jsonl(rows: list[dict], path: Path) -> None:
     print(f"Wrote {path} ({len(rows)} rows)")
 
 
+def load_checkpoint() -> dict[str, dict]:
+    """leo_id -> fully-rendered record, from every batch a prior run already completed."""
+    if not CHECKPOINT_FILE.exists():
+        return {}
+    out: dict[str, dict] = {}
+    for line in CHECKPOINT_FILE.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            rec = json.loads(line)
+            out[rec["leo_id"]] = rec
+    return out
+
+
+def append_checkpoint(recs: list[dict]) -> None:
+    CHECKPOINT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with CHECKPOINT_FILE.open("a", encoding="utf-8") as f:
+        for r in recs:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            f.flush()
+
+
+def filter_contamination_batch(batch: list[dict], gold_embs, model) -> list[dict]:
+    """Per-batch version of build_oow_scenarios.filter_contamination() -- takes a
+    PRE-LOADED embedder + pre-computed gold_embs instead of reloading the
+    SentenceTransformer on every call, since this now runs once per ~15-record batch
+    (~530 times for a full --n 7928 run) instead of once for the whole sample."""
+    if not batch:
+        return batch
+    texts = [r.get("gold_answer", "") for r in batch]
+    q_embs = model.encode(texts, normalize_embeddings=True, batch_size=64, show_progress_bar=False)
+    kept, dropped = [], 0
+    for rec, emb in zip(batch, q_embs):
+        c_sim = float(np.max(gold_embs @ emb)) if len(gold_embs) else 0.0
+        if c_sim >= CONTAM_THRESH:
+            dropped += 1
+            continue
+        kept.append(rec)
+    if dropped:
+        print(f"    contamination filter: kept={len(kept)}  dropped={dropped} (thresh={CONTAM_THRESH})")
+    return kept
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     ap.add_argument("--n", type=int, default=25, help="sample size (stratified across action buckets)")
@@ -270,24 +318,54 @@ def main() -> None:
 
     if args.skip_llm:
         print("--skip-llm: situation_report/action are set; gold_answer left empty.")
+        final_recs = recs
     else:
-        load_env(paths.env_file)
-        key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-        if not key:
-            sys.exit("ANTHROPIC_API_KEY not set in .env")
-        import anthropic
-        ws = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
-        headers = {"anthropic-workspace-id": ws} if ws else None
-        client = anthropic.Anthropic(api_key=key, default_headers=headers)
-        render_all(client, args.model, recs, args.batch_size, args.max_tokens, "leo")
+        done = load_checkpoint()
+        print(f"[resume] {len(done)} record(s) already checkpointed in {CHECKPOINT_FILE.name}")
+        todo = [r for r in recs if r["leo_id"] not in done]
+        print(f"[resume] {len(todo)} record(s) remaining to process")
 
-        gold_questions = [g["question"] for g in json.loads(Path(args.gold_file).read_text(encoding="utf-8"))]
-        recs = filter_contamination(recs, gold_questions)
+        if todo:
+            load_env(paths.env_file)
+            key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+            if not key:
+                sys.exit("ANTHROPIC_API_KEY not set in .env")
+            import anthropic
+            ws = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
+            headers = {"anthropic-workspace-id": ws} if ws else None
+            client = anthropic.Anthropic(api_key=key, default_headers=headers)
 
-        render_wrong_all(client, args.model, recs, args.batch_size, args.max_tokens)
+            gold_questions = [g["question"] for g in json.loads(Path(args.gold_file).read_text(encoding="utf-8"))]
+            from sentence_transformers import SentenceTransformer
+            embedder = SentenceTransformer(EMBEDDER_MODEL)
+            gold_embs = (embedder.encode(gold_questions, normalize_embeddings=True, batch_size=64,
+                                         show_progress_bar=False) if gold_questions else np.zeros((0, 1)))
+
+            n_batches = math.ceil(len(todo) / args.batch_size)
+            n_done_before, processed = len(done), 0
+            for bi, start in enumerate(range(0, len(todo), args.batch_size), start=1):
+                raw_batch = todo[start:start + args.batch_size]
+                t0 = time.time()
+                got = render_batch(client, args.model, raw_batch, args.max_tokens)
+                for r in raw_batch:
+                    rendered = got.get(r["_id"])
+                    if rendered:
+                        r["gold_answer"] = rendered.get("gold_answer", "")
+                batch = [r for r in raw_batch if r.get("gold_answer")]
+                batch = filter_contamination_batch(batch, gold_embs, embedder)
+                if batch:
+                    render_wrong_all(client, args.model, batch, args.batch_size, args.max_tokens)
+                append_checkpoint(batch)
+                processed += len(batch)
+                print(f"  [batch {bi}/{n_batches}] {len(batch)}/{len(raw_batch)} kept & checkpointed "
+                     f"({time.time() - t0:.1f}s, total checkpointed {n_done_before + processed}/{len(recs)})",
+                     flush=True)
+
+        done = load_checkpoint()
+        final_recs = [done[r["leo_id"]] for r in recs if r["leo_id"] in done]
 
     sft_rows, dpo_rows, reflect_rows, trace_rows = [], [], [], []
-    for r in recs:
+    for r in final_recs:
         if not r.get("gold_answer"):
             continue
         user_msg = f"{r['situation_report']}\n\n{FIXED_QUESTION}"
@@ -340,7 +418,7 @@ def main() -> None:
     write_jsonl(trace_rows, CACHE / "oow_scenario_Leo_reasoning_traces.jsonl")
 
     from collections import Counter
-    print("category distribution:", Counter(r["category"] for r in recs))
+    print("category distribution:", Counter(r["category"] for r in final_recs))
 
 
 if __name__ == "__main__":
