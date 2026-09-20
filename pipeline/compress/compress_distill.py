@@ -203,6 +203,14 @@ def train(args: argparse.Namespace) -> None:
             s_out = student(input_ids=batch["input_ids"],
                             attention_mask=batch["attention_mask"])
             s_logits = s_out.logits
+            # Defensive: a NaN/Inf logit at even one position (bf16 overflow, or a
+            # position the attention mask fully excludes) will otherwise poison every
+            # downstream reduction -- "NaN * 0" from a mask multiply is still NaN, not 0,
+            # which is exactly what kept happening on the cloud run (2026-09-20) even
+            # after upcasting to float32 for the CE call alone. Sanitize both logit
+            # tensors right after the forward pass, before either loss uses them.
+            t_logits = torch.nan_to_num(t_logits, nan=0.0, posinf=1e4, neginf=-1e4)
+            s_logits = torch.nan_to_num(s_logits, nan=0.0, posinf=1e4, neginf=-1e4)
 
             # Mask: only positions where label != -100 contribute
             mask = (batch["labels"] != -100).float()
@@ -219,19 +227,23 @@ def train(args: argparse.Namespace) -> None:
             ).sum(-1)   # sum over vocab -> per-token
             kd = (kd * mask).sum() / mask.sum().clamp_min(1) * (T * T)
 
-            # Hard-label CE
-            # Hard-label CE -- cast to float32 for JUST this call. bf16's cross_entropy
-            # was observed to go NaN from the very first steps on the cloud run
-            # (2026-09-20): log-softmax's precision loss in bf16 is a well-known nan/inf
-            # hotspot, which is why standard mixed-precision recipes always keep the final
-            # loss computation in fp32 even when the rest of the model runs in reduced
-            # precision. This only upcasts a per-micro-batch temporary, not the big
-            # t_logits/s_logits tensors, so it keeps almost all of the bf16 memory saving.
-            ce_all = F.cross_entropy(
+            # Hard-label CE -- computed manually with the SAME safe mask-then-normalize
+            # pattern as kd above, instead of relying on F.cross_entropy's built-in
+            # ignore_index handling: that internally computes the loss at EVERY position
+            # first and only zeroes out ignored ones afterward, so a NaN/Inf logit at an
+            # ignored (e.g. padded) position still produces "NaN * 0 = NaN" and poisons
+            # the whole reduction -- this was silently happening every few steps on the
+            # cloud run (2026-09-20) even after casting to float32. Labels are clamped to
+            # a valid class index before the per-token loss so -100 never reaches
+            # cross_entropy at all; ce_mask (from the ORIGINAL labels) is what actually
+            # decides which positions count.
+            ce_mask = (batch["labels"] != -100).float()
+            ce_per_tok = F.cross_entropy(
                 s_logits.view(-1, s_logits.size(-1)).float(),
-                batch["labels"].view(-1),
-                ignore_index=-100, reduction="mean",
-            )
+                batch["labels"].clamp(min=0).view(-1),
+                reduction="none",
+            ).view_as(batch["labels"])
+            ce_all = (ce_per_tok * ce_mask).sum() / ce_mask.sum().clamp_min(1)
 
             loss = alpha * ce_all + (1 - alpha) * kd
             (loss / args.grad_accum).backward()
