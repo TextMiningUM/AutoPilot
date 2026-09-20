@@ -7,6 +7,7 @@ from __future__ import annotations
 import math
 import os
 import sys
+import textwrap
 import time
 from pathlib import Path
 
@@ -67,10 +68,6 @@ div[data-testid="stMetric"] [data-testid="stMetricLabel"] p {
 }
 div[data-testid="stMetric"] [data-testid="stMetricValue"] { font-size: 1.05rem; }
 div[data-testid="stMetric"] [data-testid="stMetricLabel"] { font-size: 0.75rem; }
-.side-panel {
-    background: rgba(20,108,148,0.05); border-radius: 12px; padding: 0.8rem 1rem;
-    border: 1px solid rgba(20,108,148,0.18); margin-bottom: 0.8rem;
-}
 /* Cap the native `help=` hover tooltips -- they were wide/tall enough to spill over the
    plot next to the sidebar; keep them small even if some help text is still long. */
 div[data-testid="stTooltipContent"] {
@@ -191,16 +188,22 @@ def _describe_decision(decision: dict) -> str:
 
 
 def _short_decision(decision: dict) -> str:
-    """One-line decision summary for the IN-PLOT annotation (see _build_decision_by_time) --
-    the full multi-sentence reasoning is too long to lay out well as a Plotly annotation (no
-    HTML-style word-wrap), so only this short form travels with the native animation; the
-    full text lives in the side panel's independent Decision log instead."""
+    """Decision summary for the IN-PLOT annotation (see _build_decision_by_time): helm
+    order + rule on one line, plus the reasoning wrapped onto multiple lines via manual
+    `<br>` breaks (Plotly annotations don't auto-wrap text). Only the REASONING travels
+    here, not the full situation report (contact list etc.) -- that stays too long/technical
+    to read well even wrapped, and is still available via the side panel's Decision log."""
     action = decision.get("action", "hold_course")
     label = _ACTION_TEXT.get(action, action)
     if action in ("turn_left", "turn_right") and decision.get("degrees") is not None:
         label += f" {float(decision['degrees']):.0f}\u00b0"
     rule = decision.get("rule_applied") or "none"
-    return f"{label} \u2022 Rule {rule}"
+    header = f"<b>{label} \u2022 Rule {rule}</b>"
+    reasoning = decision.get("reasoning")
+    if not reasoning:
+        return header
+    wrapped = "<br>".join(textwrap.wrap(reasoning, width=42))
+    return f"{header}<br>{wrapped}"
 
 
 def _describe_params(params: dict) -> str:
@@ -412,14 +415,24 @@ def _render_agent_detail(ph, mission) -> None:
 # "Full run" button below can render live progress directly into `chart` as it steps --
 # st.columns() containers are positional, not order-dependent, so this still renders in
 # the correct (center) column regardless of running before the sidebar in script order.
-plot_col, side_col = st.columns([3, 2], gap="medium")
+# `wide_plot` (toggle lives in the sidebar's Simulation section) swaps the side-by-side
+# columns for a full-width plot + the Agent panel as a collapsible expander below it --
+# read here via session_state BEFORE the toggle widget itself runs (same one-render-lag
+# pattern already used for dt_slider/speed_level elsewhere in this file), so the layout
+# takes effect starting the NEXT rerun after it's flipped.
+_wide_plot = st.session_state.get("wide_plot", False)
+if _wide_plot:
+    plot_col = st.container()
+    side_col = st.expander("\U0001F916 Agent panel", expanded=False)
+else:
+    plot_col, side_col = st.columns([3, 2], gap="medium")
 with side_col:
     # Header + placeholders created early (before the sidebar/plot) -- `agent_static_ph` holds
     # the Model/config/params info (only changes when switching runs), `agent_detail_ph` holds
     # the full situation report/reasoning for whichever moment the "Show details" button (near
     # the plot) was last used to inspect -- see the Play Agent Mission section in plot_col.
-    st.markdown('<div class="side-panel">', unsafe_allow_html=True)
-    st.markdown("#### \U0001F916 Agent")
+    if not _wide_plot:
+        st.markdown("#### \U0001F916 Agent")
     agent_static_ph = st.empty()
     agent_detail_ph = st.empty()
 
@@ -554,6 +567,9 @@ with st.sidebar:
 
     st.divider()
     st.header("Simulation")
+    st.toggle("\u2194\ufe0f Wide plot (Agent panel below, collapsible)", key="wide_plot",
+             help="Moves the Agent panel below the plot instead of beside it, so the plot "
+                  "gets the full width. Takes effect on the next interaction.")
     dt = st.slider("Time step (s)", 1.0, 60.0, 10.0, step=1.0, key="dt_slider")
     sim_mode = st.session_state.get("sim_view_mode", "Manual helm")
     is_preview = sim_mode == "Scenario preview (no avoidance)"
@@ -822,8 +838,6 @@ with side_col:
     else:
         st.caption("Switch to \"Agent Real-Time\" to consult the agent live for the current "
                   "situation, or \"Play Agent Mission\" to review a precomputed run's reasoning.")
-
-    st.markdown('</div>', unsafe_allow_html=True)
 
 with plot_col:
     st.divider()

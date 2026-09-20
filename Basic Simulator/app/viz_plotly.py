@@ -238,8 +238,8 @@ def animated_trajectory_figure(trajectory: list[dict], mission: Mission,
 
     def _decision_annotation(text):
         return dict(
-            text=text, x=0.99, y=0.78, xref="paper", yref="paper",
-            xanchor="right", yanchor="top", showarrow=False, align="left",
+            text=text, x=0.01, y=0.90, xref="paper", yref="paper",
+            xanchor="left", yanchor="top", showarrow=False, align="left",
             font=dict(size=12, color="#5a3d00"),
             bgcolor="rgba(255,247,224,0.9)", bordercolor="#a67c00", borderwidth=1, borderpad=6,
         )
