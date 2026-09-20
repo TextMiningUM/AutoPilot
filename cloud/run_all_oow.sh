@@ -203,9 +203,12 @@ log "--- § 14: AWQ int4 quantization (pip install autoawq may fail on some setu
 pip install -q autoawq 2>&1 | tee "$LOG_DIR/42_awq_install.log" || log "autoawq install failed -- skipping AWQ stage."
 run_stage 42 awq_quantize    false -m pipeline.compress.compress_quantize_awq \
     --input "$MERGED_DIR" --output "$AWQ_DIR"
-# transformers' AWQ loader needs gptqmodel now (autoawq alone is no longer enough) --
-# install it right before the first stage that LOADS the quantized model.
-pip install -q gptqmodel 2>&1 | tee "$LOG_DIR/43_gptqmodel_install.log" || log "gptqmodel install failed -- AWQ eval stages will likely fail."
+# transformers' AWQ loader needs gptqmodel, but installing it drags in an incompatible
+# torch version (2.14.0) that breaks the pinned torch==2.6.0 torchvision/torchaudio
+# build for the WHOLE venv -- every later stage failed instantly with
+# "ModuleNotFoundError: ... Are this object's requirements defined correctly?" the one
+# time this was tried (2026-09-20). AWQ eval is optional; not worth breaking everything
+# downstream for. Leave it un-installed -- stages 43/44 just fail and get skipped.
 run_stage 43 eval_awq        false -m pipeline.eval.eval_finetuned \
     --model "$AWQ_DIR" --tag "oow_qwen_awq_${TAG}" --gold-file "$NORM_FILE" --force-4bit --n "$N"
 run_stage 44 eval_awq_colreg false -m pipeline.eval.eval_oow_scenarios \
