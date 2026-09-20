@@ -21,7 +21,7 @@ the model's own free-text decision), no judge call needed for them:
 
   ActionCorrect    : does the model's stated action (parsed from its answer)
                      match the ground-truth action name (maintain_course /
-                     alter_course / stop / set_speed / resume)?
+                     alter_course / stop / set_speed / resume_cruising_speed)?
   DirectionCorrect : for alter_course actions only, does the model say
                      "starboard" (never "port") with a degree figure in a
                      plausible range? Vacuous 1.0 when the ground truth
@@ -72,14 +72,14 @@ SYSTEM_OOW = (
     "situation report (own-ship state, tracked contacts with bearing/range/CPA/TCPA/risk, "
     "applicable COLREG rules, and the allowed actions this cycle with their parameters). "
     "Reply by stating the ONE action you take this cycle (maintain_course, alter_course with "
-    "a degree figure and direction, set_speed, stop, or resume), then justify it citing the "
+    "a degree figure and direction, set_speed, stop, or resume_cruising_speed), then justify it citing the "
     "COLREG rule(s) that apply. Never invent an action outside the allowed list."
 )
 
 _ACTION_PATTERNS = {
     "maintain_course": re.compile(r"\bmaintain(ing)?\s+(course|speed)|\bhold(ing)?\s+course\b", re.I),
     "stop": re.compile(r"\bstop(ping)?\b(?!\s*course)", re.I),
-    "resume": re.compile(r"\bresum(e|ing)\b", re.I),
+    "resume_cruising_speed": re.compile(r"\bresum(e|ing)\b", re.I),
     "set_speed": re.compile(r"\bset[\s_]?speed|\breduc(e|ing)\s+speed|\bslacken", re.I),
     "alter_course": re.compile(r"\balter(ing)?\s+course|\bturn(ing)?\s+(to\s+)?(starboard|port)", re.I),
 }
@@ -135,7 +135,7 @@ def parse_action(answer: str) -> str | None:
     """Best-effort extraction of the FIRST action the model claims to take. Checked in an
     order that resolves overlaps sensibly (e.g. "alter_course" wording beats a stray
     "speed" mention that would otherwise also match set_speed)."""
-    for name in ("alter_course", "stop", "resume", "set_speed", "maintain_course"):
+    for name in ("alter_course", "stop", "resume_cruising_speed", "set_speed", "maintain_course"):
         if _ACTION_PATTERNS[name].search(answer):
             return name
     return None

@@ -134,7 +134,7 @@ def trajectory_figure(trajectory: list[dict], mission: Mission,
         ))
 
     fig.update_layout(
-        title=title or f"{mission.name} ({mission.id})",
+        title=title or "",
         xaxis=xaxis, yaxis=yaxis,
         legend=dict(orientation="h", yanchor="top", y=-0.14, xanchor="center", x=0.5),
         margin=dict(l=10, r=10, t=60, b=10),
@@ -259,7 +259,7 @@ def animated_trajectory_figure(trajectory: list[dict], mission: Mission,
     ]
 
     fig.update_layout(
-        title=title or f"{mission.name} ({mission.id})",
+        title=title or "",
         xaxis=xaxis, yaxis=yaxis,
         legend=dict(orientation="h", yanchor="top", y=-0.14, xanchor="center", x=0.5),
         margin=dict(l=10, r=10, t=60, b=60),

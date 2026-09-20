@@ -2,16 +2,16 @@
  "mission_id": "q01_quiet_long_tcpa",
  "config": "v5_pg_incident",
  "tag": "default",
- "generated_at": "2026-09-19T02:16:51.363718+00:00",
+ "generated_at": "2026-09-20T01:01:52.695719+00:00",
  "params": {
   "decision_interval": 10,
   "dt": 10.0,
   "max_steps": 200,
   "enable_thinking": false,
   "max_new_tokens": 256,
-  "k": 4,
+  "k": 2,
   "use_rag": true,
-  "system_prompt": "You are the navigator on a large commercial vessel. You must navigate according to COLREG (the International Regulations for Preventing Collisions at Sea) at all times, avoiding collisions while making safe and efficient progress. Avoiding collisions comes first; once safe, reach the goal via the shortest direct track, with as few manoeuvres as possible and no zigzagging. Ground your reasoning in the provided COLREG excerpts and procedure guidance where given. If no target poses a real risk of collision, recommend holding course. What order do you give to the helm? Reply with ONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"rule_applied\": \"<e.g. Rule 15, or 'none' if no rule applies>\",\n \"reasoning\": \"<one or two sentences>\"}",
+  "system_prompt": "You are the navigator on a large commercial vessel. Your objective is to get the ship to the mission goal (position/bearing/distance given in the situation report) as directly and efficiently as possible -- that is the task. The one hard constraint on every decision, with no exceptions: never put the ship on a collision course with another vessel. When a real risk of collision exists, COLREG (the International Regulations for Preventing Collisions at Sea) governs which vessel gives way and how -- satisfy that constraint first, then resume progress toward the goal. All positions/bearings/headings given below are in metres and degrees, heading 0=north, clockwise, matching compass bearings -- take this as given, don't re-derive or second-guess it. rel.bearing is signed: positive = target is to starboard (right), negative = to port (left), 0=dead ahead, ~180/-180=dead astern. CPA is the closest distance the contact will EVER come to you at current headings/speeds; TCPA is the seconds until that closest point. TCPA=0 does NOT always mean a collision is imminent -- it also occurs when the vessels are already moving apart (closest point already passed); the situation report says so explicitly when that's the case. Judge real risk from the CPA distance itself, not from TCPA alone. DEFAULT PROCEDURE, apply this every single time: the situation report has a line starting \"GOAL COURSE CHECK:\" -- use ONLY that line to decide the goal-correction action and degrees, never a contact's rel.bearing (a contact's rel.bearing is about THAT CONTACT, not the goal, even if the numbers look similar). If \"GOAL COURSE CHECK\" says you're already on the goal bearing, hold_course (for the goal, at least). Otherwise it gives you the exact action (\"turn_left\"/\"turn_right\") and degrees to use -- copy those values directly into your answer, don't recompute them and don't substitute a different number from elsewhere in the report. Your track to the goal must look like a smooth curve or a straight line, NEVER a zigzag -- do not answer turn_right and then turn_left (or vice versa) on consecutive decisions just to chase a small residual mismatch; \"GOAL COURSE CHECK\" already has a 10-degree deadband built in for this. Only override any of this if a target poses a REAL risk of collision, in which case the COLREG-required give-way/stand-on manoeuvre takes precedence instead. Do not just describe the mismatch in your reasoning and then answer hold_course anyway when \"GOAL COURSE CHECK\" calls for a turn -- the action MUST match what that line says, never hold_course when it names a turn. Ground your reasoning in the provided COLREG excerpts and procedure guidance where given. If you are already on the goal bearing (within about 10 degrees) and your current speed is below the nominal/rated speed given for this mission, speed_up instead: reaching the goal sooner (when safe) is part of efficient progress too. What order do you give to the helm? Reply with ONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"rule_applied\": \"<e.g. Rule 15, or 'none' if no rule applies>\",\n \"reasoning\": \"<one or two sentences>\"}",
   "system_prompt_is_custom": false
  },
  "outcome": {
@@ -2585,12 +2585,12 @@
   {
    "step": 0,
    "time": 0.0,
-   "situation_report": "Own-ship at (0.0, 0.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 4000m away.\n1 contact(s):\n  - ts1: range 8000m, rel.bearing 30.0 deg, heading 90.0, speed 1.00, CPA 6287m, TCPA 1837s",
+   "situation_report": "Own-ship at (0.0, 0.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 4000m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1600s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 8000m, rel.bearing 30.0 deg, heading 90.0, speed 1.00 m/s, CPA 6287m, TCPA 1837s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "No risk of collision as the target is not on a collision course and the CPA is well beyond the safe distance."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 6287m, which is well above the safe distance threshold."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2598,19 +2598,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 275,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No risk of collision as the target is not on a collision course and the CPA is well beyond the safe distance.\"}"
+    "user_msg_chars": 529,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 6287m, which is well above the safe distance threshold.\"}"
    }
   },
   {
    "step": 10,
    "time": 100.0,
-   "situation_report": "Own-ship at (0.0, 250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 3750m away.\n1 contact(s):\n  - ts1: range 7784m, rel.bearing 30.9 deg, heading 90.0, speed 1.00, CPA 6194m, TCPA 1751s",
+   "situation_report": "Own-ship at (0.0, 250.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 3750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1500s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 7784m, rel.bearing 30.9 deg, heading 90.0, speed 1.00 m/s, CPA 6194m, TCPA 1751s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "No target poses a real risk of collision as the CPA is 6194m and TCPA is 1751s, indicating the target is not in imminent danger of collision."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 6194m, which is well above the safe distance threshold."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2618,19 +2618,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 277,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No target poses a real risk of collision as the CPA is 6194m and TCPA is 1751s, indicating the target is not in imminent danger of collision.\"}"
+    "user_msg_chars": 531,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 6194m, which is well above the safe distance threshold.\"}"
    }
   },
   {
    "step": 20,
    "time": 200.0,
-   "situation_report": "Own-ship at (0.0, 500.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 3500m away.\n1 contact(s):\n  - ts1: range 7571m, rel.bearing 31.9 deg, heading 90.0, speed 1.00, CPA 6101m, TCPA 1665s",
+   "situation_report": "Own-ship at (0.0, 500.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 3500m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1400s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 7571m, rel.bearing 31.9 deg, heading 90.0, speed 1.00 m/s, CPA 6101m, TCPA 1665s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "The contact is not posing a risk of collision as the CPA is 6101m and TCPA is 1665s, indicating no immediate collision threat. Therefore, holding course is appropriate."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 6101m, which is well above the safe distance threshold."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2638,19 +2638,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 277,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The contact is not posing a risk of collision as the CPA is 6101m and TCPA is 1665s, indicating no immediate collision threat. Therefore, holding course is appropriate.\"}"
+    "user_msg_chars": 531,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 6101m, which is well above the safe distance threshold.\"}"
    }
   },
   {
    "step": 30,
    "time": 300.0,
-   "situation_report": "Own-ship at (0.0, 750.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 3250m away.\n1 contact(s):\n  - ts1: range 7360m, rel.bearing 32.9 deg, heading 90.0, speed 1.00, CPA 6008m, TCPA 1579s",
+   "situation_report": "Own-ship at (0.0, 750.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 3250m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1300s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 7360m, rel.bearing 32.9 deg, heading 90.0, speed 1.00 m/s, CPA 6008m, TCPA 1579s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "No target poses a real risk of collision as the CPA is 6008m and TCPA is 1579s, indicating the contact is not a collision risk."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is well above the safe distance."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2658,19 +2658,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 277,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No target poses a real risk of collision as the CPA is 6008m and TCPA is 1579s, indicating the contact is not a collision risk.\"}"
+    "user_msg_chars": 531,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is well above the safe distance.\"}"
    }
   },
   {
    "step": 40,
    "time": 400.0,
-   "situation_report": "Own-ship at (0.0, 1000.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 3000m away.\n1 contact(s):\n  - ts1: range 7151m, rel.bearing 34.0 deg, heading 90.0, speed 1.00, CPA 5916m, TCPA 1492s",
+   "situation_report": "Own-ship at (0.0, 1000.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 3000m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1200s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 7151m, rel.bearing 34.0 deg, heading 90.0, speed 1.00 m/s, CPA 5916m, TCPA 1492s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "No target poses a real risk of collision as the CPA is 5916m and TCPA is 1492s, indicating the contact is not a collision risk."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5916m, which is well above the safe distance threshold."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2678,19 +2678,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 278,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No target poses a real risk of collision as the CPA is 5916m and TCPA is 1492s, indicating the contact is not a collision risk.\"}"
+    "user_msg_chars": 532,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5916m, which is well above the safe distance threshold.\"}"
    }
   },
   {
    "step": 50,
    "time": 500.0,
-   "situation_report": "Own-ship at (0.0, 1250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 2750m away.\n1 contact(s):\n  - ts1: range 6946m, rel.bearing 35.2 deg, heading 90.0, speed 1.00, CPA 5823m, TCPA 1406s",
+   "situation_report": "Own-ship at (0.0, 1250.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 2750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1100s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 6946m, rel.bearing 35.2 deg, heading 90.0, speed 1.00 m/s, CPA 5823m, TCPA 1406s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "No target poses a real risk of collision as the CPA is 5823m and TCPA is 1406s, indicating the contact is not a collision risk."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5823m, which is well above the safe distance threshold."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2698,19 +2698,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 278,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No target poses a real risk of collision as the CPA is 5823m and TCPA is 1406s, indicating the contact is not a collision risk.\"}"
+    "user_msg_chars": 532,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5823m, which is well above the safe distance threshold.\"}"
    }
   },
   {
    "step": 60,
    "time": 600.0,
-   "situation_report": "Own-ship at (0.0, 1500.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 2500m away.\n1 contact(s):\n  - ts1: range 6743m, rel.bearing 36.4 deg, heading 90.0, speed 1.00, CPA 5730m, TCPA 1320s",
+   "situation_report": "Own-ship at (0.0, 1500.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 2500m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1000s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 6743m, rel.bearing 36.4 deg, heading 90.0, speed 1.00 m/s, CPA 5730m, TCPA 1320s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "No target poses a real risk of collision as the CPA is 5730m and TCPA is 1320s, indicating the contact is not a collision risk."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5730m, which is well above the safe distance threshold."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2718,19 +2718,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 278,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No target poses a real risk of collision as the CPA is 5730m and TCPA is 1320s, indicating the contact is not a collision risk.\"}"
+    "user_msg_chars": 532,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5730m, which is well above the safe distance threshold.\"}"
    }
   },
   {
    "step": 70,
    "time": 700.0,
-   "situation_report": "Own-ship at (0.0, 1750.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 2250m away.\n1 contact(s):\n  - ts1: range 6543m, rel.bearing 37.7 deg, heading 90.0, speed 1.00, CPA 5637m, TCPA 1234s",
+   "situation_report": "Own-ship at (0.0, 1750.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 2250m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 900s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 6543m, rel.bearing 37.7 deg, heading 90.0, speed 1.00 m/s, CPA 5637m, TCPA 1234s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "No target poses a real risk of collision as the CPA is 5637m and TCPA is 1234s, indicating the target is not in imminent danger of collision."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5637m, which is well above the safe distance threshold."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2738,19 +2738,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 278,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No target poses a real risk of collision as the CPA is 5637m and TCPA is 1234s, indicating the target is not in imminent danger of collision.\"}"
+    "user_msg_chars": 531,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5637m, which is well above the safe distance threshold.\"}"
    }
   },
   {
    "step": 80,
    "time": 800.0,
-   "situation_report": "Own-ship at (0.0, 2000.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 2000m away.\n1 contact(s):\n  - ts1: range 6347m, rel.bearing 39.1 deg, heading 90.0, speed 1.00, CPA 5544m, TCPA 1148s",
+   "situation_report": "Own-ship at (0.0, 2000.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 2000m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 800s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 6347m, rel.bearing 39.1 deg, heading 90.0, speed 1.00 m/s, CPA 5544m, TCPA 1148s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "The contact is not posing a risk of collision as it is moving away from the own-ship and the CPA is well beyond the safe distance."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5544m, which is well above the safe distance threshold."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2758,19 +2758,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 278,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The contact is not posing a risk of collision as it is moving away from the own-ship and the CPA is well beyond the safe distance.\"}"
+    "user_msg_chars": 531,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5544m, which is well above the safe distance threshold.\"}"
    }
   },
   {
    "step": 90,
    "time": 900.0,
-   "situation_report": "Own-ship at (0.0, 2250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 1750m away.\n1 contact(s):\n  - ts1: range 6155m, rel.bearing 40.5 deg, heading 90.0, speed 1.00, CPA 5451m, TCPA 1061s",
+   "situation_report": "Own-ship at (0.0, 2250.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 1750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 700s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 6155m, rel.bearing 40.5 deg, heading 90.0, speed 1.00 m/s, CPA 5451m, TCPA 1061s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "No target poses a real risk of collision as the CPA is 5451m and TCPA is 1061s, indicating the target is not in imminent danger of collision."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and no collision risk is detected with the target vessel as the CPA is well above the safe distance."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2778,19 +2778,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 278,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No target poses a real risk of collision as the CPA is 5451m and TCPA is 1061s, indicating the target is not in imminent danger of collision.\"}"
+    "user_msg_chars": 531,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and no collision risk is detected with the target vessel as the CPA is well above the safe distance.\"}"
    }
   },
   {
    "step": 100,
    "time": 1000.0,
-   "situation_report": "Own-ship at (0.0, 2500.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 1500m away.\n1 contact(s):\n  - ts1: range 5967m, rel.bearing 42.1 deg, heading 90.0, speed 1.00, CPA 5359m, TCPA 975s",
+   "situation_report": "Own-ship at (0.0, 2500.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 1500m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 600s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5967m, rel.bearing 42.1 deg, heading 90.0, speed 1.00 m/s, CPA 5359m, TCPA 975s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "No target poses a real risk of collision as the CPA is 5359m and TCPA is 975s, indicating the target is not in imminent danger of collision."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is well above the safe distance."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2798,19 +2798,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 277,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No target poses a real risk of collision as the CPA is 5359m and TCPA is 975s, indicating the target is not in imminent danger of collision.\"}"
+    "user_msg_chars": 530,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is well above the safe distance.\"}"
    }
   },
   {
    "step": 110,
    "time": 1100.0,
-   "situation_report": "Own-ship at (0.0, 2750.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 1250m away.\n1 contact(s):\n  - ts1: range 5784m, rel.bearing 43.8 deg, heading 90.0, speed 1.00, CPA 5266m, TCPA 889s",
+   "situation_report": "Own-ship at (0.0, 2750.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 1250m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 500s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5784m, rel.bearing 43.8 deg, heading 90.0, speed 1.00 m/s, CPA 5266m, TCPA 889s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "No target poses a real risk of collision as the CPA is 5266m and TCPA is 889s, indicating the target is not in imminent danger of collision."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is greater than 5000m."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2818,19 +2818,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 277,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No target poses a real risk of collision as the CPA is 5266m and TCPA is 889s, indicating the target is not in imminent danger of collision.\"}"
+    "user_msg_chars": 530,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is greater than 5000m.\"}"
    }
   },
   {
    "step": 120,
    "time": 1200.0,
-   "situation_report": "Own-ship at (0.0, 3000.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 1000m away.\n1 contact(s):\n  - ts1: range 5606m, rel.bearing 45.5 deg, heading 90.0, speed 1.00, CPA 5173m, TCPA 803s",
+   "situation_report": "Own-ship at (0.0, 3000.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 1000m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 400s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5606m, rel.bearing 45.5 deg, heading 90.0, speed 1.00 m/s, CPA 5173m, TCPA 803s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "The contact is not posing a risk of collision as the CPA (Closest Point of Approach) is 5173m and TCPA (Time to Closest Point of Approach) is 803s, indicating a safe distance and time. Therefore, no manoeuvre is required."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5173m, which is well above the safe distance threshold."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2838,19 +2838,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 277,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The contact is not posing a risk of collision as the CPA (Closest Point of Approach) is 5173m and TCPA (Time to Closest Point of Approach) is 803s, indicating a safe distance and time. Therefore, no manoeuvre is required.\"}"
+    "user_msg_chars": 530,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5173m, which is well above the safe distance threshold.\"}"
    }
   },
   {
    "step": 130,
    "time": 1300.0,
-   "situation_report": "Own-ship at (0.0, 3250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 750m away.\n1 contact(s):\n  - ts1: range 5434m, rel.bearing 47.4 deg, heading 90.0, speed 1.00, CPA 5080m, TCPA 717s",
+   "situation_report": "Own-ship at (0.0, 3250.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 300s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5434m, rel.bearing 47.4 deg, heading 90.0, speed 1.00 m/s, CPA 5080m, TCPA 717s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "No target poses a real risk of collision as the CPA is 5080m and TCPA is 717s, indicating the target is not in imminent danger of collision."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5080m, which is well above the safe distance threshold."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2858,19 +2858,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 276,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No target poses a real risk of collision as the CPA is 5080m and TCPA is 717s, indicating the target is not in imminent danger of collision.\"}"
+    "user_msg_chars": 529,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5080m, which is well above the safe distance threshold.\"}"
    }
   },
   {
    "step": 140,
    "time": 1400.0,
-   "situation_report": "Own-ship at (0.0, 3500.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 500m away.\n1 contact(s):\n  - ts1: range 5268m, rel.bearing 49.4 deg, heading 90.0, speed 1.00, CPA 4987m, TCPA 630s",
+   "situation_report": "Own-ship at (0.0, 3500.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 500m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 200s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5268m, rel.bearing 49.4 deg, heading 90.0, speed 1.00 m/s, CPA 4987m, TCPA 630s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "The contact is on a collision course, but the CPA (Closest Point of Approach) is 4987m, which is well above the safe distance, and the TCPA (Time to Closest Point of Approach) is 630 seconds. Therefore, no immediate collision risk exists, and the vessel can continue on its current course."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is well above the ship's range."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2878,19 +2878,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 276,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The contact is on a collision course, but the CPA (Closest Point of Approach) is 4987m, which is well above the safe distance, and the TCPA (Time to Closest Point of Approach) is 630 seconds. Therefore, no immediate collision risk exists, and the vessel can continue on its current course.\"}"
+    "user_msg_chars": 529,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is well above the ship's range.\"}"
    }
   },
   {
    "step": 150,
    "time": 1500.0,
-   "situation_report": "Own-ship at (0.0, 3750.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 250m away.\n1 contact(s):\n  - ts1: range 5109m, rel.bearing 51.5 deg, heading 90.0, speed 1.00, CPA 4894m, TCPA 544s",
+   "situation_report": "Own-ship at (0.0, 3750.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 250m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 100s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5109m, rel.bearing 51.5 deg, heading 90.0, speed 1.00 m/s, CPA 4894m, TCPA 544s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "The contact is not posing a risk of collision as the CPA (Closest Point of Approach) is well beyond the safe distance and the TCPA (Time to Closest Point of Approach) is significantly large, indicating no immediate collision risk."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is well above the safe distance."
    },
    "debug": {
     "config": "v5_pg_incident",
@@ -2898,8 +2898,8 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "",
-    "user_msg_chars": 276,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The contact is not posing a risk of collision as the CPA (Closest Point of Approach) is well beyond the safe distance and the TCPA (Time to Closest Point of Approach) is significantly large, indicating no immediate collision risk.\"}"
+    "user_msg_chars": 529,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is well above the safe distance.\"}"
    }
   }
  ]

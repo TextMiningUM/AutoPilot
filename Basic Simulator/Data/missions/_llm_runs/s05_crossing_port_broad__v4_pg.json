@@ -2,22 +2,22 @@
  "mission_id": "s05_crossing_port_broad",
  "config": "v4_pg",
  "tag": "default",
- "generated_at": "2026-09-19T06:59:56.030663+00:00",
+ "generated_at": "2026-09-20T06:15:55.145063+00:00",
  "params": {
   "decision_interval": 10,
   "dt": 10.0,
   "max_steps": 200,
   "enable_thinking": false,
   "max_new_tokens": 256,
-  "k": 4,
+  "k": 2,
   "use_rag": true,
-  "system_prompt": "You are the navigator on a large commercial vessel. You must navigate according to COLREG (the International Regulations for Preventing Collisions at Sea) at all times, avoiding collisions while making safe and efficient progress. Avoiding collisions comes first; once safe, reach the goal via the shortest direct track, with as few manoeuvres as possible and no zigzagging. Ground your reasoning in the provided COLREG excerpts and procedure guidance where given. If no target poses a real risk of collision, recommend holding course. What order do you give to the helm? Reply with ONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"rule_applied\": \"<e.g. Rule 15, or 'none' if no rule applies>\",\n \"reasoning\": \"<one or two sentences>\"}",
+  "system_prompt": "You are the navigator on a large commercial vessel. Your objective is to get the ship to the mission goal (position/bearing/distance given in the situation report) as directly and efficiently as possible -- that is the task. The one hard constraint on every decision, with no exceptions: never put the ship on a collision course with another vessel. When a real risk of collision exists, COLREG (the International Regulations for Preventing Collisions at Sea) governs which vessel gives way and how -- satisfy that constraint first, then resume progress toward the goal. All positions/bearings/headings given below are in metres and degrees, heading 0=north, clockwise, matching compass bearings -- take this as given, don't re-derive or second-guess it. rel.bearing is signed: positive = target is to starboard (right), negative = to port (left), 0=dead ahead, ~180/-180=dead astern. CPA is the closest distance the contact will EVER come to you at current headings/speeds; TCPA is the seconds until that closest point. TCPA=0 does NOT always mean a collision is imminent -- it also occurs when the vessels are already moving apart (closest point already passed); the situation report says so explicitly when that's the case. Judge real risk from the CPA distance itself, not from TCPA alone. DEFAULT PROCEDURE, apply this every single time: the situation report has a line starting \"GOAL COURSE CHECK:\" -- use ONLY that line to decide the goal-correction action and degrees, never a contact's rel.bearing (a contact's rel.bearing is about THAT CONTACT, not the goal, even if the numbers look similar). If \"GOAL COURSE CHECK\" says you're already on the goal bearing, hold_course (for the goal, at least). Otherwise it gives you the exact action (\"turn_left\"/\"turn_right\") and degrees to use -- copy those values directly into your answer, don't recompute them and don't substitute a different number from elsewhere in the report. Your track to the goal must look like a smooth curve or a straight line, NEVER a zigzag -- do not answer turn_right and then turn_left (or vice versa) on consecutive decisions just to chase a small residual mismatch; \"GOAL COURSE CHECK\" already has a 10-degree deadband built in for this. Only override any of this if a target poses a REAL risk of collision, in which case the COLREG-required give-way/stand-on manoeuvre takes precedence instead. Do not just describe the mismatch in your reasoning and then answer hold_course anyway when \"GOAL COURSE CHECK\" calls for a turn -- the action MUST match what that line says, never hold_course when it names a turn. Ground your reasoning in the provided COLREG excerpts and procedure guidance where given. If you are already on the goal bearing (within about 10 degrees) and your current speed is below the nominal/rated speed given for this mission, speed_up instead: reaching the goal sooner (when safe) is part of efficient progress too. What order do you give to the helm? Reply with ONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"rule_applied\": \"<e.g. Rule 15, or 'none' if no rule applies>\",\n \"reasoning\": \"<one or two sentences>\"}",
   "system_prompt_is_custom": false
  },
  "outcome": {
-  "verdict": "max_steps_reached",
-  "final_step": 199,
-  "final_time_s": 2000.0
+  "verdict": "collision",
+  "final_step": 54,
+  "final_time_s": 540.0
  },
  "trajectory": [
   {
@@ -39,9 +39,9 @@
   {
    "time": 10.0,
    "vehicle": "own_ship",
-   "x": 6.47,
-   "y": 24.15,
-   "heading": 15.0,
+   "x": 0.0,
+   "y": 25.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -55,9 +55,9 @@
   {
    "time": 20.0,
    "vehicle": "own_ship",
-   "x": 12.94,
-   "y": 48.3,
-   "heading": 15.0,
+   "x": 0.0,
+   "y": 50.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -71,9 +71,9 @@
   {
    "time": 30.0,
    "vehicle": "own_ship",
-   "x": 19.41,
-   "y": 72.44,
-   "heading": 15.0,
+   "x": 0.0,
+   "y": 75.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -87,9 +87,9 @@
   {
    "time": 40.0,
    "vehicle": "own_ship",
-   "x": 25.88,
-   "y": 96.59,
-   "heading": 15.0,
+   "x": 0.0,
+   "y": 100.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -103,9 +103,9 @@
   {
    "time": 50.0,
    "vehicle": "own_ship",
-   "x": 32.35,
-   "y": 120.74,
-   "heading": 15.0,
+   "x": 0.0,
+   "y": 125.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -119,9 +119,9 @@
   {
    "time": 60.0,
    "vehicle": "own_ship",
-   "x": 38.82,
-   "y": 144.89,
-   "heading": 15.0,
+   "x": 0.0,
+   "y": 150.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -135,9 +135,9 @@
   {
    "time": 70.0,
    "vehicle": "own_ship",
-   "x": 45.29,
-   "y": 169.04,
-   "heading": 15.0,
+   "x": 0.0,
+   "y": 175.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -151,9 +151,9 @@
   {
    "time": 80.0,
    "vehicle": "own_ship",
-   "x": 51.76,
-   "y": 193.19,
-   "heading": 15.0,
+   "x": 0.0,
+   "y": 200.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -167,9 +167,9 @@
   {
    "time": 90.0,
    "vehicle": "own_ship",
-   "x": 58.23,
-   "y": 217.33,
-   "heading": 15.0,
+   "x": 0.0,
+   "y": 225.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -183,9 +183,9 @@
   {
    "time": 100.0,
    "vehicle": "own_ship",
-   "x": 64.7,
-   "y": 241.48,
-   "heading": 15.0,
+   "x": 0.0,
+   "y": 250.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -199,9 +199,9 @@
   {
    "time": 110.0,
    "vehicle": "own_ship",
-   "x": 77.2,
-   "y": 263.13,
-   "heading": 30.0,
+   "x": 0.0,
+   "y": 275.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -215,9 +215,9 @@
   {
    "time": 120.0,
    "vehicle": "own_ship",
-   "x": 89.7,
-   "y": 284.78,
-   "heading": 30.0,
+   "x": 0.0,
+   "y": 300.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -231,9 +231,9 @@
   {
    "time": 130.0,
    "vehicle": "own_ship",
-   "x": 102.2,
-   "y": 306.43,
-   "heading": 30.0,
+   "x": 0.0,
+   "y": 325.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -247,9 +247,9 @@
   {
    "time": 140.0,
    "vehicle": "own_ship",
-   "x": 114.7,
-   "y": 328.08,
-   "heading": 30.0,
+   "x": 0.0,
+   "y": 350.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -263,9 +263,9 @@
   {
    "time": 150.0,
    "vehicle": "own_ship",
-   "x": 127.2,
-   "y": 349.73,
-   "heading": 30.0,
+   "x": 0.0,
+   "y": 375.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -279,9 +279,9 @@
   {
    "time": 160.0,
    "vehicle": "own_ship",
-   "x": 139.7,
-   "y": 371.39,
-   "heading": 30.0,
+   "x": 0.0,
+   "y": 400.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -295,9 +295,9 @@
   {
    "time": 170.0,
    "vehicle": "own_ship",
-   "x": 152.2,
-   "y": 393.04,
-   "heading": 30.0,
+   "x": 0.0,
+   "y": 425.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -311,9 +311,9 @@
   {
    "time": 180.0,
    "vehicle": "own_ship",
-   "x": 164.7,
-   "y": 414.69,
-   "heading": 30.0,
+   "x": 0.0,
+   "y": 450.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -327,9 +327,9 @@
   {
    "time": 190.0,
    "vehicle": "own_ship",
-   "x": 177.2,
-   "y": 436.34,
-   "heading": 30.0,
+   "x": 0.0,
+   "y": 475.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -343,9 +343,9 @@
   {
    "time": 200.0,
    "vehicle": "own_ship",
-   "x": 189.7,
-   "y": 457.99,
-   "heading": 30.0,
+   "x": 0.0,
+   "y": 500.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -359,9 +359,9 @@
   {
    "time": 210.0,
    "vehicle": "own_ship",
-   "x": 207.38,
-   "y": 475.67,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 525.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -375,9 +375,9 @@
   {
    "time": 220.0,
    "vehicle": "own_ship",
-   "x": 225.06,
-   "y": 493.34,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 550.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -391,9 +391,9 @@
   {
    "time": 230.0,
    "vehicle": "own_ship",
-   "x": 242.74,
-   "y": 511.02,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 575.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -407,9 +407,9 @@
   {
    "time": 240.0,
    "vehicle": "own_ship",
-   "x": 260.42,
-   "y": 528.7,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 600.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -423,9 +423,9 @@
   {
    "time": 250.0,
    "vehicle": "own_ship",
-   "x": 278.09,
-   "y": 546.38,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 625.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -439,9 +439,9 @@
   {
    "time": 260.0,
    "vehicle": "own_ship",
-   "x": 295.77,
-   "y": 564.05,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 650.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -455,9 +455,9 @@
   {
    "time": 270.0,
    "vehicle": "own_ship",
-   "x": 313.45,
-   "y": 581.73,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 675.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -471,9 +471,9 @@
   {
    "time": 280.0,
    "vehicle": "own_ship",
-   "x": 331.13,
-   "y": 599.41,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 700.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -487,9 +487,9 @@
   {
    "time": 290.0,
    "vehicle": "own_ship",
-   "x": 348.8,
-   "y": 617.09,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 725.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -503,9 +503,9 @@
   {
    "time": 300.0,
    "vehicle": "own_ship",
-   "x": 366.48,
-   "y": 634.76,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 750.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -519,9 +519,9 @@
   {
    "time": 310.0,
    "vehicle": "own_ship",
-   "x": 384.16,
-   "y": 652.44,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 775.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -535,9 +535,9 @@
   {
    "time": 320.0,
    "vehicle": "own_ship",
-   "x": 401.84,
-   "y": 670.12,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 800.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -551,9 +551,9 @@
   {
    "time": 330.0,
    "vehicle": "own_ship",
-   "x": 419.51,
-   "y": 687.8,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 825.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -567,9 +567,9 @@
   {
    "time": 340.0,
    "vehicle": "own_ship",
-   "x": 437.19,
-   "y": 705.48,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 850.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -583,9 +583,9 @@
   {
    "time": 350.0,
    "vehicle": "own_ship",
-   "x": 454.87,
-   "y": 723.15,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 875.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -599,9 +599,9 @@
   {
    "time": 360.0,
    "vehicle": "own_ship",
-   "x": 472.55,
-   "y": 740.83,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 900.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -615,9 +615,9 @@
   {
    "time": 370.0,
    "vehicle": "own_ship",
-   "x": 490.23,
-   "y": 758.51,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 925.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -631,9 +631,9 @@
   {
    "time": 380.0,
    "vehicle": "own_ship",
-   "x": 507.9,
-   "y": 776.19,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 950.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -647,9 +647,9 @@
   {
    "time": 390.0,
    "vehicle": "own_ship",
-   "x": 525.58,
-   "y": 793.86,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 975.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -663,9 +663,9 @@
   {
    "time": 400.0,
    "vehicle": "own_ship",
-   "x": 543.26,
-   "y": 811.54,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 1000.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -679,9 +679,9 @@
   {
    "time": 410.0,
    "vehicle": "own_ship",
-   "x": 560.94,
-   "y": 829.22,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 1025.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -695,9 +695,9 @@
   {
    "time": 420.0,
    "vehicle": "own_ship",
-   "x": 578.61,
-   "y": 846.9,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 1050.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -711,9 +711,9 @@
   {
    "time": 430.0,
    "vehicle": "own_ship",
-   "x": 596.29,
-   "y": 864.57,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 1075.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -727,9 +727,9 @@
   {
    "time": 440.0,
    "vehicle": "own_ship",
-   "x": 613.97,
-   "y": 882.25,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 1100.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -743,9 +743,9 @@
   {
    "time": 450.0,
    "vehicle": "own_ship",
-   "x": 631.65,
-   "y": 899.93,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 1125.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -759,9 +759,9 @@
   {
    "time": 460.0,
    "vehicle": "own_ship",
-   "x": 649.32,
-   "y": 917.61,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 1150.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -775,9 +775,9 @@
   {
    "time": 470.0,
    "vehicle": "own_ship",
-   "x": 667.0,
-   "y": 935.28,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 1175.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -791,9 +791,9 @@
   {
    "time": 480.0,
    "vehicle": "own_ship",
-   "x": 684.68,
-   "y": 952.96,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 1200.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -807,9 +807,9 @@
   {
    "time": 490.0,
    "vehicle": "own_ship",
-   "x": 702.36,
-   "y": 970.64,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 1225.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -823,9 +823,9 @@
   {
    "time": 500.0,
    "vehicle": "own_ship",
-   "x": 720.03,
-   "y": 988.32,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 1250.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -839,9 +839,9 @@
   {
    "time": 510.0,
    "vehicle": "own_ship",
-   "x": 737.71,
-   "y": 1006.0,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 1275.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -855,9 +855,9 @@
   {
    "time": 520.0,
    "vehicle": "own_ship",
-   "x": 755.39,
-   "y": 1023.67,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 1300.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -871,9 +871,9 @@
   {
    "time": 530.0,
    "vehicle": "own_ship",
-   "x": 773.07,
-   "y": 1041.35,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 1325.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -887,9 +887,9 @@
   {
    "time": 540.0,
    "vehicle": "own_ship",
-   "x": 790.75,
-   "y": 1059.03,
-   "heading": 45.0,
+   "x": 0.0,
+   "y": 1350.0,
+   "heading": 0.0,
    "speed": 2.5
   },
   {
@@ -899,2354 +899,18 @@
    "y": 1357.39,
    "heading": 40.2,
    "speed": 2.2
-  },
-  {
-   "time": 550.0,
-   "vehicle": "own_ship",
-   "x": 808.42,
-   "y": 1076.71,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 550.0,
-   "vehicle": "ts1",
-   "x": 1.6,
-   "y": 1374.19,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 560.0,
-   "vehicle": "own_ship",
-   "x": 826.1,
-   "y": 1094.38,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 560.0,
-   "vehicle": "ts1",
-   "x": 15.8,
-   "y": 1391.0,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 570.0,
-   "vehicle": "own_ship",
-   "x": 843.78,
-   "y": 1112.06,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 570.0,
-   "vehicle": "ts1",
-   "x": 30.0,
-   "y": 1407.8,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 580.0,
-   "vehicle": "own_ship",
-   "x": 861.46,
-   "y": 1129.74,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 580.0,
-   "vehicle": "ts1",
-   "x": 44.2,
-   "y": 1424.6,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 590.0,
-   "vehicle": "own_ship",
-   "x": 879.13,
-   "y": 1147.42,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 590.0,
-   "vehicle": "ts1",
-   "x": 58.4,
-   "y": 1441.41,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 600.0,
-   "vehicle": "own_ship",
-   "x": 896.81,
-   "y": 1165.09,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 600.0,
-   "vehicle": "ts1",
-   "x": 72.6,
-   "y": 1458.21,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 610.0,
-   "vehicle": "own_ship",
-   "x": 914.49,
-   "y": 1182.77,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 610.0,
-   "vehicle": "ts1",
-   "x": 86.8,
-   "y": 1475.01,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 620.0,
-   "vehicle": "own_ship",
-   "x": 932.17,
-   "y": 1200.45,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 620.0,
-   "vehicle": "ts1",
-   "x": 101.0,
-   "y": 1491.82,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 630.0,
-   "vehicle": "own_ship",
-   "x": 949.84,
-   "y": 1218.13,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 630.0,
-   "vehicle": "ts1",
-   "x": 115.2,
-   "y": 1508.62,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 640.0,
-   "vehicle": "own_ship",
-   "x": 967.52,
-   "y": 1235.81,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 640.0,
-   "vehicle": "ts1",
-   "x": 129.4,
-   "y": 1525.42,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 650.0,
-   "vehicle": "own_ship",
-   "x": 985.2,
-   "y": 1253.48,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 650.0,
-   "vehicle": "ts1",
-   "x": 143.6,
-   "y": 1542.23,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 660.0,
-   "vehicle": "own_ship",
-   "x": 1002.88,
-   "y": 1271.16,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 660.0,
-   "vehicle": "ts1",
-   "x": 157.8,
-   "y": 1559.03,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 670.0,
-   "vehicle": "own_ship",
-   "x": 1020.56,
-   "y": 1288.84,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 670.0,
-   "vehicle": "ts1",
-   "x": 172.0,
-   "y": 1575.84,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 680.0,
-   "vehicle": "own_ship",
-   "x": 1038.23,
-   "y": 1306.52,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 680.0,
-   "vehicle": "ts1",
-   "x": 186.2,
-   "y": 1592.64,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 690.0,
-   "vehicle": "own_ship",
-   "x": 1055.91,
-   "y": 1324.19,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 690.0,
-   "vehicle": "ts1",
-   "x": 200.4,
-   "y": 1609.44,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 700.0,
-   "vehicle": "own_ship",
-   "x": 1073.59,
-   "y": 1341.87,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 700.0,
-   "vehicle": "ts1",
-   "x": 214.6,
-   "y": 1626.25,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 710.0,
-   "vehicle": "own_ship",
-   "x": 1091.27,
-   "y": 1359.55,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 710.0,
-   "vehicle": "ts1",
-   "x": 228.8,
-   "y": 1643.05,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 720.0,
-   "vehicle": "own_ship",
-   "x": 1108.94,
-   "y": 1377.23,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 720.0,
-   "vehicle": "ts1",
-   "x": 243.0,
-   "y": 1659.85,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 730.0,
-   "vehicle": "own_ship",
-   "x": 1126.62,
-   "y": 1394.9,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 730.0,
-   "vehicle": "ts1",
-   "x": 257.21,
-   "y": 1676.66,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 740.0,
-   "vehicle": "own_ship",
-   "x": 1144.3,
-   "y": 1412.58,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 740.0,
-   "vehicle": "ts1",
-   "x": 271.41,
-   "y": 1693.46,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 750.0,
-   "vehicle": "own_ship",
-   "x": 1161.98,
-   "y": 1430.26,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 750.0,
-   "vehicle": "ts1",
-   "x": 285.61,
-   "y": 1710.26,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 760.0,
-   "vehicle": "own_ship",
-   "x": 1179.65,
-   "y": 1447.94,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 760.0,
-   "vehicle": "ts1",
-   "x": 299.81,
-   "y": 1727.07,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 770.0,
-   "vehicle": "own_ship",
-   "x": 1197.33,
-   "y": 1465.61,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 770.0,
-   "vehicle": "ts1",
-   "x": 314.01,
-   "y": 1743.87,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 780.0,
-   "vehicle": "own_ship",
-   "x": 1215.01,
-   "y": 1483.29,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 780.0,
-   "vehicle": "ts1",
-   "x": 328.21,
-   "y": 1760.67,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 790.0,
-   "vehicle": "own_ship",
-   "x": 1232.69,
-   "y": 1500.97,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 790.0,
-   "vehicle": "ts1",
-   "x": 342.41,
-   "y": 1777.48,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 800.0,
-   "vehicle": "own_ship",
-   "x": 1250.36,
-   "y": 1518.65,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 800.0,
-   "vehicle": "ts1",
-   "x": 356.61,
-   "y": 1794.28,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 810.0,
-   "vehicle": "own_ship",
-   "x": 1268.04,
-   "y": 1536.33,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 810.0,
-   "vehicle": "ts1",
-   "x": 370.81,
-   "y": 1811.08,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 820.0,
-   "vehicle": "own_ship",
-   "x": 1285.72,
-   "y": 1554.0,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 820.0,
-   "vehicle": "ts1",
-   "x": 385.01,
-   "y": 1827.89,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 830.0,
-   "vehicle": "own_ship",
-   "x": 1303.4,
-   "y": 1571.68,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 830.0,
-   "vehicle": "ts1",
-   "x": 399.21,
-   "y": 1844.69,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 840.0,
-   "vehicle": "own_ship",
-   "x": 1321.08,
-   "y": 1589.36,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 840.0,
-   "vehicle": "ts1",
-   "x": 413.41,
-   "y": 1861.5,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 850.0,
-   "vehicle": "own_ship",
-   "x": 1338.75,
-   "y": 1607.04,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 850.0,
-   "vehicle": "ts1",
-   "x": 427.61,
-   "y": 1878.3,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 860.0,
-   "vehicle": "own_ship",
-   "x": 1356.43,
-   "y": 1624.71,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 860.0,
-   "vehicle": "ts1",
-   "x": 441.81,
-   "y": 1895.1,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 870.0,
-   "vehicle": "own_ship",
-   "x": 1374.11,
-   "y": 1642.39,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 870.0,
-   "vehicle": "ts1",
-   "x": 456.01,
-   "y": 1911.91,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 880.0,
-   "vehicle": "own_ship",
-   "x": 1391.79,
-   "y": 1660.07,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 880.0,
-   "vehicle": "ts1",
-   "x": 470.21,
-   "y": 1928.71,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 890.0,
-   "vehicle": "own_ship",
-   "x": 1409.46,
-   "y": 1677.75,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 890.0,
-   "vehicle": "ts1",
-   "x": 484.41,
-   "y": 1945.51,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 900.0,
-   "vehicle": "own_ship",
-   "x": 1427.14,
-   "y": 1695.42,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 900.0,
-   "vehicle": "ts1",
-   "x": 498.61,
-   "y": 1962.32,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 910.0,
-   "vehicle": "own_ship",
-   "x": 1444.82,
-   "y": 1713.1,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 910.0,
-   "vehicle": "ts1",
-   "x": 512.81,
-   "y": 1979.12,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 920.0,
-   "vehicle": "own_ship",
-   "x": 1462.5,
-   "y": 1730.78,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 920.0,
-   "vehicle": "ts1",
-   "x": 527.01,
-   "y": 1995.92,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 930.0,
-   "vehicle": "own_ship",
-   "x": 1480.17,
-   "y": 1748.46,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 930.0,
-   "vehicle": "ts1",
-   "x": 541.21,
-   "y": 2012.73,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 940.0,
-   "vehicle": "own_ship",
-   "x": 1497.85,
-   "y": 1766.14,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 940.0,
-   "vehicle": "ts1",
-   "x": 555.41,
-   "y": 2029.53,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 950.0,
-   "vehicle": "own_ship",
-   "x": 1515.53,
-   "y": 1783.81,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 950.0,
-   "vehicle": "ts1",
-   "x": 569.61,
-   "y": 2046.33,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 960.0,
-   "vehicle": "own_ship",
-   "x": 1533.21,
-   "y": 1801.49,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 960.0,
-   "vehicle": "ts1",
-   "x": 583.81,
-   "y": 2063.14,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 970.0,
-   "vehicle": "own_ship",
-   "x": 1550.89,
-   "y": 1819.17,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 970.0,
-   "vehicle": "ts1",
-   "x": 598.01,
-   "y": 2079.94,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 980.0,
-   "vehicle": "own_ship",
-   "x": 1568.56,
-   "y": 1836.85,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 980.0,
-   "vehicle": "ts1",
-   "x": 612.21,
-   "y": 2096.74,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 990.0,
-   "vehicle": "own_ship",
-   "x": 1586.24,
-   "y": 1854.52,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 990.0,
-   "vehicle": "ts1",
-   "x": 626.41,
-   "y": 2113.55,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1000.0,
-   "vehicle": "own_ship",
-   "x": 1603.92,
-   "y": 1872.2,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1000.0,
-   "vehicle": "ts1",
-   "x": 640.61,
-   "y": 2130.35,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1010.0,
-   "vehicle": "own_ship",
-   "x": 1621.6,
-   "y": 1889.88,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1010.0,
-   "vehicle": "ts1",
-   "x": 654.81,
-   "y": 2147.15,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1020.0,
-   "vehicle": "own_ship",
-   "x": 1639.27,
-   "y": 1907.56,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1020.0,
-   "vehicle": "ts1",
-   "x": 669.01,
-   "y": 2163.96,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1030.0,
-   "vehicle": "own_ship",
-   "x": 1656.95,
-   "y": 1925.23,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1030.0,
-   "vehicle": "ts1",
-   "x": 683.21,
-   "y": 2180.76,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1040.0,
-   "vehicle": "own_ship",
-   "x": 1674.63,
-   "y": 1942.91,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1040.0,
-   "vehicle": "ts1",
-   "x": 697.41,
-   "y": 2197.57,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1050.0,
-   "vehicle": "own_ship",
-   "x": 1692.31,
-   "y": 1960.59,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1050.0,
-   "vehicle": "ts1",
-   "x": 711.61,
-   "y": 2214.37,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1060.0,
-   "vehicle": "own_ship",
-   "x": 1709.98,
-   "y": 1978.27,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1060.0,
-   "vehicle": "ts1",
-   "x": 725.81,
-   "y": 2231.17,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1070.0,
-   "vehicle": "own_ship",
-   "x": 1727.66,
-   "y": 1995.95,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1070.0,
-   "vehicle": "ts1",
-   "x": 740.01,
-   "y": 2247.98,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1080.0,
-   "vehicle": "own_ship",
-   "x": 1745.34,
-   "y": 2013.62,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1080.0,
-   "vehicle": "ts1",
-   "x": 754.21,
-   "y": 2264.78,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1090.0,
-   "vehicle": "own_ship",
-   "x": 1763.02,
-   "y": 2031.3,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1090.0,
-   "vehicle": "ts1",
-   "x": 768.41,
-   "y": 2281.58,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1100.0,
-   "vehicle": "own_ship",
-   "x": 1780.7,
-   "y": 2048.98,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1100.0,
-   "vehicle": "ts1",
-   "x": 782.61,
-   "y": 2298.39,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1110.0,
-   "vehicle": "own_ship",
-   "x": 1798.37,
-   "y": 2066.66,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1110.0,
-   "vehicle": "ts1",
-   "x": 796.81,
-   "y": 2315.19,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1120.0,
-   "vehicle": "own_ship",
-   "x": 1816.05,
-   "y": 2084.33,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1120.0,
-   "vehicle": "ts1",
-   "x": 811.01,
-   "y": 2331.99,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1130.0,
-   "vehicle": "own_ship",
-   "x": 1833.73,
-   "y": 2102.01,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1130.0,
-   "vehicle": "ts1",
-   "x": 825.21,
-   "y": 2348.8,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1140.0,
-   "vehicle": "own_ship",
-   "x": 1851.41,
-   "y": 2119.69,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1140.0,
-   "vehicle": "ts1",
-   "x": 839.41,
-   "y": 2365.6,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1150.0,
-   "vehicle": "own_ship",
-   "x": 1869.08,
-   "y": 2137.37,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1150.0,
-   "vehicle": "ts1",
-   "x": 853.61,
-   "y": 2382.4,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1160.0,
-   "vehicle": "own_ship",
-   "x": 1886.76,
-   "y": 2155.04,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1160.0,
-   "vehicle": "ts1",
-   "x": 867.81,
-   "y": 2399.21,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1170.0,
-   "vehicle": "own_ship",
-   "x": 1904.44,
-   "y": 2172.72,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1170.0,
-   "vehicle": "ts1",
-   "x": 882.01,
-   "y": 2416.01,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1180.0,
-   "vehicle": "own_ship",
-   "x": 1922.12,
-   "y": 2190.4,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1180.0,
-   "vehicle": "ts1",
-   "x": 896.21,
-   "y": 2432.81,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1190.0,
-   "vehicle": "own_ship",
-   "x": 1939.79,
-   "y": 2208.08,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1190.0,
-   "vehicle": "ts1",
-   "x": 910.41,
-   "y": 2449.62,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1200.0,
-   "vehicle": "own_ship",
-   "x": 1957.47,
-   "y": 2225.75,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1200.0,
-   "vehicle": "ts1",
-   "x": 924.61,
-   "y": 2466.42,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1210.0,
-   "vehicle": "own_ship",
-   "x": 1975.15,
-   "y": 2243.43,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1210.0,
-   "vehicle": "ts1",
-   "x": 938.81,
-   "y": 2483.23,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1220.0,
-   "vehicle": "own_ship",
-   "x": 1992.83,
-   "y": 2261.11,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1220.0,
-   "vehicle": "ts1",
-   "x": 953.01,
-   "y": 2500.03,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1230.0,
-   "vehicle": "own_ship",
-   "x": 2010.5,
-   "y": 2278.79,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1230.0,
-   "vehicle": "ts1",
-   "x": 967.21,
-   "y": 2516.83,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1240.0,
-   "vehicle": "own_ship",
-   "x": 2028.18,
-   "y": 2296.47,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1240.0,
-   "vehicle": "ts1",
-   "x": 981.41,
-   "y": 2533.64,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1250.0,
-   "vehicle": "own_ship",
-   "x": 2045.86,
-   "y": 2314.14,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1250.0,
-   "vehicle": "ts1",
-   "x": 995.61,
-   "y": 2550.44,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1260.0,
-   "vehicle": "own_ship",
-   "x": 2063.54,
-   "y": 2331.82,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1260.0,
-   "vehicle": "ts1",
-   "x": 1009.81,
-   "y": 2567.24,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1270.0,
-   "vehicle": "own_ship",
-   "x": 2081.22,
-   "y": 2349.5,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1270.0,
-   "vehicle": "ts1",
-   "x": 1024.01,
-   "y": 2584.05,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1280.0,
-   "vehicle": "own_ship",
-   "x": 2098.89,
-   "y": 2367.18,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1280.0,
-   "vehicle": "ts1",
-   "x": 1038.21,
-   "y": 2600.85,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1290.0,
-   "vehicle": "own_ship",
-   "x": 2116.57,
-   "y": 2384.85,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1290.0,
-   "vehicle": "ts1",
-   "x": 1052.41,
-   "y": 2617.65,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1300.0,
-   "vehicle": "own_ship",
-   "x": 2134.25,
-   "y": 2402.53,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1300.0,
-   "vehicle": "ts1",
-   "x": 1066.61,
-   "y": 2634.46,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1310.0,
-   "vehicle": "own_ship",
-   "x": 2151.93,
-   "y": 2420.21,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1310.0,
-   "vehicle": "ts1",
-   "x": 1080.81,
-   "y": 2651.26,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1320.0,
-   "vehicle": "own_ship",
-   "x": 2169.6,
-   "y": 2437.89,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1320.0,
-   "vehicle": "ts1",
-   "x": 1095.01,
-   "y": 2668.06,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1330.0,
-   "vehicle": "own_ship",
-   "x": 2187.28,
-   "y": 2455.56,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1330.0,
-   "vehicle": "ts1",
-   "x": 1109.21,
-   "y": 2684.87,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1340.0,
-   "vehicle": "own_ship",
-   "x": 2204.96,
-   "y": 2473.24,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1340.0,
-   "vehicle": "ts1",
-   "x": 1123.41,
-   "y": 2701.67,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1350.0,
-   "vehicle": "own_ship",
-   "x": 2222.64,
-   "y": 2490.92,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1350.0,
-   "vehicle": "ts1",
-   "x": 1137.61,
-   "y": 2718.47,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1360.0,
-   "vehicle": "own_ship",
-   "x": 2240.31,
-   "y": 2508.6,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1360.0,
-   "vehicle": "ts1",
-   "x": 1151.81,
-   "y": 2735.28,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1370.0,
-   "vehicle": "own_ship",
-   "x": 2257.99,
-   "y": 2526.28,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1370.0,
-   "vehicle": "ts1",
-   "x": 1166.01,
-   "y": 2752.08,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1380.0,
-   "vehicle": "own_ship",
-   "x": 2275.67,
-   "y": 2543.95,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1380.0,
-   "vehicle": "ts1",
-   "x": 1180.21,
-   "y": 2768.88,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1390.0,
-   "vehicle": "own_ship",
-   "x": 2293.35,
-   "y": 2561.63,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1390.0,
-   "vehicle": "ts1",
-   "x": 1194.41,
-   "y": 2785.69,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1400.0,
-   "vehicle": "own_ship",
-   "x": 2311.03,
-   "y": 2579.31,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1400.0,
-   "vehicle": "ts1",
-   "x": 1208.61,
-   "y": 2802.49,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1410.0,
-   "vehicle": "own_ship",
-   "x": 2328.7,
-   "y": 2596.99,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1410.0,
-   "vehicle": "ts1",
-   "x": 1222.81,
-   "y": 2819.3,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1420.0,
-   "vehicle": "own_ship",
-   "x": 2346.38,
-   "y": 2614.66,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1420.0,
-   "vehicle": "ts1",
-   "x": 1237.01,
-   "y": 2836.1,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1430.0,
-   "vehicle": "own_ship",
-   "x": 2364.06,
-   "y": 2632.34,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1430.0,
-   "vehicle": "ts1",
-   "x": 1251.21,
-   "y": 2852.9,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1440.0,
-   "vehicle": "own_ship",
-   "x": 2381.74,
-   "y": 2650.02,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1440.0,
-   "vehicle": "ts1",
-   "x": 1265.41,
-   "y": 2869.71,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1450.0,
-   "vehicle": "own_ship",
-   "x": 2399.41,
-   "y": 2667.7,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1450.0,
-   "vehicle": "ts1",
-   "x": 1279.61,
-   "y": 2886.51,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1460.0,
-   "vehicle": "own_ship",
-   "x": 2417.09,
-   "y": 2685.37,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1460.0,
-   "vehicle": "ts1",
-   "x": 1293.81,
-   "y": 2903.31,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1470.0,
-   "vehicle": "own_ship",
-   "x": 2434.77,
-   "y": 2703.05,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1470.0,
-   "vehicle": "ts1",
-   "x": 1308.01,
-   "y": 2920.12,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1480.0,
-   "vehicle": "own_ship",
-   "x": 2452.45,
-   "y": 2720.73,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1480.0,
-   "vehicle": "ts1",
-   "x": 1322.21,
-   "y": 2936.92,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1490.0,
-   "vehicle": "own_ship",
-   "x": 2470.12,
-   "y": 2738.41,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1490.0,
-   "vehicle": "ts1",
-   "x": 1336.41,
-   "y": 2953.72,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1500.0,
-   "vehicle": "own_ship",
-   "x": 2487.8,
-   "y": 2756.08,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1500.0,
-   "vehicle": "ts1",
-   "x": 1350.61,
-   "y": 2970.53,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1510.0,
-   "vehicle": "own_ship",
-   "x": 2505.48,
-   "y": 2773.76,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1510.0,
-   "vehicle": "ts1",
-   "x": 1364.81,
-   "y": 2987.33,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1520.0,
-   "vehicle": "own_ship",
-   "x": 2523.16,
-   "y": 2791.44,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1520.0,
-   "vehicle": "ts1",
-   "x": 1379.01,
-   "y": 3004.13,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1530.0,
-   "vehicle": "own_ship",
-   "x": 2540.83,
-   "y": 2809.12,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1530.0,
-   "vehicle": "ts1",
-   "x": 1393.21,
-   "y": 3020.94,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1540.0,
-   "vehicle": "own_ship",
-   "x": 2558.51,
-   "y": 2826.8,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1540.0,
-   "vehicle": "ts1",
-   "x": 1407.41,
-   "y": 3037.74,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1550.0,
-   "vehicle": "own_ship",
-   "x": 2576.19,
-   "y": 2844.47,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1550.0,
-   "vehicle": "ts1",
-   "x": 1421.61,
-   "y": 3054.54,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1560.0,
-   "vehicle": "own_ship",
-   "x": 2593.87,
-   "y": 2862.15,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1560.0,
-   "vehicle": "ts1",
-   "x": 1435.81,
-   "y": 3071.35,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1570.0,
-   "vehicle": "own_ship",
-   "x": 2611.55,
-   "y": 2879.83,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1570.0,
-   "vehicle": "ts1",
-   "x": 1450.01,
-   "y": 3088.15,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1580.0,
-   "vehicle": "own_ship",
-   "x": 2629.22,
-   "y": 2897.51,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1580.0,
-   "vehicle": "ts1",
-   "x": 1464.21,
-   "y": 3104.95,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1590.0,
-   "vehicle": "own_ship",
-   "x": 2646.9,
-   "y": 2915.18,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1590.0,
-   "vehicle": "ts1",
-   "x": 1478.41,
-   "y": 3121.76,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1600.0,
-   "vehicle": "own_ship",
-   "x": 2664.58,
-   "y": 2932.86,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1600.0,
-   "vehicle": "ts1",
-   "x": 1492.61,
-   "y": 3138.56,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1610.0,
-   "vehicle": "own_ship",
-   "x": 2682.26,
-   "y": 2950.54,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1610.0,
-   "vehicle": "ts1",
-   "x": 1506.81,
-   "y": 3155.37,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1620.0,
-   "vehicle": "own_ship",
-   "x": 2699.93,
-   "y": 2968.22,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1620.0,
-   "vehicle": "ts1",
-   "x": 1521.01,
-   "y": 3172.17,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1630.0,
-   "vehicle": "own_ship",
-   "x": 2717.61,
-   "y": 2985.89,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1630.0,
-   "vehicle": "ts1",
-   "x": 1535.21,
-   "y": 3188.97,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1640.0,
-   "vehicle": "own_ship",
-   "x": 2735.29,
-   "y": 3003.57,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1640.0,
-   "vehicle": "ts1",
-   "x": 1549.41,
-   "y": 3205.78,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1650.0,
-   "vehicle": "own_ship",
-   "x": 2752.97,
-   "y": 3021.25,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1650.0,
-   "vehicle": "ts1",
-   "x": 1563.61,
-   "y": 3222.58,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1660.0,
-   "vehicle": "own_ship",
-   "x": 2770.64,
-   "y": 3038.93,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1660.0,
-   "vehicle": "ts1",
-   "x": 1577.81,
-   "y": 3239.38,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1670.0,
-   "vehicle": "own_ship",
-   "x": 2788.32,
-   "y": 3056.61,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1670.0,
-   "vehicle": "ts1",
-   "x": 1592.01,
-   "y": 3256.19,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1680.0,
-   "vehicle": "own_ship",
-   "x": 2806.0,
-   "y": 3074.28,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1680.0,
-   "vehicle": "ts1",
-   "x": 1606.21,
-   "y": 3272.99,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1690.0,
-   "vehicle": "own_ship",
-   "x": 2823.68,
-   "y": 3091.96,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1690.0,
-   "vehicle": "ts1",
-   "x": 1620.41,
-   "y": 3289.79,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1700.0,
-   "vehicle": "own_ship",
-   "x": 2841.36,
-   "y": 3109.64,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1700.0,
-   "vehicle": "ts1",
-   "x": 1634.61,
-   "y": 3306.6,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1710.0,
-   "vehicle": "own_ship",
-   "x": 2859.03,
-   "y": 3127.32,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1710.0,
-   "vehicle": "ts1",
-   "x": 1648.81,
-   "y": 3323.4,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1720.0,
-   "vehicle": "own_ship",
-   "x": 2876.71,
-   "y": 3144.99,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1720.0,
-   "vehicle": "ts1",
-   "x": 1663.01,
-   "y": 3340.2,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1730.0,
-   "vehicle": "own_ship",
-   "x": 2894.39,
-   "y": 3162.67,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1730.0,
-   "vehicle": "ts1",
-   "x": 1677.21,
-   "y": 3357.01,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1740.0,
-   "vehicle": "own_ship",
-   "x": 2912.07,
-   "y": 3180.35,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1740.0,
-   "vehicle": "ts1",
-   "x": 1691.41,
-   "y": 3373.81,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1750.0,
-   "vehicle": "own_ship",
-   "x": 2929.74,
-   "y": 3198.03,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1750.0,
-   "vehicle": "ts1",
-   "x": 1705.61,
-   "y": 3390.61,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1760.0,
-   "vehicle": "own_ship",
-   "x": 2947.42,
-   "y": 3215.7,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1760.0,
-   "vehicle": "ts1",
-   "x": 1719.81,
-   "y": 3407.42,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1770.0,
-   "vehicle": "own_ship",
-   "x": 2965.1,
-   "y": 3233.38,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1770.0,
-   "vehicle": "ts1",
-   "x": 1734.01,
-   "y": 3424.22,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1780.0,
-   "vehicle": "own_ship",
-   "x": 2982.78,
-   "y": 3251.06,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1780.0,
-   "vehicle": "ts1",
-   "x": 1748.21,
-   "y": 3441.03,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1790.0,
-   "vehicle": "own_ship",
-   "x": 3000.45,
-   "y": 3268.74,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1790.0,
-   "vehicle": "ts1",
-   "x": 1762.41,
-   "y": 3457.83,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1800.0,
-   "vehicle": "own_ship",
-   "x": 3018.13,
-   "y": 3286.41,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1800.0,
-   "vehicle": "ts1",
-   "x": 1776.61,
-   "y": 3474.63,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1810.0,
-   "vehicle": "own_ship",
-   "x": 3035.81,
-   "y": 3304.09,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1810.0,
-   "vehicle": "ts1",
-   "x": 1790.81,
-   "y": 3491.44,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1820.0,
-   "vehicle": "own_ship",
-   "x": 3053.49,
-   "y": 3321.77,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1820.0,
-   "vehicle": "ts1",
-   "x": 1805.01,
-   "y": 3508.24,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1830.0,
-   "vehicle": "own_ship",
-   "x": 3071.16,
-   "y": 3339.45,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1830.0,
-   "vehicle": "ts1",
-   "x": 1819.21,
-   "y": 3525.04,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1840.0,
-   "vehicle": "own_ship",
-   "x": 3088.84,
-   "y": 3357.13,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1840.0,
-   "vehicle": "ts1",
-   "x": 1833.41,
-   "y": 3541.85,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1850.0,
-   "vehicle": "own_ship",
-   "x": 3106.52,
-   "y": 3374.8,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1850.0,
-   "vehicle": "ts1",
-   "x": 1847.61,
-   "y": 3558.65,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1860.0,
-   "vehicle": "own_ship",
-   "x": 3124.2,
-   "y": 3392.48,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1860.0,
-   "vehicle": "ts1",
-   "x": 1861.81,
-   "y": 3575.45,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1870.0,
-   "vehicle": "own_ship",
-   "x": 3141.88,
-   "y": 3410.16,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1870.0,
-   "vehicle": "ts1",
-   "x": 1876.01,
-   "y": 3592.26,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1880.0,
-   "vehicle": "own_ship",
-   "x": 3159.55,
-   "y": 3427.84,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1880.0,
-   "vehicle": "ts1",
-   "x": 1890.21,
-   "y": 3609.06,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1890.0,
-   "vehicle": "own_ship",
-   "x": 3177.23,
-   "y": 3445.51,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1890.0,
-   "vehicle": "ts1",
-   "x": 1904.41,
-   "y": 3625.86,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1900.0,
-   "vehicle": "own_ship",
-   "x": 3194.91,
-   "y": 3463.19,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1900.0,
-   "vehicle": "ts1",
-   "x": 1918.61,
-   "y": 3642.67,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1910.0,
-   "vehicle": "own_ship",
-   "x": 3212.59,
-   "y": 3480.87,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1910.0,
-   "vehicle": "ts1",
-   "x": 1932.81,
-   "y": 3659.47,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1920.0,
-   "vehicle": "own_ship",
-   "x": 3230.26,
-   "y": 3498.55,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1920.0,
-   "vehicle": "ts1",
-   "x": 1947.01,
-   "y": 3676.27,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1930.0,
-   "vehicle": "own_ship",
-   "x": 3247.94,
-   "y": 3516.22,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1930.0,
-   "vehicle": "ts1",
-   "x": 1961.21,
-   "y": 3693.08,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1940.0,
-   "vehicle": "own_ship",
-   "x": 3265.62,
-   "y": 3533.9,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1940.0,
-   "vehicle": "ts1",
-   "x": 1975.41,
-   "y": 3709.88,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1950.0,
-   "vehicle": "own_ship",
-   "x": 3283.3,
-   "y": 3551.58,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1950.0,
-   "vehicle": "ts1",
-   "x": 1989.61,
-   "y": 3726.68,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1960.0,
-   "vehicle": "own_ship",
-   "x": 3300.97,
-   "y": 3569.26,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1960.0,
-   "vehicle": "ts1",
-   "x": 2003.81,
-   "y": 3743.49,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1970.0,
-   "vehicle": "own_ship",
-   "x": 3318.65,
-   "y": 3586.94,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1970.0,
-   "vehicle": "ts1",
-   "x": 2018.01,
-   "y": 3760.29,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1980.0,
-   "vehicle": "own_ship",
-   "x": 3336.33,
-   "y": 3604.61,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1980.0,
-   "vehicle": "ts1",
-   "x": 2032.21,
-   "y": 3777.1,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 1990.0,
-   "vehicle": "own_ship",
-   "x": 3354.01,
-   "y": 3622.29,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 1990.0,
-   "vehicle": "ts1",
-   "x": 2046.41,
-   "y": 3793.9,
-   "heading": 40.2,
-   "speed": 2.2
-  },
-  {
-   "time": 2000.0,
-   "vehicle": "own_ship",
-   "x": 3371.69,
-   "y": 3639.97,
-   "heading": 45.0,
-   "speed": 2.5
-  },
-  {
-   "time": 2000.0,
-   "vehicle": "ts1",
-   "x": 2060.61,
-   "y": 3810.7,
-   "heading": 40.2,
-   "speed": 2.2
   }
  ],
  "checkpoints": [
   {
    "step": 0,
    "time": 0.0,
-   "situation_report": "Own-ship at (0.0, 0.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2400m away.\n1 contact(s):\n  - ts1: range 900m, rel.bearing -60.0 deg, heading 40.2, speed 2.20, CPA 0m, TCPA 549s",
+   "situation_report": "Own-ship at (0.0, 0.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 2400m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 960s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 900m, rel.bearing -60.0 deg, heading 40.2, speed 2.20 m/s, CPA 0m, TCPA 549s",
    "decision": {
-    "action": "turn_right",
-    "degrees": 15.0,
+    "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "Rule 15",
-    "reasoning": "The overtaking vessel (Beatrice) is on a collision course with Brenda Prior. To avoid collision, Brenda Prior must keep out of the way of Beatrice by turning right to alter the course and avoid the risk of collision."
+    "reasoning": "The vessel 'ts1' is on a collision course with the own-ship as indicated by CPA 0m and TCPA 549s. According to Rule 15, the overtaking vessel (ts1) must keep out of the way of the vessel being overtaken (own-ship). Therefore, the own-ship must maintain its course and speed, and the overtaking vessel must take the necessary action to avoid collision."
    },
    "debug": {
     "config": "v4_pg",
@@ -3254,19 +918,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 906,
-    "raw_response": "{\"action\": \"turn_right\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The overtaking vessel (Beatrice) is on a collision course with Brenda Prior. To avoid collision, Brenda Prior must keep out of the way of Beatrice by turning right to alter the course and avoid the risk of collision.\"}"
+    "user_msg_chars": 1159,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The vessel 'ts1' is on a collision course with the own-ship as indicated by CPA 0m and TCPA 549s. According to Rule 15, the overtaking vessel (ts1) must keep out of the way of the vessel being overtaken (own-ship). Therefore, the own-ship must maintain its course and speed, and the overtaking vessel must take the necessary action to avoid collision.\"}"
    }
   },
   {
    "step": 10,
    "time": 100.0,
-   "situation_report": "Own-ship at (64.7, 241.5), heading 15.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2159m away.\n1 contact(s):\n  - ts1: range 869m, rel.bearing -91.1 deg, heading 40.2, speed 2.20, CPA 430m, TCPA 709s",
+   "situation_report": "Own-ship at (0.0, 250.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 2150m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 860s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 805m, rel.bearing -75.6 deg, heading 40.2, speed 2.20 m/s, CPA 216m, TCPA 473s",
    "decision": {
-    "action": "turn_right",
-    "degrees": 15.0,
+    "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "Rule 15",
-    "reasoning": "The overtaking vessel (Beatrice) is approaching from the starboard side, and Brenda Prior must keep out of the way. A right turn of 15 degrees is necessary to avoid a potential collision and ensure safe navigation according to COLREG Rule 15."
+    "reasoning": "The vessel 'ts1' is approaching from the port side with a CPA of 216m, indicating a real risk of collision. As the overtaking vessel, Brenda Prior must keep out of the way of Beatrice, and the COLREGs require the overtaking vessel to give way. Since the goal course check indicates no turn is needed, the vessel must maintain its course while ensuring the safety of the other vessel."
    },
    "debug": {
     "config": "v4_pg",
@@ -3274,19 +938,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 912,
-    "raw_response": "{\"action\": \"turn_right\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The overtaking vessel (Beatrice) is approaching from the starboard side, and Brenda Prior must keep out of the way. A right turn of 15 degrees is necessary to avoid a potential collision and ensure safe navigation according to COLREG Rule 15.\"}"
+    "user_msg_chars": 1163,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The vessel 'ts1' is approaching from the port side with a CPA of 216m, indicating a real risk of collision. As the overtaking vessel, Brenda Prior must keep out of the way of Beatrice, and the COLREGs require the overtaking vessel to give way. Since the goal course check indicates no turn is needed, the vessel must maintain its course while ensuring the safety of the other vessel.\"}"
    }
   },
   {
    "step": 20,
    "time": 200.0,
-   "situation_report": "Own-ship at (189.7, 458.0), heading 30.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1951m away.\n1 contact(s):\n  - ts1: range 969m, rel.bearing -120.5 deg, heading 40.2, speed 2.20, CPA 917m, TCPA 610s",
+   "situation_report": "Own-ship at (0.0, 500.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1900m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 760s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 781m, rel.bearing -93.7 deg, heading 40.2, speed 2.20 m/s, CPA 433m, TCPA 396s",
    "decision": {
-    "action": "turn_right",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The overtaking vessel (Beatrice) is approaching from the port side, and Brenda Prior must keep out of the way. A right turn of 15 degrees is necessary to avoid a potential collision and ensure safe passage according to Rule 15."
+    "action": "hold_course",
+    "degrees": 0.0,
+    "rule_applied": "none",
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and no immediate collision risk is detected with the contact vessel as the CPA is 433m, which is safe."
    },
    "debug": {
     "config": "v4_pg",
@@ -3294,19 +958,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 914,
-    "raw_response": "{\"action\": \"turn_right\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The overtaking vessel (Beatrice) is approaching from the port side, and Brenda Prior must keep out of the way. A right turn of 15 degrees is necessary to avoid a potential collision and ensure safe passage according to Rule 15.\"}"
+    "user_msg_chars": 1163,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and no immediate collision risk is detected with the contact vessel as the CPA is 433m, which is safe.\"}"
    }
   },
   {
    "step": 30,
    "time": 300.0,
-   "situation_report": "Own-ship at (366.5, 634.8), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1803m away.\n1 contact(s):\n  - ts1: range 1161m, rel.bearing -144.2 deg, heading 40.2, speed 2.20, CPA 1161m, TCPA 0s",
+   "situation_report": "Own-ship at (0.0, 750.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1650m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 660s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 835m, rel.bearing -111.1 deg, heading 40.2, speed 2.20 m/s, CPA 649m, TCPA 320s",
    "decision": {
     "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The target vessel (ts1) is on a collision course with the own-ship, as indicated by the CPA (Closest Point of Approach) at 0 seconds. However, since the own-ship is the overtaking vessel, it must keep out of the way of the target vessel. The target vessel is not overtaking, so the own-ship must maintain its course and speed until the target vessel has passed, as per COLREG Rule 15. Therefore, the own-ship should hold course."
+    "degrees": 0.0,
+    "rule_applied": "Rule 15",
+    "reasoning": "The vessel 'ts1' is approaching from the port side with a CPA of 649m, indicating a potential risk of collision. As the overtaking vessel, Brenda Prior must keep out of the way of Beatrice, and the COLREGs require the overtaking vessel to give way. Since the goal course check confirms the heading is already on the goal bearing, the vessel should hold course while ensuring the safety of the other vessel."
    },
    "debug": {
     "config": "v4_pg",
@@ -3314,19 +978,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 914,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The target vessel (ts1) is on a collision course with the own-ship, as indicated by the CPA (Closest Point of Approach) at 0 seconds. However, since the own-ship is the overtaking vessel, it must keep out of the way of the target vessel. The target vessel is not overtaking, so the own-ship must maintain its course and speed until the target vessel has passed, as per COLREG Rule 15. Therefore, the own-ship should hold course.\"}"
+    "user_msg_chars": 1164,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The vessel 'ts1' is approaching from the port side with a CPA of 649m, indicating a potential risk of collision. As the overtaking vessel, Brenda Prior must keep out of the way of Beatrice, and the COLREGs require the overtaking vessel to give way. Since the goal course check confirms the heading is already on the goal bearing, the vessel should hold course while ensuring the safety of the other vessel.\"}"
    }
   },
   {
    "step": 40,
    "time": 400.0,
-   "situation_report": "Own-ship at (543.3, 811.5), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1679m away.\n1 contact(s):\n  - ts1: range 1371m, rel.bearing -150.3 deg, heading 40.2, speed 2.20, CPA 1371m, TCPA 0s",
+   "situation_report": "Own-ship at (0.0, 1000.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1400m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 560s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 954m, rel.bearing -125.2 deg, heading 40.2, speed 2.20 m/s, CPA 866m, TCPA 244s",
    "decision": {
     "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The target vessel (ts1) is on a collision course with the own-ship, as indicated by the CPA (Closest Point of Approach) at 0 seconds. However, since the own-ship is the overtaking vessel, it must keep out of the way of the target vessel (Beatrice). The own-ship is maintaining a proper lookout and has reported intentions to VTS, so it is following the correct procedure. Therefore, the own-ship should hold course until the target vessel has passed safely."
+    "degrees": 0.0,
+    "rule_applied": "Rule 15",
+    "reasoning": "The vessel 'ts1' is approaching from the port side with a CPA of 866m, indicating a real risk of collision. As the overtaking vessel, Brenda Prior must keep out of the way of Beatrice, and the COLREGs require the overtaking vessel to give way. Since the goal course check indicates no turn is needed, the vessel must maintain its course while ensuring the safety of the other vessel."
    },
    "debug": {
     "config": "v4_pg",
@@ -3334,19 +998,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 914,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The target vessel (ts1) is on a collision course with the own-ship, as indicated by the CPA (Closest Point of Approach) at 0 seconds. However, since the own-ship is the overtaking vessel, it must keep out of the way of the target vessel (Beatrice). The own-ship is maintaining a proper lookout and has reported intentions to VTS, so it is following the correct procedure. Therefore, the own-ship should hold course until the target vessel has passed safely.\"}"
+    "user_msg_chars": 1165,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The vessel 'ts1' is approaching from the port side with a CPA of 866m, indicating a real risk of collision. As the overtaking vessel, Brenda Prior must keep out of the way of Beatrice, and the COLREGs require the overtaking vessel to give way. Since the goal course check indicates no turn is needed, the vessel must maintain its course while ensuring the safety of the other vessel.\"}"
    }
   },
   {
    "step": 50,
    "time": 500.0,
-   "situation_report": "Own-ship at (720.0, 988.3), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1585m away.\n1 contact(s):\n  - ts1: range 1593m, rel.bearing -154.7 deg, heading 40.2, speed 2.20, CPA 1593m, TCPA 0s",
+   "situation_report": "Own-ship at (0.0, 1250.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1150m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 460s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 1117m, rel.bearing -135.7 deg, heading 40.2, speed 2.20 m/s, CPA 1082m, TCPA 168s",
    "decision": {
     "action": "hold_course",
-    "degrees": 0,
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "The target vessel (ts1) is on a collision course with the own-ship, but since the own-ship is the overtaking vessel, it must keep out of the way of the target vessel. However, the target vessel is not overtaking, and the own-ship is not in a position where it must keep out of the way. Therefore, the own-ship may hold course."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and no immediate collision risk is detected with the contact vessel as the CPA is 1082m, which is safe."
    },
    "debug": {
     "config": "v4_pg",
@@ -3354,288 +1018,8 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 914,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The target vessel (ts1) is on a collision course with the own-ship, but since the own-ship is the overtaking vessel, it must keep out of the way of the target vessel. However, the target vessel is not overtaking, and the own-ship is not in a position where it must keep out of the way. Therefore, the own-ship may hold course.\"}"
-   }
-  },
-  {
-   "step": 60,
-   "time": 600.0,
-   "situation_report": "Own-ship at (896.8, 1165.1), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1526m away.\n1 contact(s):\n  - ts1: range 1822m, rel.bearing -158.1 deg, heading 40.2, speed 2.20, CPA 1822m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The contact (ts1) is on a collision course with the own-ship, but since the CPA is at 1822m and TCPA is 0s, it indicates the contact is already at the closest point of approach. Therefore, no immediate action is required as the risk of collision is not imminent."
-   },
-   "debug": {
-    "config": "v4_pg",
-    "retrieved_chunk_ids": [],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 915,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The contact (ts1) is on a collision course with the own-ship, but since the CPA is at 1822m and TCPA is 0s, it indicates the contact is already at the closest point of approach. Therefore, no immediate action is required as the risk of collision is not imminent.\"}"
-   }
-  },
-  {
-   "step": 70,
-   "time": 700.0,
-   "situation_report": "Own-ship at (1073.6, 1341.9), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1507m away.\n1 contact(s):\n  - ts1: range 2056m, rel.bearing -160.7 deg, heading 40.2, speed 2.20, CPA 2056m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The contact (ts1) is on a collision course with the own-ship, but the CPA is 2056m and TCPA is 0s, indicating the closest point of approach is already at the current position. Therefore, no immediate collision risk exists, and the own-ship should hold course."
-   },
-   "debug": {
-    "config": "v4_pg",
-    "retrieved_chunk_ids": [],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 916,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The contact (ts1) is on a collision course with the own-ship, but the CPA is 2056m and TCPA is 0s, indicating the closest point of approach is already at the current position. Therefore, no immediate collision risk exists, and the own-ship should hold course.\"}"
-   }
-  },
-  {
-   "step": 80,
-   "time": 800.0,
-   "situation_report": "Own-ship at (1250.4, 1518.6), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1530m away.\n1 contact(s):\n  - ts1: range 2294m, rel.bearing -162.8 deg, heading 40.2, speed 2.20, CPA 2294m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The target vessel (ts1) is on a collision course with the own-ship, but since the own-ship is the overtaking vessel, it must keep out of the way of the target vessel. However, the target vessel is not overtaking, and there is no immediate risk of collision as the CPA is at 2294m and TCPA is 0s. Therefore, the own-ship should hold course."
-   },
-   "debug": {
-    "config": "v4_pg",
-    "retrieved_chunk_ids": [],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 916,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The target vessel (ts1) is on a collision course with the own-ship, but since the own-ship is the overtaking vessel, it must keep out of the way of the target vessel. However, the target vessel is not overtaking, and there is no immediate risk of collision as the CPA is at 2294m and TCPA is 0s. Therefore, the own-ship should hold course.\"}"
-   }
-  },
-  {
-   "step": 90,
-   "time": 900.0,
-   "situation_report": "Own-ship at (1427.1, 1695.4), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1592m away.\n1 contact(s):\n  - ts1: range 2534m, rel.bearing -164.4 deg, heading 40.2, speed 2.20, CPA 2534m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The contact is approaching with a CPA of 2534m and TCPA of 0s, indicating no risk of collision. No manoeuvre is required as the situation is safe."
-   },
-   "debug": {
-    "config": "v4_pg",
-    "retrieved_chunk_ids": [],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 916,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The contact is approaching with a CPA of 2534m and TCPA of 0s, indicating no risk of collision. No manoeuvre is required as the situation is safe.\"}"
-   }
-  },
-  {
-   "step": 100,
-   "time": 1000.0,
-   "situation_report": "Own-ship at (1603.9, 1872.2), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1689m away.\n1 contact(s):\n  - ts1: range 2775m, rel.bearing -165.8 deg, heading 40.2, speed 2.20, CPA 2775m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The contact (ts1) is on a collision course with the own-ship, but since the CPA is at 2775m and TCPA is 0s, it indicates the contact is already at the closest point of approach. Therefore, no immediate action is required as the risk of collision is not imminent."
-   },
-   "debug": {
-    "config": "v4_pg",
-    "retrieved_chunk_ids": [],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 916,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The contact (ts1) is on a collision course with the own-ship, but since the CPA is at 2775m and TCPA is 0s, it indicates the contact is already at the closest point of approach. Therefore, no immediate action is required as the risk of collision is not imminent.\"}"
-   }
-  },
-  {
-   "step": 110,
-   "time": 1100.0,
-   "situation_report": "Own-ship at (1780.7, 2049.0), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1815m away.\n1 contact(s):\n  - ts1: range 3018m, rel.bearing -167.0 deg, heading 40.2, speed 2.20, CPA 3018m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The contact is approaching with a CPA of 3018m and TCPA of 0s, indicating it is on a collision course. However, since the contact is not yet in a position to constitute a risk of collision, the vessel should hold course as per the procedure guidance."
-   },
-   "debug": {
-    "config": "v4_pg",
-    "retrieved_chunk_ids": [],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 916,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The contact is approaching with a CPA of 3018m and TCPA of 0s, indicating it is on a collision course. However, since the contact is not yet in a position to constitute a risk of collision, the vessel should hold course as per the procedure guidance.\"}"
-   }
-  },
-  {
-   "step": 120,
-   "time": 1200.0,
-   "situation_report": "Own-ship at (1957.5, 2225.8), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1965m away.\n1 contact(s):\n  - ts1: range 3262m, rel.bearing -168.0 deg, heading 40.2, speed 2.20, CPA 3262m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The contact (ts1) is on a collision course with the own-ship, but since the CPA is at 3262m and TCPA is 0s, it indicates the contact is already at the closest point of approach. Therefore, no immediate action is required as the risk of collision is not imminent."
-   },
-   "debug": {
-    "config": "v4_pg",
-    "retrieved_chunk_ids": [],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 916,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The contact (ts1) is on a collision course with the own-ship, but since the CPA is at 3262m and TCPA is 0s, it indicates the contact is already at the closest point of approach. Therefore, no immediate action is required as the risk of collision is not imminent.\"}"
-   }
-  },
-  {
-   "step": 130,
-   "time": 1300.0,
-   "situation_report": "Own-ship at (2134.2, 2402.5), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2134m away.\n1 contact(s):\n  - ts1: range 3507m, rel.bearing -168.8 deg, heading 40.2, speed 2.20, CPA 3507m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The contact (ts1) is on a collision course, but since it is stationary (speed 2.20 m/s) and the CPA is at 0s, it is already in the process of collision. The own-ship is maintaining a proper lookout and there is no indication of a risk of collision, so holding course is appropriate."
-   },
-   "debug": {
-    "config": "v4_pg",
-    "retrieved_chunk_ids": [],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 916,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The contact (ts1) is on a collision course, but since it is stationary (speed 2.20 m/s) and the CPA is at 0s, it is already in the process of collision. The own-ship is maintaining a proper lookout and there is no indication of a risk of collision, so holding course is appropriate.\"}"
-   }
-  },
-  {
-   "step": 140,
-   "time": 1400.0,
-   "situation_report": "Own-ship at (2311.0, 2579.3), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2318m away.\n1 contact(s):\n  - ts1: range 3753m, rel.bearing -169.6 deg, heading 40.2, speed 2.20, CPA 3753m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The contact (ts1) is on a collision course with the own-ship, but since the CPA is at 3753m and TCPA is 0s, it indicates the vessels are already at closest point of approach. The own-ship is maintaining a proper lookout and there is no immediate risk of collision, so holding course is appropriate."
-   },
-   "debug": {
-    "config": "v4_pg",
-    "retrieved_chunk_ids": [],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 916,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The contact (ts1) is on a collision course with the own-ship, but since the CPA is at 3753m and TCPA is 0s, it indicates the vessels are already at closest point of approach. The own-ship is maintaining a proper lookout and there is no immediate risk of collision, so holding course is appropriate.\"}"
-   }
-  },
-  {
-   "step": 150,
-   "time": 1500.0,
-   "situation_report": "Own-ship at (2487.8, 2756.1), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2513m away.\n1 contact(s):\n  - ts1: range 3999m, rel.bearing -170.2 deg, heading 40.2, speed 2.20, CPA 3999m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The target vessel (ts1) is on a collision course with the own-ship, but since the own-ship is the overtaking vessel, it must keep out of the way of the target vessel. However, since the target vessel is not overtaking and the CPA is at 0s, the own-ship should hold course to avoid any unnecessary maneuvers and ensure safe navigation."
-   },
-   "debug": {
-    "config": "v4_pg",
-    "retrieved_chunk_ids": [],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 916,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The target vessel (ts1) is on a collision course with the own-ship, but since the own-ship is the overtaking vessel, it must keep out of the way of the target vessel. However, since the target vessel is not overtaking and the CPA is at 0s, the own-ship should hold course to avoid any unnecessary maneuvers and ensure safe navigation.\"}"
-   }
-  },
-  {
-   "step": 160,
-   "time": 1600.0,
-   "situation_report": "Own-ship at (2664.6, 2932.9), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2717m away.\n1 contact(s):\n  - ts1: range 4246m, rel.bearing -170.8 deg, heading 40.2, speed 2.20, CPA 4246m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The contact (ts1) is on a collision course with the own-ship, but since the CPA is at 4246m and TCPA is 0s, it indicates the contact is already at the closest point of approach. Therefore, no immediate action is required as the risk of collision is not imminent."
-   },
-   "debug": {
-    "config": "v4_pg",
-    "retrieved_chunk_ids": [],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 916,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The contact (ts1) is on a collision course with the own-ship, but since the CPA is at 4246m and TCPA is 0s, it indicates the contact is already at the closest point of approach. Therefore, no immediate action is required as the risk of collision is not imminent.\"}"
-   }
-  },
-  {
-   "step": 170,
-   "time": 1700.0,
-   "situation_report": "Own-ship at (2841.4, 3109.6), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2929m away.\n1 contact(s):\n  - ts1: range 4493m, rel.bearing -171.3 deg, heading 40.2, speed 2.20, CPA 4493m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The target vessel (ts1) is on a collision course with the own-ship, but since the own-ship is the overtaking vessel, it must keep out of the way of the target vessel. However, the target vessel is not overtaking, and there is no indication of a risk of collision based on the provided data. Therefore, the own-ship should hold course."
-   },
-   "debug": {
-    "config": "v4_pg",
-    "retrieved_chunk_ids": [],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 916,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The target vessel (ts1) is on a collision course with the own-ship, but since the own-ship is the overtaking vessel, it must keep out of the way of the target vessel. However, the target vessel is not overtaking, and there is no indication of a risk of collision based on the provided data. Therefore, the own-ship should hold course.\"}"
-   }
-  },
-  {
-   "step": 180,
-   "time": 1800.0,
-   "situation_report": "Own-ship at (3018.1, 3286.4), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 3146m away.\n1 contact(s):\n  - ts1: range 4740m, rel.bearing -171.8 deg, heading 40.2, speed 2.20, CPA 4740m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The contact (ts1) is on a collision course with the own-ship, but since the CPA is at 4740m and TCPA is 0s, it indicates the vessels are already at closest point of approach. The own-ship is maintaining a proper lookout and there is no immediate risk of collision, so holding course is appropriate."
-   },
-   "debug": {
-    "config": "v4_pg",
-    "retrieved_chunk_ids": [],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 916,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The contact (ts1) is on a collision course with the own-ship, but since the CPA is at 4740m and TCPA is 0s, it indicates the vessels are already at closest point of approach. The own-ship is maintaining a proper lookout and there is no immediate risk of collision, so holding course is appropriate.\"}"
-   }
-  },
-  {
-   "step": 190,
-   "time": 1900.0,
-   "situation_report": "Own-ship at (3194.9, 3463.2), heading 45.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 3367m away.\n1 contact(s):\n  - ts1: range 4987m, rel.bearing -172.2 deg, heading 40.2, speed 2.20, CPA 4987m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The contact (ts1) is on a collision course with the own-ship, but since the CPA is at 4987m and TCPA is 0s, it indicates the contact is already at the closest point of approach. Therefore, no immediate action is required as the risk of collision is not imminent."
-   },
-   "debug": {
-    "config": "v4_pg",
-    "retrieved_chunk_ids": [],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 916,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"The contact (ts1) is on a collision course with the own-ship, but since the CPA is at 4987m and TCPA is 0s, it indicates the contact is already at the closest point of approach. Therefore, no immediate action is required as the risk of collision is not imminent.\"}"
+    "user_msg_chars": 1167,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and no immediate collision risk is detected with the contact vessel as the CPA is 1082m, which is safe.\"}"
    }
   }
  ]

@@ -2,16 +2,16 @@
  "mission_id": "q01_quiet_long_tcpa",
  "config": "v2_cot",
  "tag": "default",
- "generated_at": "2026-09-19T02:52:56.561753+00:00",
+ "generated_at": "2026-09-20T00:46:02.000622+00:00",
  "params": {
   "decision_interval": 10,
   "dt": 10.0,
   "max_steps": 200,
-  "enable_thinking": false,
-  "max_new_tokens": 256,
-  "k": 4,
+  "enable_thinking": true,
+  "max_new_tokens": 2048,
+  "k": 2,
   "use_rag": true,
-  "system_prompt": "You are the navigator on a large commercial vessel. You must navigate according to COLREG (the International Regulations for Preventing Collisions at Sea) at all times, avoiding collisions while making safe and efficient progress. Avoiding collisions comes first; once safe, reach the goal via the shortest direct track, with as few manoeuvres as possible and no zigzagging. Ground your reasoning in the provided COLREG excerpts and procedure guidance where given. If no target poses a real risk of collision, recommend holding course. What order do you give to the helm? Reply with ONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"rule_applied\": \"<e.g. Rule 15, or 'none' if no rule applies>\",\n \"reasoning\": \"<one or two sentences>\"}",
+  "system_prompt": "You are the navigator on a large commercial vessel. Your objective is to get the ship to the mission goal (position/bearing/distance given in the situation report) as directly and efficiently as possible -- that is the task. The one hard constraint on every decision, with no exceptions: never put the ship on a collision course with another vessel. When a real risk of collision exists, COLREG (the International Regulations for Preventing Collisions at Sea) governs which vessel gives way and how -- satisfy that constraint first, then resume progress toward the goal. All positions/bearings/headings given below are in metres and degrees, heading 0=north, clockwise, matching compass bearings -- take this as given, don't re-derive or second-guess it. rel.bearing is signed: positive = target is to starboard (right), negative = to port (left), 0=dead ahead, ~180/-180=dead astern. CPA is the closest distance the contact will EVER come to you at current headings/speeds; TCPA is the seconds until that closest point. TCPA=0 does NOT always mean a collision is imminent -- it also occurs when the vessels are already moving apart (closest point already passed); the situation report says so explicitly when that's the case. Judge real risk from the CPA distance itself, not from TCPA alone. DEFAULT PROCEDURE, apply this every single time: the situation report has a line starting \"GOAL COURSE CHECK:\" -- use ONLY that line to decide the goal-correction action and degrees, never a contact's rel.bearing (a contact's rel.bearing is about THAT CONTACT, not the goal, even if the numbers look similar). If \"GOAL COURSE CHECK\" says you're already on the goal bearing, hold_course (for the goal, at least). Otherwise it gives you the exact action (\"turn_left\"/\"turn_right\") and degrees to use -- copy those values directly into your answer, don't recompute them and don't substitute a different number from elsewhere in the report. Your track to the goal must look like a smooth curve or a straight line, NEVER a zigzag -- do not answer turn_right and then turn_left (or vice versa) on consecutive decisions just to chase a small residual mismatch; \"GOAL COURSE CHECK\" already has a 10-degree deadband built in for this. Only override any of this if a target poses a REAL risk of collision, in which case the COLREG-required give-way/stand-on manoeuvre takes precedence instead. Do not just describe the mismatch in your reasoning and then answer hold_course anyway when \"GOAL COURSE CHECK\" calls for a turn -- the action MUST match what that line says, never hold_course when it names a turn. Ground your reasoning in the provided COLREG excerpts and procedure guidance where given. If you are already on the goal bearing (within about 10 degrees) and your current speed is below the nominal/rated speed given for this mission, speed_up instead: reaching the goal sooner (when safe) is part of efficient progress too. What order do you give to the helm? Reply with ONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"rule_applied\": \"<e.g. Rule 15, or 'none' if no rule applies>\",\n \"reasoning\": \"<one or two sentences>\"}",
   "system_prompt_is_custom": false
  },
  "outcome": {
@@ -2585,12 +2585,12 @@
   {
    "step": 0,
    "time": 0.0,
-   "situation_report": "Own-ship at (0.0, 0.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 4000m away.\n1 contact(s):\n  - ts1: range 8000m, rel.bearing 30.0 deg, heading 90.0, speed 1.00, CPA 6287m, TCPA 1837s",
+   "situation_report": "Own-ship at (0.0, 0.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 4000m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1600s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 8000m, rel.bearing 30.0 deg, heading 90.0, speed 1.00 m/s, CPA 6287m, TCPA 1837s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0,0) heading 0.0 degrees, which is straight along the positive x-axis. The mission is to go to (0,4000), so directly north. There's a contact, ts1, at 8000m range, 30 degrees relative bearing. That means the contact is ahead to the right (sinc",
-    "_parse_error": true
+    "reasoning": "No collision risk detected (CPA 6287m > safe distance, TCPA 1837s). Goal bearing already matched (0.0 deg). Maintain course/speed for efficient progress."
    },
    "debug": {
     "config": "v2_cot",
@@ -2598,19 +2598,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 420,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0,0) heading 0.0 degrees, which is straight along the positive x-axis. The mission is to go to (0,4000), so directly north. There's a contact, ts1, at 8000m range, 30 degrees relative bearing. That means the contact is ahead to the right (since relative bearing is measured from the ship's bow). The contact is heading 90 degrees, so it's moving east. Its speed is 1.00 m/s. The CPA (closest point of approach) is 6287m, and TCPA is 1837 seconds. \n\nFirst, I need to check if there's a risk of collision. The CPA is the closest distance between the two ships. Since the CPA is 6287m, which is more than the range of the contact (8000m), but the contact is moving east. The own-ship is moving north. The contact's CPA is 6288m, which is less than the initial range of 8000m, so they are approaching each other. Wait, but the CPA is the closest point, so the distance will decrease until that point, then increase. So the contact is on a collision course? Or not?\n\nWait, the CPA is 6287m, which is the closest distance. So the ships are approaching each other, but the CPA is still a significant distance. But according to COLREG, if the CPA is less than the range, then there's a risk. But here, the CPA is 6287m, which is less than the initial range of 8000m. So the ships are on a collision course? Or not? Wait, the CPA is the closest point of approach. If the CPA is less than the initial distance, then they are approaching each other. But the TCPA is 1837 seconds, so they will pass each other at that point. But the question is whether there's a risk of collision. \n\nBut according to COLREG, Rule 13: When two power-driven vessels are approaching each other so that there is a risk of collision, each shall keep to the right. But in this case, the contact is moving east (heading 90 degrees), and the own-ship is moving north (heading "
+    "user_msg_chars": 985,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on the correct bearing for the goal, so no turn is needed. The only other vessel, ts1, is at a relative bearing of 30 degrees, moving at 1.00 m/s. The CPA is 6287 meters, which is quite far, so there's no immediate collision risk. Since the CPA is safe and the TCPA is 1837 seconds, the vessels aren't on a collision course. The COLREG rules don't apply here because there's no risk. So the best action is to maintain course and speed. The ETA is 1600 seconds, which is acceptable. No need to adjust for the other ship. Just hold course and continue at current speed.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No collision risk detected (CPA 6287m > safe distance, TCPA 1837s). Goal bearing already matched (0.0 deg). Maintain course/speed for efficient progress.\"}"
    }
   },
   {
    "step": 10,
    "time": 100.0,
-   "situation_report": "Own-ship at (0.0, 250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 3750m away.\n1 contact(s):\n  - ts1: range 7784m, rel.bearing 30.9 deg, heading 90.0, speed 1.00, CPA 6194m, TCPA 1751s",
+   "situation_report": "Own-ship at (0.0, 250.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 3750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1500s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 7784m, rel.bearing 30.9 deg, heading 90.0, speed 1.00 m/s, CPA 6194m, TCPA 1751s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0.0, 250.0) heading 0.0 degrees, which is straight along the positive x-axis. The mission goal is at (0.0, 4000.0), so directly north. The distance to the goal is 3750 meters. There's one contact: ts1, which is at a range of 7784 meters, relat",
-    "_parse_error": true
+    "reasoning": "No collision risk detected (CPA 6194m > 500m), goal bearing already matched, and speed is optimal for ETA."
    },
    "debug": {
     "config": "v2_cot",
@@ -2618,19 +2618,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 422,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0.0, 250.0) heading 0.0 degrees, which is straight along the positive x-axis. The mission goal is at (0.0, 4000.0), so directly north. The distance to the goal is 3750 meters. There's one contact: ts1, which is at a range of 7784 meters, relative bearing 30.9 degrees. The contact is heading 90 degrees (east) at 1.00 m/s. CPA (closest point of approach) is 6194 meters, and TCPA (time to CPA) is 1751 seconds.\n\nFirst, I need to determine if there's a risk of collision. The CPA is 6194 meters, which is quite far, so maybe not an immediate risk. But I should check the COLREG rules. The own-ship is on a course towards the goal, which is directly north. The contact is east of the own-ship (relative bearing 30.9 degrees), moving east. The own-ship is moving north. \n\nThe contact's CPA is 6194 meters, which is the closest approach. Since the CPA is not zero, there's no immediate collision risk. But I need to check if the contact is on a collision course. The own-ship is moving north, and the contact is moving east. Their relative motion: the contact is moving east, so from the own-ship's perspective, the contact is moving east and away from the own-ship's path. Wait, the own-ship is moving north, and the contact is moving east. So their paths are crossing? Let me visualize. The own-ship is at (0,250), moving north. The contact is at (range 7784m, relative bearing 30.9 degrees). Let me convert that to absolute coordinates. Relative bearing 30.9 degrees means the contact is 30.9 degrees to the right (since own-ship is heading 0.0, which is north, so relative bearing is measured clockwise from the bow). Wait, relative bearing is measured from the ship's bow. If the own-ship is heading 0.0 (north), then a relative bearing of 30.9 degrees would be 30.9"
+    "user_msg_chars": 987,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on the correct bearing for the goal, so no turn is needed. The only other vessel, ts1, is at a relative bearing of 30.9 degrees, which is to the starboard side. The CPA is 6194 meters, which is quite far, so there's no immediate collision risk. Since the CPA is large, COLREG doesn't require action here. The ship should maintain course and speed. The ETA is 1500 seconds, which is acceptable. No need to adjust speed unless there's a risk. So the correct action is hold_course.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No collision risk detected (CPA 6194m > 500m), goal bearing already matched, and speed is optimal for ETA.\"}"
    }
   },
   {
    "step": 20,
    "time": 200.0,
-   "situation_report": "Own-ship at (0.0, 500.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 3500m away.\n1 contact(s):\n  - ts1: range 7571m, rel.bearing 31.9 deg, heading 90.0, speed 1.00, CPA 6101m, TCPA 1665s",
+   "situation_report": "Own-ship at (0.0, 500.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 3500m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1400s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 7571m, rel.bearing 31.9 deg, heading 90.0, speed 1.00 m/s, CPA 6101m, TCPA 1665s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0.0, 500.0) heading 0.0 degrees, which is straight along the positive x-axis. The mission goal is at (0.0, 4000.0), so directly north, but the own-ship is already at y=500, so the goal is 3500 meters north. The contact, ts1, is at a range of 7",
-    "_parse_error": true
+    "reasoning": "No collision risk: ts1's CPA is 6101m (well clear), and own-ship is on goal bearing. No COLREG obligations apply."
    },
    "debug": {
     "config": "v2_cot",
@@ -2638,19 +2638,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 422,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0.0, 500.0) heading 0.0 degrees, which is straight along the positive x-axis. The mission goal is at (0.0, 4000.0), so directly north, but the own-ship is already at y=500, so the goal is 3500 meters north. The contact, ts1, is at a range of 7571 meters, relative bearing 31.9 degrees. That means the contact is to the northeast of the own-ship. The contact's heading is 90 degrees, so it's moving east. The CPA (closest point of approach) is 6101 meters, and TCPA is 1665 seconds. \n\nFirst, I need to check if there's a risk of collision. The CPA is 6101 meters, which is quite far, so maybe not an immediate risk. But I should check the COLREG rules. The own-ship is on a course towards the goal, which is straight north. The contact is moving east. The relative bearing is 31.9 degrees, so the contact is ahead to the right (since own-ship is heading 0.0, which is east, so relative bearing 31.9 would be northeast). Wait, own-ship's heading is 0.0 degrees, which is east, so the bow is pointing east. The contact is at a relative bearing of 31.9 degrees, which would be 31.9 degrees to the right of the bow. So the contact is in the starboard quarter. \n\nThe contact is moving east (heading 90 degrees), so it's moving in the same direction as the own-ship's heading. The own-ship is moving north (since it's heading 0.0, but wait, no. Wait, heading 0.0 degrees is typically north in some systems, but in maritime terms, headings are usually 0 degrees as north, 90 as east, etc. Wait, the own-ship's heading is 0.0, so that's north. Wait, the own-ship's position is (0.0, 500.0), and the goal is (0.0, 4000.0), which is directly north. So the own-"
+    "user_msg_chars": 987,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on the correct bearing for the goal, so no turn is needed. The only other vessel, ts1, is at a relative bearing of 31.9 degrees, which is to the starboard side. The CPA is 6101 meters, which is quite far, so there's no immediate collision risk. Since the CPA is well above the ship's current range, the risk is minimal. The ship's speed is 2.5 m/s, and the ETA is 1400 seconds. The other ship is moving at 1.0 m/s, so even though it's on a collision course, the CPA is enough to not require action. The COLREG rules don't apply here because there's no real risk. So the best action is to maintain course and speed.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No collision risk: ts1's CPA is 6101m (well clear), and own-ship is on goal bearing. No COLREG obligations apply.\"}"
    }
   },
   {
    "step": 30,
    "time": 300.0,
-   "situation_report": "Own-ship at (0.0, 750.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 3250m away.\n1 contact(s):\n  - ts1: range 7360m, rel.bearing 32.9 deg, heading 90.0, speed 1.00, CPA 6008m, TCPA 1579s",
+   "situation_report": "Own-ship at (0.0, 750.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 3250m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1300s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 7360m, rel.bearing 32.9 deg, heading 90.0, speed 1.00 m/s, CPA 6008m, TCPA 1579s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0.0, 750.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime terms) with a speed of 2.5 m/s. The mission goal is at (0.0, 4000.0), so that's straight south, 3250 meters away. There's one contact: ts1, which is at a r",
-    "_parse_error": true
+    "reasoning": "No collision risk with ts1 (CPA 6008m > 500m), goal bearing already matched, and speed is at rated mission value."
    },
    "debug": {
     "config": "v2_cot",
@@ -2658,19 +2658,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 422,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0.0, 750.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime terms) with a speed of 2.5 m/s. The mission goal is at (0.0, 4000.0), so that's straight south, 3250 meters away. There's one contact: ts1, which is at a range of 7360 meters, relative bearing 32.9 degrees. The contact's heading is 90 degrees (east), speed 1.0 m/s. The CPA (closest point of approach) is 6008 meters, and TCPA is 1579 seconds. \n\nFirst, I need to determine if there's a risk of collision. The CPA is 6008 meters, which is quite far, so maybe not an immediate risk. But I should check the relative motion. The own-ship is moving north (since heading 0.0 is north) at 2.5 m/s, and the contact is moving east at 1.0 m/s. The relative bearing is 32.9 degrees, which is east of north. So the contact is to the east-northeast of the own-ship. \n\nWait, relative bearing 32.9 degrees. If the own-ship is heading north, then the contact is 32.9 degrees to the east of the bow. So the contact is approaching from the east, moving east. The own-ship is moving north. So their paths might cross? Let me visualize. The own-ship is moving north, the contact is moving east. The contact is to the east of the own-ship. So the contact is moving east, away from the own-ship's path. The CPA is 6008 meters, which is the closest approach. Since the contact is moving east and the own-ship is moving north, their relative motion would be such that the contact is moving away from the own-ship's path. \n\nBut wait, the CPA is the closest point of approach. If the CPA is 6008 meters, that's the closest they'll get. So the contact is not on a collision course. The TCPA is 1579 seconds, so in about 26 minutes, they'll be closest"
+    "user_msg_chars": 987,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on the correct bearing for the goal, so no turn is needed. The only other vessel, ts1, is at a relative bearing of 32.9 degrees, which is to the starboard side. The CPA is 6008 meters, which is quite far, so there's no immediate collision risk. Since the CPA is large, COLREG doesn't require action here. The ship should maintain course and speed. The ETA is around 1300 seconds, which is acceptable. No need to adjust speed unless there's a risk. So the correct action is to hold course.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No collision risk with ts1 (CPA 6008m > 500m), goal bearing already matched, and speed is at rated mission value.\"}"
    }
   },
   {
    "step": 40,
    "time": 400.0,
-   "situation_report": "Own-ship at (0.0, 1000.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 3000m away.\n1 contact(s):\n  - ts1: range 7151m, rel.bearing 34.0 deg, heading 90.0, speed 1.00, CPA 5916m, TCPA 1492s",
+   "situation_report": "Own-ship at (0.0, 1000.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 3000m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1200s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 7151m, rel.bearing 34.0 deg, heading 90.0, speed 1.00 m/s, CPA 5916m, TCPA 1492s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0.0, 1000.0) heading 0.0 (which is straight along the positive x-axis, so towards the east), speed 2.5 m/s. The mission goal is at (0.0, 4000.0), so directly north, 3000 meters away. The contact, ts1, is at a range of 7151 meters, relative bea",
-    "_parse_error": true
+    "reasoning": "No collision risk: ts1's CPA (5916m) is well clear. Goal bearing already matched. Maintain course and speed as per mission parameters."
    },
    "debug": {
     "config": "v2_cot",
@@ -2678,19 +2678,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 423,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0.0, 1000.0) heading 0.0 (which is straight along the positive x-axis, so towards the east), speed 2.5 m/s. The mission goal is at (0.0, 4000.0), so directly north, 3000 meters away. The contact, ts1, is at a range of 7151 meters, relative bearing 34 degrees. The contact's heading is 90 degrees (east), speed 1.0 m/s. CPA (closest point of approach) is 5916 meters, TCPA (time to CPA) is 1492 seconds.\n\nFirst, I need to determine if there's a risk of collision. The CPA is 5916 meters, which is quite far, so maybe not an immediate risk. But I should check the COLREG rules. \n\nThe own-ship is on a course towards the goal, which is directly north. The contact is approaching from the east (relative bearing 34 degrees, so slightly north of east). The contact is moving east (heading 90 degrees), so it's moving in the same direction as the own-ship's initial heading. Wait, the own-ship is heading 0.0 (east), and the contact is moving east. So they're moving in the same direction. \n\nBut the CPA is 5916 meters. Let me think about their positions. The own-ship is at (0,1000), moving east. The contact is at a range of 7151 meters from the own-ship, with a relative bearing of 34 degrees. So the contact's position in absolute coordinates would be: \n\nThe own-ship's position is (0,1000). The contact is at a range of 7150 meters, relative bearing 34 degrees. So the contact's position is:\n\nx = 7151 * cos(34°) ≈ 7151 * 0.8290 ≈ 5920 meters. But since the own-ship is at x=0, the contact's x-coordinate is 5920 meters. The y-coordinate is 1000 + 7151 * sin(34°) �"
+    "user_msg_chars": 988,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on the correct bearing for the goal, so no turn is needed. The only other vessel, ts1, is at a relative bearing of 34 degrees, which is to the starboard side. The CPA is 5916 meters, which is quite far, so there's no immediate collision risk. Since the CPA is well above the ship's current range, the risk is minimal. The COLREG rules don't require action here because there's no real risk of collision. The ship should maintain course and speed. The ETA is 1200 seconds, which is acceptable. So the correct action is to hold course.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No collision risk: ts1's CPA (5916m) is well clear. Goal bearing already matched. Maintain course and speed as per mission parameters.\"}"
    }
   },
   {
    "step": 50,
    "time": 500.0,
-   "situation_report": "Own-ship at (0.0, 1250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 2750m away.\n1 contact(s):\n  - ts1: range 6946m, rel.bearing 35.2 deg, heading 90.0, speed 1.00, CPA 5823m, TCPA 1406s",
+   "situation_report": "Own-ship at (0.0, 1250.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 2750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1100s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 6946m, rel.bearing 35.2 deg, heading 90.0, speed 1.00 m/s, CPA 5823m, TCPA 1406s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0.0, 1250.0) heading 0.0 (which is north, since in maritime terms 0 degrees is north), speed 2.5 m/s. The mission goal is at (0.0, 4000.0), so directly south, 2750 meters away. There's one contact, ts1, at 6946 meters range, relative bearing 3",
-    "_parse_error": true
+    "reasoning": "No collision risk detected (CPA 5823m > safe distance), goal bearing already matched, and speed is optimal for mission."
    },
    "debug": {
     "config": "v2_cot",
@@ -2698,19 +2698,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 423,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0.0, 1250.0) heading 0.0 (which is north, since in maritime terms 0 degrees is north), speed 2.5 m/s. The mission goal is at (0.0, 4000.0), so directly south, 2750 meters away. There's one contact, ts1, at 6946 meters range, relative bearing 35.2 degrees. The contact is heading 90 degrees (east), speed 1.0 m/s. CPA (closest point of approach) is 5823 meters, TCPA (time to CPA) is 1406 seconds.\n\nFirst, I need to determine if there's a risk of collision. The CPA is 5823 meters, which is quite far. The TCPA is over 20 minutes, so the contact is not imminent. But I should check the relative motion. The own-ship is moving north (since heading 0.0) at 2.5 m/s, and the contact is moving east at 1.0 m/s. The relative bearing is 35.2 degrees, so the contact is to the northeast of the own-ship. \n\nWait, relative bearing is 35.2 degrees. So from the own-ship's perspective, the contact is 35.2 degrees to the right (since bearings are measured clockwise from north). So the contact is northeast of the own-ship. The contact is moving east, so its course is to the east. The own-ship is moving north. So the contact is approaching from the northeast, moving east, while the own-ship is moving north. \n\nTo check if there's a risk of collision, we can look at the CPA. Since the CPA is 5823 meters, which is more than the distance between the ships (6946 meters), the contact is not going to collide. But wait, the CPA is the closest point of approach. So the contact is approaching, but not close enough to collide. \n\nBut according to COLREG, the give-way and stand-on rules apply. The own-ship is on a course of 0.0 (north), and the contact is on a course of 90 degrees (east). The relative motion here: the contact is moving east, the own"
+    "user_msg_chars": 988,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on the correct bearing for the goal, so no turn is needed. The only other vessel, ts1, is at a relative bearing of 35.2 degrees, which is to the starboard side. The CPA is 5823 meters, which is quite far, so there's no immediate collision risk. Since the CPA is well above the minimum safe distance, COLREG doesn't require any action here. The ship should maintain course and speed. The ETA is around 1100 seconds, which is acceptable. No need to adjust speed unless there's a risk, which there isn't. So the correct action is to hold course.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No collision risk detected (CPA 5823m > safe distance), goal bearing already matched, and speed is optimal for mission.\"}"
    }
   },
   {
    "step": 60,
    "time": 600.0,
-   "situation_report": "Own-ship at (0.0, 1500.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 2500m away.\n1 contact(s):\n  - ts1: range 6743m, rel.bearing 36.4 deg, heading 90.0, speed 1.00, CPA 5730m, TCPA 1320s",
+   "situation_report": "Own-ship at (0.0, 1500.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 2500m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1000s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 6743m, rel.bearing 36.4 deg, heading 90.0, speed 1.00 m/s, CPA 5730m, TCPA 1320s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0.0, 1500.0) heading 0.0 (which is north, since in maritime terms 0 degrees is north), speed 2.5 m/s. The mission goal is at (0.0, 4000.0), so directly north, 2500 meters away. There's one contact: ts1, which is at a range of 6743 meters, rela",
-    "_parse_error": true
+    "reasoning": "No collision risk: ts1's CPA is 5730m (well clear), and goal bearing is already matched. Maintain course/speed per COLREGs."
    },
    "debug": {
     "config": "v2_cot",
@@ -2718,19 +2718,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 423,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0.0, 1500.0) heading 0.0 (which is north, since in maritime terms 0 degrees is north), speed 2.5 m/s. The mission goal is at (0.0, 4000.0), so directly north, 2500 meters away. There's one contact: ts1, which is at a range of 6743 meters, relative bearing 36.4 degrees. The contact's heading is 90 degrees (east), speed 1.0 m/s. CPA (closest point of approach) is 5730 meters, TCPA (time to CPA) is 1320 seconds.\n\nFirst, I need to determine if there's a risk of collision. The CPA is 5730 meters, which is quite far, so maybe not an immediate risk. But I should check the COLREG rules. The key here is Rule 13, which deals with the responsibilities between vessels. The own-ship is going north, and the contact is moving east. The contact's CPA is 5730m, which is the closest approach. Since the CPA is not zero, there's no immediate collision risk. But I need to check if the contact is on a collision course. \n\nWait, the own-ship is moving north at 2.5 m/s, and the contact is moving east at 1.0 m/s. The relative motion here: the contact is approaching from the east (since relative bearing is 36.4 degrees, which is slightly north of east). Wait, relative bearing is measured from the own-ship's bow. So if the own-ship is heading north, a relative bearing of 36.4 degrees would mean the contact is to the east of the bow, but slightly north. Wait, relative bearings are measured clockwise from the bow. So if the own-ship is heading north (0 degrees), then a relative bearing of 36.4 degrees would be 36.4 degrees to the right (starboard) side. So the contact is to the starboard side, moving east. \n\nBut the CPA is 5730 meters, which is the closest approach. Since the CPA is not zero, there's no risk of collision. But according to COLREG, even if there's no immediate"
+    "user_msg_chars": 988,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on the correct bearing for the goal, so no turn is needed. The only other vessel, ts1, is at a relative bearing of 36.4 degrees, which is to the starboard side. The CPA is 5730 meters, which is quite far, so there's no immediate collision risk. Since the CPA is well above the ship's current range, the risk is minimal. The COLREG rules don't require action here because there's no real risk of collision. The ship should maintain course and speed. The ETA is 1000 seconds, which is acceptable. So the correct action is to hold course and continue at the current speed.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No collision risk: ts1's CPA is 5730m (well clear), and goal bearing is already matched. Maintain course/speed per COLREGs.\"}"
    }
   },
   {
    "step": 70,
    "time": 700.0,
-   "situation_report": "Own-ship at (0.0, 1750.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 2250m away.\n1 contact(s):\n  - ts1: range 6543m, rel.bearing 37.7 deg, heading 90.0, speed 1.00, CPA 5637m, TCPA 1234s",
+   "situation_report": "Own-ship at (0.0, 1750.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 2250m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 900s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 6543m, rel.bearing 37.7 deg, heading 90.0, speed 1.00 m/s, CPA 5637m, TCPA 1234s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0.0, 1750.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime terms) with a speed of 2.5 m/s. The mission goal is at (0.0, 4000.0), so that's straight north, 2250 meters away. The contact, ts1, is at a range of 6543 ",
-    "_parse_error": true
+    "reasoning": "No collision risk detected (CPA 5637m > 500m), goal bearing already matched, and no COLREG give-way obligation."
    },
    "debug": {
     "config": "v2_cot",
@@ -2738,19 +2738,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 423,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0.0, 1750.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime terms) with a speed of 2.5 m/s. The mission goal is at (0.0, 4000.0), so that's straight north, 2250 meters away. The contact, ts1, is at a range of 6543 meters, relative bearing 37.7 degrees. The contact's heading is 90 degrees (east), speed 1.0 m/s. The CPA (closest point of approach) is 5637 meters, and TCPA (time to CPA) is 1234 seconds.\n\nFirst, I need to determine if there's a risk of collision. The CPA is 5637 meters, which is quite far, so maybe not an immediate risk. But I should check the COLREG rules. The key here is Rule 13, which deals with the responsibilities between vessels. The own-ship is on a course of 0.0 (north), and the contact is moving east (heading 90 degrees). The relative bearing is 37.7 degrees, so the contact is to the northeast of the own-ship. \n\nWait, the own-ship is moving north, and the contact is moving east. Their paths might cross. But the CPA is 5637 meters, which is the closest approach. Since the CPA is not zero, there's no immediate collision risk. But I need to check if they are on a collision course. The TCPA is 1234 seconds, so they are approaching each other but not on a collision course. \n\nRule 15 says that when two power-driven vessels are approaching each other so as to involve risk of collision, each shall keep to the starboard side of the other. But in this case, since the CPA is not zero, there's no risk. So according to Rule 13, the vessel which has the other on her starboard side shall keep out of the way. Wait, the contact is on the starboard side of the own-ship? Let me visualize. The own-ship is heading north, and the contact is at a relative bearing of 37.7 degrees. So from the own-ship's perspective, the contact"
+    "user_msg_chars": 987,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on the correct bearing for the goal, so no turn is needed. The only other vessel, ts1, is at a relative bearing of 37.7 degrees, which is to the starboard side. The CPA is 5637 meters, which is quite far, so there's no immediate collision risk. Since the CPA is large, COLREG doesn't require action here. The ship should maintain course and speed. The ETA is 900 seconds, which is acceptable. No need to adjust for the other ship. So the action is hold_course.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No collision risk detected (CPA 5637m > 500m), goal bearing already matched, and no COLREG give-way obligation.\"}"
    }
   },
   {
    "step": 80,
    "time": 800.0,
-   "situation_report": "Own-ship at (0.0, 2000.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 2000m away.\n1 contact(s):\n  - ts1: range 6347m, rel.bearing 39.1 deg, heading 90.0, speed 1.00, CPA 5544m, TCPA 1148s",
+   "situation_report": "Own-ship at (0.0, 2000.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 2000m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 800s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 6347m, rel.bearing 39.1 deg, heading 90.0, speed 1.00 m/s, CPA 5544m, TCPA 1148s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0.0, 2000.0) heading 0.0 (which is north, since in maritime terms 0 degrees is north), speed 2.5 m/s. The mission goal is at (0.0, 4000.0), so directly north, 2000 meters away. There's one contact: ts1, which is at a range of 6347 meters, rela",
-    "_parse_error": true
+    "reasoning": "No collision risk: ts1's CPA (5544m) and TCPA (1148s) indicate no immediate danger. Own-ship is on goal bearing and safe course."
    },
    "debug": {
     "config": "v2_cot",
@@ -2758,19 +2758,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 423,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0.0, 2000.0) heading 0.0 (which is north, since in maritime terms 0 degrees is north), speed 2.5 m/s. The mission goal is at (0.0, 4000.0), so directly north, 2000 meters away. There's one contact: ts1, which is at a range of 6347 meters, relative bearing 39.1 degrees. The contact's heading is 90 degrees (east), speed 1.0 m/s. CPA (closest point of approach) is 5544 meters, TCPA (time to CPA) is 1148 seconds.\n\nFirst, I need to determine if there's a risk of collision. The CPA is 5544 meters, which is quite far, so maybe not an immediate risk. But I should check the COLREG rules. The key here is whether the two vessels are on a collision course. \n\nThe own-ship is moving north at 2.5 m/s. The contact is moving east at 1.0 m/s. The relative bearing is 39.1 degrees, which means the contact is to the northeast of the own-ship. Wait, relative bearing is measured from the own-ship's bow. So if the own-ship is heading north, a relative bearing of 39.1 degrees would mean the contact is 39.1 degrees to the right (starboard) side. So the contact is approaching from the east-northeast? Wait, maybe I need to visualize this.\n\nThe own-ship is moving north. The contact is moving east. The contact's position is 6347 meters away at a relative bearing of 39.1 degrees. So in terms of absolute position, the contact's position relative to the own-ship would be: since the own-ship is at (0,2000), and the contact is at a relative bearing of 39.1 degrees. Let me calculate the contact's absolute position. But maybe that's complicating. Instead, think about the relative motion.\n\nThe contact is moving east (heading 90 degrees) at 1 m/s. The own-ship is moving north at 2.5 m/s. The contact is approaching from the east, but since it"
+    "user_msg_chars": 987,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on course for the goal, so no turn is needed there. The main thing to check is the other ship, ts1. It's at a range of 6347m, rel.bearing 39.1 degrees, heading 90 (so it's moving east), speed 1.00 m/s. The CPA is 5544m, which is pretty close but not immediate. The TCPA is 1148 seconds, so it's not a near-term collision. \n\nApplying COLREGs, Rule 13 says that when two power-driven vessels are approaching each other, the one on the port side must give way. Wait, but here the other ship is on the starboard side (rel.bearing 39.1 degrees, so to starboard). Wait, no, the rel.bearing is 39.1, which is to the right (starboard). So the other ship is on the starboard side. According to Rule 13, the vessel on the port side (the one that is to the left) should give way. But in this case, the other ship is on the starboard side. So the own-ship is on the port side? Wait, the own-ship is heading 0.0 (north), and the other ship is at a rel.bearing of 39.1 degrees, which is to the right (starboard). So the other ship is to the starboard side of the own-ship. \n\nRule 13: When two power-driven vessels are approaching each other so that there is a risk of collision, the vessel which should keep her course and speed is the one which has the other on her starboard side. Wait, no. Rule 13 says that if two power-driven vessels are on a collision course, the one which has the other on her starboard side must give way. So in this case, the other ship is on the starboard side. Therefore, the own-ship is the one that should keep course and speed. So the other ship should give way. But the own-ship is on a course towards the goal. Since the CPA is 5544m, which is more than the distance to the goal (2000m), so the risk isn't immediate. The TCPA is 1148s, so the closest point is still ahead. So there's no immediate risk. Therefore, no need to change course. The own-ship is on the correct course, and the other ship is not a collision risk. So the action is to hold course. \n\nWait, but the CPA is 5544m, which is the closest distance. Since the own-ship is moving towards the goal, and the other ship is moving east (heading 90), their paths might cross. But the CPA is 5544m, which is more than the distance to the goal. So the risk isn't present. Therefore, no action needed. So the answer is hold course, no rule applied.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No collision risk: ts1's CPA (5544m) and TCPA (1148s) indicate no immediate danger. Own-ship is on goal bearing and safe course.\"}"
    }
   },
   {
    "step": 90,
    "time": 900.0,
-   "situation_report": "Own-ship at (0.0, 2250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 1750m away.\n1 contact(s):\n  - ts1: range 6155m, rel.bearing 40.5 deg, heading 90.0, speed 1.00, CPA 5451m, TCPA 1061s",
+   "situation_report": "Own-ship at (0.0, 2250.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 1750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 700s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 6155m, rel.bearing 40.5 deg, heading 90.0, speed 1.00 m/s, CPA 5451m, TCPA 1061s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0.0, 2250.0) heading 0.0 degrees, which is straight along the positive x-axis. The mission goal is at (0.0, 4000.0), so directly north. The distance to the goal is 1750 meters. There's one contact, ts1, at a range of 6155 meters, relative bear",
-    "_parse_error": true
+    "reasoning": "No collision risk: ts1's CPA is 5451m (safe), and own-ship is already on goal bearing. No COLREG rule applies as risk is not imminent."
    },
    "debug": {
     "config": "v2_cot",
@@ -2778,19 +2778,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 423,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0.0, 2250.0) heading 0.0 degrees, which is straight along the positive x-axis. The mission goal is at (0.0, 4000.0), so directly north. The distance to the goal is 1750 meters. There's one contact, ts1, at a range of 6155 meters, relative bearing 40.5 degrees. The contact is heading 90 degrees (east) at 1.00 m/s. CPA is 5451 meters, TCPA is 1061 seconds.\n\nFirst, I need to determine if there's a risk of collision. The CPA is the closest point of approach, which is 5451 meters. Since the CPA is quite far (over 5 kilometers), the risk of collision seems low. But I should check the relative motion. The own-ship is moving north at 2.5 m/s, and the contact is moving east at 1.0 m/s. The relative motion would be such that the contact is moving away from the own-ship's path. The relative bearing is 40.5 degrees, so the contact is to the northeast of the own-ship. The contact's path is east, so it's moving away from the own-ship's position. The CPA is 5451 meters, which is still a long way, so the risk is minimal.\n\nCOLREGs: Rule 13 says that when two power-driven vessels are approaching each other so that there is a risk of collision, the vessel which should keep her course and speed is the one on the starboard side. But in this case, the CPA is not imminent. Rule 15 is about crossing situations, but the contact is moving east, and the own-ship is moving north. The contact is on the port side (relative bearing 40.5 degrees, which is left of the bow). Since the contact is moving east, it's not crossing the own-ship's path. The own-ship is on a direct course to the north, and the contact is moving east, so their paths are diverging. Therefore, there's no immediate risk. \n\nSince there's no risk of collision, the correct action is to hold course. The own-ship should continue towards the goal without changing course or speed"
+    "user_msg_chars": 987,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on the correct bearing for the goal, so no turn is needed. The only other vessel, ts1, is at a relative bearing of 40.5 degrees, which is to the starboard side. The CPA is 5451 meters, which is quite far, so there's no immediate collision risk. Since the CPA is well above the ship's current range, the risk is minimal. The ship's speed is 2.5 m/s, and the ETA is 700 seconds. The other ship is moving at 1.0 m/s, so even though it's on a collision course, the CPA is still safe. According to COLREG Rule 13, the give-way vessel must take early and substantial action. But since the CPA is not imminent, the ship can maintain course. So the correct action is to hold course and continue at the current speed.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No collision risk: ts1's CPA is 5451m (safe), and own-ship is already on goal bearing. No COLREG rule applies as risk is not imminent.\"}"
    }
   },
   {
    "step": 100,
    "time": 1000.0,
-   "situation_report": "Own-ship at (0.0, 2500.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 1500m away.\n1 contact(s):\n  - ts1: range 5967m, rel.bearing 42.1 deg, heading 90.0, speed 1.00, CPA 5359m, TCPA 975s",
+   "situation_report": "Own-ship at (0.0, 2500.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 1500m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 600s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5967m, rel.bearing 42.1 deg, heading 90.0, speed 1.00 m/s, CPA 5359m, TCPA 975s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0.0, 2500.0) heading 0.0 (which is north, since in maritime terms 0 degrees is north), speed 2.5 m/s. The mission goal is at (0.0, 4000.0), so directly north, 1500 meters away. There's one contact, ts1, at range 5967m, relative bearing 42.1 de",
-    "_parse_error": true
+    "reasoning": "Already on goal bearing (0.0 deg) with safe CPA (5359m) to ts1; no collision risk, so maintain course and speed."
    },
    "debug": {
     "config": "v2_cot",
@@ -2798,19 +2798,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 422,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0.0, 2500.0) heading 0.0 (which is north, since in maritime terms 0 degrees is north), speed 2.5 m/s. The mission goal is at (0.0, 4000.0), so directly north, 1500 meters away. There's one contact, ts1, at range 5967m, relative bearing 42.1 degrees. The contact's heading is 90.0 degrees (east), speed 1.00 m/s. CPA is 5359m, TCPA 975 seconds.\n\nFirst, I need to determine if there's a risk of collision. The CPA is the closest point of approach, which is 5359 meters. Since the CPA is quite far (over 5000 meters), the risk seems low. But I should check the relative motion. The own-ship is moving north at 2.5 m/s, and the contact is moving east at 1.0 m/s. The relative bearing is 42.1 degrees, so the contact is to the northeast of the own-ship. \n\nWait, relative bearing is 42.1 degrees. So from the own-ship's perspective, the contact is 42.1 degrees to the right (since heading is 0.0, which is north, so relative bearing would be measured clockwise from the bow). So the contact is northeast of the own-ship. The contact is moving east, so its course is to the east. The own-ship is moving north. So the contact is approaching from the northeast, moving east, while the own-ship is moving north. \n\nThe CPA is 5359 meters, which is the closest they'll get. Since the TCPA is 975 seconds, which is over 16 minutes, that's a long time. The CPA is still quite far, so the risk of collision is low. But according to COLREG, even if the CPA is not immediate, if there's a risk, you need to take action. But how do we determine if there's a risk?\n\nCOLREG Rule 13 says that when two power-driven vessels are approaching each other so that there is a risk of collision, each shall keep to the right. But in this case,"
+    "user_msg_chars": 986,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on course for the goal, so no turn is needed. The only other vessel, ts1, is at a 42.1-degree bearing, moving east (heading 90). The CPA is 5359m, which is quite far, so no immediate collision risk. Since the CPA is safe and the ship is already on the correct bearing, the best action is to maintain course and speed. No COLREG rules apply here because there's no risk of collision. So, the answer should be hold_course with no rule applied.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"Already on goal bearing (0.0 deg) with safe CPA (5359m) to ts1; no collision risk, so maintain course and speed.\"}"
    }
   },
   {
    "step": 110,
    "time": 1100.0,
-   "situation_report": "Own-ship at (0.0, 2750.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 1250m away.\n1 contact(s):\n  - ts1: range 5784m, rel.bearing 43.8 deg, heading 90.0, speed 1.00, CPA 5266m, TCPA 889s",
+   "situation_report": "Own-ship at (0.0, 2750.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 1250m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 500s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5784m, rel.bearing 43.8 deg, heading 90.0, speed 1.00 m/s, CPA 5266m, TCPA 889s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0.0, 2750.0) heading 0.0 degrees, which is straight along the positive x-axis. The mission goal is at (0.0, 4000.0), so directly north. The distance to the goal is 1250 meters. There's one contact, ts1, at a range of 5784 meters, relative bear",
-    "_parse_error": true
+    "reasoning": "Goal bearing is already matched (within 10°), and the only contact (ts1) has CPA 5266m (no collision risk). No COLREG rule applies as ts1 is not on a collision course."
    },
    "debug": {
     "config": "v2_cot",
@@ -2818,19 +2818,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 422,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0.0, 2750.0) heading 0.0 degrees, which is straight along the positive x-axis. The mission goal is at (0.0, 4000.0), so directly north. The distance to the goal is 1250 meters. There's one contact, ts1, at a range of 5784 meters, relative bearing 43.8 degrees. The contact is heading 90 degrees (east) at 1.00 m/s. CPA is 5266m and TCPA is 889 seconds.\n\nFirst, I need to determine if there's a risk of collision. The CPA is the closest point of approach, which is 5266 meters. Since the CPA is quite far (over 5 km), maybe there's no immediate risk. But I should check the relative motion. The own-ship is moving north at 2.5 m/s, and the contact is moving east at 1.0 m/s. The relative bearing is 43.8 degrees, so the contact is to the northeast of the own-ship. \n\nWait, the own-ship is moving north, and the contact is moving east. So their paths are diverging. The contact is approaching from the northeast, moving east, while the own-ship is moving north. The CPA is 5266m, which is still a long way. The TCPA is 889 seconds, so the closest approach is in about 15 minutes. But since the CPA is not less than the range, maybe there's no risk. \n\nBut according to COLREG, Rule 13 says that when two power-driven vessels are approaching each other so that there is a risk of collision, the vessel which should keep her course and speed is the one on the starboard side. Wait, but in this case, the contact is on a relative bearing of 43.8 degrees, which is northeast. The own-ship is moving north, and the contact is moving east. So their relative motion: the contact is moving east, so from the own-ship's perspective, the contact is moving to the east and south? Wait, the own-ship is moving north. The contact is moving east. So the contact's position relative to the own-ship is changing. \n\nAlternatively,"
+    "user_msg_chars": 986,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on the correct bearing for the goal, so no turn is needed. The only other vessel, ts1, is at a relative bearing of 43.8 degrees, which is to the starboard side. The CPA is 5266 meters, which is quite far, so there's no immediate collision risk. Since the CPA is well above the ship's current range, the risk is minimal. The ship's speed is at the rated speed, so no need to adjust speed. The goal is on course, so the best action is to hold course and maintain speed. No COLREG rules are violated here because the other ship isn't in a collision course. So the answer should be hold course with no degrees and rule applied as none.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"Goal bearing is already matched (within 10°), and the only contact (ts1) has CPA 5266m (no collision risk). No COLREG rule applies as ts1 is not on a collision course.\"}"
    }
   },
   {
    "step": 120,
    "time": 1200.0,
-   "situation_report": "Own-ship at (0.0, 3000.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 1000m away.\n1 contact(s):\n  - ts1: range 5606m, rel.bearing 45.5 deg, heading 90.0, speed 1.00, CPA 5173m, TCPA 803s",
+   "situation_report": "Own-ship at (0.0, 3000.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 1000m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 400s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5606m, rel.bearing 45.5 deg, heading 90.0, speed 1.00 m/s, CPA 5173m, TCPA 803s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0.0, 3000.0) heading 0.0 (which is north, since in maritime terms 0 degrees is north), speed 2.5 m/s. The mission goal is at (0.0, 4000.0), so directly north, 1000 meters away. There's one contact: ts1, which is at a range of 5606 meters, rela",
-    "_parse_error": true
+    "reasoning": "Already on goal bearing (0.0 deg) with safe CPA (5173m) to ts1; no collision risk, so maintain course and speed."
    },
    "debug": {
     "config": "v2_cot",
@@ -2838,19 +2838,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 422,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0.0, 3000.0) heading 0.0 (which is north, since in maritime terms 0 degrees is north), speed 2.5 m/s. The mission goal is at (0.0, 4000.0), so directly north, 1000 meters away. There's one contact: ts1, which is at a range of 5606 meters, relative bearing 45.5 degrees. The contact's heading is 90 degrees (east), speed 1.0 m/s. The CPA (closest point of approach) is 5173 meters, and TCPA (time to CPA) is 803 seconds.\n\nFirst, I need to determine if there's a risk of collision. The CPA is 5173 meters, which is quite far, so maybe not an immediate risk. But I should check the COLREG rules. The key here is whether the two vessels are on a collision course. \n\nThe own-ship is moving north at 2.5 m/s. The contact is moving east at 1.0 m/s. The relative bearing is 45.5 degrees, which means the contact is northeast of the own-ship. Let me visualize this: the own-ship is going straight north, and the contact is moving east. The contact's position relative to the own-ship is northeast, so the contact is approaching from the northeast, moving east. \n\nThe CPA is 5173 meters, which is the closest they'll get. Since the TCPA is 803 seconds, that's over 13 minutes. So the contact is not going to collide. But wait, maybe I should check the relative motion. The own-ship is moving north, the contact is moving east. The relative motion would be the contact approaching from the northeast, but since the own-ship is moving north and the contact is moving east, their paths might not cross. \n\nBut according to COLREG Rule 13, when two power-driven vessels are approaching each other, the one on the port side must keep clear. Wait, but the contact is moving east, and the own-ship is moving north. The relative bearing is 45.5 degrees, so the contact is to the northeast of the own-ship. The contact's heading is east, so"
+    "user_msg_chars": 986,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on course for the goal, so no turn is needed. The only other vessel, ts1, is at a 45.5-degree relative bearing, moving east (heading 90). The CPA is 5173m, which is more than 5000m, so no immediate collision risk. Since the CPA is safe and the ship is already on the correct bearing, the best action is to maintain course and speed. No COLREG rules apply here because there's no risk of collision. So, the answer should be hold_course with no rule applied.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"Already on goal bearing (0.0 deg) with safe CPA (5173m) to ts1; no collision risk, so maintain course and speed.\"}"
    }
   },
   {
    "step": 130,
    "time": 1300.0,
-   "situation_report": "Own-ship at (0.0, 3250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 750m away.\n1 contact(s):\n  - ts1: range 5434m, rel.bearing 47.4 deg, heading 90.0, speed 1.00, CPA 5080m, TCPA 717s",
+   "situation_report": "Own-ship at (0.0, 3250.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 300s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5434m, rel.bearing 47.4 deg, heading 90.0, speed 1.00 m/s, CPA 5080m, TCPA 717s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0.0, 3250.0) heading 0.0 degrees, which is straight along the positive x-axis. The mission goal is at (0.0, 4000.0), so directly north. The distance to the goal is 750 meters. The contact, ts1, is at a range of 5434 meters, relative bearing 47",
-    "_parse_error": true
+    "reasoning": "No collision risk detected (CPA 5080m > safe distance), already on goal bearing (0.0 deg), no COLREG obligations apply."
    },
    "debug": {
     "config": "v2_cot",
@@ -2858,19 +2858,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 421,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0.0, 3250.0) heading 0.0 degrees, which is straight along the positive x-axis. The mission goal is at (0.0, 4000.0), so directly north. The distance to the goal is 750 meters. The contact, ts1, is at a range of 5434 meters, relative bearing 47.4 degrees, heading 90 degrees (east), speed 1.00 m/s. CPA is 5080 meters and TCPA is 717 seconds.\n\nFirst, I need to determine if there's a risk of collision. The CPA is 5080 meters, which is the closest point of approach. Since the CPA is not zero, there's no immediate collision risk. But I should check if the contact is on a collision course. The own-ship is moving north (heading 0.0), and the contact is moving east (heading 90.0). Their relative motion: the contact is approaching from the northeast (relative bearing 47.4 degrees), but since the contact is moving east, and the own-ship is moving north, their paths might cross. Wait, but the CPA is 5080m, so they are not on a collision course. \n\nCOLREG Rule 15 says that when two power-driven vessels are approaching each other so as to involve risk of collision, the vessel which should keep her course and speed is the one on the starboard side of the other. But here, the contact is on a relative bearing of 47.4 degrees, which is northeast. The own-ship is moving north, and the contact is moving east. So the contact is approaching from the east? Wait, the contact's position is relative to the own-ship. The own-ship is at (0.0, 3250.0), and the contact is at 5434m range, 47.4 degrees relative bearing. So in the own-ship's frame, the contact is northeast. But the contact is moving east (heading 90 degrees). So the contact is moving east, which in the own-ship's frame, that would be towards the east. Wait, the own-ship is moving north. So the contact is approaching from the northeast, moving east"
+    "user_msg_chars": 985,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on course for the goal, so no turn is needed. The only other vessel, ts1, is at a 47.4-degree relative bearing, moving east (heading 90). The CPA is 5080m, which is quite far, so no immediate collision risk. Since the CPA is safe and the ship is already on the correct bearing, the best action is to maintain course and speed. No COLREG rules apply here because there's no risk of collision. So, the answer should be hold_course with no rule applied.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No collision risk detected (CPA 5080m > safe distance), already on goal bearing (0.0 deg), no COLREG obligations apply.\"}"
    }
   },
   {
    "step": 140,
    "time": 1400.0,
-   "situation_report": "Own-ship at (0.0, 3500.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 500m away.\n1 contact(s):\n  - ts1: range 5268m, rel.bearing 49.4 deg, heading 90.0, speed 1.00, CPA 4987m, TCPA 630s",
+   "situation_report": "Own-ship at (0.0, 3500.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 500m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 200s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5268m, rel.bearing 49.4 deg, heading 90.0, speed 1.00 m/s, CPA 4987m, TCPA 630s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0.0, 3500.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime terms) with a speed of 2.5 m/s. The mission goal is at (0.0, 4000.0), which is 500 meters north. So the own-ship needs to go north to reach the goal.\n\nNow",
-    "_parse_error": true
+    "reasoning": "No collision risk: ts1's CPA (4987m) is well clear of current range (5268m), and the goal bearing is already matched. Maintain course per COLREGs."
    },
    "debug": {
     "config": "v2_cot",
@@ -2878,19 +2878,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 421,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0.0, 3500.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime terms) with a speed of 2.5 m/s. The mission goal is at (0.0, 4000.0), which is 500 meters north. So the own-ship needs to go north to reach the goal.\n\nNow, there's a contact named ts1. The range is 5268 meters, relative bearing 49.4 degrees. The contact's heading is 90.0 degrees (east), speed 1.00 m/s. CPA (closest point of approach) is 4987 meters, TCPA (time to CPA) is 630 seconds. \n\nFirst, I need to determine if there's a risk of collision. The CPA is very close, almost the same as the initial range, but slightly less. The TCPA is 630 seconds, which is over 10 minutes. But the CPA is still quite close. However, the contact is moving east (heading 90 degrees) while the own-ship is moving north. \n\nLet me visualize this. The own-ship is moving north, and the contact is moving east. Their relative motion: the contact is approaching from the east (since relative bearing is 49.4 degrees, which is northeast from the own-ship's position). Wait, relative bearing is measured from the own-ship's bow. So if the own-ship is heading north (0 degrees), a relative bearing of 49.0 degrees would mean the contact is to the northeast. But the contact's heading is east, so it's moving east. \n\nThe CPA is 4987 meters, which is just a bit less than the initial range of 5268 meters. So the contact is approaching, but not on a collision course. The CPA is still quite far, and the TCPA is 630 seconds. But according to COLREG, if the CPA is less than the range, there's a risk. However, the CPA here is 4987m, which is less than the initial range, but the TCPA is 630s. \n\nBut wait, the own-ship is moving north at 2.5 m/s, and"
+    "user_msg_chars": 985,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on the correct bearing for the goal, so no turn is needed. The only other vessel, ts1, is at a relative bearing of 49.4 degrees, which is to the starboard side. The CPA is 4987 meters, which is quite far, so there's no immediate collision risk. Since the CPA is well above the ship's current range, the risk is minimal. The COLREG rules don't require action here because there's no real risk of collision. The ship should maintain course and speed. The ETA is 200 seconds, which is acceptable. So the correct action is to hold course.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No collision risk: ts1's CPA (4987m) is well clear of current range (5268m), and the goal bearing is already matched. Maintain course per COLREGs.\"}"
    }
   },
   {
    "step": 150,
    "time": 1500.0,
-   "situation_report": "Own-ship at (0.0, 3750.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 250m away.\n1 contact(s):\n  - ts1: range 5109m, rel.bearing 51.5 deg, heading 90.0, speed 1.00, CPA 4894m, TCPA 544s",
+   "situation_report": "Own-ship at (0.0, 3750.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 250m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 100s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5109m, rel.bearing 51.5 deg, heading 90.0, speed 1.00 m/s, CPA 4894m, TCPA 544s",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The own-ship is at (0.0, 3750.0) heading 0.0 (which is north, since in maritime terms 0 degrees is north), speed 2.5 m/s. The mission goal is at (0.0, 4000.0), which is 250 meters north. So the own-ship needs to go north to reach the goal.\n\nNow, there's a contact",
-    "_parse_error": true
+    "reasoning": "No collision risk detected (CPA 4894m > 500m), goal bearing already matched, and no COLREG give-way obligation applies to the distant target."
    },
    "debug": {
     "config": "v2_cot",
@@ -2898,8 +2898,8 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 421,
-    "raw_response": "<think>\nOkay, let's break this down. The own-ship is at (0.0, 3750.0) heading 0.0 (which is north, since in maritime terms 0 degrees is north), speed 2.5 m/s. The mission goal is at (0.0, 4000.0), which is 250 meters north. So the own-ship needs to go north to reach the goal.\n\nNow, there's a contact named ts1. The range is 5109 meters, relative bearing 51.5 degrees. The contact's heading is 90.0 degrees, which is east. Speed is 1.00 m/s. CPA (closest point of approach) is 4894 meters, and TCPA (time to closest point of approach) is 544 seconds. \n\nFirst, I need to determine if there's a risk of collision. The CPA is 4894 meters, which is quite far. The TCPA is over 500 seconds, so the contact is not going to collide with the own-ship. But wait, the own-ship is moving north at 2.5 m/s, and the contact is moving east at 1.0 m/s. Let me visualize their paths. \n\nThe own-ship is moving north, and the contact is moving east. Their relative motion: the contact is approaching from the east (since relative bearing is 51.5 degrees, which would be northeast from the own-ship's perspective? Wait, relative bearing is measured from the own-ship's bow. So if the own-ship is heading north (0 degrees), a relative bearing of 51.5 degrees would mean the contact is to the northeast. But the contact's heading is east (90 degrees), so it's moving east. The own-ship is moving north. \n\nSo their paths are crossing? Let me check the CPA. The CPA is 4894 meters, which is the closest distance between the two vessels. Since the CPA is positive (they are not on a collision course), there's no immediate risk. But the own-ship is moving towards the goal, which is directly north. The contact is moving east, so it's not in the way of the own-ship's path. \n\nBut wait, the contact's CPA is 4890 meters, which is still a"
+    "user_msg_chars": 985,
+    "raw_response": "<think>\nOkay, let's break this down. The ship is on course for the goal, so no turn is needed. The only other vessel, ts1, is at a relative bearing of 51.5 degrees, which is to the starboard side. The CPA is 4894 meters, which is quite far, so there's no immediate collision risk. Since the CPA is large, COLREG doesn't require any action here. The ship should maintain course and speed. The ETA is 100 seconds, which is fine. No need to adjust for the other ship. So the action is hold_course.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No collision risk detected (CPA 4894m > 500m), goal bearing already matched, and no COLREG give-way obligation applies to the distant target.\"}"
    }
   }
  ]

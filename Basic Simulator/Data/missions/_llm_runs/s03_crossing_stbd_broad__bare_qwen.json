@@ -2,16 +2,16 @@
  "mission_id": "s03_crossing_stbd_broad",
  "config": "bare_qwen",
  "tag": "default",
- "generated_at": "2026-09-19T06:12:30.683777+00:00",
+ "generated_at": "2026-09-20T03:55:48.872973+00:00",
  "params": {
   "decision_interval": 10,
   "dt": 10.0,
   "max_steps": 200,
   "enable_thinking": false,
   "max_new_tokens": 256,
-  "k": 4,
+  "k": 2,
   "use_rag": true,
-  "system_prompt": "You are the navigator on a large commercial vessel. You must navigate according to COLREG (the International Regulations for Preventing Collisions at Sea) at all times, avoiding collisions while making safe and efficient progress. Avoiding collisions comes first; once safe, reach the goal via the shortest direct track, with as few manoeuvres as possible and no zigzagging. Ground your reasoning in the provided COLREG excerpts and procedure guidance where given. If no target poses a real risk of collision, recommend holding course. What order do you give to the helm? Reply with ONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"rule_applied\": \"<e.g. Rule 15, or 'none' if no rule applies>\",\n \"reasoning\": \"<one or two sentences>\"}",
+  "system_prompt": "You are the navigator on a large commercial vessel. Your objective is to get the ship to the mission goal (position/bearing/distance given in the situation report) as directly and efficiently as possible -- that is the task. The one hard constraint on every decision, with no exceptions: never put the ship on a collision course with another vessel. When a real risk of collision exists, COLREG (the International Regulations for Preventing Collisions at Sea) governs which vessel gives way and how -- satisfy that constraint first, then resume progress toward the goal. All positions/bearings/headings given below are in metres and degrees, heading 0=north, clockwise, matching compass bearings -- take this as given, don't re-derive or second-guess it. rel.bearing is signed: positive = target is to starboard (right), negative = to port (left), 0=dead ahead, ~180/-180=dead astern. CPA is the closest distance the contact will EVER come to you at current headings/speeds; TCPA is the seconds until that closest point. TCPA=0 does NOT always mean a collision is imminent -- it also occurs when the vessels are already moving apart (closest point already passed); the situation report says so explicitly when that's the case. Judge real risk from the CPA distance itself, not from TCPA alone. DEFAULT PROCEDURE, apply this every single time: the situation report has a line starting \"GOAL COURSE CHECK:\" -- use ONLY that line to decide the goal-correction action and degrees, never a contact's rel.bearing (a contact's rel.bearing is about THAT CONTACT, not the goal, even if the numbers look similar). If \"GOAL COURSE CHECK\" says you're already on the goal bearing, hold_course (for the goal, at least). Otherwise it gives you the exact action (\"turn_left\"/\"turn_right\") and degrees to use -- copy those values directly into your answer, don't recompute them and don't substitute a different number from elsewhere in the report. Your track to the goal must look like a smooth curve or a straight line, NEVER a zigzag -- do not answer turn_right and then turn_left (or vice versa) on consecutive decisions just to chase a small residual mismatch; \"GOAL COURSE CHECK\" already has a 10-degree deadband built in for this. Only override any of this if a target poses a REAL risk of collision, in which case the COLREG-required give-way/stand-on manoeuvre takes precedence instead. Do not just describe the mismatch in your reasoning and then answer hold_course anyway when \"GOAL COURSE CHECK\" calls for a turn -- the action MUST match what that line says, never hold_course when it names a turn. Ground your reasoning in the provided COLREG excerpts and procedure guidance where given. If you are already on the goal bearing (within about 10 degrees) and your current speed is below the nominal/rated speed given for this mission, speed_up instead: reaching the goal sooner (when safe) is part of efficient progress too. What order do you give to the helm? Reply with ONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"rule_applied\": \"<e.g. Rule 15, or 'none' if no rule applies>\",\n \"reasoning\": \"<one or two sentences>\"}",
   "system_prompt_is_custom": false
  },
  "outcome": {
@@ -39,10 +39,10 @@
   {
    "time": 10.0,
    "vehicle": "own_ship",
-   "x": 6.47,
-   "y": 24.15,
-   "heading": 15.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 5.0,
+   "heading": 0.0,
+   "speed": 0.5
   },
   {
    "time": 10.0,
@@ -55,10 +55,10 @@
   {
    "time": 20.0,
    "vehicle": "own_ship",
-   "x": 12.94,
-   "y": 48.3,
-   "heading": 15.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 10.0,
+   "heading": 0.0,
+   "speed": 0.5
   },
   {
    "time": 20.0,
@@ -71,10 +71,10 @@
   {
    "time": 30.0,
    "vehicle": "own_ship",
-   "x": 19.41,
-   "y": 72.44,
-   "heading": 15.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 15.0,
+   "heading": 0.0,
+   "speed": 0.5
   },
   {
    "time": 30.0,
@@ -87,10 +87,10 @@
   {
    "time": 40.0,
    "vehicle": "own_ship",
-   "x": 25.88,
-   "y": 96.59,
-   "heading": 15.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 20.0,
+   "heading": 0.0,
+   "speed": 0.5
   },
   {
    "time": 40.0,
@@ -103,10 +103,10 @@
   {
    "time": 50.0,
    "vehicle": "own_ship",
-   "x": 32.35,
-   "y": 120.74,
-   "heading": 15.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 25.0,
+   "heading": 0.0,
+   "speed": 0.5
   },
   {
    "time": 50.0,
@@ -119,10 +119,10 @@
   {
    "time": 60.0,
    "vehicle": "own_ship",
-   "x": 38.82,
-   "y": 144.89,
-   "heading": 15.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 30.0,
+   "heading": 0.0,
+   "speed": 0.5
   },
   {
    "time": 60.0,
@@ -135,10 +135,10 @@
   {
    "time": 70.0,
    "vehicle": "own_ship",
-   "x": 45.29,
-   "y": 169.04,
-   "heading": 15.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 35.0,
+   "heading": 0.0,
+   "speed": 0.5
   },
   {
    "time": 70.0,
@@ -151,10 +151,10 @@
   {
    "time": 80.0,
    "vehicle": "own_ship",
-   "x": 51.76,
-   "y": 193.19,
-   "heading": 15.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 40.0,
+   "heading": 0.0,
+   "speed": 0.5
   },
   {
    "time": 80.0,
@@ -167,10 +167,10 @@
   {
    "time": 90.0,
    "vehicle": "own_ship",
-   "x": 58.23,
-   "y": 217.33,
-   "heading": 15.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 45.0,
+   "heading": 0.0,
+   "speed": 0.5
   },
   {
    "time": 90.0,
@@ -183,10 +183,10 @@
   {
    "time": 100.0,
    "vehicle": "own_ship",
-   "x": 64.7,
-   "y": 241.48,
-   "heading": 15.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 50.0,
+   "heading": 0.0,
+   "speed": 0.5
   },
   {
    "time": 100.0,
@@ -199,10 +199,10 @@
   {
    "time": 110.0,
    "vehicle": "own_ship",
-   "x": 64.7,
-   "y": 266.48,
+   "x": 0.0,
+   "y": 50.0,
    "heading": 0.0,
-   "speed": 2.5
+   "speed": 0.0
   },
   {
    "time": 110.0,
@@ -215,10 +215,10 @@
   {
    "time": 120.0,
    "vehicle": "own_ship",
-   "x": 64.7,
-   "y": 291.48,
+   "x": 0.0,
+   "y": 50.0,
    "heading": 0.0,
-   "speed": 2.5
+   "speed": 0.0
   },
   {
    "time": 120.0,
@@ -231,10 +231,10 @@
   {
    "time": 130.0,
    "vehicle": "own_ship",
-   "x": 64.7,
-   "y": 316.48,
+   "x": 0.0,
+   "y": 50.0,
    "heading": 0.0,
-   "speed": 2.5
+   "speed": 0.0
   },
   {
    "time": 130.0,
@@ -247,10 +247,10 @@
   {
    "time": 140.0,
    "vehicle": "own_ship",
-   "x": 64.7,
-   "y": 341.48,
+   "x": 0.0,
+   "y": 50.0,
    "heading": 0.0,
-   "speed": 2.5
+   "speed": 0.0
   },
   {
    "time": 140.0,
@@ -263,10 +263,10 @@
   {
    "time": 150.0,
    "vehicle": "own_ship",
-   "x": 64.7,
-   "y": 366.48,
+   "x": 0.0,
+   "y": 50.0,
    "heading": 0.0,
-   "speed": 2.5
+   "speed": 0.0
   },
   {
    "time": 150.0,
@@ -279,10 +279,10 @@
   {
    "time": 160.0,
    "vehicle": "own_ship",
-   "x": 64.7,
-   "y": 391.48,
+   "x": 0.0,
+   "y": 50.0,
    "heading": 0.0,
-   "speed": 2.5
+   "speed": 0.0
   },
   {
    "time": 160.0,
@@ -295,10 +295,10 @@
   {
    "time": 170.0,
    "vehicle": "own_ship",
-   "x": 64.7,
-   "y": 416.48,
+   "x": 0.0,
+   "y": 50.0,
    "heading": 0.0,
-   "speed": 2.5
+   "speed": 0.0
   },
   {
    "time": 170.0,
@@ -311,10 +311,10 @@
   {
    "time": 180.0,
    "vehicle": "own_ship",
-   "x": 64.7,
-   "y": 441.48,
+   "x": 0.0,
+   "y": 50.0,
    "heading": 0.0,
-   "speed": 2.5
+   "speed": 0.0
   },
   {
    "time": 180.0,
@@ -327,10 +327,10 @@
   {
    "time": 190.0,
    "vehicle": "own_ship",
-   "x": 64.7,
-   "y": 466.48,
+   "x": 0.0,
+   "y": 50.0,
    "heading": 0.0,
-   "speed": 2.5
+   "speed": 0.0
   },
   {
    "time": 190.0,
@@ -343,10 +343,10 @@
   {
    "time": 200.0,
    "vehicle": "own_ship",
-   "x": 64.7,
-   "y": 491.48,
+   "x": 0.0,
+   "y": 50.0,
    "heading": 0.0,
-   "speed": 2.5
+   "speed": 0.0
   },
   {
    "time": 200.0,
@@ -359,10 +359,10 @@
   {
    "time": 210.0,
    "vehicle": "own_ship",
-   "x": 58.23,
-   "y": 515.63,
-   "heading": 345.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 70.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 210.0,
@@ -375,10 +375,10 @@
   {
    "time": 220.0,
    "vehicle": "own_ship",
-   "x": 51.76,
-   "y": 539.78,
-   "heading": 345.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 90.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 220.0,
@@ -391,10 +391,10 @@
   {
    "time": 230.0,
    "vehicle": "own_ship",
-   "x": 45.29,
-   "y": 563.93,
-   "heading": 345.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 110.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 230.0,
@@ -407,10 +407,10 @@
   {
    "time": 240.0,
    "vehicle": "own_ship",
-   "x": 38.82,
-   "y": 588.07,
-   "heading": 345.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 130.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 240.0,
@@ -423,10 +423,10 @@
   {
    "time": 250.0,
    "vehicle": "own_ship",
-   "x": 32.35,
-   "y": 612.22,
-   "heading": 345.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 150.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 250.0,
@@ -439,10 +439,10 @@
   {
    "time": 260.0,
    "vehicle": "own_ship",
-   "x": 25.88,
-   "y": 636.37,
-   "heading": 345.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 170.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 260.0,
@@ -455,10 +455,10 @@
   {
    "time": 270.0,
    "vehicle": "own_ship",
-   "x": 19.41,
-   "y": 660.52,
-   "heading": 345.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 190.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 270.0,
@@ -471,10 +471,10 @@
   {
    "time": 280.0,
    "vehicle": "own_ship",
-   "x": 12.94,
-   "y": 684.67,
-   "heading": 345.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 210.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 280.0,
@@ -487,10 +487,10 @@
   {
    "time": 290.0,
    "vehicle": "own_ship",
-   "x": 6.47,
-   "y": 708.81,
-   "heading": 345.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 230.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 290.0,
@@ -504,9 +504,9 @@
    "time": 300.0,
    "vehicle": "own_ship",
    "x": 0.0,
-   "y": 732.96,
-   "heading": 345.0,
-   "speed": 2.5
+   "y": 250.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 300.0,
@@ -519,10 +519,10 @@
   {
    "time": 310.0,
    "vehicle": "own_ship",
-   "x": -17.68,
-   "y": 750.64,
-   "heading": 315.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 310.0,
@@ -535,10 +535,10 @@
   {
    "time": 320.0,
    "vehicle": "own_ship",
-   "x": -35.36,
-   "y": 768.32,
-   "heading": 315.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 320.0,
@@ -551,10 +551,10 @@
   {
    "time": 330.0,
    "vehicle": "own_ship",
-   "x": -53.03,
-   "y": 786.0,
-   "heading": 315.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 330.0,
@@ -567,10 +567,10 @@
   {
    "time": 340.0,
    "vehicle": "own_ship",
-   "x": -70.71,
-   "y": 803.67,
-   "heading": 315.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 340.0,
@@ -583,10 +583,10 @@
   {
    "time": 350.0,
    "vehicle": "own_ship",
-   "x": -88.39,
-   "y": 821.35,
-   "heading": 315.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 350.0,
@@ -599,10 +599,10 @@
   {
    "time": 360.0,
    "vehicle": "own_ship",
-   "x": -106.07,
-   "y": 839.03,
-   "heading": 315.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 360.0,
@@ -615,10 +615,10 @@
   {
    "time": 370.0,
    "vehicle": "own_ship",
-   "x": -123.74,
-   "y": 856.71,
-   "heading": 315.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 370.0,
@@ -631,10 +631,10 @@
   {
    "time": 380.0,
    "vehicle": "own_ship",
-   "x": -141.42,
-   "y": 874.38,
-   "heading": 315.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 380.0,
@@ -647,10 +647,10 @@
   {
    "time": 390.0,
    "vehicle": "own_ship",
-   "x": -159.1,
-   "y": 892.06,
-   "heading": 315.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 390.0,
@@ -663,10 +663,10 @@
   {
    "time": 400.0,
    "vehicle": "own_ship",
-   "x": -176.78,
-   "y": 909.74,
-   "heading": 315.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 400.0,
@@ -679,10 +679,10 @@
   {
    "time": 410.0,
    "vehicle": "own_ship",
-   "x": -198.43,
-   "y": 922.24,
-   "heading": 300.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 270.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 410.0,
@@ -695,10 +695,10 @@
   {
    "time": 420.0,
    "vehicle": "own_ship",
-   "x": -220.08,
-   "y": 934.74,
-   "heading": 300.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 290.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 420.0,
@@ -711,10 +711,10 @@
   {
    "time": 430.0,
    "vehicle": "own_ship",
-   "x": -241.73,
-   "y": 947.24,
-   "heading": 300.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 310.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 430.0,
@@ -727,10 +727,10 @@
   {
    "time": 440.0,
    "vehicle": "own_ship",
-   "x": -263.38,
-   "y": 959.74,
-   "heading": 300.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 330.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 440.0,
@@ -743,10 +743,10 @@
   {
    "time": 450.0,
    "vehicle": "own_ship",
-   "x": -285.03,
-   "y": 972.24,
-   "heading": 300.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 350.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 450.0,
@@ -759,10 +759,10 @@
   {
    "time": 460.0,
    "vehicle": "own_ship",
-   "x": -306.68,
-   "y": 984.74,
-   "heading": 300.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 370.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 460.0,
@@ -775,10 +775,10 @@
   {
    "time": 470.0,
    "vehicle": "own_ship",
-   "x": -328.33,
-   "y": 997.24,
-   "heading": 300.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 390.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 470.0,
@@ -791,10 +791,10 @@
   {
    "time": 480.0,
    "vehicle": "own_ship",
-   "x": -349.98,
-   "y": 1009.74,
-   "heading": 300.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 410.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 480.0,
@@ -807,10 +807,10 @@
   {
    "time": 490.0,
    "vehicle": "own_ship",
-   "x": -371.63,
-   "y": 1022.24,
-   "heading": 300.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 430.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 490.0,
@@ -823,10 +823,10 @@
   {
    "time": 500.0,
    "vehicle": "own_ship",
-   "x": -393.28,
-   "y": 1034.74,
-   "heading": 300.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 450.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 500.0,
@@ -839,10 +839,10 @@
   {
    "time": 510.0,
    "vehicle": "own_ship",
-   "x": -417.43,
-   "y": 1041.21,
-   "heading": 285.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 510.0,
@@ -855,10 +855,10 @@
   {
    "time": 520.0,
    "vehicle": "own_ship",
-   "x": -441.58,
-   "y": 1047.68,
-   "heading": 285.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 520.0,
@@ -871,10 +871,10 @@
   {
    "time": 530.0,
    "vehicle": "own_ship",
-   "x": -465.73,
-   "y": 1054.15,
-   "heading": 285.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 530.0,
@@ -887,10 +887,10 @@
   {
    "time": 540.0,
    "vehicle": "own_ship",
-   "x": -489.88,
-   "y": 1060.62,
-   "heading": 285.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 540.0,
@@ -903,10 +903,10 @@
   {
    "time": 550.0,
    "vehicle": "own_ship",
-   "x": -514.02,
-   "y": 1067.09,
-   "heading": 285.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 550.0,
@@ -919,10 +919,10 @@
   {
    "time": 560.0,
    "vehicle": "own_ship",
-   "x": -538.17,
-   "y": 1073.56,
-   "heading": 285.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 560.0,
@@ -935,10 +935,10 @@
   {
    "time": 570.0,
    "vehicle": "own_ship",
-   "x": -562.32,
-   "y": 1080.03,
-   "heading": 285.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 570.0,
@@ -951,10 +951,10 @@
   {
    "time": 580.0,
    "vehicle": "own_ship",
-   "x": -586.47,
-   "y": 1086.5,
-   "heading": 285.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 580.0,
@@ -967,10 +967,10 @@
   {
    "time": 590.0,
    "vehicle": "own_ship",
-   "x": -610.62,
-   "y": 1092.97,
-   "heading": 285.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 590.0,
@@ -983,10 +983,10 @@
   {
    "time": 600.0,
    "vehicle": "own_ship",
-   "x": -634.76,
-   "y": 1099.44,
-   "heading": 285.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 600.0,
@@ -999,10 +999,10 @@
   {
    "time": 610.0,
    "vehicle": "own_ship",
-   "x": -659.76,
-   "y": 1099.44,
-   "heading": 270.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 470.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 610.0,
@@ -1015,10 +1015,10 @@
   {
    "time": 620.0,
    "vehicle": "own_ship",
-   "x": -684.76,
-   "y": 1099.44,
-   "heading": 270.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 490.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 620.0,
@@ -1031,10 +1031,10 @@
   {
    "time": 630.0,
    "vehicle": "own_ship",
-   "x": -709.76,
-   "y": 1099.44,
-   "heading": 270.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 510.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 630.0,
@@ -1047,10 +1047,10 @@
   {
    "time": 640.0,
    "vehicle": "own_ship",
-   "x": -734.76,
-   "y": 1099.44,
-   "heading": 270.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 530.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 640.0,
@@ -1063,10 +1063,10 @@
   {
    "time": 650.0,
    "vehicle": "own_ship",
-   "x": -759.76,
-   "y": 1099.44,
-   "heading": 270.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 550.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 650.0,
@@ -1079,10 +1079,10 @@
   {
    "time": 660.0,
    "vehicle": "own_ship",
-   "x": -784.76,
-   "y": 1099.44,
-   "heading": 270.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 570.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 660.0,
@@ -1095,10 +1095,10 @@
   {
    "time": 670.0,
    "vehicle": "own_ship",
-   "x": -809.76,
-   "y": 1099.44,
-   "heading": 270.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 590.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 670.0,
@@ -1111,10 +1111,10 @@
   {
    "time": 680.0,
    "vehicle": "own_ship",
-   "x": -834.76,
-   "y": 1099.44,
-   "heading": 270.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 610.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 680.0,
@@ -1127,10 +1127,10 @@
   {
    "time": 690.0,
    "vehicle": "own_ship",
-   "x": -859.76,
-   "y": 1099.44,
-   "heading": 270.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 630.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 690.0,
@@ -1143,10 +1143,10 @@
   {
    "time": 700.0,
    "vehicle": "own_ship",
-   "x": -884.76,
-   "y": 1099.44,
-   "heading": 270.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 650.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 700.0,
@@ -1159,10 +1159,10 @@
   {
    "time": 710.0,
    "vehicle": "own_ship",
-   "x": -908.91,
-   "y": 1092.97,
-   "heading": 255.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 710.0,
@@ -1175,10 +1175,10 @@
   {
    "time": 720.0,
    "vehicle": "own_ship",
-   "x": -933.06,
-   "y": 1086.5,
-   "heading": 255.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 720.0,
@@ -1191,10 +1191,10 @@
   {
    "time": 730.0,
    "vehicle": "own_ship",
-   "x": -957.21,
-   "y": 1080.03,
-   "heading": 255.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 730.0,
@@ -1207,10 +1207,10 @@
   {
    "time": 740.0,
    "vehicle": "own_ship",
-   "x": -981.36,
-   "y": 1073.56,
-   "heading": 255.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 740.0,
@@ -1223,10 +1223,10 @@
   {
    "time": 750.0,
    "vehicle": "own_ship",
-   "x": -1005.51,
-   "y": 1067.09,
-   "heading": 255.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 750.0,
@@ -1239,10 +1239,10 @@
   {
    "time": 760.0,
    "vehicle": "own_ship",
-   "x": -1029.65,
-   "y": 1060.62,
-   "heading": 255.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 760.0,
@@ -1255,10 +1255,10 @@
   {
    "time": 770.0,
    "vehicle": "own_ship",
-   "x": -1053.8,
-   "y": 1054.15,
-   "heading": 255.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 770.0,
@@ -1271,10 +1271,10 @@
   {
    "time": 780.0,
    "vehicle": "own_ship",
-   "x": -1077.95,
-   "y": 1047.68,
-   "heading": 255.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 780.0,
@@ -1287,10 +1287,10 @@
   {
    "time": 790.0,
    "vehicle": "own_ship",
-   "x": -1102.1,
-   "y": 1041.21,
-   "heading": 255.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 790.0,
@@ -1303,10 +1303,10 @@
   {
    "time": 800.0,
    "vehicle": "own_ship",
-   "x": -1126.25,
-   "y": 1034.74,
-   "heading": 255.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 800.0,
@@ -1319,10 +1319,10 @@
   {
    "time": 810.0,
    "vehicle": "own_ship",
-   "x": -1147.9,
-   "y": 1022.24,
-   "heading": 240.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 670.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 810.0,
@@ -1335,10 +1335,10 @@
   {
    "time": 820.0,
    "vehicle": "own_ship",
-   "x": -1169.55,
-   "y": 1009.74,
-   "heading": 240.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 690.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 820.0,
@@ -1351,10 +1351,10 @@
   {
    "time": 830.0,
    "vehicle": "own_ship",
-   "x": -1191.2,
-   "y": 997.24,
-   "heading": 240.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 710.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 830.0,
@@ -1367,10 +1367,10 @@
   {
    "time": 840.0,
    "vehicle": "own_ship",
-   "x": -1212.85,
-   "y": 984.74,
-   "heading": 240.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 730.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 840.0,
@@ -1383,10 +1383,10 @@
   {
    "time": 850.0,
    "vehicle": "own_ship",
-   "x": -1234.5,
-   "y": 972.24,
-   "heading": 240.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 750.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 850.0,
@@ -1399,10 +1399,10 @@
   {
    "time": 860.0,
    "vehicle": "own_ship",
-   "x": -1256.15,
-   "y": 959.74,
-   "heading": 240.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 770.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 860.0,
@@ -1415,10 +1415,10 @@
   {
    "time": 870.0,
    "vehicle": "own_ship",
-   "x": -1277.8,
-   "y": 947.24,
-   "heading": 240.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 790.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 870.0,
@@ -1431,10 +1431,10 @@
   {
    "time": 880.0,
    "vehicle": "own_ship",
-   "x": -1299.45,
-   "y": 934.74,
-   "heading": 240.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 810.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 880.0,
@@ -1447,10 +1447,10 @@
   {
    "time": 890.0,
    "vehicle": "own_ship",
-   "x": -1321.1,
-   "y": 922.24,
-   "heading": 240.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 830.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 890.0,
@@ -1463,10 +1463,10 @@
   {
    "time": 900.0,
    "vehicle": "own_ship",
-   "x": -1342.75,
-   "y": 909.74,
-   "heading": 240.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 850.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 900.0,
@@ -1479,10 +1479,10 @@
   {
    "time": 910.0,
    "vehicle": "own_ship",
-   "x": -1360.43,
-   "y": 892.06,
-   "heading": 225.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 910.0,
@@ -1495,10 +1495,10 @@
   {
    "time": 920.0,
    "vehicle": "own_ship",
-   "x": -1378.11,
-   "y": 874.38,
-   "heading": 225.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 920.0,
@@ -1511,10 +1511,10 @@
   {
    "time": 930.0,
    "vehicle": "own_ship",
-   "x": -1395.79,
-   "y": 856.71,
-   "heading": 225.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 930.0,
@@ -1527,10 +1527,10 @@
   {
    "time": 940.0,
    "vehicle": "own_ship",
-   "x": -1413.46,
-   "y": 839.03,
-   "heading": 225.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 940.0,
@@ -1543,10 +1543,10 @@
   {
    "time": 950.0,
    "vehicle": "own_ship",
-   "x": -1431.14,
-   "y": 821.35,
-   "heading": 225.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 950.0,
@@ -1559,10 +1559,10 @@
   {
    "time": 960.0,
    "vehicle": "own_ship",
-   "x": -1448.82,
-   "y": 803.67,
-   "heading": 225.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 960.0,
@@ -1575,10 +1575,10 @@
   {
    "time": 970.0,
    "vehicle": "own_ship",
-   "x": -1466.5,
-   "y": 786.0,
-   "heading": 225.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 970.0,
@@ -1591,10 +1591,10 @@
   {
    "time": 980.0,
    "vehicle": "own_ship",
-   "x": -1484.17,
-   "y": 768.32,
-   "heading": 225.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 980.0,
@@ -1607,10 +1607,10 @@
   {
    "time": 990.0,
    "vehicle": "own_ship",
-   "x": -1501.85,
-   "y": 750.64,
-   "heading": 225.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 990.0,
@@ -1623,10 +1623,10 @@
   {
    "time": 1000.0,
    "vehicle": "own_ship",
-   "x": -1519.53,
-   "y": 732.96,
-   "heading": 225.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1000.0,
@@ -1639,10 +1639,10 @@
   {
    "time": 1010.0,
    "vehicle": "own_ship",
-   "x": -1532.03,
-   "y": 711.31,
-   "heading": 210.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 870.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1010.0,
@@ -1655,10 +1655,10 @@
   {
    "time": 1020.0,
    "vehicle": "own_ship",
-   "x": -1544.53,
-   "y": 689.66,
-   "heading": 210.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 890.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1020.0,
@@ -1671,10 +1671,10 @@
   {
    "time": 1030.0,
    "vehicle": "own_ship",
-   "x": -1557.03,
-   "y": 668.01,
-   "heading": 210.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 910.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1030.0,
@@ -1687,10 +1687,10 @@
   {
    "time": 1040.0,
    "vehicle": "own_ship",
-   "x": -1569.53,
-   "y": 646.36,
-   "heading": 210.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 930.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1040.0,
@@ -1703,10 +1703,10 @@
   {
    "time": 1050.0,
    "vehicle": "own_ship",
-   "x": -1582.03,
-   "y": 624.71,
-   "heading": 210.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 950.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1050.0,
@@ -1719,10 +1719,10 @@
   {
    "time": 1060.0,
    "vehicle": "own_ship",
-   "x": -1594.53,
-   "y": 603.06,
-   "heading": 210.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 970.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1060.0,
@@ -1735,10 +1735,10 @@
   {
    "time": 1070.0,
    "vehicle": "own_ship",
-   "x": -1607.03,
-   "y": 581.41,
-   "heading": 210.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 990.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1070.0,
@@ -1751,10 +1751,10 @@
   {
    "time": 1080.0,
    "vehicle": "own_ship",
-   "x": -1619.53,
-   "y": 559.76,
-   "heading": 210.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1010.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1080.0,
@@ -1767,10 +1767,10 @@
   {
    "time": 1090.0,
    "vehicle": "own_ship",
-   "x": -1632.03,
-   "y": 538.11,
-   "heading": 210.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1030.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1090.0,
@@ -1783,10 +1783,10 @@
   {
    "time": 1100.0,
    "vehicle": "own_ship",
-   "x": -1644.53,
-   "y": 516.46,
-   "heading": 210.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1050.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1100.0,
@@ -1799,10 +1799,10 @@
   {
    "time": 1110.0,
    "vehicle": "own_ship",
-   "x": -1651.0,
-   "y": 492.31,
-   "heading": 195.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1050.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1110.0,
@@ -1815,10 +1815,10 @@
   {
    "time": 1120.0,
    "vehicle": "own_ship",
-   "x": -1657.47,
-   "y": 468.16,
-   "heading": 195.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1050.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1120.0,
@@ -1831,10 +1831,10 @@
   {
    "time": 1130.0,
    "vehicle": "own_ship",
-   "x": -1663.94,
-   "y": 444.01,
-   "heading": 195.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1050.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1130.0,
@@ -1847,10 +1847,10 @@
   {
    "time": 1140.0,
    "vehicle": "own_ship",
-   "x": -1670.41,
-   "y": 419.86,
-   "heading": 195.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1050.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1140.0,
@@ -1863,10 +1863,10 @@
   {
    "time": 1150.0,
    "vehicle": "own_ship",
-   "x": -1676.88,
-   "y": 395.72,
-   "heading": 195.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1050.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1150.0,
@@ -1879,10 +1879,10 @@
   {
    "time": 1160.0,
    "vehicle": "own_ship",
-   "x": -1683.35,
-   "y": 371.57,
-   "heading": 195.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1050.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1160.0,
@@ -1895,10 +1895,10 @@
   {
    "time": 1170.0,
    "vehicle": "own_ship",
-   "x": -1689.82,
-   "y": 347.42,
-   "heading": 195.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1050.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1170.0,
@@ -1911,10 +1911,10 @@
   {
    "time": 1180.0,
    "vehicle": "own_ship",
-   "x": -1696.29,
-   "y": 323.27,
-   "heading": 195.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1050.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1180.0,
@@ -1927,10 +1927,10 @@
   {
    "time": 1190.0,
    "vehicle": "own_ship",
-   "x": -1702.76,
-   "y": 299.12,
-   "heading": 195.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1050.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1190.0,
@@ -1943,10 +1943,10 @@
   {
    "time": 1200.0,
    "vehicle": "own_ship",
-   "x": -1709.23,
-   "y": 274.98,
-   "heading": 195.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1050.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1200.0,
@@ -1959,10 +1959,10 @@
   {
    "time": 1210.0,
    "vehicle": "own_ship",
-   "x": -1709.23,
-   "y": 249.98,
-   "heading": 180.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1070.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1210.0,
@@ -1975,10 +1975,10 @@
   {
    "time": 1220.0,
    "vehicle": "own_ship",
-   "x": -1709.23,
-   "y": 224.98,
-   "heading": 180.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1090.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1220.0,
@@ -1991,10 +1991,10 @@
   {
    "time": 1230.0,
    "vehicle": "own_ship",
-   "x": -1709.23,
-   "y": 199.98,
-   "heading": 180.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1110.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1230.0,
@@ -2007,10 +2007,10 @@
   {
    "time": 1240.0,
    "vehicle": "own_ship",
-   "x": -1709.23,
-   "y": 174.98,
-   "heading": 180.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1130.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1240.0,
@@ -2023,10 +2023,10 @@
   {
    "time": 1250.0,
    "vehicle": "own_ship",
-   "x": -1709.23,
-   "y": 149.98,
-   "heading": 180.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1150.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1250.0,
@@ -2039,10 +2039,10 @@
   {
    "time": 1260.0,
    "vehicle": "own_ship",
-   "x": -1709.23,
-   "y": 124.98,
-   "heading": 180.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1170.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1260.0,
@@ -2055,10 +2055,10 @@
   {
    "time": 1270.0,
    "vehicle": "own_ship",
-   "x": -1709.23,
-   "y": 99.98,
-   "heading": 180.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1190.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1270.0,
@@ -2071,10 +2071,10 @@
   {
    "time": 1280.0,
    "vehicle": "own_ship",
-   "x": -1709.23,
-   "y": 74.98,
-   "heading": 180.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1210.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1280.0,
@@ -2087,10 +2087,10 @@
   {
    "time": 1290.0,
    "vehicle": "own_ship",
-   "x": -1709.23,
-   "y": 49.98,
-   "heading": 180.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1230.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1290.0,
@@ -2103,10 +2103,10 @@
   {
    "time": 1300.0,
    "vehicle": "own_ship",
-   "x": -1709.23,
-   "y": 24.98,
-   "heading": 180.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1250.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1300.0,
@@ -2119,10 +2119,10 @@
   {
    "time": 1310.0,
    "vehicle": "own_ship",
-   "x": -1702.76,
-   "y": 0.83,
-   "heading": 165.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1310.0,
@@ -2135,10 +2135,10 @@
   {
    "time": 1320.0,
    "vehicle": "own_ship",
-   "x": -1696.29,
-   "y": -23.32,
-   "heading": 165.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1320.0,
@@ -2151,10 +2151,10 @@
   {
    "time": 1330.0,
    "vehicle": "own_ship",
-   "x": -1689.82,
-   "y": -47.47,
-   "heading": 165.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1330.0,
@@ -2167,10 +2167,10 @@
   {
    "time": 1340.0,
    "vehicle": "own_ship",
-   "x": -1683.35,
-   "y": -71.62,
-   "heading": 165.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1340.0,
@@ -2183,10 +2183,10 @@
   {
    "time": 1350.0,
    "vehicle": "own_ship",
-   "x": -1676.88,
-   "y": -95.77,
-   "heading": 165.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1350.0,
@@ -2199,10 +2199,10 @@
   {
    "time": 1360.0,
    "vehicle": "own_ship",
-   "x": -1670.41,
-   "y": -119.91,
-   "heading": 165.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1360.0,
@@ -2215,10 +2215,10 @@
   {
    "time": 1370.0,
    "vehicle": "own_ship",
-   "x": -1663.94,
-   "y": -144.06,
-   "heading": 165.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1370.0,
@@ -2231,10 +2231,10 @@
   {
    "time": 1380.0,
    "vehicle": "own_ship",
-   "x": -1657.47,
-   "y": -168.21,
-   "heading": 165.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1380.0,
@@ -2247,10 +2247,10 @@
   {
    "time": 1390.0,
    "vehicle": "own_ship",
-   "x": -1651.0,
-   "y": -192.36,
-   "heading": 165.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1390.0,
@@ -2263,10 +2263,10 @@
   {
    "time": 1400.0,
    "vehicle": "own_ship",
-   "x": -1644.53,
-   "y": -216.51,
-   "heading": 165.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1250.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1400.0,
@@ -2279,10 +2279,10 @@
   {
    "time": 1410.0,
    "vehicle": "own_ship",
-   "x": -1632.03,
-   "y": -238.16,
-   "heading": 150.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1270.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1410.0,
@@ -2295,10 +2295,10 @@
   {
    "time": 1420.0,
    "vehicle": "own_ship",
-   "x": -1619.53,
-   "y": -259.81,
-   "heading": 150.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1290.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1420.0,
@@ -2311,10 +2311,10 @@
   {
    "time": 1430.0,
    "vehicle": "own_ship",
-   "x": -1607.03,
-   "y": -281.46,
-   "heading": 150.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1310.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1430.0,
@@ -2327,10 +2327,10 @@
   {
    "time": 1440.0,
    "vehicle": "own_ship",
-   "x": -1594.53,
-   "y": -303.11,
-   "heading": 150.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1330.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1440.0,
@@ -2343,10 +2343,10 @@
   {
    "time": 1450.0,
    "vehicle": "own_ship",
-   "x": -1582.03,
-   "y": -324.76,
-   "heading": 150.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1350.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1450.0,
@@ -2359,10 +2359,10 @@
   {
    "time": 1460.0,
    "vehicle": "own_ship",
-   "x": -1569.53,
-   "y": -346.41,
-   "heading": 150.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1370.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1460.0,
@@ -2375,10 +2375,10 @@
   {
    "time": 1470.0,
    "vehicle": "own_ship",
-   "x": -1557.03,
-   "y": -368.06,
-   "heading": 150.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1390.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1470.0,
@@ -2391,10 +2391,10 @@
   {
    "time": 1480.0,
    "vehicle": "own_ship",
-   "x": -1544.53,
-   "y": -389.71,
-   "heading": 150.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1410.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1480.0,
@@ -2407,10 +2407,10 @@
   {
    "time": 1490.0,
    "vehicle": "own_ship",
-   "x": -1532.03,
-   "y": -411.36,
-   "heading": 150.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1430.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1490.0,
@@ -2423,10 +2423,10 @@
   {
    "time": 1500.0,
    "vehicle": "own_ship",
-   "x": -1519.53,
-   "y": -433.01,
-   "heading": 150.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1450.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1500.0,
@@ -2439,10 +2439,10 @@
   {
    "time": 1510.0,
    "vehicle": "own_ship",
-   "x": -1501.85,
-   "y": -450.69,
-   "heading": 135.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1510.0,
@@ -2455,10 +2455,10 @@
   {
    "time": 1520.0,
    "vehicle": "own_ship",
-   "x": -1484.17,
-   "y": -468.37,
-   "heading": 135.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1520.0,
@@ -2471,10 +2471,10 @@
   {
    "time": 1530.0,
    "vehicle": "own_ship",
-   "x": -1466.5,
-   "y": -486.05,
-   "heading": 135.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1530.0,
@@ -2487,10 +2487,10 @@
   {
    "time": 1540.0,
    "vehicle": "own_ship",
-   "x": -1448.82,
-   "y": -503.72,
-   "heading": 135.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1540.0,
@@ -2503,10 +2503,10 @@
   {
    "time": 1550.0,
    "vehicle": "own_ship",
-   "x": -1431.14,
-   "y": -521.4,
-   "heading": 135.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1550.0,
@@ -2519,10 +2519,10 @@
   {
    "time": 1560.0,
    "vehicle": "own_ship",
-   "x": -1413.46,
-   "y": -539.08,
-   "heading": 135.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1560.0,
@@ -2535,10 +2535,10 @@
   {
    "time": 1570.0,
    "vehicle": "own_ship",
-   "x": -1395.79,
-   "y": -556.76,
-   "heading": 135.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1570.0,
@@ -2551,10 +2551,10 @@
   {
    "time": 1580.0,
    "vehicle": "own_ship",
-   "x": -1378.11,
-   "y": -574.43,
-   "heading": 135.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1580.0,
@@ -2567,10 +2567,10 @@
   {
    "time": 1590.0,
    "vehicle": "own_ship",
-   "x": -1360.43,
-   "y": -592.11,
-   "heading": 135.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1590.0,
@@ -2583,10 +2583,10 @@
   {
    "time": 1600.0,
    "vehicle": "own_ship",
-   "x": -1342.75,
-   "y": -609.79,
-   "heading": 135.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1450.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1600.0,
@@ -2599,10 +2599,10 @@
   {
    "time": 1610.0,
    "vehicle": "own_ship",
-   "x": -1321.1,
-   "y": -622.29,
-   "heading": 120.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1470.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1610.0,
@@ -2615,10 +2615,10 @@
   {
    "time": 1620.0,
    "vehicle": "own_ship",
-   "x": -1299.45,
-   "y": -634.79,
-   "heading": 120.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1490.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1620.0,
@@ -2631,10 +2631,10 @@
   {
    "time": 1630.0,
    "vehicle": "own_ship",
-   "x": -1277.8,
-   "y": -647.29,
-   "heading": 120.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1510.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1630.0,
@@ -2647,10 +2647,10 @@
   {
    "time": 1640.0,
    "vehicle": "own_ship",
-   "x": -1256.15,
-   "y": -659.79,
-   "heading": 120.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1530.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1640.0,
@@ -2663,10 +2663,10 @@
   {
    "time": 1650.0,
    "vehicle": "own_ship",
-   "x": -1234.5,
-   "y": -672.29,
-   "heading": 120.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1550.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1650.0,
@@ -2679,10 +2679,10 @@
   {
    "time": 1660.0,
    "vehicle": "own_ship",
-   "x": -1212.85,
-   "y": -684.79,
-   "heading": 120.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1570.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1660.0,
@@ -2695,10 +2695,10 @@
   {
    "time": 1670.0,
    "vehicle": "own_ship",
-   "x": -1191.2,
-   "y": -697.29,
-   "heading": 120.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1590.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1670.0,
@@ -2711,10 +2711,10 @@
   {
    "time": 1680.0,
    "vehicle": "own_ship",
-   "x": -1169.55,
-   "y": -709.79,
-   "heading": 120.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1610.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1680.0,
@@ -2727,10 +2727,10 @@
   {
    "time": 1690.0,
    "vehicle": "own_ship",
-   "x": -1147.9,
-   "y": -722.29,
-   "heading": 120.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1630.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1690.0,
@@ -2743,10 +2743,10 @@
   {
    "time": 1700.0,
    "vehicle": "own_ship",
-   "x": -1126.25,
-   "y": -734.79,
-   "heading": 120.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1650.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1700.0,
@@ -2759,10 +2759,10 @@
   {
    "time": 1710.0,
    "vehicle": "own_ship",
-   "x": -1102.1,
-   "y": -741.26,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1710.0,
@@ -2775,10 +2775,10 @@
   {
    "time": 1720.0,
    "vehicle": "own_ship",
-   "x": -1077.95,
-   "y": -747.73,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1720.0,
@@ -2791,10 +2791,10 @@
   {
    "time": 1730.0,
    "vehicle": "own_ship",
-   "x": -1053.8,
-   "y": -754.2,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1730.0,
@@ -2807,10 +2807,10 @@
   {
    "time": 1740.0,
    "vehicle": "own_ship",
-   "x": -1029.65,
-   "y": -760.67,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1740.0,
@@ -2823,10 +2823,10 @@
   {
    "time": 1750.0,
    "vehicle": "own_ship",
-   "x": -1005.51,
-   "y": -767.14,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1750.0,
@@ -2839,10 +2839,10 @@
   {
    "time": 1760.0,
    "vehicle": "own_ship",
-   "x": -981.36,
-   "y": -773.61,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1760.0,
@@ -2855,10 +2855,10 @@
   {
    "time": 1770.0,
    "vehicle": "own_ship",
-   "x": -957.21,
-   "y": -780.08,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1770.0,
@@ -2871,10 +2871,10 @@
   {
    "time": 1780.0,
    "vehicle": "own_ship",
-   "x": -933.06,
-   "y": -786.55,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1780.0,
@@ -2887,10 +2887,10 @@
   {
    "time": 1790.0,
    "vehicle": "own_ship",
-   "x": -908.91,
-   "y": -793.02,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1790.0,
@@ -2903,10 +2903,10 @@
   {
    "time": 1800.0,
    "vehicle": "own_ship",
-   "x": -884.76,
-   "y": -799.49,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1650.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1800.0,
@@ -2919,10 +2919,10 @@
   {
    "time": 1810.0,
    "vehicle": "own_ship",
-   "x": -859.76,
-   "y": -799.49,
-   "heading": 90.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1670.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1810.0,
@@ -2935,10 +2935,10 @@
   {
    "time": 1820.0,
    "vehicle": "own_ship",
-   "x": -834.76,
-   "y": -799.49,
-   "heading": 90.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1690.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1820.0,
@@ -2951,10 +2951,10 @@
   {
    "time": 1830.0,
    "vehicle": "own_ship",
-   "x": -809.76,
-   "y": -799.49,
-   "heading": 90.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1710.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1830.0,
@@ -2967,10 +2967,10 @@
   {
    "time": 1840.0,
    "vehicle": "own_ship",
-   "x": -784.76,
-   "y": -799.49,
-   "heading": 90.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1730.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1840.0,
@@ -2983,10 +2983,10 @@
   {
    "time": 1850.0,
    "vehicle": "own_ship",
-   "x": -759.76,
-   "y": -799.49,
-   "heading": 90.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1750.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1850.0,
@@ -2999,10 +2999,10 @@
   {
    "time": 1860.0,
    "vehicle": "own_ship",
-   "x": -734.76,
-   "y": -799.49,
-   "heading": 90.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1770.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1860.0,
@@ -3015,10 +3015,10 @@
   {
    "time": 1870.0,
    "vehicle": "own_ship",
-   "x": -709.76,
-   "y": -799.49,
-   "heading": 90.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1790.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1870.0,
@@ -3031,10 +3031,10 @@
   {
    "time": 1880.0,
    "vehicle": "own_ship",
-   "x": -684.76,
-   "y": -799.49,
-   "heading": 90.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1810.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1880.0,
@@ -3047,10 +3047,10 @@
   {
    "time": 1890.0,
    "vehicle": "own_ship",
-   "x": -659.76,
-   "y": -799.49,
-   "heading": 90.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1830.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1890.0,
@@ -3063,10 +3063,10 @@
   {
    "time": 1900.0,
    "vehicle": "own_ship",
-   "x": -634.76,
-   "y": -799.49,
-   "heading": 90.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1850.0,
+   "heading": 0.0,
+   "speed": 2.0
   },
   {
    "time": 1900.0,
@@ -3079,10 +3079,10 @@
   {
    "time": 1910.0,
    "vehicle": "own_ship",
-   "x": -610.62,
-   "y": -805.96,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1910.0,
@@ -3095,10 +3095,10 @@
   {
    "time": 1920.0,
    "vehicle": "own_ship",
-   "x": -586.47,
-   "y": -812.44,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1920.0,
@@ -3111,10 +3111,10 @@
   {
    "time": 1930.0,
    "vehicle": "own_ship",
-   "x": -562.32,
-   "y": -818.91,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1930.0,
@@ -3127,10 +3127,10 @@
   {
    "time": 1940.0,
    "vehicle": "own_ship",
-   "x": -538.17,
-   "y": -825.38,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1940.0,
@@ -3143,10 +3143,10 @@
   {
    "time": 1950.0,
    "vehicle": "own_ship",
-   "x": -514.02,
-   "y": -831.85,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1950.0,
@@ -3159,10 +3159,10 @@
   {
    "time": 1960.0,
    "vehicle": "own_ship",
-   "x": -489.88,
-   "y": -838.32,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1960.0,
@@ -3175,10 +3175,10 @@
   {
    "time": 1970.0,
    "vehicle": "own_ship",
-   "x": -465.73,
-   "y": -844.79,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1970.0,
@@ -3191,10 +3191,10 @@
   {
    "time": 1980.0,
    "vehicle": "own_ship",
-   "x": -441.58,
-   "y": -851.26,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1980.0,
@@ -3207,10 +3207,10 @@
   {
    "time": 1990.0,
    "vehicle": "own_ship",
-   "x": -417.43,
-   "y": -857.73,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 1990.0,
@@ -3223,10 +3223,10 @@
   {
    "time": 2000.0,
    "vehicle": "own_ship",
-   "x": -393.28,
-   "y": -864.2,
-   "heading": 105.0,
-   "speed": 2.5
+   "x": 0.0,
+   "y": 1850.0,
+   "heading": 0.0,
+   "speed": 0.0
   },
   {
    "time": 2000.0,
@@ -3241,12 +3241,12 @@
   {
    "step": 0,
    "time": 0.0,
-   "situation_report": "Own-ship at (0.0, 0.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2400m away.\n1 contact(s):\n  - ts1: range 900m, rel.bearing 65.0 deg, heading 305.6, speed 2.60, CPA 0m, TCPA 386s",
+   "situation_report": "Own-ship at (0.0, 0.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 2400m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 960s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 900m, rel.bearing 65.0 deg, heading 305.6, speed 2.60 m/s, CPA 0m, TCPA 386s",
    "decision": {
-    "action": "turn_right",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching CPA at 0m, indicating a potential collision. A right turn of 15 degrees will help avoid the contact while maintaining course towards the mission goal."
+    "action": "slow_down",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The other ship is on a collision course with the mission goal, and slowing down will increase the time to closest point of approach (TCPA) to avoid collision."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3254,19 +3254,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 271,
-    "raw_response": "{\"action\": \"turn_right\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching CPA at 0m, indicating a potential collision. A right turn of 15 degrees will help avoid the contact while maintaining course towards the mission goal.\"}"
+    "user_msg_chars": 524,
+    "raw_response": "{\"action\": \"slow_down\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The other ship is on a collision course with the mission goal, and slowing down will increase the time to closest point of approach (TCPA) to avoid collision.\"}"
    }
   },
   {
    "step": 10,
    "time": 100.0,
-   "situation_report": "Own-ship at (64.7, 241.5), heading 15.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2159m away.\n1 contact(s):\n  - ts1: range 764m, rel.bearing 64.5 deg, heading 305.6, speed 2.60, CPA 101m, TCPA 261s",
+   "situation_report": "Own-ship at (0.0, 50.0), heading 0.0, speed 0.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 2350m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 4700s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 880m, rel.bearing 67.9 deg, heading 305.6, speed 2.60 m/s, CPA 651m, TCPA 253s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the starboard side with a CPA of 101m, indicating a potential collision risk. A left turn of 15 degrees will help avoid the contact while maintaining course towards the mission goal."
+    "action": "slow_down",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The current speed may cause the ship to arrive too late, and the other ship is approaching the goal area, so slowing down is necessary to avoid collision and ensure a safe arrival."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3274,19 +3274,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 277,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the starboard side with a CPA of 101m, indicating a potential collision risk. A left turn of 15 degrees will help avoid the contact while maintaining course towards the mission goal.\"}"
+    "user_msg_chars": 528,
+    "raw_response": "{\"action\": \"slow_down\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The current speed may cause the ship to arrive too late, and the other ship is approaching the goal area, so slowing down is necessary to avoid collision and ensure a safe arrival.\"}"
    }
   },
   {
    "step": 20,
    "time": 200.0,
-   "situation_report": "Own-ship at (64.7, 491.5), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1910m away.\n1 contact(s):\n  - ts1: range 759m, rel.bearing 98.4 deg, heading 305.6, speed 2.60, CPA 418m, TCPA 272s",
+   "situation_report": "Own-ship at (0.0, 50.0), heading 0.0, speed 0.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 2350m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed (stopped), the goal will never be reached.\n1 other ship:\n  - Ship named \"ts1\": range 880m, rel.bearing 67.9 deg, heading 305.6, speed 2.60 m/s, CPA 743m, TCPA 181s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the port side with a CPA of 418m. A left turn of 15 degrees is recommended to avoid collision and maintain a safe distance."
+    "action": "speed_up",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The ship is currently stopped, and the mission goal is 2350m away. To reach the goal, the ship must increase speed to 2.50 m/s to make progress towards the target."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3294,19 +3294,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 276,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the port side with a CPA of 418m. A left turn of 15 degrees is recommended to avoid collision and maintain a safe distance.\"}"
+    "user_msg_chars": 523,
+    "raw_response": "{\"action\": \"speed_up\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The ship is currently stopped, and the mission goal is 2350m away. To reach the goal, the ship must increase speed to 2.50 m/s to make progress towards the target.\"}"
    }
   },
   {
    "step": 30,
    "time": 300.0,
-   "situation_report": "Own-ship at (0.0, 733.0), heading 345.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1667m away.\n1 contact(s):\n  - ts1: range 889m, rel.bearing 128.4 deg, heading 305.6, speed 2.60, CPA 727m, TCPA 296s",
+   "situation_report": "Own-ship at (0.0, 250.0), heading 0.0, speed 2.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 2150m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1075s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 826m, rel.bearing 80.9 deg, heading 305.6, speed 2.60 m/s, CPA 56m, TCPA 380s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 30.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the starboard side with a CPA of 727m. A left turn of 30 degrees will increase the CPA to ensure safe navigation towards the mission goal."
+    "action": "slow_down",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "To increase the ETA and reduce the risk of collision with the approaching ship, it is necessary to slow down to a speed lower than the nominal speed."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3314,19 +3314,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 278,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 30.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the starboard side with a CPA of 727m. A left turn of 30 degrees will increase the CPA to ensure safe navigation towards the mission goal.\"}"
+    "user_msg_chars": 528,
+    "raw_response": "{\"action\": \"slow_down\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"To increase the ETA and reduce the risk of collision with the approaching ship, it is necessary to slow down to a speed lower than the nominal speed.\"}"
    }
   },
   {
    "step": 40,
    "time": 400.0,
-   "situation_report": "Own-ship at (-176.8, 909.7), heading 315.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1501m away.\n1 contact(s):\n  - ts1: range 1125m, rel.bearing 163.1 deg, heading 305.6, speed 2.60, CPA 1014m, TCPA 1133s",
+   "situation_report": "Own-ship at (0.0, 250.0), heading 0.0, speed 0.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 2150m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed (stopped), the goal will never be reached.\n1 other ship:\n  - Ship named \"ts1\": range 826m, rel.bearing 80.9 deg, heading 305.6, speed 2.60 m/s, CPA 581m, TCPA 226s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the port side, and a left turn is needed to avoid collision while maintaining course towards the mission goal."
+    "action": "speed_up",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The ship is currently stopped, and the mission goal is 2150m away. To reach the goal, the ship must increase speed to 2.50 m/s as per the rated speed for this mission."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3334,19 +3334,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 284,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the port side, and a left turn is needed to avoid collision while maintaining course towards the mission goal.\"}"
+    "user_msg_chars": 524,
+    "raw_response": "{\"action\": \"speed_up\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The ship is currently stopped, and the mission goal is 2150m away. To reach the goal, the ship must increase speed to 2.50 m/s as per the rated speed for this mission.\"}"
    }
   },
   {
    "step": 50,
    "time": 500.0,
-   "situation_report": "Own-ship at (-393.3, 1034.7), heading 300.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1421m away.\n1 contact(s):\n  - ts1: range 1375m, rel.bearing 178.4 deg, heading 305.6, speed 2.60, CPA 1311m, TCPA 1538s",
+   "situation_report": "Own-ship at (0.0, 450.0), heading 0.0, speed 2.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1950m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 975s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 819m, rel.bearing 94.9 deg, heading 305.6, speed 2.60 m/s, CPA 251m, TCPA 359s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the port side with a CPA of 1311m. A left turn of 15 degrees is recommended to avoid collision and maintain a safe distance."
+    "action": "slow_down",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The current speed may cause the ship to arrive too early, and the presence of the other ship indicates a potential collision risk, so slowing down is recommended to increase the time to the goal and avoid conflict."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3354,19 +3354,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 285,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the port side with a CPA of 1311m. A left turn of 15 degrees is recommended to avoid collision and maintain a safe distance.\"}"
+    "user_msg_chars": 528,
+    "raw_response": "{\"action\": \"slow_down\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The current speed may cause the ship to arrive too early, and the presence of the other ship indicates a potential collision risk, so slowing down is recommended to increase the time to the goal and avoid conflict.\"}"
    }
   },
   {
    "step": 60,
    "time": 600.0,
-   "situation_report": "Own-ship at (-634.8, 1099.4), heading 285.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1447m away.\n1 contact(s):\n  - ts1: range 1619m, rel.bearing -168.6 deg, heading 305.6, speed 2.60, CPA 1606m, TCPA 222s",
+   "situation_report": "Own-ship at (0.0, 450.0), heading 0.0, speed 0.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1950m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed (stopped), the goal will never be reached.\n1 other ship:\n  - Ship named \"ts1\": range 819m, rel.bearing 94.9 deg, heading 305.6, speed 2.60 m/s, CPA 418m, TCPA 271s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal."
+    "action": "speed_up",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The ship is currently stopped, and the mission goal is 1950m away. To reach the goal, the ship must increase speed to 2.50 m/s to make progress towards the target."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3374,19 +3374,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 285,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal.\"}"
+    "user_msg_chars": 524,
+    "raw_response": "{\"action\": \"speed_up\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The ship is currently stopped, and the mission goal is 1950m away. To reach the goal, the ship must increase speed to 2.50 m/s to make progress towards the target.\"}"
    }
   },
   {
    "step": 70,
    "time": 700.0,
-   "situation_report": "Own-ship at (-884.8, 1099.4), heading 270.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1573m away.\n1 contact(s):\n  - ts1: range 1846m, rel.bearing -157.1 deg, heading 305.6, speed 2.60, CPA 1825m, TCPA 177s",
+   "situation_report": "Own-ship at (0.0, 650.0), heading 0.0, speed 2.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 875s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 859m, rel.bearing 108.3 deg, heading 305.6, speed 2.60 m/s, CPA 446m, TCPA 339s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe path towards the mission goal."
+    "action": "slow_down",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The current speed may cause the ship to arrive too early, and the presence of the other ship indicates a potential collision risk, so slowing down is recommended to increase the time to the point of closest approach (TCPA) and ensure safety."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3394,19 +3394,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 285,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe path towards the mission goal.\"}"
+    "user_msg_chars": 529,
+    "raw_response": "{\"action\": \"slow_down\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The current speed may cause the ship to arrive too early, and the presence of the other ship indicates a potential collision risk, so slowing down is recommended to increase the time to the point of closest approach (TCPA) and ensure safety.\"}"
    }
   },
   {
    "step": 80,
    "time": 800.0,
-   "situation_report": "Own-ship at (-1126.2, 1034.7), heading 255.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1770m away.\n1 contact(s):\n  - ts1: range 2049m, rel.bearing -146.4 deg, heading 305.6, speed 2.60, CPA 2014m, TCPA 174s",
+   "situation_report": "Own-ship at (0.0, 650.0), heading 0.0, speed 0.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed (stopped), the goal will never be reached.\n1 other ship:\n  - Ship named \"ts1\": range 859m, rel.bearing 108.3 deg, heading 305.6, speed 2.60 m/s, CPA 256m, TCPA 315s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal."
+    "action": "speed_up",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The ship is currently stopped, and the mission goal is 1750m away. To reach the goal, the ship must increase its speed to 2.50 m/s as per the rated speed for this mission."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3414,19 +3414,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 286,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal.\"}"
+    "user_msg_chars": 525,
+    "raw_response": "{\"action\": \"speed_up\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The ship is currently stopped, and the mission goal is 1750m away. To reach the goal, the ship must increase its speed to 2.50 m/s as per the rated speed for this mission.\"}"
    }
   },
   {
    "step": 90,
    "time": 900.0,
-   "situation_report": "Own-ship at (-1342.8, 909.7), heading 240.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2006m away.\n1 contact(s):\n  - ts1: range 2222m, rel.bearing -136.2 deg, heading 305.6, speed 2.60, CPA 2168m, TCPA 177s",
+   "situation_report": "Own-ship at (0.0, 850.0), heading 0.0, speed 2.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1550m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 775s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 941m, rel.bearing 119.9 deg, heading 305.6, speed 2.60 m/s, CPA 641m, TCPA 318s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal."
+    "action": "slow_down",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The current speed may cause the ship to arrive too early, and the presence of the other ship indicates a potential collision risk, so slowing down is recommended to increase the time to the goal and avoid conflict."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3434,19 +3434,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 285,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal.\"}"
+    "user_msg_chars": 529,
+    "raw_response": "{\"action\": \"slow_down\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The current speed may cause the ship to arrive too early, and the presence of the other ship indicates a potential collision risk, so slowing down is recommended to increase the time to the goal and avoid conflict.\"}"
    }
   },
   {
    "step": 100,
    "time": 1000.0,
-   "situation_report": "Own-ship at (-1519.5, 733.0), heading 225.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2256m away.\n1 contact(s):\n  - ts1: range 2362m, rel.bearing -126.4 deg, heading 305.6, speed 2.60, CPA 2285m, TCPA 181s",
+   "situation_report": "Own-ship at (0.0, 850.0), heading 0.0, speed 0.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1550m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed (stopped), the goal will never be reached.\n1 other ship:\n  - Ship named \"ts1\": range 941m, rel.bearing 119.9 deg, heading 305.6, speed 2.60 m/s, CPA 93m, TCPA 360s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal."
+    "action": "speed_up",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The ship is currently stopped, and the mission goal is 1550m away. To reach the goal, the ship must increase speed to 2.50 m/s as per the rated speed for this mission."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3454,19 +3454,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 285,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal.\"}"
+    "user_msg_chars": 524,
+    "raw_response": "{\"action\": \"speed_up\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The ship is currently stopped, and the mission goal is 1550m away. To reach the goal, the ship must increase speed to 2.50 m/s as per the rated speed for this mission.\"}"
    }
   },
   {
    "step": 110,
    "time": 1100.0,
-   "situation_report": "Own-ship at (-1644.5, 516.5), heading 210.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2500m away.\n1 contact(s):\n  - ts1: range 2464m, rel.bearing -116.8 deg, heading 305.6, speed 2.60, CPA 2364m, TCPA 184s",
+   "situation_report": "Own-ship at (0.0, 1050.0), heading 0.0, speed 2.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1350m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 675s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 1055m, rel.bearing 129.4 deg, heading 305.6, speed 2.60 m/s, CPA 835m, TCPA 297s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal."
+    "action": "slow_down",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The current speed may cause the ship to arrive before the other ship (ts1) reaches its closest point of approach (CPA), increasing the risk of collision. Slowing down will extend the ETA and reduce the risk."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3474,19 +3474,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 285,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal.\"}"
+    "user_msg_chars": 531,
+    "raw_response": "{\"action\": \"slow_down\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The current speed may cause the ship to arrive before the other ship (ts1) reaches its closest point of approach (CPA), increasing the risk of collision. Slowing down will extend the ETA and reduce the risk.\"}"
    }
   },
   {
    "step": 120,
    "time": 1200.0,
-   "situation_report": "Own-ship at (-1709.2, 275.0), heading 195.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2727m away.\n1 contact(s):\n  - ts1: range 2527m, rel.bearing -107.4 deg, heading 305.6, speed 2.60, CPA 2402m, TCPA 187s",
+   "situation_report": "Own-ship at (0.0, 1050.0), heading 0.0, speed 0.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1350m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed (stopped), the goal will never be reached.\n1 other ship:\n  - Ship named \"ts1\": range 1055m, rel.bearing 129.4 deg, heading 305.6, speed 2.60 m/s, CPA 70m, TCPA 405s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal."
+    "action": "speed_up",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The ship is currently stopped, and the mission goal is 1350m away. To reach the goal, the ship must increase speed to 2.50 m/s to make progress towards the target."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3494,19 +3494,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 285,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal.\"}"
+    "user_msg_chars": 526,
+    "raw_response": "{\"action\": \"speed_up\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The ship is currently stopped, and the mission goal is 1350m away. To reach the goal, the ship must increase speed to 2.50 m/s to make progress towards the target.\"}"
    }
   },
   {
    "step": 130,
    "time": 1300.0,
-   "situation_report": "Own-ship at (-1709.2, 25.0), heading 180.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2926m away.\n1 contact(s):\n  - ts1: range 2550m, rel.bearing -98.0 deg, heading 305.6, speed 2.60, CPA 2400m, TCPA 190s",
+   "situation_report": "Own-ship at (0.0, 1250.0), heading 0.0, speed 2.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1150m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 575s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 1192m, rel.bearing 136.8 deg, heading 305.6, speed 2.60 m/s, CPA 1030m, TCPA 277s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal."
+    "action": "slow_down",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "To increase the ETA and reduce the risk of collision with the approaching ship, it is necessary to slow down to a speed lower than the rated speed."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3514,19 +3514,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 283,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal.\"}"
+    "user_msg_chars": 532,
+    "raw_response": "{\"action\": \"slow_down\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"To increase the ETA and reduce the risk of collision with the approaching ship, it is necessary to slow down to a speed lower than the rated speed.\"}"
    }
   },
   {
    "step": 140,
    "time": 1400.0,
-   "situation_report": "Own-ship at (-1644.5, -216.5), heading 165.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 3090m away.\n1 contact(s):\n  - ts1: range 2532m, rel.bearing -88.6 deg, heading 305.6, speed 2.60, CPA 2356m, TCPA 193s",
+   "situation_report": "Own-ship at (0.0, 1250.0), heading 0.0, speed 0.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1150m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed (stopped), the goal will never be reached.\n1 other ship:\n  - Ship named \"ts1\": range 1192m, rel.bearing 136.8 deg, heading 305.6, speed 2.60 m/s, CPA 232m, TCPA 450s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal."
+    "action": "speed_up",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The ship is currently stopped, and the mission goal is 1150m away. To reach the goal, the ship needs to increase its speed to 2.50 m/s as per the rated speed for this mission."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3534,19 +3534,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 285,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal.\"}"
+    "user_msg_chars": 527,
+    "raw_response": "{\"action\": \"speed_up\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The ship is currently stopped, and the mission goal is 1150m away. To reach the goal, the ship needs to increase its speed to 2.50 m/s as per the rated speed for this mission.\"}"
    }
   },
   {
    "step": 150,
    "time": 1500.0,
-   "situation_report": "Own-ship at (-1519.5, -433.0), heading 150.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 3215m away.\n1 contact(s):\n  - ts1: range 2473m, rel.bearing -79.2 deg, heading 305.6, speed 2.60, CPA 2272m, TCPA 196s",
+   "situation_report": "Own-ship at (0.0, 1450.0), heading 0.0, speed 2.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 950m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 475s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 1345m, rel.bearing 142.7 deg, heading 305.6, speed 2.60 m/s, CPA 1225m, TCPA 256s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal."
+    "action": "slow_down",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The current speed may cause the ship to arrive before the other ship (ts1) reaches its CPA, potentially leading to a collision. Slowing down will increase the ETA and reduce the risk of collision."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3554,19 +3554,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 285,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal.\"}"
+    "user_msg_chars": 531,
+    "raw_response": "{\"action\": \"slow_down\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The current speed may cause the ship to arrive before the other ship (ts1) reaches its CPA, potentially leading to a collision. Slowing down will increase the ETA and reduce the risk of collision.\"}"
    }
   },
   {
    "step": 160,
    "time": 1600.0,
-   "situation_report": "Own-ship at (-1342.8, -609.8), heading 135.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 3296m away.\n1 contact(s):\n  - ts1: range 2375m, rel.bearing -69.6 deg, heading 305.6, speed 2.60, CPA 2150m, TCPA 199s",
+   "situation_report": "Own-ship at (0.0, 1450.0), heading 0.0, speed 0.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 950m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed (stopped), the goal will never be reached.\n1 other ship:\n  - Ship named \"ts1\": range 1345m, rel.bearing 142.7 deg, heading 305.6, speed 2.60 m/s, CPA 395m, TCPA 495s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the left side of the ship's bow, and a left turn is necessary to avoid collision while maintaining a safe course towards the mission goal."
+    "action": "speed_up",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The ship is currently stopped, and the mission goal is 950m away. To reach the goal, the ship needs to increase speed to 2.50 m/s to make progress."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3574,19 +3574,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 285,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the left side of the ship's bow, and a left turn is necessary to avoid collision while maintaining a safe course towards the mission goal.\"}"
+    "user_msg_chars": 526,
+    "raw_response": "{\"action\": \"speed_up\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The ship is currently stopped, and the mission goal is 950m away. To reach the goal, the ship needs to increase speed to 2.50 m/s to make progress.\"}"
    }
   },
   {
    "step": 170,
    "time": 1700.0,
-   "situation_report": "Own-ship at (-1126.2, -734.8), heading 120.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 3331m away.\n1 contact(s):\n  - ts1: range 2239m, rel.bearing -59.9 deg, heading 305.6, speed 2.60, CPA 1990m, TCPA 201s",
+   "situation_report": "Own-ship at (0.0, 1650.0), heading 0.0, speed 2.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 375s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 1509m, rel.bearing 147.3 deg, heading 305.6, speed 2.60 m/s, CPA 1420m, TCPA 235s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal."
+    "action": "slow_down",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The ETA to the goal is 375 seconds, but the other ship is approaching with a CPA of 1420m and TCPA of 235s, indicating a potential collision risk. Slowing down will increase the time to collision and reduce the risk."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3594,19 +3594,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 285,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a safe course towards the mission goal.\"}"
+    "user_msg_chars": 531,
+    "raw_response": "{\"action\": \"slow_down\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The ETA to the goal is 375 seconds, but the other ship is approaching with a CPA of 1420m and TCPA of 235s, indicating a potential collision risk. Slowing down will increase the time to collision and reduce the risk.\"}"
    }
   },
   {
    "step": 180,
    "time": 1800.0,
-   "situation_report": "Own-ship at (-884.8, -799.5), heading 105.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 3320m away.\n1 contact(s):\n  - ts1: range 2070m, rel.bearing -49.8 deg, heading 305.6, speed 2.60, CPA 1797m, TCPA 205s",
+   "situation_report": "Own-ship at (0.0, 1650.0), heading 0.0, speed 0.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed (stopped), the goal will never be reached.\n1 other ship:\n  - Ship named \"ts1\": range 1509m, rel.bearing 147.3 deg, heading 305.6, speed 2.60 m/s, CPA 557m, TCPA 539s",
    "decision": {
-    "action": "turn_left",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a course towards the mission goal."
+    "action": "speed_up",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The ship is currently stopped, and the mission goal is 750m away. To reach the goal, the ship needs to increase speed to 2.50 m/s as per the rated speed for this mission."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3614,19 +3614,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 284,
-    "raw_response": "{\"action\": \"turn_left\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the left side of the ship's bow, and a left turn is needed to avoid collision while maintaining a course towards the mission goal.\"}"
+    "user_msg_chars": 526,
+    "raw_response": "{\"action\": \"speed_up\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The ship is currently stopped, and the mission goal is 750m away. To reach the goal, the ship needs to increase speed to 2.50 m/s as per the rated speed for this mission.\"}"
    }
   },
   {
    "step": 190,
    "time": 1900.0,
-   "situation_report": "Own-ship at (-634.8, -799.5), heading 90.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 3262m away.\n1 contact(s):\n  - ts1: range 1870m, rel.bearing -39.1 deg, heading 305.6, speed 2.60, CPA 1573m, TCPA 208s",
+   "situation_report": "Own-ship at (0.0, 1850.0), heading 0.0, speed 2.00 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 550m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 275s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 1681m, rel.bearing 151.0 deg, heading 305.6, speed 2.60 m/s, CPA 1615m, TCPA 215s",
    "decision": {
-    "action": "turn_right",
-    "degrees": 15.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The contact is approaching from the left side of the ship's bow, and a right turn is needed to avoid collision while maintaining a course towards the mission goal."
+    "action": "slow_down",
+    "degrees": 0.0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The ETA to the goal is 275 seconds, but the other ship is approaching with a CPA of 1615m and TCPA of 215s, indicating a potential collision risk. Slowing down will increase the time to collision and reduce the risk."
    },
    "debug": {
     "config": "bare_qwen",
@@ -3634,8 +3634,8 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 283,
-    "raw_response": "{\"action\": \"turn_right\", \"degrees\": 15.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The contact is approaching from the left side of the ship's bow, and a right turn is needed to avoid collision while maintaining a course towards the mission goal.\"}"
+    "user_msg_chars": 531,
+    "raw_response": "{\"action\": \"slow_down\", \"degrees\": 0.0, \"rule_applied\": \"Rule 12\", \"reasoning\": \"The ETA to the goal is 275 seconds, but the other ship is approaching with a CPA of 1615m and TCPA of 215s, indicating a potential collision risk. Slowing down will increase the time to collision and reduce the risk.\"}"
    }
   }
  ]

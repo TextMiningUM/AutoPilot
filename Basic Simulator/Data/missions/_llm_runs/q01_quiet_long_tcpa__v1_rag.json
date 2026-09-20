@@ -2,22 +2,22 @@
  "mission_id": "q01_quiet_long_tcpa",
  "config": "v1_rag",
  "tag": "default",
- "generated_at": "2026-09-19T02:04:43.164395+00:00",
+ "generated_at": "2026-09-20T00:37:04.693698+00:00",
  "params": {
   "decision_interval": 10,
   "dt": 10.0,
   "max_steps": 200,
   "enable_thinking": false,
   "max_new_tokens": 256,
-  "k": 4,
+  "k": 2,
   "use_rag": true,
-  "system_prompt": "You are the navigator on a large commercial vessel. You must navigate according to COLREG (the International Regulations for Preventing Collisions at Sea) at all times, avoiding collisions while making safe and efficient progress. Avoiding collisions comes first; once safe, reach the goal via the shortest direct track, with as few manoeuvres as possible and no zigzagging. Ground your reasoning in the provided COLREG excerpts and procedure guidance where given. If no target poses a real risk of collision, recommend holding course. What order do you give to the helm? Reply with ONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"rule_applied\": \"<e.g. Rule 15, or 'none' if no rule applies>\",\n \"reasoning\": \"<one or two sentences>\"}",
+  "system_prompt": "You are the navigator on a large commercial vessel. Your objective is to get the ship to the mission goal (position/bearing/distance given in the situation report) as directly and efficiently as possible -- that is the task. The one hard constraint on every decision, with no exceptions: never put the ship on a collision course with another vessel. When a real risk of collision exists, COLREG (the International Regulations for Preventing Collisions at Sea) governs which vessel gives way and how -- satisfy that constraint first, then resume progress toward the goal. All positions/bearings/headings given below are in metres and degrees, heading 0=north, clockwise, matching compass bearings -- take this as given, don't re-derive or second-guess it. rel.bearing is signed: positive = target is to starboard (right), negative = to port (left), 0=dead ahead, ~180/-180=dead astern. CPA is the closest distance the contact will EVER come to you at current headings/speeds; TCPA is the seconds until that closest point. TCPA=0 does NOT always mean a collision is imminent -- it also occurs when the vessels are already moving apart (closest point already passed); the situation report says so explicitly when that's the case. Judge real risk from the CPA distance itself, not from TCPA alone. DEFAULT PROCEDURE, apply this every single time: the situation report has a line starting \"GOAL COURSE CHECK:\" -- use ONLY that line to decide the goal-correction action and degrees, never a contact's rel.bearing (a contact's rel.bearing is about THAT CONTACT, not the goal, even if the numbers look similar). If \"GOAL COURSE CHECK\" says you're already on the goal bearing, hold_course (for the goal, at least). Otherwise it gives you the exact action (\"turn_left\"/\"turn_right\") and degrees to use -- copy those values directly into your answer, don't recompute them and don't substitute a different number from elsewhere in the report. Your track to the goal must look like a smooth curve or a straight line, NEVER a zigzag -- do not answer turn_right and then turn_left (or vice versa) on consecutive decisions just to chase a small residual mismatch; \"GOAL COURSE CHECK\" already has a 10-degree deadband built in for this. Only override any of this if a target poses a REAL risk of collision, in which case the COLREG-required give-way/stand-on manoeuvre takes precedence instead. Do not just describe the mismatch in your reasoning and then answer hold_course anyway when \"GOAL COURSE CHECK\" calls for a turn -- the action MUST match what that line says, never hold_course when it names a turn. Ground your reasoning in the provided COLREG excerpts and procedure guidance where given. If you are already on the goal bearing (within about 10 degrees) and your current speed is below the nominal/rated speed given for this mission, speed_up instead: reaching the goal sooner (when safe) is part of efficient progress too. What order do you give to the helm? Reply with ONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"rule_applied\": \"<e.g. Rule 15, or 'none' if no rule applies>\",\n \"reasoning\": \"<one or two sentences>\"}",
   "system_prompt_is_custom": false
  },
  "outcome": {
-  "verdict": "max_steps_reached",
-  "final_step": 199,
-  "final_time_s": 2000.0
+  "verdict": "reached_goal",
+  "final_step": 159,
+  "final_time_s": 1590.0
  },
  "trajectory": [
   {
@@ -2280,9 +2280,9 @@
    "time": 1410.0,
    "vehicle": "own_ship",
    "x": 0.0,
-   "y": 3505.0,
+   "y": 3525.0,
    "heading": 0.0,
-   "speed": 0.5
+   "speed": 2.5
   },
   {
    "time": 1410.0,
@@ -2296,9 +2296,9 @@
    "time": 1420.0,
    "vehicle": "own_ship",
    "x": 0.0,
-   "y": 3510.0,
+   "y": 3550.0,
    "heading": 0.0,
-   "speed": 0.5
+   "speed": 2.5
   },
   {
    "time": 1420.0,
@@ -2312,9 +2312,9 @@
    "time": 1430.0,
    "vehicle": "own_ship",
    "x": 0.0,
-   "y": 3515.0,
+   "y": 3575.0,
    "heading": 0.0,
-   "speed": 0.5
+   "speed": 2.5
   },
   {
    "time": 1430.0,
@@ -2328,9 +2328,9 @@
    "time": 1440.0,
    "vehicle": "own_ship",
    "x": 0.0,
-   "y": 3520.0,
+   "y": 3600.0,
    "heading": 0.0,
-   "speed": 0.5
+   "speed": 2.5
   },
   {
    "time": 1440.0,
@@ -2344,9 +2344,9 @@
    "time": 1450.0,
    "vehicle": "own_ship",
    "x": 0.0,
-   "y": 3525.0,
+   "y": 3625.0,
    "heading": 0.0,
-   "speed": 0.5
+   "speed": 2.5
   },
   {
    "time": 1450.0,
@@ -2360,9 +2360,9 @@
    "time": 1460.0,
    "vehicle": "own_ship",
    "x": 0.0,
-   "y": 3530.0,
+   "y": 3650.0,
    "heading": 0.0,
-   "speed": 0.5
+   "speed": 2.5
   },
   {
    "time": 1460.0,
@@ -2376,9 +2376,9 @@
    "time": 1470.0,
    "vehicle": "own_ship",
    "x": 0.0,
-   "y": 3535.0,
+   "y": 3675.0,
    "heading": 0.0,
-   "speed": 0.5
+   "speed": 2.5
   },
   {
    "time": 1470.0,
@@ -2392,9 +2392,9 @@
    "time": 1480.0,
    "vehicle": "own_ship",
    "x": 0.0,
-   "y": 3540.0,
+   "y": 3700.0,
    "heading": 0.0,
-   "speed": 0.5
+   "speed": 2.5
   },
   {
    "time": 1480.0,
@@ -2408,9 +2408,9 @@
    "time": 1490.0,
    "vehicle": "own_ship",
    "x": 0.0,
-   "y": 3545.0,
+   "y": 3725.0,
    "heading": 0.0,
-   "speed": 0.5
+   "speed": 2.5
   },
   {
    "time": 1490.0,
@@ -2424,9 +2424,9 @@
    "time": 1500.0,
    "vehicle": "own_ship",
    "x": 0.0,
-   "y": 3550.0,
+   "y": 3750.0,
    "heading": 0.0,
-   "speed": 0.5
+   "speed": 2.5
   },
   {
    "time": 1500.0,
@@ -2439,10 +2439,10 @@
   {
    "time": 1510.0,
    "vehicle": "own_ship",
-   "x": 5.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
+   "x": 0.0,
+   "y": 3775.0,
+   "heading": 0.0,
+   "speed": 2.5
   },
   {
    "time": 1510.0,
@@ -2455,10 +2455,10 @@
   {
    "time": 1520.0,
    "vehicle": "own_ship",
-   "x": 10.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
+   "x": 0.0,
+   "y": 3800.0,
+   "heading": 0.0,
+   "speed": 2.5
   },
   {
    "time": 1520.0,
@@ -2471,10 +2471,10 @@
   {
    "time": 1530.0,
    "vehicle": "own_ship",
-   "x": 15.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
+   "x": 0.0,
+   "y": 3825.0,
+   "heading": 0.0,
+   "speed": 2.5
   },
   {
    "time": 1530.0,
@@ -2487,10 +2487,10 @@
   {
    "time": 1540.0,
    "vehicle": "own_ship",
-   "x": 20.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
+   "x": 0.0,
+   "y": 3850.0,
+   "heading": 0.0,
+   "speed": 2.5
   },
   {
    "time": 1540.0,
@@ -2503,10 +2503,10 @@
   {
    "time": 1550.0,
    "vehicle": "own_ship",
-   "x": 25.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
+   "x": 0.0,
+   "y": 3875.0,
+   "heading": 0.0,
+   "speed": 2.5
   },
   {
    "time": 1550.0,
@@ -2519,10 +2519,10 @@
   {
    "time": 1560.0,
    "vehicle": "own_ship",
-   "x": 30.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
+   "x": 0.0,
+   "y": 3900.0,
+   "heading": 0.0,
+   "speed": 2.5
   },
   {
    "time": 1560.0,
@@ -2535,10 +2535,10 @@
   {
    "time": 1570.0,
    "vehicle": "own_ship",
-   "x": 35.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
+   "x": 0.0,
+   "y": 3925.0,
+   "heading": 0.0,
+   "speed": 2.5
   },
   {
    "time": 1570.0,
@@ -2551,10 +2551,10 @@
   {
    "time": 1580.0,
    "vehicle": "own_ship",
-   "x": 40.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
+   "x": 0.0,
+   "y": 3950.0,
+   "heading": 0.0,
+   "speed": 2.5
   },
   {
    "time": 1580.0,
@@ -2567,671 +2567,15 @@
   {
    "time": 1590.0,
    "vehicle": "own_ship",
-   "x": 45.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
+   "x": 0.0,
+   "y": 3975.0,
+   "heading": 0.0,
+   "speed": 2.5
   },
   {
    "time": 1590.0,
    "vehicle": "ts1",
    "x": 5590.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1600.0,
-   "vehicle": "own_ship",
-   "x": 50.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1600.0,
-   "vehicle": "ts1",
-   "x": 5600.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1610.0,
-   "vehicle": "own_ship",
-   "x": 55.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1610.0,
-   "vehicle": "ts1",
-   "x": 5610.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1620.0,
-   "vehicle": "own_ship",
-   "x": 60.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1620.0,
-   "vehicle": "ts1",
-   "x": 5620.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1630.0,
-   "vehicle": "own_ship",
-   "x": 65.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1630.0,
-   "vehicle": "ts1",
-   "x": 5630.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1640.0,
-   "vehicle": "own_ship",
-   "x": 70.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1640.0,
-   "vehicle": "ts1",
-   "x": 5640.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1650.0,
-   "vehicle": "own_ship",
-   "x": 75.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1650.0,
-   "vehicle": "ts1",
-   "x": 5650.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1660.0,
-   "vehicle": "own_ship",
-   "x": 80.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1660.0,
-   "vehicle": "ts1",
-   "x": 5660.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1670.0,
-   "vehicle": "own_ship",
-   "x": 85.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1670.0,
-   "vehicle": "ts1",
-   "x": 5670.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1680.0,
-   "vehicle": "own_ship",
-   "x": 90.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1680.0,
-   "vehicle": "ts1",
-   "x": 5680.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1690.0,
-   "vehicle": "own_ship",
-   "x": 95.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1690.0,
-   "vehicle": "ts1",
-   "x": 5690.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1700.0,
-   "vehicle": "own_ship",
-   "x": 100.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1700.0,
-   "vehicle": "ts1",
-   "x": 5700.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1710.0,
-   "vehicle": "own_ship",
-   "x": 105.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1710.0,
-   "vehicle": "ts1",
-   "x": 5710.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1720.0,
-   "vehicle": "own_ship",
-   "x": 110.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1720.0,
-   "vehicle": "ts1",
-   "x": 5720.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1730.0,
-   "vehicle": "own_ship",
-   "x": 115.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1730.0,
-   "vehicle": "ts1",
-   "x": 5730.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1740.0,
-   "vehicle": "own_ship",
-   "x": 120.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1740.0,
-   "vehicle": "ts1",
-   "x": 5740.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1750.0,
-   "vehicle": "own_ship",
-   "x": 125.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1750.0,
-   "vehicle": "ts1",
-   "x": 5750.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1760.0,
-   "vehicle": "own_ship",
-   "x": 130.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1760.0,
-   "vehicle": "ts1",
-   "x": 5760.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1770.0,
-   "vehicle": "own_ship",
-   "x": 135.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1770.0,
-   "vehicle": "ts1",
-   "x": 5770.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1780.0,
-   "vehicle": "own_ship",
-   "x": 140.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1780.0,
-   "vehicle": "ts1",
-   "x": 5780.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1790.0,
-   "vehicle": "own_ship",
-   "x": 145.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1790.0,
-   "vehicle": "ts1",
-   "x": 5790.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1800.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.5
-  },
-  {
-   "time": 1800.0,
-   "vehicle": "ts1",
-   "x": 5800.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1810.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1810.0,
-   "vehicle": "ts1",
-   "x": 5810.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1820.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1820.0,
-   "vehicle": "ts1",
-   "x": 5820.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1830.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1830.0,
-   "vehicle": "ts1",
-   "x": 5830.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1840.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1840.0,
-   "vehicle": "ts1",
-   "x": 5840.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1850.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1850.0,
-   "vehicle": "ts1",
-   "x": 5850.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1860.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1860.0,
-   "vehicle": "ts1",
-   "x": 5860.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1870.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1870.0,
-   "vehicle": "ts1",
-   "x": 5870.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1880.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1880.0,
-   "vehicle": "ts1",
-   "x": 5880.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1890.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1890.0,
-   "vehicle": "ts1",
-   "x": 5890.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1900.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1900.0,
-   "vehicle": "ts1",
-   "x": 5900.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1910.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1910.0,
-   "vehicle": "ts1",
-   "x": 5910.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1920.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1920.0,
-   "vehicle": "ts1",
-   "x": 5920.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1930.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1930.0,
-   "vehicle": "ts1",
-   "x": 5930.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1940.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1940.0,
-   "vehicle": "ts1",
-   "x": 5940.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1950.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1950.0,
-   "vehicle": "ts1",
-   "x": 5950.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1960.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1960.0,
-   "vehicle": "ts1",
-   "x": 5960.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1970.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1970.0,
-   "vehicle": "ts1",
-   "x": 5970.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1980.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1980.0,
-   "vehicle": "ts1",
-   "x": 5980.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 1990.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 1990.0,
-   "vehicle": "ts1",
-   "x": 5990.0,
-   "y": 6928.2,
-   "heading": 90.0,
-   "speed": 1.0
-  },
-  {
-   "time": 2000.0,
-   "vehicle": "own_ship",
-   "x": 150.0,
-   "y": 3550.0,
-   "heading": 90.0,
-   "speed": 0.0
-  },
-  {
-   "time": 2000.0,
-   "vehicle": "ts1",
-   "x": 6000.0,
    "y": 6928.2,
    "heading": 90.0,
    "speed": 1.0
@@ -3241,501 +2585,369 @@
   {
    "step": 0,
    "time": 0.0,
-   "situation_report": "Own-ship at (0.0, 0.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 4000m away.\n1 contact(s):\n  - ts1: range 8000m, rel.bearing 30.0 deg, heading 90.0, speed 1.00, CPA 6287m, TCPA 1837s",
+   "situation_report": "Own-ship at (0.0, 0.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 4000m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1600s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 8000m, rel.bearing 30.0 deg, heading 90.0, speed 1.00 m/s, CPA 6287m, TCPA 1837s",
    "decision": {
     "action": "hold_course",
-    "degrees": 0,
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "There is no real risk of collision as the contact is not approaching and the CPA is well beyond the safe distance. The vessel is on a safe course and speed, and no immediate action is required."
+    "reasoning": "The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the target vessel as the CPA is 6287m, which is well above the minimum safe distance."
    },
    "debug": {
     "config": "v1_rag",
     "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_d3d00426",
+     "chunk_3f087e38"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7822,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"There is no real risk of collision as the contact is not approaching and the CPA is well beyond the safe distance. The vessel is on a safe course and speed, and no immediate action is required.\"\n}"
+    "user_msg_chars": 2578,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the target vessel as the CPA is 6287m, which is well above the minimum safe distance.\"}"
    }
   },
   {
    "step": 10,
    "time": 100.0,
-   "situation_report": "Own-ship at (0.0, 250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 3750m away.\n1 contact(s):\n  - ts1: range 7784m, rel.bearing 30.9 deg, heading 90.0, speed 1.00, CPA 6194m, TCPA 1751s",
+   "situation_report": "Own-ship at (0.0, 250.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 3750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1500s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 7784m, rel.bearing 30.9 deg, heading 90.0, speed 1.00 m/s, CPA 6194m, TCPA 1751s",
    "decision": {
     "action": "hold_course",
-    "degrees": 0,
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 2-3 mile limit for restricted visibility. The vessel is on a safe course and speed."
+    "reasoning": "The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the target vessel as the CPA is 6194m, which is well above the safe distance threshold."
    },
    "debug": {
     "config": "v1_rag",
     "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_d3d00426",
+     "chunk_3f087e38"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7824,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 2-3 mile limit for restricted visibility. The vessel is on a safe course and speed.\"\n}"
+    "user_msg_chars": 2580,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the target vessel as the CPA is 6194m, which is well above the safe distance threshold.\"}"
    }
   },
   {
    "step": 20,
    "time": 200.0,
-   "situation_report": "Own-ship at (0.0, 500.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 3500m away.\n1 contact(s):\n  - ts1: range 7571m, rel.bearing 31.9 deg, heading 90.0, speed 1.00, CPA 6101m, TCPA 1665s",
+   "situation_report": "Own-ship at (0.0, 500.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 3500m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1400s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 7571m, rel.bearing 31.9 deg, heading 90.0, speed 1.00 m/s, CPA 6101m, TCPA 1665s",
    "decision": {
     "action": "hold_course",
-    "degrees": 0,
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "There is no real risk of collision as the contact is not approaching and the CPA is well beyond the safe distance. The vessel is on a safe course and speed, and no immediate action is required."
+    "reasoning": "The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the contact vessel as the CPA is 6101m, which is well above the minimum safe distance."
    },
    "debug": {
     "config": "v1_rag",
     "retrieved_chunk_ids": [
-     "chunk_d527960a",
-     "chunk_3f087e38",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_d3d00426",
+     "chunk_0d636362"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7824,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"There is no real risk of collision as the contact is not approaching and the CPA is well beyond the safe distance. The vessel is on a safe course and speed, and no immediate action is required.\"\n}"
+    "user_msg_chars": 1347,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the contact vessel as the CPA is 6101m, which is well above the minimum safe distance.\"}"
    }
   },
   {
    "step": 30,
    "time": 300.0,
-   "situation_report": "Own-ship at (0.0, 750.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 3250m away.\n1 contact(s):\n  - ts1: range 7360m, rel.bearing 32.9 deg, heading 90.0, speed 1.00, CPA 6008m, TCPA 1579s",
+   "situation_report": "Own-ship at (0.0, 750.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 3250m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1300s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 7360m, rel.bearing 32.9 deg, heading 90.0, speed 1.00 m/s, CPA 6008m, TCPA 1579s",
    "decision": {
     "action": "hold_course",
-    "degrees": 0,
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "There is no real risk of collision as the contact is not approaching and the CPA is well beyond the safe distance. The vessel is on a direct course towards the mission goal with no immediate collision risk."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 6008m, which is well above the minimum safe distance."
    },
    "debug": {
     "config": "v1_rag",
     "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_d3d00426",
+     "chunk_0d636362"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7824,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"There is no real risk of collision as the contact is not approaching and the CPA is well beyond the safe distance. The vessel is on a direct course towards the mission goal with no immediate collision risk.\"\n}"
+    "user_msg_chars": 1347,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 6008m, which is well above the minimum safe distance.\"}"
    }
   },
   {
    "step": 40,
    "time": 400.0,
-   "situation_report": "Own-ship at (0.0, 1000.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 3000m away.\n1 contact(s):\n  - ts1: range 7151m, rel.bearing 34.0 deg, heading 90.0, speed 1.00, CPA 5916m, TCPA 1492s",
+   "situation_report": "Own-ship at (0.0, 1000.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 3000m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1200s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 7151m, rel.bearing 34.0 deg, heading 90.0, speed 1.00 m/s, CPA 5916m, TCPA 1492s",
    "decision": {
     "action": "hold_course",
-    "degrees": 0,
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 2-mile limit for restricted visibility. The vessel is on a safe course and speed."
+    "reasoning": "The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the target vessel as the CPA is 5916m, which is well above the minimum safe distance."
    },
    "debug": {
     "config": "v1_rag",
     "retrieved_chunk_ids": [
-     "chunk_d527960a",
-     "chunk_3f087e38",
-     "chunk_9607cb6a",
-     "chunk_56efc6a4"
+     "chunk_d3d00426",
+     "chunk_3f087e38"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7825,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 2-mile limit for restricted visibility. The vessel is on a safe course and speed.\"\n}"
+    "user_msg_chars": 2581,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the target vessel as the CPA is 5916m, which is well above the minimum safe distance.\"}"
    }
   },
   {
    "step": 50,
    "time": 500.0,
-   "situation_report": "Own-ship at (0.0, 1250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 2750m away.\n1 contact(s):\n  - ts1: range 6946m, rel.bearing 35.2 deg, heading 90.0, speed 1.00, CPA 5823m, TCPA 1406s",
+   "situation_report": "Own-ship at (0.0, 1250.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 2750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1100s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 6946m, rel.bearing 35.2 deg, heading 90.0, speed 1.00 m/s, CPA 5823m, TCPA 1406s",
    "decision": {
     "action": "hold_course",
-    "degrees": 0,
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 2750m distance to the mission goal. Therefore, holding course is appropriate."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5823m, which is well above the minimum safe distance."
    },
    "debug": {
     "config": "v1_rag",
     "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_d3d00426",
+     "chunk_0d636362"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7825,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 2750m distance to the mission goal. Therefore, holding course is appropriate.\"\n}"
+    "user_msg_chars": 1348,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5823m, which is well above the minimum safe distance.\"}"
    }
   },
   {
    "step": 60,
    "time": 600.0,
-   "situation_report": "Own-ship at (0.0, 1500.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 2500m away.\n1 contact(s):\n  - ts1: range 6743m, rel.bearing 36.4 deg, heading 90.0, speed 1.00, CPA 5730m, TCPA 1320s",
+   "situation_report": "Own-ship at (0.0, 1500.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 2500m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1000s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 6743m, rel.bearing 36.4 deg, heading 90.0, speed 1.00 m/s, CPA 5730m, TCPA 1320s",
    "decision": {
     "action": "hold_course",
-    "degrees": 0,
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 2500m range. The vessel is on a safe course and speed, and no immediate action is required."
+    "reasoning": "The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the target vessel as the CPA is 5730m, which is well above the safe distance threshold."
    },
    "debug": {
     "config": "v1_rag",
     "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_d3d00426",
+     "chunk_3f087e38"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7825,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 2500m range. The vessel is on a safe course and speed, and no immediate action is required.\"\n}"
+    "user_msg_chars": 2581,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the target vessel as the CPA is 5730m, which is well above the safe distance threshold.\"}"
    }
   },
   {
    "step": 70,
    "time": 700.0,
-   "situation_report": "Own-ship at (0.0, 1750.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 2250m away.\n1 contact(s):\n  - ts1: range 6543m, rel.bearing 37.7 deg, heading 90.0, speed 1.00, CPA 5637m, TCPA 1234s",
+   "situation_report": "Own-ship at (0.0, 1750.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 2250m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 900s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 6543m, rel.bearing 37.7 deg, heading 90.0, speed 1.00 m/s, CPA 5637m, TCPA 1234s",
    "decision": {
     "action": "hold_course",
-    "degrees": 0,
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 2 to 3 mile limit for restricted visibility. The vessel is on a safe course and speed."
+    "reasoning": "The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5637m, which is well above the minimum safe distance."
    },
    "debug": {
     "config": "v1_rag",
     "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_d3d00426",
+     "chunk_0d636362"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7825,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 2 to 3 mile limit for restricted visibility. The vessel is on a safe course and speed.\"\n}"
+    "user_msg_chars": 1347,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within 10 degrees, and there is no immediate risk of collision with the contact vessel as the CPA is 5637m, which is well above the minimum safe distance.\"}"
    }
   },
   {
    "step": 80,
    "time": 800.0,
-   "situation_report": "Own-ship at (0.0, 2000.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 2000m away.\n1 contact(s):\n  - ts1: range 6347m, rel.bearing 39.1 deg, heading 90.0, speed 1.00, CPA 5544m, TCPA 1148s",
+   "situation_report": "Own-ship at (0.0, 2000.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 2000m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 800s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 6347m, rel.bearing 39.1 deg, heading 90.0, speed 1.00 m/s, CPA 5544m, TCPA 1148s",
    "decision": {
     "action": "hold_course",
-    "degrees": 0,
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 2-mile limit for restricted visibility. The vessel is on a safe course and speed."
+    "reasoning": "The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the target vessel as the CPA is 5544m, which is well above the minimum safe distance."
    },
    "debug": {
     "config": "v1_rag",
     "retrieved_chunk_ids": [
-     "chunk_d527960a",
-     "chunk_3f087e38",
-     "chunk_9607cb6a",
-     "chunk_56efc6a4"
+     "chunk_d3d00426",
+     "chunk_3f087e38"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7825,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 2-mile limit for restricted visibility. The vessel is on a safe course and speed.\"\n}"
+    "user_msg_chars": 2580,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the target vessel as the CPA is 5544m, which is well above the minimum safe distance.\"}"
    }
   },
   {
    "step": 90,
    "time": 900.0,
-   "situation_report": "Own-ship at (0.0, 2250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 1750m away.\n1 contact(s):\n  - ts1: range 6155m, rel.bearing 40.5 deg, heading 90.0, speed 1.00, CPA 5451m, TCPA 1061s",
+   "situation_report": "Own-ship at (0.0, 2250.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 1750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 700s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 6155m, rel.bearing 40.5 deg, heading 90.0, speed 1.00 m/s, CPA 5451m, TCPA 1061s",
    "decision": {
     "action": "hold_course",
-    "degrees": 0,
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "No target poses a real risk of collision as the CPA (Closest Point of Approach) is 5451m, which is well beyond the safe distance. Therefore, holding course is appropriate."
+    "reasoning": "The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the other vessel as the CPA is 5451m, which is well above the minimum safe distance. Therefore, no course correction is needed."
    },
    "debug": {
     "config": "v1_rag",
     "retrieved_chunk_ids": [
-     "chunk_d527960a",
-     "chunk_3f087e38",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_d3d00426",
+     "chunk_0d636362"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7825,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"No target poses a real risk of collision as the CPA (Closest Point of Approach) is 5451m, which is well beyond the safe distance. Therefore, holding course is appropriate.\"\n}"
+    "user_msg_chars": 1347,
+    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0.0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the other vessel as the CPA is 5451m, which is well above the minimum safe distance. Therefore, no course correction is needed.\"\n}"
    }
   },
   {
    "step": 100,
    "time": 1000.0,
-   "situation_report": "Own-ship at (0.0, 2500.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 1500m away.\n1 contact(s):\n  - ts1: range 5967m, rel.bearing 42.1 deg, heading 90.0, speed 1.00, CPA 5359m, TCPA 975s",
+   "situation_report": "Own-ship at (0.0, 2500.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 1500m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 600s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5967m, rel.bearing 42.1 deg, heading 90.0, speed 1.00 m/s, CPA 5359m, TCPA 975s",
    "decision": {
     "action": "hold_course",
-    "degrees": 0,
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 1500m range. The vessel is on a safe course and speed, and no immediate action is required."
+    "reasoning": "The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the target vessel as the CPA is 5359m, which is well above the minimum safe distance."
    },
    "debug": {
     "config": "v1_rag",
     "retrieved_chunk_ids": [
      "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
-    ],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": null,
-    "user_msg_chars": 7824,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 1500m range. The vessel is on a safe course and speed, and no immediate action is required.\"\n}"
-   }
-  },
-  {
-   "step": 110,
-   "time": 1100.0,
-   "situation_report": "Own-ship at (0.0, 2750.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 1250m away.\n1 contact(s):\n  - ts1: range 5784m, rel.bearing 43.8 deg, heading 90.0, speed 1.00, CPA 5266m, TCPA 889s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 1 mile limit for vessels in sight of one another. The own-ship is on a direct course to the mission goal with no immediate collision risk."
-   },
-   "debug": {
-    "config": "v1_rag",
-    "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
-    ],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": null,
-    "user_msg_chars": 7824,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 1 mile limit for vessels in sight of one another. The own-ship is on a direct course to the mission goal with no immediate collision risk.\"\n}"
-   }
-  },
-  {
-   "step": 120,
-   "time": 1200.0,
-   "situation_report": "Own-ship at (0.0, 3000.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 1000m away.\n1 contact(s):\n  - ts1: range 5606m, rel.bearing 45.5 deg, heading 90.0, speed 1.00, CPA 5173m, TCPA 803s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 1 mile limit for restricted visibility. The give-way vessel does not need to take action as there is no risk of collision."
-   },
-   "debug": {
-    "config": "v1_rag",
-    "retrieved_chunk_ids": [
-     "chunk_d527960a",
-     "chunk_3f087e38",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
-    ],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": null,
-    "user_msg_chars": 7824,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 1 mile limit for restricted visibility. The give-way vessel does not need to take action as there is no risk of collision.\"\n}"
-   }
-  },
-  {
-   "step": 130,
-   "time": 1300.0,
-   "situation_report": "Own-ship at (0.0, 3250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 750m away.\n1 contact(s):\n  - ts1: range 5434m, rel.bearing 47.4 deg, heading 90.0, speed 1.00, CPA 5080m, TCPA 717s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 2-3 mile limit for close quarters in restricted visibility. The vessel is on a direct course towards the goal with no immediate collision risk."
-   },
-   "debug": {
-    "config": "v1_rag",
-    "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_9607cb6a",
      "chunk_d3d00426"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 6002,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"There is no real risk of collision as the contact is not approaching and the CPA is well beyond the 2-3 mile limit for close quarters in restricted visibility. The vessel is on a direct course towards the goal with no immediate collision risk.\"\n}"
+    "user_msg_chars": 2579,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the target vessel as the CPA is 5359m, which is well above the minimum safe distance.\"}"
+   }
+  },
+  {
+   "step": 110,
+   "time": 1100.0,
+   "situation_report": "Own-ship at (0.0, 2750.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 1250m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 500s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5784m, rel.bearing 43.8 deg, heading 90.0, speed 1.00 m/s, CPA 5266m, TCPA 889s",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0.0,
+    "rule_applied": "none",
+    "reasoning": "The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the other vessel as the CPA is 5266m, which is well above the minimum safe distance. Therefore, no course correction is needed."
+   },
+   "debug": {
+    "config": "v1_rag",
+    "retrieved_chunk_ids": [
+     "chunk_d3d00426",
+     "chunk_0d636362"
+    ],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1346,
+    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0.0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the other vessel as the CPA is 5266m, which is well above the minimum safe distance. Therefore, no course correction is needed.\"\n}"
+   }
+  },
+  {
+   "step": 120,
+   "time": 1200.0,
+   "situation_report": "Own-ship at (0.0, 3000.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 1000m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 400s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5606m, rel.bearing 45.5 deg, heading 90.0, speed 1.00 m/s, CPA 5173m, TCPA 803s",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0.0,
+    "rule_applied": "none",
+    "reasoning": "The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the target vessel as the CPA is 5173m, which is well above the safety threshold."
+   },
+   "debug": {
+    "config": "v1_rag",
+    "retrieved_chunk_ids": [
+     "chunk_d3d00426",
+     "chunk_3f087e38"
+    ],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 2579,
+    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the target vessel as the CPA is 5173m, which is well above the safety threshold.\"}"
+   }
+  },
+  {
+   "step": 130,
+   "time": 1300.0,
+   "situation_report": "Own-ship at (0.0, 3250.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 750m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 300s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5434m, rel.bearing 47.4 deg, heading 90.0, speed 1.00 m/s, CPA 5080m, TCPA 717s",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0.0,
+    "rule_applied": "none",
+    "reasoning": "The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the contact vessel as the CPA is 5080m, which is well above the minimum safe distance. Therefore, no course correction is needed."
+   },
+   "debug": {
+    "config": "v1_rag",
+    "retrieved_chunk_ids": [
+     "chunk_d3d00426",
+     "chunk_0d636362"
+    ],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1345,
+    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0.0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the contact vessel as the CPA is 5080m, which is well above the minimum safe distance. Therefore, no course correction is needed.\"\n}"
    }
   },
   {
    "step": 140,
    "time": 1400.0,
-   "situation_report": "Own-ship at (0.0, 3500.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 4000.0), 500m away.\n1 contact(s):\n  - ts1: range 5268m, rel.bearing 49.4 deg, heading 90.0, speed 1.00, CPA 4987m, TCPA 630s",
+   "situation_report": "Own-ship at (0.0, 3500.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 500m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 200s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5268m, rel.bearing 49.4 deg, heading 90.0, speed 1.00 m/s, CPA 4987m, TCPA 630s",
    "decision": {
-    "action": "slow_down",
-    "degrees": 0,
-    "rule_applied": "Rule 16",
-    "reasoning": "The target vessel is approaching in a crossing situation, and there is a risk of collision. According to Rule 16, the give-way vessel must take action to avoid collision, which includes slowing down to ensure a safe passing distance."
+    "action": "hold_course",
+    "degrees": 0.0,
+    "rule_applied": "none",
+    "reasoning": "The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the contact vessel as the CPA is 4987m, which is well above the minimum safe distance. Therefore, no course correction is needed."
    },
    "debug": {
     "config": "v1_rag",
     "retrieved_chunk_ids": [
-     "chunk_d527960a",
-     "chunk_3f087e38",
-     "chunk_9607cb6a",
-     "chunk_56efc6a4"
+     "chunk_d3d00426",
+     "chunk_0d636362"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7823,
-    "raw_response": "{\n  \"action\": \"slow_down\",\n  \"degrees\": 0,\n  \"rule_applied\": \"Rule 16\",\n  \"reasoning\": \"The target vessel is approaching in a crossing situation, and there is a risk of collision. According to Rule 16, the give-way vessel must take action to avoid collision, which includes slowing down to ensure a safe passing distance.\"\n}"
+    "user_msg_chars": 1345,
+    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0.0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the contact vessel as the CPA is 4987m, which is well above the minimum safe distance. Therefore, no course correction is needed.\"\n}"
    }
   },
   {
    "step": 150,
    "time": 1500.0,
-   "situation_report": "Own-ship at (0.0, 3550.0), heading 0.0, speed 0.50 m/s.\nMission goal at (0.0, 4000.0), 450m away.\n1 contact(s):\n  - ts1: range 5236m, rel.bearing 49.8 deg, heading 90.0, speed 1.00, CPA 5236m, TCPA 0s",
-   "decision": {
-    "action": "turn_right",
-    "degrees": 90.0,
-    "rule_applied": "Rule 15",
-    "reasoning": "The target is approaching from the port side with a CPA of 5236m and TCPA of 0s, indicating an immediate risk of collision. Rule 15 requires a vessel to keep to the right of the centerline of the channel. To avoid collision, a 90-degree turn to the right is necessary to clear the target's path."
-   },
-   "debug": {
-    "config": "v1_rag",
-    "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_757b940f"
-    ],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": null,
-    "user_msg_chars": 6165,
-    "raw_response": "{\"action\": \"turn_right\", \"degrees\": 90.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"The target is approaching from the port side with a CPA of 5236m and TCPA of 0s, indicating an immediate risk of collision. Rule 15 requires a vessel to keep to the right of the centerline of the channel. To avoid collision, a 90-degree turn to the right is necessary to clear the target's path.\"}"
-   }
-  },
-  {
-   "step": 160,
-   "time": 1600.0,
-   "situation_report": "Own-ship at (50.0, 3550.0), heading 90.0, speed 0.50 m/s.\nMission goal at (0.0, 4000.0), 453m away.\n1 contact(s):\n  - ts1: range 5198m, rel.bearing -40.5 deg, heading 90.0, speed 1.00, CPA 5198m, TCPA 0s",
+   "situation_report": "Own-ship at (0.0, 3750.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 4000.0), 250m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 100s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 5109m, rel.bearing 51.5 deg, heading 90.0, speed 1.00 m/s, CPA 4894m, TCPA 544s",
    "decision": {
     "action": "hold_course",
-    "degrees": 0,
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "The contact is at a CPA of 5198m and TCPA of 0s, indicating it is stationary or not approaching. Since there is no risk of collision, holding course is appropriate."
+    "reasoning": "The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the other vessel as the CPA is 4894m, which is well above the minimum safe distance. Therefore, no course correction is needed."
    },
    "debug": {
     "config": "v1_rag",
     "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_d3d00426",
+     "chunk_0d636362"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7824,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"The contact is at a CPA of 5198m and TCPA of 0s, indicating it is stationary or not approaching. Since there is no risk of collision, holding course is appropriate.\"\n}"
-   }
-  },
-  {
-   "step": 170,
-   "time": 1700.0,
-   "situation_report": "Own-ship at (100.0, 3550.0), heading 90.0, speed 0.50 m/s.\nMission goal at (0.0, 4000.0), 461m away.\n1 contact(s):\n  - ts1: range 5160m, rel.bearing -40.9 deg, heading 90.0, speed 1.00, CPA 5160m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The contact is at CPA (closest point of approach) with TCPA 0s, indicating no risk of collision. The own-ship is already at a safe distance and on a course that does not require alteration. Holding course is appropriate as there is no immediate risk of collision."
-   },
-   "debug": {
-    "config": "v1_rag",
-    "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_413e6f8d"
-    ],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": null,
-    "user_msg_chars": 7852,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"The contact is at CPA (closest point of approach) with TCPA 0s, indicating no risk of collision. The own-ship is already at a safe distance and on a course that does not require alteration. Holding course is appropriate as there is no immediate risk of collision.\"\n}"
-   }
-  },
-  {
-   "step": 180,
-   "time": 1800.0,
-   "situation_report": "Own-ship at (150.0, 3550.0), heading 90.0, speed 0.50 m/s.\nMission goal at (0.0, 4000.0), 474m away.\n1 contact(s):\n  - ts1: range 5122m, rel.bearing -41.3 deg, heading 90.0, speed 1.00, CPA 5122m, TCPA 0s",
-   "decision": {
-    "action": "slow_down",
-    "degrees": 0,
-    "rule_applied": "Rule 16",
-    "reasoning": "The target vessel is on a direct collision course with the own-ship, and the CPA is at 0 seconds. According to Rule 16, the give-way vessel must take action to avoid collision, which includes slowing down to ensure a safe distance."
-   },
-   "debug": {
-    "config": "v1_rag",
-    "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_9607cb6a",
-     "chunk_56efc6a4"
-    ],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": null,
-    "user_msg_chars": 7825,
-    "raw_response": "{\n  \"action\": \"slow_down\",\n  \"degrees\": 0,\n  \"rule_applied\": \"Rule 16\",\n  \"reasoning\": \"The target vessel is on a direct collision course with the own-ship, and the CPA is at 0 seconds. According to Rule 16, the give-way vessel must take action to avoid collision, which includes slowing down to ensure a safe distance.\"\n}"
-   }
-  },
-  {
-   "step": 190,
-   "time": 1900.0,
-   "situation_report": "Own-ship at (150.0, 3550.0), heading 90.0, speed 0.00 m/s.\nMission goal at (0.0, 4000.0), 474m away.\n1 contact(s):\n  - ts1: range 5122m, rel.bearing -41.3 deg, heading 90.0, speed 1.00, CPA 5122m, TCPA 0s",
-   "decision": {
-    "action": "hold_course",
-    "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "The contact is at a range of 5122m with a CPA of 5122m and TCPA of 0s, indicating it is stationary or not approaching. Since there is no risk of collision, holding course is appropriate."
-   },
-   "debug": {
-    "config": "v1_rag",
-    "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_9607cb6a",
-     "chunk_56efc6a4"
-    ],
-    "query_concepts": [],
-    "expanded_concepts": [],
-    "pg_guidance": null,
-    "user_msg_chars": 7825,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"The contact is at a range of 5122m with a CPA of 5122m and TCPA of 0s, indicating it is stationary or not approaching. Since there is no risk of collision, holding course is appropriate.\"\n}"
+    "user_msg_chars": 1345,
+    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0.0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"The ship is already on the goal bearing within the 10-degree deadband, and there is no immediate risk of collision with the other vessel as the CPA is 4894m, which is well above the minimum safe distance. Therefore, no course correction is needed.\"\n}"
    }
   }
  ]

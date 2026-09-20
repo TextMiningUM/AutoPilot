@@ -2,22 +2,22 @@
  "mission_id": "s02_crossing_stbd_fine",
  "config": "v3_rag_cot",
  "tag": "default",
- "generated_at": "2026-09-19T03:50:00.227731+00:00",
+ "generated_at": "2026-09-20T03:47:47.611624+00:00",
  "params": {
   "decision_interval": 10,
   "dt": 10.0,
   "max_steps": 200,
-  "enable_thinking": false,
-  "max_new_tokens": 256,
-  "k": 4,
+  "enable_thinking": true,
+  "max_new_tokens": 2048,
+  "k": 2,
   "use_rag": true,
-  "system_prompt": "You are the navigator on a large commercial vessel. You must navigate according to COLREG (the International Regulations for Preventing Collisions at Sea) at all times, avoiding collisions while making safe and efficient progress. Avoiding collisions comes first; once safe, reach the goal via the shortest direct track, with as few manoeuvres as possible and no zigzagging. Ground your reasoning in the provided COLREG excerpts and procedure guidance where given. If no target poses a real risk of collision, recommend holding course. What order do you give to the helm? Reply with ONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"rule_applied\": \"<e.g. Rule 15, or 'none' if no rule applies>\",\n \"reasoning\": \"<one or two sentences>\"}",
+  "system_prompt": "You are the navigator on a large commercial vessel. Your objective is to get the ship to the mission goal (position/bearing/distance given in the situation report) as directly and efficiently as possible -- that is the task. The one hard constraint on every decision, with no exceptions: never put the ship on a collision course with another vessel. When a real risk of collision exists, COLREG (the International Regulations for Preventing Collisions at Sea) governs which vessel gives way and how -- satisfy that constraint first, then resume progress toward the goal. All positions/bearings/headings given below are in metres and degrees, heading 0=north, clockwise, matching compass bearings -- take this as given, don't re-derive or second-guess it. rel.bearing is signed: positive = target is to starboard (right), negative = to port (left), 0=dead ahead, ~180/-180=dead astern. CPA is the closest distance the contact will EVER come to you at current headings/speeds; TCPA is the seconds until that closest point. TCPA=0 does NOT always mean a collision is imminent -- it also occurs when the vessels are already moving apart (closest point already passed); the situation report says so explicitly when that's the case. Judge real risk from the CPA distance itself, not from TCPA alone. DEFAULT PROCEDURE, apply this every single time: the situation report has a line starting \"GOAL COURSE CHECK:\" -- use ONLY that line to decide the goal-correction action and degrees, never a contact's rel.bearing (a contact's rel.bearing is about THAT CONTACT, not the goal, even if the numbers look similar). If \"GOAL COURSE CHECK\" says you're already on the goal bearing, hold_course (for the goal, at least). Otherwise it gives you the exact action (\"turn_left\"/\"turn_right\") and degrees to use -- copy those values directly into your answer, don't recompute them and don't substitute a different number from elsewhere in the report. Your track to the goal must look like a smooth curve or a straight line, NEVER a zigzag -- do not answer turn_right and then turn_left (or vice versa) on consecutive decisions just to chase a small residual mismatch; \"GOAL COURSE CHECK\" already has a 10-degree deadband built in for this. Only override any of this if a target poses a REAL risk of collision, in which case the COLREG-required give-way/stand-on manoeuvre takes precedence instead. Do not just describe the mismatch in your reasoning and then answer hold_course anyway when \"GOAL COURSE CHECK\" calls for a turn -- the action MUST match what that line says, never hold_course when it names a turn. Ground your reasoning in the provided COLREG excerpts and procedure guidance where given. If you are already on the goal bearing (within about 10 degrees) and your current speed is below the nominal/rated speed given for this mission, speed_up instead: reaching the goal sooner (when safe) is part of efficient progress too. What order do you give to the helm? Reply with ONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"rule_applied\": \"<e.g. Rule 15, or 'none' if no rule applies>\",\n \"reasoning\": \"<one or two sentences>\"}",
   "system_prompt_is_custom": false
  },
  "outcome": {
   "verdict": "reached_goal",
-  "final_step": 95,
-  "final_time_s": 950.0
+  "final_step": 100,
+  "final_time_s": 1000.0
  },
  "trajectory": [
   {
@@ -39,9 +39,9 @@
   {
    "time": 10.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 25.0,
-   "heading": 0.0,
+   "x": 8.55,
+   "y": 23.49,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -55,9 +55,9 @@
   {
    "time": 20.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 50.0,
-   "heading": 0.0,
+   "x": 17.1,
+   "y": 46.98,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -71,9 +71,9 @@
   {
    "time": 30.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 75.0,
-   "heading": 0.0,
+   "x": 25.65,
+   "y": 70.48,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -87,9 +87,9 @@
   {
    "time": 40.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 100.0,
-   "heading": 0.0,
+   "x": 34.2,
+   "y": 93.97,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -103,9 +103,9 @@
   {
    "time": 50.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 125.0,
-   "heading": 0.0,
+   "x": 42.75,
+   "y": 117.46,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -119,9 +119,9 @@
   {
    "time": 60.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 150.0,
-   "heading": 0.0,
+   "x": 51.3,
+   "y": 140.95,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -135,9 +135,9 @@
   {
    "time": 70.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 175.0,
-   "heading": 0.0,
+   "x": 59.85,
+   "y": 164.45,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -151,9 +151,9 @@
   {
    "time": 80.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 200.0,
-   "heading": 0.0,
+   "x": 68.4,
+   "y": 187.94,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -167,9 +167,9 @@
   {
    "time": 90.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 225.0,
-   "heading": 0.0,
+   "x": 76.95,
+   "y": 211.43,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -183,9 +183,9 @@
   {
    "time": 100.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 250.0,
-   "heading": 0.0,
+   "x": 85.51,
+   "y": 234.92,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -199,9 +199,9 @@
   {
    "time": 110.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 275.0,
-   "heading": 0.0,
+   "x": 94.06,
+   "y": 258.42,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -215,9 +215,9 @@
   {
    "time": 120.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 300.0,
-   "heading": 0.0,
+   "x": 102.61,
+   "y": 281.91,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -231,9 +231,9 @@
   {
    "time": 130.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 325.0,
-   "heading": 0.0,
+   "x": 111.16,
+   "y": 305.4,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -247,9 +247,9 @@
   {
    "time": 140.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 350.0,
-   "heading": 0.0,
+   "x": 119.71,
+   "y": 328.89,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -263,9 +263,9 @@
   {
    "time": 150.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 375.0,
-   "heading": 0.0,
+   "x": 128.26,
+   "y": 352.38,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -279,9 +279,9 @@
   {
    "time": 160.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 400.0,
-   "heading": 0.0,
+   "x": 136.81,
+   "y": 375.88,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -295,9 +295,9 @@
   {
    "time": 170.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 425.0,
-   "heading": 0.0,
+   "x": 145.36,
+   "y": 399.37,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -311,9 +311,9 @@
   {
    "time": 180.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 450.0,
-   "heading": 0.0,
+   "x": 153.91,
+   "y": 422.86,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -327,9 +327,9 @@
   {
    "time": 190.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 475.0,
-   "heading": 0.0,
+   "x": 162.46,
+   "y": 446.35,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -343,9 +343,9 @@
   {
    "time": 200.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 500.0,
-   "heading": 0.0,
+   "x": 171.01,
+   "y": 469.85,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -359,9 +359,9 @@
   {
    "time": 210.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 525.0,
-   "heading": 0.0,
+   "x": 179.56,
+   "y": 493.34,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -375,9 +375,9 @@
   {
    "time": 220.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 550.0,
-   "heading": 0.0,
+   "x": 188.11,
+   "y": 516.83,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -391,9 +391,9 @@
   {
    "time": 230.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 575.0,
-   "heading": 0.0,
+   "x": 196.66,
+   "y": 540.32,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -407,9 +407,9 @@
   {
    "time": 240.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 600.0,
-   "heading": 0.0,
+   "x": 205.21,
+   "y": 563.82,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -423,9 +423,9 @@
   {
    "time": 250.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 625.0,
-   "heading": 0.0,
+   "x": 213.76,
+   "y": 587.31,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -439,9 +439,9 @@
   {
    "time": 260.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 650.0,
-   "heading": 0.0,
+   "x": 222.31,
+   "y": 610.8,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -455,9 +455,9 @@
   {
    "time": 270.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 675.0,
-   "heading": 0.0,
+   "x": 230.86,
+   "y": 634.29,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -471,9 +471,9 @@
   {
    "time": 280.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 700.0,
-   "heading": 0.0,
+   "x": 239.41,
+   "y": 657.78,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -487,9 +487,9 @@
   {
    "time": 290.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 725.0,
-   "heading": 0.0,
+   "x": 247.96,
+   "y": 681.28,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -503,9 +503,9 @@
   {
    "time": 300.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 750.0,
-   "heading": 0.0,
+   "x": 256.52,
+   "y": 704.77,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -519,9 +519,9 @@
   {
    "time": 310.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 775.0,
-   "heading": 0.0,
+   "x": 265.07,
+   "y": 728.26,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -535,9 +535,9 @@
   {
    "time": 320.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 800.0,
-   "heading": 0.0,
+   "x": 273.62,
+   "y": 751.75,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -551,9 +551,9 @@
   {
    "time": 330.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 825.0,
-   "heading": 0.0,
+   "x": 282.17,
+   "y": 775.25,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -567,9 +567,9 @@
   {
    "time": 340.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 850.0,
-   "heading": 0.0,
+   "x": 290.72,
+   "y": 798.74,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -583,9 +583,9 @@
   {
    "time": 350.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 875.0,
-   "heading": 0.0,
+   "x": 299.27,
+   "y": 822.23,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -599,9 +599,9 @@
   {
    "time": 360.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 900.0,
-   "heading": 0.0,
+   "x": 307.82,
+   "y": 845.72,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -615,9 +615,9 @@
   {
    "time": 370.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 925.0,
-   "heading": 0.0,
+   "x": 316.37,
+   "y": 869.22,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -631,9 +631,9 @@
   {
    "time": 380.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 950.0,
-   "heading": 0.0,
+   "x": 324.92,
+   "y": 892.71,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -647,9 +647,9 @@
   {
    "time": 390.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 975.0,
-   "heading": 0.0,
+   "x": 333.47,
+   "y": 916.2,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -663,9 +663,9 @@
   {
    "time": 400.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1000.0,
-   "heading": 0.0,
+   "x": 342.02,
+   "y": 939.69,
+   "heading": 20.0,
    "speed": 2.5
   },
   {
@@ -679,9 +679,9 @@
   {
    "time": 410.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1025.0,
-   "heading": 0.0,
+   "x": 336.4,
+   "y": 964.05,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -695,9 +695,9 @@
   {
    "time": 420.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1050.0,
-   "heading": 0.0,
+   "x": 330.77,
+   "y": 988.41,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -711,9 +711,9 @@
   {
    "time": 430.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1075.0,
-   "heading": 0.0,
+   "x": 325.15,
+   "y": 1012.77,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -727,9 +727,9 @@
   {
    "time": 440.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1100.0,
-   "heading": 0.0,
+   "x": 319.53,
+   "y": 1037.13,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -743,9 +743,9 @@
   {
    "time": 450.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1125.0,
-   "heading": 0.0,
+   "x": 313.9,
+   "y": 1061.49,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -759,9 +759,9 @@
   {
    "time": 460.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1150.0,
-   "heading": 0.0,
+   "x": 308.28,
+   "y": 1085.85,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -775,9 +775,9 @@
   {
    "time": 470.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1175.0,
-   "heading": 0.0,
+   "x": 302.65,
+   "y": 1110.21,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -791,9 +791,9 @@
   {
    "time": 480.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1200.0,
-   "heading": 0.0,
+   "x": 297.03,
+   "y": 1134.57,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -807,9 +807,9 @@
   {
    "time": 490.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1225.0,
-   "heading": 0.0,
+   "x": 291.41,
+   "y": 1158.93,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -823,9 +823,9 @@
   {
    "time": 500.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1250.0,
-   "heading": 0.0,
+   "x": 285.78,
+   "y": 1183.29,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -839,9 +839,9 @@
   {
    "time": 510.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1275.0,
-   "heading": 0.0,
+   "x": 280.16,
+   "y": 1207.64,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -855,9 +855,9 @@
   {
    "time": 520.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1300.0,
-   "heading": 0.0,
+   "x": 274.53,
+   "y": 1232.0,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -871,9 +871,9 @@
   {
    "time": 530.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1325.0,
-   "heading": 0.0,
+   "x": 268.91,
+   "y": 1256.36,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -887,9 +887,9 @@
   {
    "time": 540.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1350.0,
-   "heading": 0.0,
+   "x": 263.29,
+   "y": 1280.72,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -903,9 +903,9 @@
   {
    "time": 550.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1375.0,
-   "heading": 0.0,
+   "x": 257.66,
+   "y": 1305.08,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -919,9 +919,9 @@
   {
    "time": 560.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1400.0,
-   "heading": 0.0,
+   "x": 252.04,
+   "y": 1329.44,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -935,9 +935,9 @@
   {
    "time": 570.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1425.0,
-   "heading": 0.0,
+   "x": 246.42,
+   "y": 1353.8,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -951,9 +951,9 @@
   {
    "time": 580.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1450.0,
-   "heading": 0.0,
+   "x": 240.79,
+   "y": 1378.16,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -967,9 +967,9 @@
   {
    "time": 590.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1475.0,
-   "heading": 0.0,
+   "x": 235.17,
+   "y": 1402.52,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -983,9 +983,9 @@
   {
    "time": 600.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1500.0,
-   "heading": 0.0,
+   "x": 229.54,
+   "y": 1426.88,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -999,9 +999,9 @@
   {
    "time": 610.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1525.0,
-   "heading": 0.0,
+   "x": 223.92,
+   "y": 1451.24,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1015,9 +1015,9 @@
   {
    "time": 620.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1550.0,
-   "heading": 0.0,
+   "x": 218.3,
+   "y": 1475.6,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1031,9 +1031,9 @@
   {
    "time": 630.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1575.0,
-   "heading": 0.0,
+   "x": 212.67,
+   "y": 1499.96,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1047,9 +1047,9 @@
   {
    "time": 640.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1600.0,
-   "heading": 0.0,
+   "x": 207.05,
+   "y": 1524.31,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1063,9 +1063,9 @@
   {
    "time": 650.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1625.0,
-   "heading": 0.0,
+   "x": 201.43,
+   "y": 1548.67,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1079,9 +1079,9 @@
   {
    "time": 660.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1650.0,
-   "heading": 0.0,
+   "x": 195.8,
+   "y": 1573.03,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1095,9 +1095,9 @@
   {
    "time": 670.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1675.0,
-   "heading": 0.0,
+   "x": 190.18,
+   "y": 1597.39,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1111,9 +1111,9 @@
   {
    "time": 680.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1700.0,
-   "heading": 0.0,
+   "x": 184.55,
+   "y": 1621.75,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1127,9 +1127,9 @@
   {
    "time": 690.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1725.0,
-   "heading": 0.0,
+   "x": 178.93,
+   "y": 1646.11,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1143,9 +1143,9 @@
   {
    "time": 700.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1750.0,
-   "heading": 0.0,
+   "x": 173.31,
+   "y": 1670.47,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1159,9 +1159,9 @@
   {
    "time": 710.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1775.0,
-   "heading": 0.0,
+   "x": 167.68,
+   "y": 1694.83,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1175,9 +1175,9 @@
   {
    "time": 720.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1800.0,
-   "heading": 0.0,
+   "x": 162.06,
+   "y": 1719.19,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1191,9 +1191,9 @@
   {
    "time": 730.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1825.0,
-   "heading": 0.0,
+   "x": 156.44,
+   "y": 1743.55,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1207,9 +1207,9 @@
   {
    "time": 740.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1850.0,
-   "heading": 0.0,
+   "x": 150.81,
+   "y": 1767.91,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1223,9 +1223,9 @@
   {
    "time": 750.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1875.0,
-   "heading": 0.0,
+   "x": 145.19,
+   "y": 1792.27,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1239,9 +1239,9 @@
   {
    "time": 760.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1900.0,
-   "heading": 0.0,
+   "x": 139.56,
+   "y": 1816.63,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1255,9 +1255,9 @@
   {
    "time": 770.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1925.0,
-   "heading": 0.0,
+   "x": 133.94,
+   "y": 1840.98,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1271,9 +1271,9 @@
   {
    "time": 780.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1950.0,
-   "heading": 0.0,
+   "x": 128.32,
+   "y": 1865.34,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1287,9 +1287,9 @@
   {
    "time": 790.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 1975.0,
-   "heading": 0.0,
+   "x": 122.69,
+   "y": 1889.7,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1303,9 +1303,9 @@
   {
    "time": 800.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2000.0,
-   "heading": 0.0,
+   "x": 117.07,
+   "y": 1914.06,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1319,9 +1319,9 @@
   {
    "time": 810.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2025.0,
-   "heading": 0.0,
+   "x": 111.45,
+   "y": 1938.42,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1335,9 +1335,9 @@
   {
    "time": 820.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2050.0,
-   "heading": 0.0,
+   "x": 105.82,
+   "y": 1962.78,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1351,9 +1351,9 @@
   {
    "time": 830.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2075.0,
-   "heading": 0.0,
+   "x": 100.2,
+   "y": 1987.14,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1367,9 +1367,9 @@
   {
    "time": 840.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2100.0,
-   "heading": 0.0,
+   "x": 94.57,
+   "y": 2011.5,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1383,9 +1383,9 @@
   {
    "time": 850.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2125.0,
-   "heading": 0.0,
+   "x": 88.95,
+   "y": 2035.86,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1399,9 +1399,9 @@
   {
    "time": 860.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2150.0,
-   "heading": 0.0,
+   "x": 83.33,
+   "y": 2060.22,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1415,9 +1415,9 @@
   {
    "time": 870.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2175.0,
-   "heading": 0.0,
+   "x": 77.7,
+   "y": 2084.58,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1431,9 +1431,9 @@
   {
    "time": 880.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2200.0,
-   "heading": 0.0,
+   "x": 72.08,
+   "y": 2108.94,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1447,9 +1447,9 @@
   {
    "time": 890.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2225.0,
-   "heading": 0.0,
+   "x": 66.46,
+   "y": 2133.3,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1463,9 +1463,9 @@
   {
    "time": 900.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2250.0,
-   "heading": 0.0,
+   "x": 60.83,
+   "y": 2157.66,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1479,9 +1479,9 @@
   {
    "time": 910.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2275.0,
-   "heading": 0.0,
+   "x": 55.21,
+   "y": 2182.01,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1495,9 +1495,9 @@
   {
    "time": 920.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2300.0,
-   "heading": 0.0,
+   "x": 49.58,
+   "y": 2206.37,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1511,9 +1511,9 @@
   {
    "time": 930.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2325.0,
-   "heading": 0.0,
+   "x": 43.96,
+   "y": 2230.73,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1527,9 +1527,9 @@
   {
    "time": 940.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2350.0,
-   "heading": 0.0,
+   "x": 38.34,
+   "y": 2255.09,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1543,9 +1543,9 @@
   {
    "time": 950.0,
    "vehicle": "own_ship",
-   "x": 0.0,
-   "y": 2375.0,
-   "heading": 0.0,
+   "x": 32.71,
+   "y": 2279.45,
+   "heading": 347.0,
    "speed": 2.5
   },
   {
@@ -1555,257 +1555,349 @@
    "y": -685.31,
    "heading": 222.9,
    "speed": 2.2
+  },
+  {
+   "time": 960.0,
+   "vehicle": "own_ship",
+   "x": 27.09,
+   "y": 2303.81,
+   "heading": 347.0,
+   "speed": 2.5
+  },
+  {
+   "time": 960.0,
+   "vehicle": "ts1",
+   "x": -1129.88,
+   "y": -701.43,
+   "heading": 222.9,
+   "speed": 2.2
+  },
+  {
+   "time": 970.0,
+   "vehicle": "own_ship",
+   "x": 21.46,
+   "y": 2328.17,
+   "heading": 347.0,
+   "speed": 2.5
+  },
+  {
+   "time": 970.0,
+   "vehicle": "ts1",
+   "x": -1144.86,
+   "y": -717.55,
+   "heading": 222.9,
+   "speed": 2.2
+  },
+  {
+   "time": 980.0,
+   "vehicle": "own_ship",
+   "x": 15.84,
+   "y": 2352.53,
+   "heading": 347.0,
+   "speed": 2.5
+  },
+  {
+   "time": 980.0,
+   "vehicle": "ts1",
+   "x": -1159.83,
+   "y": -733.66,
+   "heading": 222.9,
+   "speed": 2.2
+  },
+  {
+   "time": 990.0,
+   "vehicle": "own_ship",
+   "x": 10.22,
+   "y": 2376.89,
+   "heading": 347.0,
+   "speed": 2.5
+  },
+  {
+   "time": 990.0,
+   "vehicle": "ts1",
+   "x": -1174.81,
+   "y": -749.78,
+   "heading": 222.9,
+   "speed": 2.2
+  },
+  {
+   "time": 1000.0,
+   "vehicle": "own_ship",
+   "x": 4.59,
+   "y": 2401.25,
+   "heading": 347.0,
+   "speed": 2.5
+  },
+  {
+   "time": 1000.0,
+   "vehicle": "ts1",
+   "x": -1189.79,
+   "y": -765.89,
+   "heading": 222.9,
+   "speed": 2.2
   }
  ],
  "checkpoints": [
   {
    "step": 0,
    "time": 0.0,
-   "situation_report": "Own-ship at (0.0, 0.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2400m away.\n1 contact(s):\n  - ts1: range 900m, rel.bearing 20.0 deg, heading 222.9, speed 2.20, CPA 0m, TCPA 206s",
+   "situation_report": "Own-ship at (0.0, 0.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 2400m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 960s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 900m, rel.bearing 20.0 deg, heading 222.9, speed 2.20 m/s, CPA 0m, TCPA 206s",
    "decision": {
-    "action": "hold_course",
-    "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREGs. The situation given is that the own-ship is at (0.0, 0.0) heading 0.0 (which I think means facing 0 degrees, so directly ahead, maybe north?), speed 2.50 m/s. The mission goa",
-    "_parse_error": true
+    "action": "turn_right",
+    "degrees": 20.0,
+    "rule_applied": "Rule 15",
+    "reasoning": "Other ship (ts1) is on starboard side, requiring this vessel to give way by turning right to avoid collision."
    },
    "debug": {
     "config": "v3_rag_cot",
     "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_9607cb6a",
-     "chunk_56efc6a4"
+     "chunk_d3d00426",
+     "chunk_0d636362"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7963,
-    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREGs. The situation given is that the own-ship is at (0.0, 0.0) heading 0.0 (which I think means facing 0 degrees, so directly ahead, maybe north?), speed 2.50 m/s. The mission goal is 2400m away at (0.0, 2400.0), so straight ahead along the y-axis. There's one contact, ts1, at 900m range, relative bearing 20 degrees, heading 222.9 degrees, speed 2.20 m/s. CPA (closest point of approach) is 0m, TCPA (time to CPA) is 206 seconds. \n\nFirst, I need to determine if there's a risk of collision. CPA is 0m, which means the two vessels are on a collision course. The TCPA is 206 seconds, so they're going to meet in about 3.4 minutes. The relative bearing is 20 degrees, so the contact is slightly to the port side (since relative bearing is measured from the own-ship's bow). \n\nNow, applying COLREGs. The key here is Rule 15, which deals with crossing situations. The own-ship is a general cargo trawler, and the contact is a containership (since the incident report mentions MSC Aquarius, which is a containership). Wait, but the contact's details aren't given, but the own-ship is a general cargo trawler. \n\nRule 15 says that in a crossing situation where there's a risk of collision, the power-driven vessel (which the own-ship is) must avoid crossing ahead of another power-driven vessel on its starboard side. However, in this case, the contact is approaching from the port side (relative bearing 20 degrees). Wait, relative bearing is 20 degrees, so the contact is on the port side. Wait, relative bearing is measured from the own-ship's bow. If the own-ship is heading 0 degrees (north), then a relative bearing of 20 degrees would be 20 degrees to the port (left) side. So the contact is approaching from the port side. \n\nBut Rule 15 applies when a vessel is on the"
+    "user_msg_chars": 1796,
+    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a ship, and the main goal is to reach the mission target efficiently while avoiding collisions. The situation report says the ship is already on the correct bearing for the goal, so no turn is needed there. The other ship, ts1, is at 900m range, 20 degrees to the starboard (since rel.bearing is positive). The CPA is 0m, which means the closest point of approach is right now, and TCPA is 206 seconds. Wait, but CPA is 0m, so that suggests they are on a collision course. But the user mentioned that CPA is the closest distance the contact will ever come, so if it's 0m, that means they are already on a collision course. But the TCPA is 206s, which is confusing because if the CPA is 0, the TCPA should be 0 or negative. Maybe there's a mistake in the data, but according to the problem statement, we have to take the given numbers as fact.\n\nSo, the COLREG rules say that if a vessel is directed to keep out of the way, it must take early and substantial action. The other ship, ts1, is approaching. The user's ship is on the same bearing as the goal, so the goal is straight ahead. The other ship is at 20 degrees to starboard, so it's on the port side? Wait, rel.bearing is positive to starboard, so 20 degrees to starboard. Wait, the user's heading is 0.0 (north), so the other ship is at 20 degrees to starboard, meaning it's to the right of the user's bow. The user is moving north at 2.5 m/s, and the other ship is moving at 2.2 m/s. The CPA is 0m, which suggests that the other ship is on a collision course. But the TCPA is 206s, which would mean that the closest point is in the future. But if CPA is 0, that's conflicting. Maybe the data is incorrect, but we have to work with it.\n\nSince the CPA is 0, the user's ship is on a collision course with ts1. According to COLREG, the vessel that must give way is the one that has the other vessel on its starboard side. Wait, the COLREG rules for crossing situations: if two vessels are approaching each other on opposite courses, the vessel on the starboard side must keep clear. Wait, but in this case, the other ship is at 20 degrees to the user's starboard. So the user is on the port side of the other ship? Wait, the user's heading is 0.0 (north), and the other ship is at 20 degrees to starboard. So the other ship is to the right of the user's bow. The user is moving north, and the other ship is moving at 222.9 degrees, which is roughly southwest direction. So their paths might be crossing. \n\nBut the CPA is 0, which suggests that the other ship is on a collision course. The user's ship is on the same bearing as the goal, so the user is moving straight north. The other ship is moving southwest. So their paths might be crossing. The user's ship is the one that must give way if the other ship is on the starboard side. Wait, COLREG Rule 15: when two power-driven vessels are approaching each other so as to involve risk of collision, each shall keep to the right. Wait, but in this case, the other ship is on the starboard side of the user. So the user is on the port side of the other ship. Therefore, the other ship should keep to the right (starboard), so the user should give way. Wait, but the user is on the port side of the other ship. So according to Rule 15, the other ship should keep to the right, so the user should give way. But the user is on a collision course. So the user must take action to avoid the collision. \n\nBut the user's current course is straight north, and the other ship is approaching. The user's speed is 2.5 m/s, and the other ship is 2.2 m/s. The CPA is 0, so they are on a collision course. The user must take action to avoid. Since the other ship is on the starboard side, the user must give way. Wait, but the user is the one that must give way. So the user should turn to starboard to avoid the other ship. But the user is already on the correct bearing for the goal. However, the collision risk takes precedence. So the user must turn right (starboard) to avoid the other ship. But the user's current course is straight north, and the other ship is at 20 degrees to starboard. So turning right would take the user away from the other ship. \n\nBut the user's goal is straight ahead. So the user must choose between the goal and the collision. According to COLREG, the collision avoidance takes precedence. So the user must turn right to avoid the other ship. But the user's current heading is 0.0 (north), and the other ship is at 20 degrees to starboard. So the user needs to turn right (starboard) to avoid the collision. However, the user's goal is straight ahead. But the collision is imminent, so the user must take action. \n\nBut the user's current course is on the goal bearing. The GOAL COURSE CHECK says no turn is needed. But the collision is imminent. So the user must take action to avoid the collision, even if it means deviating from the goal. Therefore, the correct action is to turn right to avoid the other ship. But the user's speed is 2.5 m/s, which is the rated speed. So the user can't speed up. But the user must turn. \n\nSo the action is to turn right, and the rule applied is Rule 15. The reasoning is that the other ship is on the starboard side, so the user must give way by turning right to avoid collision.\n</think>\n\n{\"action\": \"turn_right\", \"degrees\": 20.0, \"rule_applied\": \"Rule 15\", \"reasoning\": \"Other ship (ts1) is on starboard side, requiring this vessel to give way by turning right to avoid collision.\"}"
    }
   },
   {
    "step": 10,
    "time": 100.0,
-   "situation_report": "Own-ship at (0.0, 250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2150m away.\n1 contact(s):\n  - ts1: range 671m, rel.bearing 27.3 deg, heading 222.9, speed 2.20, CPA 85m, TCPA 152s",
+   "situation_report": "Own-ship at (85.5, 234.9), heading 20.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 2167m away, bearing 357.7 deg.\nGOAL COURSE CHECK: heading is 22 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=22 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 867s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 650m, rel.bearing -0.0 deg, heading 222.9, speed 2.20 m/s, CPA 121m, TCPA 139s",
    "decision": {
     "action": "hold_course",
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREG rules to avoid collisions. The situation given is that the own-ship is at (0.0, 250.0) heading 0.0 (which is north, since 0 degrees is north in standard maritime terms) with a ",
+    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The situation is that the own-ship is on a course that's 22 degrees off the goal bearing to port. The mission is to get to the goal efficiently, but there's another ship, ts1, at 650 meters range, directly ahead (rel.bearing -0.0 deg), heading 222.9 degrees, spee",
     "_parse_error": true
    },
    "debug": {
     "config": "v3_rag_cot",
     "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_413e6f8d",
+     "chunk_4bdd4457"
     ],
-    "query_concepts": [],
-    "expanded_concepts": [],
+    "query_concepts": [
+     "collision"
+    ],
+    "expanded_concepts": [
+     "ais",
+     "casualty",
+     "investigation_finding",
+     "light",
+     "radar_arpa"
+    ],
     "pg_guidance": null,
-    "user_msg_chars": 7966,
-    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREG rules to avoid collisions. The situation given is that the own-ship is at (0.0, 250.0) heading 0.0 (which is north, since 0 degrees is north in standard maritime terms) with a speed of 2.50 m/s. The mission goal is at (0.0, 2400.0), which is 2150 meters directly north. There's one contact, ts1, at a range of 671 meters, relative bearing 27.3 degrees, heading 222.9 degrees (which is southwest), speed 2.20 m/s. The CPA (closest point of approach) is 85 meters, and TCPA (time to CPA) is 152 seconds.\n\nFirst, I need to determine if there's a risk of collision. The CPA is very close (85 meters), so that's a concern. The relative bearing is 27.3 degrees, which means the contact is to the northeast of the own-ship. The own-ship is heading north, and the contact is heading southwest. Let me visualize this: the own-ship is moving north, and the contact is moving southwest. The contact's heading is 222.9 degrees, which is 180 + 42.9, so southwest. So their paths might cross.\n\nNow, applying COLREG rules. The key here is Rule 15, which deals with crossing situations. Rule 15 states that a power-driven vessel must avoid crossing ahead of another power-driven vessel on her starboard side if there's a risk of collision. But first, I need to determine if this is a crossing situation. \n\nThe own-ship is heading north, and the contact is heading southwest. The relative bearing is 27.3 degrees, so the contact is to the northeast of the own-ship. The contact's heading is southwest, so it's moving towards the south-west. The own-ship is moving north. So their paths might cross. \n\nWait, the contact is moving southwest, so from the own-ship's perspective, the contact is approaching from the northeast, moving towards the southwest. The own-ship is moving north. So the contact is approaching from the northeast, moving southwest, and the"
+    "user_msg_chars": 5840,
+    "raw_response": "<think>\nOkay, let's break this down. The situation is that the own-ship is on a course that's 22 degrees off the goal bearing to port. The mission is to get to the goal efficiently, but there's another ship, ts1, at 650 meters range, directly ahead (rel.bearing -0.0 deg), heading 222.9 degrees, speed 2.20 m/s. The CPA is 121 meters with TCPA 139 seconds. \n\nFirst, the goal course check says to turn left 22 degrees to correct the heading. But I need to check if ts1 poses a collision risk. The CPA is 121 meters, which is quite close, but not immediately imminent since TCPA is 139 seconds. However, the CPA is the closest distance, so if the current course continues, the ships will get that close. But according to COLREG, the stand-on vessel is the one that should maintain course, and the give-way vessel must take action. \n\nThe own-ship is on a course that's 22 degrees off the goal bearing. The other ship, ts1, is directly ahead. The own-ship's heading is 20 degrees, and the ts1 is heading 222.9 degrees. Let me check the relative motion. The own-ship is moving at 2.5 m/s, ts1 at 2.2 m/s. The relative bearing is 0 degrees, so they are on a collision course? Wait, the rel.bearing is -0.0, meaning directly ahead. So the ts1 is directly in front of the own-ship. The CPA is 121 meters, which is a real risk. \n\nUnder COLREG, if two vessels are approaching each other, the vessel on the starboard side is the stand-on vessel. Wait, the own-ship's heading is 20 degrees (north is 0, so 20 degrees is slightly east of north). The ts1 is heading 222.9 degrees, which is 180 + 42.9, so south-west direction. So the own-ship is moving northeast (20 degrees), and ts1 is moving southwest (222.9). They are approaching each other. The stand-on vessel is the one on the starboard side. The own-ship's starboard side is to the right, which would be towards the east. The ts1 is moving southwest, so its starboard side is towards the south. \n\nWait, the COLREG Rule 13 applies to crossing situations. If two power-driven vessels are approaching each other so that their courses will cross, the vessel which has the other on her starboard side shall keep out of the way. So if the own-ship has ts1 on its starboard side, then the own-ship is the give-way vessel. But the rel.bearing is -0.0, meaning directly ahead. So the ts1 is directly in front of the own-ship. So the own-ship is on a course that's 22 degrees off the goal bearing. The ts1 is approaching from ahead. \n\nWait, the CPA is 121 meters, which is a real risk. So the own-ship needs to take action to avoid collision. The COLREG requires that the give-way vessel must take action. If the own-ship is the give-way vessel, then it must alter course. But the goal course check says to turn left 22 degrees. However, the presence of ts1 requires checking if the own-ship is the give-way vessel. \n\nIn this case, since the ts1 is approaching from ahead, and the own-ship is on a course that's 22 degrees off the goal bearing. The own-ship's current heading is 20 degrees, which is slightly east of north. The ts1 is heading 222.9 degrees, which is southwest. So the own-ship is moving northeast, and ts1 is moving southwest. They are approaching each other. The stand-on vessel is the one on the starboard side. The own-ship's starboard side is to the right (east), and the ts1's starboard side is to the south. So the own-ship has the ts1 on its port side (since the ts1 is directly ahead, which is the own-ship's front, so the ts1 is on the port side? Wait, the own-ship's heading is 20 degrees, so the front is 20 degrees. The ts1 is directly ahead, so the rel.bearing is -0.0, meaning directly in front. So the ts1 is on the own-ship's bow. \n\nIn a crossing situation, the vessel on the starboard side is the stand-on vessel. The own-ship is on a course of 20 degrees, so its starboard side is to the right (east). The ts1 is moving southwest, so its starboard side is to the south. The own-ship is on a course that's 22 degrees off the goal bearing, which is 357.7 degrees. The goal is to the north. So the own-ship is heading east of north, but the goal is almost directly north. \n\nWait, the own-ship's current heading is 20 degrees, which is slightly east of north. The goal is at bearing 357.7 degrees, which is almost directly north. So the own-ship is slightly east of the goal bearing. The goal course check says to turn left 22 degrees to correct. But the presence of ts1 requires checking if the own-ship is the give-way vessel. \n\nSince the ts1 is directly ahead, and the own-ship is on a course that's 22 degrees off the goal bearing, which is almost directly north. The ts1 is approaching from ahead. The own-ship's course is 20 degrees, so it's moving northeast. The ts1 is moving southwest. So they are approaching each other. The stand-on vessel is the one on the starboard side. The own-ship's starboard side is to the east. The ts1 is moving southwest, so its starboard side is to the south. Therefore, the own-ship has the ts1 on its port side (since the ts1 is directly ahead, which is the own-ship's bow, so the ts1 is on the port side of the own-ship). Wait, no. If the own-ship is heading 20 degrees (east of north), then the port side is to the west. The ts1 is directly ahead, so it's on the own-ship's bow, which is the front. So the ts1 is on the own-ship's bow, which is the front. \n\nIn a crossing situation, the vessel on the starboard side is the stand-on vessel. The own-ship is on a course of 20 degrees, so its starboard side is to the east. The ts1 is moving southwest, so its starboard side is to the south. Therefore, the own-ship is on the port side of the ts1. Wait, this is getting confusing. Let me think again. \n\nThe own-ship is moving northeast (20 degrees). The ts1 is moving southwest (222.9 degrees). They are approaching each other. The stand-on vessel is the one that has the other on its starboard side. So if the ts1 is on the own-ship's starboard side, then the own-ship is the give-way vessel. But the ts1 is directly ahead, so it's on the own-ship's bow. The own-ship's starboard side is to the east. The ts1 is moving southwest, so its starboard side is to the south. Therefore, the ts1 is on the own-ship's port side (since the own-ship is moving northeast, the ts1 is directly in front, which is the own-ship's bow, so the ts1 is on the port side of the own-ship). Wait, no. The own-ship's port side is to the west. The ts1 is directly ahead, so it's on the own-ship's bow, which is the front. So the ts1 is on the own-ship's bow, which is the front. \n\nIn this case, the own-ship is the give-way vessel because the ts1 is on its port side. Wait, no. The stand-on vessel is the one that has the other on its starboard side. So if the ts1 is on the own-ship's starboard side, then the own-ship is the give-way vessel. But the ts1 is directly ahead, so it's on the own-ship's bow. The own-ship's starboard side is to the east. The ts1 is moving southwest, so its starboard side is to the south. Therefore, the ts1 is on the own-ship's port side. Wait, this is getting too confusing. \n\nAlternatively, since the ts1 is directly ahead, and the own-ship is on a course that's 22 degrees off the goal bearing, which is almost directly north. The own-ship is heading 20 degrees, which is slightly east of north. The ts1 is approaching from ahead. The CPA is 121 meters, which is a real risk. So the own-ship must take action to avoid collision. \n\nThe COLREG Rule 13 applies to crossing situations. If the own-ship is the give-way vessel, it must take action. If the ts1 is the give-way vessel, then the own-ship should maintain course"
    }
   },
   {
    "step": 20,
    "time": 200.0,
-   "situation_report": "Own-ship at (0.0, 500.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1900m away.\n1 contact(s):\n  - ts1: range 463m, rel.bearing 41.7 deg, heading 222.9, speed 2.20, CPA 171m, TCPA 98s",
+   "situation_report": "Own-ship at (171.0, 469.8), heading 20.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1938m away, bearing 354.9 deg.\nGOAL COURSE CHECK: heading is 25 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=25 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 775s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 400m, rel.bearing -0.0 deg, heading 222.9, speed 2.20 m/s, CPA 74m, TCPA 85s",
    "decision": {
     "action": "hold_course",
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREGs. The situation given is that the own-ship is at (0.0, 500.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime terms) with a speed of 2.50 m/s. The m",
+    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The situation report says the ship is 25 degrees off the goal bearing to port, so the correct action is to turn left by 25 degrees. But I need to check if there's a collision risk with the other ship, ts1.\n\nLooking at ts1: rel.bearing is -0.0 deg, which means it'",
     "_parse_error": true
    },
    "debug": {
     "config": "v3_rag_cot",
     "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_413e6f8d",
+     "chunk_4bdd4457"
     ],
-    "query_concepts": [],
-    "expanded_concepts": [],
+    "query_concepts": [
+     "collision"
+    ],
+    "expanded_concepts": [
+     "ais",
+     "casualty",
+     "investigation_finding",
+     "light",
+     "radar_arpa"
+    ],
     "pg_guidance": null,
-    "user_msg_chars": 7966,
-    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREGs. The situation given is that the own-ship is at (0.0, 500.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime terms) with a speed of 2.50 m/s. The mission goal is at (0.0, 2400.0), so directly north, 1900 meters away. There's one contact, ts1, at a range of 463 meters, relative bearing 41.7 degrees, heading 222.9 degrees (which is southwest), speed 2.20 m/s. The CPA (closest point of approach) is 171 meters, and TCPA (time to CPA) is 98 seconds.\n\nFirst, I need to determine if there's a risk of collision. The CPA is 171 meters, which is quite close, so that's a concern. The relative bearing is 41.7 degrees, which means the contact is to the northeast of the own-ship. The contact's heading is 222.9 degrees, which is southwest, so it's moving towards the southeast. The own-ship is moving north. \n\nNow, applying COLREGs. The key here is to check if there's a crossing situation. The own-ship is going north, and the contact is moving from southwest to southeast. The relative bearing is northeast, so the contact is approaching from the starboard side (since the own-ship is heading north, the contact is coming from the right side). \n\nRule 15 says that in a crossing situation, a power-driven vessel must avoid crossing ahead of another power-driven vessel on its starboard side if there's a risk of collision. The own-ship is on a course that might cross ahead of the contact, which is approaching from the starboard side. The CPA is very close, so there's a risk of collision. \n\nThe own-ship is the stand-on vessel here, but since the contact is approaching from the starboard side, the own-ship must give way. Wait, no. Wait, Rule 15 says that the power-driven vessel (the own-ship) must avoid crossing ahead of another power-driven vessel on its starboard side. So if the contact is on"
+    "user_msg_chars": 5839,
+    "raw_response": "<think>\nOkay, let's break this down. The situation report says the ship is 25 degrees off the goal bearing to port, so the correct action is to turn left by 25 degrees. But I need to check if there's a collision risk with the other ship, ts1.\n\nLooking at ts1: rel.bearing is -0.0 deg, which means it's directly ahead (dead astern? Wait, rel.bearing is signed, positive is starboard, negative is port. So -0.0 deg would be directly ahead, since 0 is dead ahead. Wait, no. Wait, the user said rel.bearing is signed: positive = target is to starboard (right), negative = to port (left), 0=dead ahead. So rel.bearing of -0.0 deg means the target is directly ahead (since 0 is dead ahead). Wait, but the rel.bearing is -0.0, which is 0.0 with a negative sign. Wait, maybe there's a typo here. Wait, the user says \"rel.bearing is signed: positive = target is to starboard (right), negative = to port (left), 0=dead ahead, ~180/-180=dead astern.\" So if rel.bearing is -0.0, that's 0.0 with a negative sign, which would mean the target is directly ahead (since 0 is dead ahead). Wait, but the rel.bearing is -0.0, which is the same as 0.0. Maybe it's a typo, but assuming the data is correct, the target is directly ahead. \n\nBut the CPA is 74m and TCPA is 85s. The CPA is the closest distance the contact will come to the ship. Since the CPA is 74m, which is quite close, but not extremely so. However, the TCPA is 85 seconds, meaning the closest point is in the future. The question is whether this poses a real risk of collision. \n\nThe ship is on a course that's 25 degrees off the goal bearing to port. The other ship is directly ahead (rel.bearing -0.0), so it's in the path. The CPA is 74m, which is within the 3-mile (approx 5556m) visibility range of the sidelights, but the CPA is much closer. However, the current speed is 2.5 m/s, and the other ship is moving at 2.2 m/s. The relative motion here: the own-ship is moving at 2.5 m/s, and the other ship is moving at 2.2 m/s. The relative speed towards the target is the difference in their speeds. Wait, but the direction matters. The own-ship is heading 20 degrees, and the other ship is heading 222.9 degrees. Let me check the bearings. \n\nOwn-ship heading is 20 degrees (north is 0, clockwise). The other ship's heading is 222.9 degrees. So the other ship is heading roughly southwest (since 222.9 is 180 + 42.9, so southwest). The own-ship is heading northeast (20 degrees). So their paths are crossing. The CPA is 74m, which is very close. The TCPA is 85 seconds, so the closest point is in 85 seconds. \n\nBut according to COLREG, when two vessels are approaching each other, the vessel which has the other on its starboard side (i.e., the one on the starboard side of the other) is the give-way vessel. Wait, the other ship is directly ahead (rel.bearing -0.0), so the own-ship is on the same course as the other ship? Wait, no. The own-ship is heading 20 degrees, and the other ship is heading 222.9 degrees. So their courses are not aligned. \n\nWait, the other ship is at rel.bearing -0.0, which is directly ahead. So the own-ship is on a course that's 20 degrees, and the other ship is approaching from directly ahead. The own-ship is moving northeast (20 degrees), and the other ship is moving southwest (222.9 degrees). So their paths are crossing. \n\nIn this case, the other ship is on the port side of the own-ship? Wait, the own-ship is moving northeast, and the other ship is moving southwest. So the other ship is approaching from the front (since it's directly ahead). So the own-ship is the stand-on vessel, and the other ship is the give-way vessel. Wait, but according to COLREG Rule 13, when two power-driven vessels are approaching each other, the one on the port side of the other is the give-way vessel. Wait, the other ship is directly ahead, so the own-ship is on the same course as the other ship? No, the own-ship is moving northeast, and the other ship is moving southwest. So their relative motion is such that they are approaching each other. \n\nWait, the other ship is directly ahead (rel.bearing -0.0), so the own-ship is on a course that's 20 degrees, and the other ship is moving towards the own-ship. The CPA is 74m, which is very close. The TCPA is 85 seconds. So the other ship is on a collision course. \n\nBut according to COLREG, the give-way vessel must take early and substantial action to keep well clear. The own-ship is the stand-on vessel here, so the other ship should give way. But the other ship is not giving way. So the own-ship must take action to avoid collision. \n\nBut the own-ship is supposed to correct its course to the goal bearing. However, the other ship is on a collision course. So the priority is to avoid collision. \n\nBut the own-ship is on a course that's 25 degrees off the goal bearing to port. The correct action is to turn left by 25 degrees. However, if turning left would take the own-ship away from the other ship, that's the priority. \n\nWait, the other ship is directly ahead. If the own-ship turns left (port), it would move to the left of its current course. Since the own-ship is heading 20 degrees, turning left (port) would make it head more towards the north. The other ship is moving southwest. So turning left would take the own-ship away from the other ship's path. \n\nAlternatively, if the own-ship continues on its current course, the CPA is 74m, which is a real risk. So the own-ship must take action to avoid collision. \n\nBut the COLREG says that the give-way vessel must take action. In this case, the other ship is the give-way vessel (since it's on the starboard side of the own-ship? Wait, the other ship is directly ahead. So the own-ship is on the same side as the other ship? Wait, the other ship is directly ahead, so the own-ship is on the same side as the other ship. Wait, the own-ship is moving northeast, and the other ship is moving southwest. So the other ship is approaching from the front. \n\nIn this case, the other ship is on the starboard side of the own-ship? Wait, the own-ship is moving northeast. The other ship is directly ahead, so the other ship is on the starboard side of the own-ship? No, the other ship is directly ahead, so it's on the same line of the own-ship's course. Wait, the own-ship is moving northeast, and the other ship is moving southwest. So their paths are crossing. \n\nIn this case, the other ship is on the starboard side of the own-ship? Or port? Wait, the own-ship is moving northeast. The other ship is directly ahead, so the other ship is on the same line as the own-ship's course. Wait, the own-ship is moving northeast, and the other ship is moving southwest. So the other ship is approaching from the front. \n\nIn this case, the other ship is on the starboard side of the own-ship? No, the other ship is directly ahead. So the own-ship is the stand-on vessel, and the other ship is the give-way vessel. But the other ship is not giving way. So the own-ship must take action. \n\nBut the own-ship is supposed to correct its course to the goal bearing. However, the collision risk is real. So the priority is to avoid collision. \n\nBut the own-ship is on a course that's 25 degrees off the goal bearing to port. The correct action is to turn left by 25 degrees. However, if turning left would take the own-ship away from the other ship, that's the priority. \n\nWait, the other ship is directly ahead. If the own-ship turns left (port), it would move to the left of its current course. Since the own-ship is heading 20 degrees, turning left would make it head more towards the north. The other ship is moving southwest. So turning left would take the own-ship away from the other ship's path. \n\nTherefore, the own-ship should turn left by 25 degrees to correct the course to the goal bearing, which would also take it away from the other ship's path. \n\nBut the CPA is 74m, which is a real risk. So the own-ship"
    }
   },
   {
    "step": 30,
    "time": 300.0,
-   "situation_report": "Own-ship at (0.0, 750.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1650m away.\n1 contact(s):\n  - ts1: range 322m, rel.bearing 72.7 deg, heading 222.9, speed 2.20, CPA 256m, TCPA 45s",
+   "situation_report": "Own-ship at (256.5, 704.8), heading 20.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1715m away, bearing 351.4 deg.\nGOAL COURSE CHECK: heading is 29 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=29 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 686s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 150m, rel.bearing -0.0 deg, heading 222.9, speed 2.20 m/s, CPA 28m, TCPA 32s",
    "decision": {
     "action": "hold_course",
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREG rules to avoid collisions. The situation given is that the own-ship is at (0.0, 750.0) heading 0.0 (which is directly along the positive x-axis, so east), speed 2.50 m/s. The m",
+    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The situation report says the ship is 29 degrees off the goal bearing to port, so the correct action is to turn left by 29 degrees. But I need to check if there's a collision risk with the other ship, ts1.\n\nLooking at ts1: it's at a range of 150m, rel.bearing -0.",
     "_parse_error": true
    },
    "debug": {
     "config": "v3_rag_cot",
     "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_413e6f8d",
+     "chunk_4bdd4457"
     ],
-    "query_concepts": [],
-    "expanded_concepts": [],
+    "query_concepts": [
+     "collision"
+    ],
+    "expanded_concepts": [
+     "ais",
+     "casualty",
+     "investigation_finding",
+     "light",
+     "radar_arpa"
+    ],
     "pg_guidance": null,
-    "user_msg_chars": 7966,
-    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREG rules to avoid collisions. The situation given is that the own-ship is at (0.0, 750.0) heading 0.0 (which is directly along the positive x-axis, so east), speed 2.50 m/s. The mission goal is at (0.0, 2400.0), which is straight north, 1650 meters away. There's one contact, ts1, with range 322m, relative bearing 72.7 degrees, heading 222.9 degrees, speed 2.20 m/s. CPA (closest point of approach) is 256m, TCPA (time to CPA) is 45 seconds.\n\nFirst, I need to determine the relative motion between the own-ship and the contact. The own-ship is moving east (heading 0.0), and the contact is moving at heading 222.9 degrees, which is roughly southwest. The relative bearing is 72.7 degrees, so from the own-ship's perspective, the contact is to the northeast (since relative bearing is measured clockwise from the bow, so 72.7 degrees would be northeast). \n\nThe CPA is 256 meters, which is quite close, and TCPA is 45 seconds. That means the contact is going to get very close to the own-ship. The question is whether there's a risk of collision. According to COLREG, if there's a risk of collision, the give-way vessel must take action. \n\nLooking at the COLREG excerpts, Rule 15 talks about crossing situations. The own-ship is moving east, and the contact is moving southwest. The relative bearing suggests that the contact is approaching from the northeast. Wait, if the own-ship is moving east, and the contact is moving southwest, their paths might cross. But the CPA is 256 meters, which is a close approach. \n\nBut according to Rule 15, in a crossing situation, the power-driven vessel (which the own-ship is) must avoid crossing ahead of another power-driven vessel on its starboard side. However, the contact's position and movement need to be analyzed. The contact's heading is 222.9 degrees, which is 18"
+    "user_msg_chars": 5839,
+    "raw_response": "<think>\nOkay, let's break this down. The situation report says the ship is 29 degrees off the goal bearing to port, so the correct action is to turn left by 29 degrees. But I need to check if there's a collision risk with the other ship, ts1.\n\nLooking at ts1: it's at a range of 150m, rel.bearing -0.0 deg, which means it's directly ahead (dead astern? Wait, rel.bearing is -0.0, so that's 0 degrees, which is dead ahead. Wait, no. The user said rel.bearing is signed: positive is starboard, negative is port. So rel.bearing -0.0 deg would be directly ahead (since 0 is dead ahead, and negative is port, but here it's exactly -0.0, which is the same as 0. So ts1 is directly ahead. Wait, but the rel.bearing is -0.0, which is the same as 0.0. So the other ship is directly in front, at 150m range. \n\nThe CPA is 28m, TCPA 32s. So the closest point of approach is 28 meters. That's very close. So there's a real risk of collision here. \n\nNow, COLREG rules: when two vessels are approaching each other, the vessel on the starboard side (right) is the stand-on vessel, and the one on the port side must give way. Wait, but in this case, the other ship is directly ahead. Let me think. The own-ship is heading 20.0 degrees. The other ship, ts1, is at a rel.bearing of -0.0 degrees, which is directly ahead. So the own-ship is approaching ts1 head-on. \n\nIn COLREG Rule 13, when two power-driven vessels are approaching each other so as to involve risk of collision, each shall keep to the right. So the vessel which has the other on her port side must give way. Wait, if they are approaching head-on, each should alter course to starboard. But the own-ship is on a heading of 20 degrees. The other ship is directly ahead. So the own-ship is approaching from the port side of ts1? Wait, no. If the other ship is directly ahead, then the own-ship is approaching from the front. Wait, maybe I need to check the relative positions. \n\nThe own-ship is at (256.5, 704.8), heading 20 degrees. The other ship ts1 is at range 150m, rel.bearing -0.0 degrees. So the bearing is directly ahead. So the own-ship is approaching ts1 head-on. \n\nIn this case, according to COLREG Rule 13, when two power-driven vessels are approaching each other so as to involve risk of collision, each shall keep to the right. So each should turn to starboard. But the own-ship is supposed to turn left to correct the course to the goal. However, the collision risk with ts1 takes precedence. \n\nBut the own-ship is on a heading of 20 degrees. The other ship is directly ahead. So the own-ship is approaching from the port side of ts1? Wait, no. If the other ship is directly ahead, then the own-ship is approaching from the front. So the own-ship is on the starboard side of ts1? Wait, maybe I'm getting confused. \n\nAlternatively, since the other ship is directly ahead, the own-ship is approaching head-on. So according to Rule 13, each should turn to starboard. But the own-ship's goal requires a left turn. However, the collision risk with ts1 is imminent. So the COLREG rule here would require the own-ship to turn right (starboard) to avoid collision. \n\nBut the situation report says that the CPA is 28m, which is very close. So the real risk is present. Therefore, the COLREG rule applies here, and the own-ship must turn right (starboard) to avoid collision, even though the goal requires a left turn. \n\nSo the correct action is to turn right, not left. But the GOAL COURSE CHECK says to turn left. However, the collision risk takes precedence. So the action should be to turn right, applying Rule 13. \n\nWait, but the user's instruction says that if a target poses a real collision risk, the COLREG-required give-way/stand-on manoeuvre takes precedence. So in this case, the own-ship must turn right to avoid collision with ts1. Therefore, the action is to turn right, not left. \n\nSo the JSON should be action: turn_right, degrees: 29 (but wait, the original goal says to turn left 29 degrees. But since there's a collision risk, the correct action is to turn right. But how much? The user's instruction says to use the exact degrees from the GOAL COURSE CHECK unless there's a collision risk. But in this case, the collision risk is present, so the COLREG takes precedence. \n\nWait, the user's instruction says: \"Only override any of this if a target poses a REAL risk of collision, in which case the COLREG-required give-way/stand-on manoeuvre takes precedence instead.\" So the original plan was to turn left 29 degrees. But the collision risk with ts1 requires a different action. \n\nSo the correct action is to turn right (starboard) to avoid collision. But how many degrees? The user's instruction says to use the exact degrees from the GOAL COURSE CHECK unless there's a collision risk. But in this case, the collision risk is present, so the COLREG takes precedence. \n\nBut the user's instruction says that when a real risk of collision exists, COLREG applies. So the own-ship must turn right (starboard) to avoid collision. However, the exact degrees needed to avoid collision would depend on the situation. But the user's instruction says to use the exact degrees from the GOAL COURSE CHECK unless there's a collision risk. \n\nWait, the user's instruction says: \"If 'GOAL COURSE CHECK' says you're already on the goal bearing, hold_course (for the goal, at least). Otherwise it gives you the exact action (\"turn_left\"/\"turn_right\") and degrees to use -- copy those values directly into your answer, don't recompute them and don't substitute a different number from elsewhere in the report.\" \n\nSo in this case, the GOAL COURSE CHECK says to turn left 29 degrees. But there's a collision risk. So the COLREG takes precedence. But how to determine the correct action? \n\nIn the collision scenario, the own-ship is approaching head-on with ts1. According to Rule 13, each should turn to starboard. So the own-ship should turn right (starboard) to avoid collision. Therefore, the correct action is to turn right, not left. \n\nBut the user's instruction says that when there's a collision risk, the COLREG takes precedence. So the action should be to turn right, even though the goal requires a left turn. \n\nBut the user's instruction says to use the exact degrees from the GOAL COURSE CHECK unless there's a collision risk. So in this case, the collision risk exists, so the COLREG takes precedence. Therefore, the action is to turn right, but how many degrees? \n\nThe user's instruction says to use the exact degrees from the GOAL COURSE CHECK. Wait, no. The user's instruction says: \"If 'GOAL COURSE CHECK' says you're already on the goal bearing, hold_course (for the goal, at least). Otherwise it gives you the exact action (\"turn_left\"/\"turn_right\") and degrees to use -- copy those values directly into your answer, don't recompute them and don't substitute a different number from elsewhere in the report.\" \n\nSo the GOAL COURSE CHECK says to turn left 29 degrees. But the collision risk requires a different action. So the correct action is to turn right, but the degrees? The user's instruction says to use the exact degrees from the GOAL COURSE CHECK. Wait, no. The user's instruction says that when there's a collision risk, the COLREG takes precedence. So the action is to turn right, but the degrees would be determined by the COLREG. \n\nBut the user's instruction doesn't specify how to calculate the degrees for the COLREG action. So perhaps the correct action is to turn right, but the degrees would be the same as the original plan? Or maybe the degrees needed to avoid collision. \n\nBut the user's instruction says to use the exact degrees from the GOAL COURSE CHECK unless there's a collision risk. So in this case, the collision risk exists, so the COLREG takes precedence. Therefore, the action is to turn right, but the degrees would be determined by the COLREG. However, the user's instruction doesn't specify how to calculate the degrees for the COLREG action. \n\nAlternatively, maybe the collision risk is not immediate. The CPA is 28m, which is very close, but the TCPA is 32 seconds. So the risk is real. Therefore, the own-ship must turn right to avoid collision. \n\nBut the user's instruction says to use the exact degrees from the GOAL COURSE CHECK. So the original plan was to turn left 29 degrees. But the collision risk requires a different action. \n\nThis is a bit confusing. The user's instruction says that when a real collision risk exists, the COLREG takes precedence. So"
    }
   },
   {
    "step": 40,
    "time": 400.0,
-   "situation_report": "Own-ship at (0.0, 1000.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1400m away.\n1 contact(s):\n  - ts1: range 344m, rel.bearing 116.6 deg, heading 222.9, speed 2.20, CPA 344m, TCPA 0s",
+   "situation_report": "Own-ship at (342.0, 939.7), heading 20.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1500m away, bearing 346.8 deg.\nGOAL COURSE CHECK: heading is 33 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=33 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 600s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 100m, rel.bearing -180.0 deg, heading 222.9, speed 2.20 m/s, CPA 100m, TCPA 0s (already past closest point, ranges now increasing)",
    "decision": {
-    "action": "hold_course",
+    "action": "turn_left",
+    "degrees": 33.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREGs. The situation given is that the own-ship is at (0.0, 1000.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime terms) with a speed of 2.50 m/s. The ",
-    "_parse_error": true
+    "reasoning": "GOAL COURSE CHECK requires 33° left turn; no collision risk (ts1 is astern, CPA=100m, TCPA=0, moving apart)."
    },
    "debug": {
     "config": "v3_rag_cot",
     "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_9607cb6a",
-     "chunk_56efc6a4"
+     "chunk_757b940f",
+     "chunk_413e6f8d"
     ],
-    "query_concepts": [],
-    "expanded_concepts": [],
+    "query_concepts": [
+     "collision"
+    ],
+    "expanded_concepts": [
+     "ais",
+     "casualty",
+     "investigation_finding",
+     "light",
+     "radar_arpa"
+    ],
     "pg_guidance": null,
-    "user_msg_chars": 7967,
-    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREGs. The situation given is that the own-ship is at (0.0, 1000.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime terms) with a speed of 2.50 m/s. The mission goal is at (0.0, 2400.0), so directly north, 1400 meters away. There's one contact, ts1, at a range of 344 meters, relative bearing 116.6 degrees. The contact's heading is 222.9 degrees, speed 2.20 m/s. The CPA (closest point of approach) is 344 meters, and TCPA (time to closest point of approach) is 0 seconds. That means they're on a collision course.\n\nFirst, I need to determine the COLREG rules applicable here. The key here is the crossing situation. The own-ship is heading north, and the contact is approaching from the relative bearing of 116.6 degrees. Let me visualize that. If the own-ship is heading north (0 degrees), a relative bearing of 116.6 degrees would be to the east of the bow. Wait, relative bearing is measured from the bow, so 116.6 degrees would be to the right (starboard) side. Wait, relative bearing is measured clockwise from the bow. So if the own-ship is heading north, the relative bearing of 116.6 degrees would be 116.6 degrees to the right (starboard) of the bow. So the contact is approaching from the starboard side. \n\nNow, the contact's heading is 222.9 degrees. Let me convert that to a compass direction. 222.9 degrees is 180 + 42.9, so that's 42.9 degrees south of west. So the contact is moving towards the northwest. Wait, but the own-ship is moving north. So the contact is approaching from the starboard side (east of the bow) and moving northwest. Let me think about their paths. \n\nThe CPA is 344 meters, and TCPA is 0 seconds. That means they are on a collision"
+    "user_msg_chars": 4538,
+    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a ship, and the main goal is to reach the mission target efficiently while avoiding collisions. The situation report shows the ship is 33 degrees off the goal bearing, needing a left turn. But there's another ship, ts1, at 100m range, rel.bearing -180, which means directly astern. The CPA is 100m, and TCPA is 0, meaning they've already passed the closest point and are moving apart. \n\nFirst, check if there's a collision risk. The other ship is behind, moving away. The CPA is 100m, which is safe. So no immediate risk. The COLREG rules mention that the stand-on vessel should maintain course if the other is the give-way. But in this case, since the other ship is astern, the user's ship is the stand-on. So no need to change course. The goal course check says to turn left 33 degrees, but since the other ship isn't a risk, proceed with that. Also, speed is at nominal, so no need to adjust speed. The answer should be turn left 33 degrees, applying the goal course check, no collision risk.\n</think>\n\n{\"action\": \"turn_left\", \"degrees\": 33.0, \"rule_applied\": \"none\", \"reasoning\": \"GOAL COURSE CHECK requires 33° left turn; no collision risk (ts1 is astern, CPA=100m, TCPA=0, moving apart).\"}"
    }
   },
   {
    "step": 50,
    "time": 500.0,
-   "situation_report": "Own-ship at (0.0, 1250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1150m away.\n1 contact(s):\n  - ts1: range 508m, rel.bearing 142.7 deg, heading 222.9, speed 2.20, CPA 508m, TCPA 0s",
+   "situation_report": "Own-ship at (285.8, 1183.3), heading 347.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1250m away, bearing 346.8 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 500s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 338m, rel.bearing -170.7 deg, heading 222.9, speed 2.20 m/s, CPA 338m, TCPA 0s (already past closest point, ranges now increasing)",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, so I need to apply COLREG rules. The situation given has the own-ship at (0.0, 1250.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime terms) with a speed of 2.50 m/s. The mission",
-    "_parse_error": true
+    "reasoning": "Goal bearing is already matched (within 10°), and the only contact (ts1) has CPA=338m (safe) with TCPA=0 (already passing). No collision risk, so hold course and speed as per default procedure."
    },
    "debug": {
     "config": "v3_rag_cot",
     "retrieved_chunk_ids": [
      "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_413e6f8d"
+     "chunk_d3d00426"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7994,
-    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, so I need to apply COLREG rules. The situation given has the own-ship at (0.0, 1250.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime terms) with a speed of 2.50 m/s. The mission goal is at (0.0, 2400.0), which is directly north, 1150 meters away. There's one contact, ts1, at a range of 508 meters, relative bearing 142.7 degrees, heading 222.9 degrees, speed 2.20 m/s. The CPA (closest point of approach) is 508 meters, and TCPA (time to closest point of approach) is 0 seconds. That means they're on a collision course.\n\nFirst, I need to determine the COLREG rules applicable here. The key here is the crossing situation. The own-ship is going north, and the contact (ts1) is approaching from the southeast (relative bearing 142.7 degrees, which is roughly southeast). The contact's heading is 222.9 degrees, which is southwest. So the contact is moving southwest, and the own-ship is moving north. The CPA is immediate, so they're on a collision course.\n\nUnder COLREG Rule 13, when two power-driven vessels are approaching each other so as to involve risk of collision, each shall keep to the starboard side of the center line. But wait, the own-ship is on a course of 0 degrees (north), and the contact is approaching from the southeast. So the contact is on the starboard side of the own-ship's course. Wait, maybe I need to visualize this better.\n\nThe own-ship is heading north. The contact is approaching from the southeast, moving southwest. So the contact is on the starboard (right) side of the own-ship's path. According to Rule 13, when two power-driven vessels are approaching each other, each should keep to the starboard side. So the own-ship should turn right (starboard) to pass port side of the other vessel. Wait, but the contact is on the starboard side. So the own-ship should turn right to starboard, which would make it pass"
+    "user_msg_chars": 3092,
+    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a ship named Talis Achieve. The mission is to reach a goal bearing 346.8 degrees, and the ship is already on that bearing within 10 degrees, so no turn is needed for the goal. The current speed is 2.50 m/s, which matches the nominal speed, so the ETA is about 500 seconds if heading straight. \n\nNow, there's another ship, ts1, at 338m range, rel.bearing -170.7 degrees (which is almost directly ahead but slightly to port). The CPA is 338m and TCPA is 0, meaning the closest point is already passed, and the distance is increasing. Since the CPA is 338m, which is more than the 300m threshold for a risk of collision, there's no immediate danger here. The TCPA being 0 just means they've passed the closest point, so no collision risk now.\n\nThe COLREG rules mention that if a risk of collision exists, the give-way vessel must take action. But in this case, the CPA is safe. The user's ship is on the correct course and speed, and the other ship is moving away. So, no COLREG rule is violated here. The default procedure is to hold course and speed since the goal is already on bearing and the other ship isn't a risk. Therefore, the action should be hold_course with no degrees, and the rule applied is none because there's no collision risk.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"Goal bearing is already matched (within 10°), and the only contact (ts1) has CPA=338m (safe) with TCPA=0 (already passing). No collision risk, so hold course and speed as per default procedure.\"}"
    }
   },
   {
    "step": 60,
    "time": 600.0,
-   "situation_report": "Own-ship at (0.0, 1500.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 900m away.\n1 contact(s):\n  - ts1: range 723m, rel.bearing 154.8 deg, heading 222.9, speed 2.20, CPA 723m, TCPA 0s",
+   "situation_report": "Own-ship at (229.5, 1426.9), heading 347.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1000m away, bearing 346.7 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 400s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 586m, rel.bearing -174.7 deg, heading 222.9, speed 2.20 m/s, CPA 586m, TCPA 0s (already past closest point, ranges now increasing)",
    "decision": {
     "action": "hold_course",
+    "degrees": 0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREG rules to avoid collisions. The situation given is that the own-ship is at (0.0, 1500.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime contexts) wi",
-    "_parse_error": true
+    "reasoning": "No collision risk detected (CPA 586m > 500m), goal bearing already matched (346.7°), and speed matches rated speed."
    },
    "debug": {
     "config": "v3_rag_cot",
     "retrieved_chunk_ids": [
      "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_d3d00426"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7966,
-    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREG rules to avoid collisions. The situation given is that the own-ship is at (0.0, 1500.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime contexts) with a speed of 2.50 m/s. The mission goal is at (0.0, 2400.0), which is directly north, 900 meters away. There's one contact, ts1, with a range of 723 meters, relative bearing 154.8 degrees, heading 222.9 degrees, speed 2.20 m/s. The CPA (Closest Point of Approach) is 723 meters and TCPA (Time to Closest Point of Approach) is 0 seconds. That means the two vessels are on a collision course.\n\nFirst, I need to determine the COLREG rules applicable here. The key here is the crossing situation. The own-ship is heading north, and the contact (ts1) is approaching from the southeast (relative bearing 154.8 degrees, which is roughly southeast). The contact's heading is 222.9 degrees, which is southwest. So the contact is moving southwest, and the own-ship is moving north. \n\nAccording to COLREG Rule 15, in a crossing situation where there's a risk of collision, the vessel which has the other on her starboard side must keep clear. Wait, the own-ship is going north, and the contact is coming from the southeast. Let me visualize this. If the own-ship is heading north, the contact is approaching from the southeast, so the contact is on the own-ship's starboard side (right side). Therefore, the own-ship is the give-way vessel and must take action to avoid collision. \n\nBut wait, the contact's CPA is at 0 seconds, meaning they are on a collision course. The own-ship is moving north, and the contact is moving southwest. The relative bearing of 154.8 degrees means the contact is approaching from the starboard side. So according to Rule 15, the own-ship (which is on the starboard side of the contact) must give way. Wait, no. Wait, Rule 15 says that"
+    "user_msg_chars": 3092,
+    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a ship named Talis Achieve. The mission is to reach a goal bearing 346.7 degrees, and the ship is already on that bearing within 10 degrees, so no turn is needed for the goal. The current speed is 2.50 m/s, which matches the nominal speed, so no need to speed up or slow down. The only other ship, ts1, is at a CPA of 586m with TCPA 0, meaning it's already passed the closest point and moving away. Since the CPA is over 500 meters, there's no real risk of collision here. COLREG rules don't require any action since the other ship is not on a collision course. So the correct maneuver is to hold course and maintain speed. No rules apply here, so the action is hold_course.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0, \"rule_applied\": \"none\", \"reasoning\": \"No collision risk detected (CPA 586m > 500m), goal bearing already matched (346.7°), and speed matches rated speed.\"}"
    }
   },
   {
    "step": 70,
    "time": 700.0,
-   "situation_report": "Own-ship at (0.0, 1750.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 650m away.\n1 contact(s):\n  - ts1: range 955m, rel.bearing 161.2 deg, heading 222.9, speed 2.20, CPA 955m, TCPA 0s",
+   "situation_report": "Own-ship at (173.3, 1670.5), heading 347.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 750m away, bearing 346.6 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 300s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 836m, rel.bearing -176.3 deg, heading 222.9, speed 2.20 m/s, CPA 836m, TCPA 0s (already past closest point, ranges now increasing)",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREGs. The situation given is that the own-ship is at (0.0, 1750.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime terms) with a speed of 2.50 m/s. The ",
-    "_parse_error": true
+    "reasoning": "No collision risk: ts1's CPA is 836m (safe) and TCPA 0s (past closest point). Goal bearing already matched; maintain course/speed per COLREG-Consolidated-2018.pdf guidelines."
    },
    "debug": {
     "config": "v3_rag_cot",
     "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_d3d00426",
+     "chunk_0d636362"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7966,
-    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREGs. The situation given is that the own-ship is at (0.0, 1750.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime terms) with a speed of 2.50 m/s. The mission goal is at (0.0, 2400.0), which is 650 meters directly north. There's one contact, ts1, at a range of 955 meters, relative bearing 161.2 degrees. The contact has a heading of 222.9 degrees, speed 2.20 m/s. The CPA (closest point of approach) is 955 meters, and TCPA (time to closest point of approach) is 0 seconds. That means they're on a collision course.\n\nFirst, I need to determine the COLREG rules applicable here. The key here is the crossing situation. The own-ship is heading north, and the contact is approaching from the southeast (relative bearing 161.2 degrees, which is roughly southeast). The contact's heading is 222.9 degrees, which is southwest. So the contact is moving southwest, and the own-ship is moving north. The CPA is at 0 seconds, meaning they're on a collision course.\n\nAccording to COLREG Rule 15, in a crossing situation where there's a risk of collision, the vessel which has the other on her starboard side must give way. The own-ship is on a northward course. The contact is approaching from the southeast, so relative to the own-ship, the contact is on the starboard side (since the own-ship is heading north, the starboard side is to the right, which would be east). Wait, relative bearing 161.2 degrees is measured from the own-ship's bow. So if the own-ship is heading north (0 degrees), a relative bearing of 161.2 degrees would be 161.2 degrees clockwise from the bow. That would place the contact in the southeast direction relative to the own-ship. So the contact is approaching from the southeast, which is the starboard side of the own-ship (since the own-ship is facing north, starboard is east"
+    "user_msg_chars": 1858,
+    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a ship, and the main goal is to reach the mission target efficiently while avoiding collisions. The situation report says the ship is already on the correct bearing for the goal, so no turn is needed there. The other ship, ts1, is at a range of 836m with a relative bearing of -176.3 degrees, which means it's almost directly ahead but slightly to the port side. The CPA (closest point of approach) is 836m, and TCPA is 0, meaning they've already passed the closest point and are moving apart. \n\nFirst, I need to check if there's a collision risk. Since the CPA is 836m, which is quite far, and the TCPA is 0, the vessels are not on a collision course. The relative bearing is almost directly ahead, but since the CPA is already passed, the risk is minimal. The COLREG rules mention that the vessel which must keep clear (the one directed to keep out of the way) should take early and substantial action. However, in this case, the other ship's course and speed are such that they're not a threat. \n\nThe user's ship is already on the correct bearing and speed, so the next step is to maintain course and speed unless there's a collision risk. Since the other ship is moving away, there's no immediate danger. Therefore, the correct action is to hold course and maintain speed. The JSON response should reflect that, with no turn needed and no speed change. The rule applied here is none, as there's no collision risk, and the goal is already on course.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No collision risk: ts1's CPA is 836m (safe) and TCPA 0s (past closest point). Goal bearing already matched; maintain course/speed per COLREG-Consolidated-2018.pdf guidelines.\"}"
    }
   },
   {
    "step": 80,
    "time": 800.0,
-   "situation_report": "Own-ship at (0.0, 2000.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 400m away.\n1 contact(s):\n  - ts1: range 1195m, rel.bearing 165.1 deg, heading 222.9, speed 2.20, CPA 1195m, TCPA 0s",
+   "situation_report": "Own-ship at (117.1, 1914.1), heading 347.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 500m away, bearing 346.5 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 200s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 1085m, rel.bearing -177.1 deg, heading 222.9, speed 2.20 m/s, CPA 1085m, TCPA 0s (already past closest point, ranges now increasing)",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREGs. The situation given is that the own-ship is at (0.0, 2000.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime contexts) with a speed of 2.50 m/s. T",
-    "_parse_error": true
+    "reasoning": "GOAL COURSE CHECK confirms heading matches goal bearing (346.5°), and the only contact (ts1) has CPA=1085m (no collision risk). No COLREG rule applies here; maintain course at rated speed to ensure efficient progress."
    },
    "debug": {
     "config": "v3_rag_cot",
     "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_d3d00426",
+     "chunk_3f087e38"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7968,
-    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREGs. The situation given is that the own-ship is at (0.0, 2000.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime contexts) with a speed of 2.50 m/s. The mission goal is at (0.0, 2400.0), which is 400 meters directly north. There's one contact, ts1, at a range of 1195 meters, relative bearing 165.1 degrees. The contact has a heading of 222.9 degrees, speed 2.20 m/s. The CPA (closest point of approach) is 1195 meters, and TCPA (time to closest point of approach) is 0 seconds. That means they're on a collision course.\n\nFirst, I need to determine the COLREG rules applicable here. The key here is the crossing situation. The own-ship is heading north, and the contact is approaching from the southwest (relative bearing 165.1 degrees, which is slightly south of west). The contact's heading is 222.9 degrees, which is roughly southwest. So the contact is moving southwest, and the own-ship is moving north. \n\nAccording to COLREG Rule 15, in a crossing situation where there's a risk of collision, the vessel on the starboard side must keep clear. Wait, but the own-ship is on the starboard side of the contact? Let me visualize this. The own-ship is heading north. The contact is approaching from the southwest, so from the own-ship's perspective, the contact is coming from the starboard side (since relative bearing 165.1 degrees is to the left of the own-ship's bow, but wait, relative bearing is measured from the own-ship's bow. Wait, relative bearing 165.1 degrees would be 165.1 degrees clockwise from the own-ship's bow. If the own-ship is heading north (0 degrees), then the bow is north. A relative bearing of 165.1 degrees would be 165.1 degrees clockwise from north. So that's 165.1 degrees from the bow, which would be"
+    "user_msg_chars": 3093,
+    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a ship, and the main goal is to reach the mission target efficiently while avoiding collisions. The situation report says the ship is already on the correct bearing for the goal, so no turn is needed there. The other ship, ts1, is at a range of 1085m, relative bearing -177.0 degrees, which means it's directly ahead but slightly to the port side. The CPA is 1085m and TCPA is 0, meaning the closest point has already passed, and the distance is increasing. \n\nFirst, check if there's a collision risk. Since the CPA is 1085m, which is quite far, and the TCPA is 0, the ships are moving apart. So no immediate collision risk here. The COLREG rules mention that if there's a risk, the give-way vessel must act. But in this case, the risk is already past. \n\nNext, the mission goal is within 500m, bearing 346.5 degrees, and the ship is already on that bearing. The ETA is 200 seconds at current speed. The user's speed is 2.50 m/s, which matches the rated speed, so no need to speed up or slow down. The other ship is not a collision risk, so the main focus is on the goal. \n\nThe GOAL COURSE CHECK says no turn is needed. So the correct action is to hold course. The speed is already optimal, so no change there. The only possible issue is if the other ship's movement affects the course, but since it's moving away, it's not a concern. \n\nTherefore, the answer should be to hold course, as there's no collision risk and the goal bearing is already maintained.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"GOAL COURSE CHECK confirms heading matches goal bearing (346.5°), and the only contact (ts1) has CPA=1085m (no collision risk). No COLREG rule applies here; maintain course at rated speed to ensure efficient progress.\"}"
    }
   },
   {
    "step": 90,
    "time": 900.0,
-   "situation_report": "Own-ship at (0.0, 2250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 150m away.\n1 contact(s):\n  - ts1: range 1438m, rel.bearing 167.6 deg, heading 222.9, speed 2.20, CPA 1438m, TCPA 0s",
+   "situation_report": "Own-ship at (60.8, 2157.7), heading 347.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 250m away, bearing 345.9 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 100s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 1335m, rel.bearing -177.7 deg, heading 222.9, speed 2.20 m/s, CPA 1335m, TCPA 0s (already past closest point, ranges now increasing)",
    "decision": {
     "action": "hold_course",
+    "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "[parse error -- raw model output] <think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREGs. The situation given is that the own-ship is at (0.0, 2250.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime contexts) with a speed of 2.50 m/s. T",
-    "_parse_error": true
+    "reasoning": "Goal bearing is already matched (within 10°), and the only contact (ts1) has CPA=1335m (no collision risk). No COLREG rule applies; maintain current course/speed for efficient progress."
    },
    "debug": {
     "config": "v3_rag_cot",
     "retrieved_chunk_ids": [
-     "chunk_3f087e38",
-     "chunk_d527960a",
-     "chunk_56efc6a4",
-     "chunk_9607cb6a"
+     "chunk_d3d00426",
+     "chunk_3f087e38"
     ],
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": null,
-    "user_msg_chars": 7968,
-    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a large commercial vessel, and they need to follow COLREGs. The situation given is that the own-ship is at (0.0, 2250.0) heading 0.0 (which is north, since 0 degrees is typically north in maritime contexts) with a speed of 2.50 m/s. The mission goal is at (0.0, 2400.0), which is 150 meters directly north. There's one contact, ts1, at a range of 1438 meters, relative bearing 167.6 degrees. The contact has a heading of 222.9 degrees, speed 2.20 m/s. The CPA (closest point of approach) is 1438 meters, and TCPA (time to closest point of approach) is 0 seconds. That means they're on a collision course.\n\nFirst, I need to determine the COLREG rules applicable here. The key here is the crossing situation. The own-ship is heading north, and the contact is approaching from the southeast (relative bearing 167.6 degrees, which is slightly south of east). Wait, relative bearing 167.6 degrees would be measured from the own-ship's bow. So if the own-ship is heading north (0 degrees), a relative bearing of 167.6 degrees would be 167.6 degrees clockwise from the bow. That would place the contact in the southwest direction relative to the own-ship. Wait, maybe I need to visualize this better.\n\nAlternatively, maybe the contact's heading is 222.9 degrees, which is 222.9 - 180 = 42.9 degrees south of west. So the contact is moving towards the northeast. The own-ship is moving north. The contact is approaching from the south, moving northeast. The CPA is at 0 seconds, meaning they are on a collision course. \n\nAccording to COLREG Rule 15, which deals with crossing situations. Rule 15 states that a power-driven vessel must not cross ahead of another power-driven vessel if there's a risk of collision. In this case, the own-ship is on a course that would cross the path of the contact. But since the CPA is at 0 seconds, they are on a collision"
+    "user_msg_chars": 3092,
+    "raw_response": "<think>\nOkay, let's break this down. The user is the navigator on a ship, and the main goal is to reach the mission target efficiently while avoiding collisions. The situation report says the ship is already on the correct bearing for the goal, so no turn is needed. The other ship, ts1, is at a range of 1335m, relative bearing -177.7 degrees, which means it's directly ahead but slightly to the port side. The CPA is 1335m and TCPA is 0, meaning they've already passed the closest point and are moving apart. \n\nFirst, check if there's a collision risk. Since CPA is 1335m, which is quite far, there's no immediate danger. The TCPA being 0 just means they've already passed the closest approach. So no COLREG rule is violated here. The ship's current course is aligned with the goal, and the speed is at the rated 2.50 m/s. The ETA is about 100 seconds. \n\nSince the goal course check says no turn is needed, the next step is to confirm if the speed is optimal. The ship is already at the nominal speed, so maintaining speed is best. No need to speed up or slow down. The only action required is to hold course and maintain speed. No other vessels are in a collision course, so no give-way maneuvers are needed. \n\nTherefore, the correct maneuver is to hold course and maintain speed. The reasoning is that the ship is already on the correct bearing, the other vessel is not a collision risk, and the speed is optimal.\n</think>\n\n{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"Goal bearing is already matched (within 10°), and the only contact (ts1) has CPA=1335m (no collision risk). No COLREG rule applies; maintain current course/speed for efficient progress.\"}"
    }
   }
  ]

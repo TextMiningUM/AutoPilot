@@ -24,7 +24,7 @@ model this repo trains:
      pure Python template over already-computed geometry.
   2. Narrative -> decision (the Navigation Agent, i.e. what gets trained):
      reads the narrative + the allowed-action menu, must pick ONE action
-     (maintain_course / alter_course / set_speed / stop / resume) with
+     (maintain_course / alter_course / set_speed / resume_cruising_speed / stop) with
      parameters, and state a COLREG justification in prose. In THIS
      script's training/eval data, the action+parameters are computed
      deterministically (`choose_action()`) and Claude renders only the
@@ -130,7 +130,6 @@ MODEL_DEFAULT = "claude-sonnet-4-5"
 BATCH_SIZE_DEFAULT = 15
 MAX_TOKENS_DEFAULT = 6000
 
-OWN_NAME = "LLM_SHIP"
 CONTACT_NAME_POOL = ["RANDOM_TS1", "RANDOM_TS2", "RANDOM_TS3"]
 BASE_RULES = ["Rule 2", "Rule 5", "Rule 6", "Rule 7", "Rule 8"]  # always-applicable seamanship rules
 NM_TO_M = 1852.0
@@ -139,7 +138,7 @@ SYSTEM_OOW = (
     "situation report (own-ship state, tracked contacts with bearing/range/CPA/TCPA/risk, "
     "applicable COLREG rules, and the allowed actions this cycle with their parameters). "
     "Reply by stating the ONE action you take this cycle (maintain_course, alter_course with "
-    "a degree figure and direction, set_speed, stop, or resume), then justify it citing the "
+    "a degree figure and direction, set_speed, stop, or resume_cruising_speed), then justify it citing the "
     "COLREG rule(s) that apply. Never invent an action outside the allowed list."
 )  # kept byte-identical to eval_oow_scenarios.py's SYSTEM_OOW so train/eval framing matches
 KN_TO_MS = 0.514444  # only used to keep bearing/range/speed SAMPLING ranges realistic; the
@@ -241,6 +240,26 @@ def relative_bearing(own_heading: float, true_bearing: float) -> float:
     return (true_bearing - own_heading + 540) % 360 - 180
 
 
+def advance_past_cpa(target: dict, v_os: float, extra_frac: float = 0.6) -> dict:
+    """Given a target dict from compute_target()/same_line_target() (a genuine collision-
+    course geometry at t=0), analytically re-parameterise it to a LATER moment -- `extra_frac`
+    beyond its own CPA time -- so the returned dict describes the SAME encounter already
+    resolved: range now opening, TCPA clamped to 0. Used to build risk_cleared_resume
+    instances without a separate, error-prone hand-authored geometry. Own-ship is always
+    rendered at the origin heading 0/north (narrative convention), so both vessels' motion
+    since t=0 is folded into the target's new relative start_xy/bearing; heading/speed are
+    unchanged (both hold course/speed -- that's what makes CPA/TCPA well-defined here)."""
+    cpa_m, t_cpa_min = cpa_tcpa_m(v_os, target)
+    dt_s = t_cpa_min * 60.0 * (1.0 + extra_frac)
+    th = deg2rad(target["heading_deg"])
+    vtx, vty = target["speed"] * math.sin(th), target["speed"] * math.cos(th)
+    xs, ys = target["start_xy_m"]
+    new_x, new_y = xs + vtx * dt_s, ys + (vty - v_os) * dt_s
+    new_bearing = math.degrees(math.atan2(new_x, new_y)) % 360.0
+    return {**target, "start_xy_m": (new_x, new_y), "bearing_from_os_deg": new_bearing,
+            "t_collision_min": None, "_orig_cpa_m": cpa_m, "_orig_tcpa_min": t_cpa_min}
+
+
 def classify_encounter(rel_brg: float, own_hdg: float, tgt_hdg: float) -> tuple[str, list[str]]:
     """Same COLREG encounter classification used live in colreg_llm_bridge.py's
     classify_encounter() -- kept in sync deliberately so training/eval data reflects
@@ -286,9 +305,14 @@ def closing_rate(own_speed: float, target: dict) -> float:
     return -((dvx * xs + dvy * ys) / rng)
 
 
-def risk_level(cpa_m: float, tcpa_min: float) -> str:
+def risk_level(cpa_m: float, tcpa_min: float, closing: bool = True) -> str:
     """Simple, documented CPA/TCPA-threshold heuristic (see module docstring) -- NOT a
-    full COLREG risk-of-collision model."""
+    full COLREG risk-of-collision model. TCPA=0 is ambiguous on its own (it occurs both
+    for 'collision right now' and 'closest point already passed') -- `closing=False`
+    (range opening) always resolves to 'low' regardless of the CPA/TCPA magnitude, same
+    disambiguation the live Basic Simulator agent's narrate.py uses."""
+    if not closing:
+        return "low"
     if cpa_m < 200 and tcpa_min < 6:
         return "high"
     if cpa_m < 500 and tcpa_min < 12:
@@ -303,6 +327,8 @@ def role_sentence(role: str) -> str:
         "stand_on": "She is crossing from our port side. We are the stand-on vessel.",
         "overtaking_give_way": "We are overtaking her. We are the give-way vessel.",
         "overtaking_stand_on": "She is overtaking us. We are the stand-on vessel.",
+        "cleared": "That vessel is now well clear of us and the range is increasing; the "
+                   "earlier close-quarters situation has been resolved.",
     }.get(role, "Encounter role under assessment.")
 
 
@@ -353,6 +379,16 @@ CATEGORIES: list[dict] = [
     {"name": "overtaking_stand_on", "bearing_range": (180, 180), "same_line": "astern",
      "pass_criteria": ["Own-ship holds course and speed while being overtaken.",
                        "Minimum CPA stays above the safe-distance threshold."]},
+    # Not a fresh encounter geometry -- generate_resume_instance() re-parameterises a
+    # head_on-family instance to a later moment where the CPA has already passed (see
+    # advance_past_cpa()). Added because NO existing category ever has "resume" as the
+    # ground-truth action -- every other category only teaches taking avoiding action,
+    # never standing back down from it once the risk has cleared.
+    {"name": "risk_cleared_resume",
+     "pass_criteria": ["Own-ship resumes cruise speed/course now that the earlier "
+                       "close-quarters situation is resolved.",
+                       "Own-ship does not needlessly remain at reduced speed or off track "
+                       "once safely clear of the contact."]},
 ]
 
 # Two/three-target composite categories -- reuse fixed bearings from
@@ -375,7 +411,7 @@ MULTI_TARGET_TEMPLATES: list[dict] = [
                        "Minimum CPA to ALL THREE targets stays above the safe-distance threshold."]},
 ]
 
-N_EVAL_PER_CATEGORY_DEFAULT = 25   # 8 single + 4 multi categories x 25 ~= 300 held-out
+N_EVAL_PER_CATEGORY_DEFAULT = 25   # 9 single + 4 multi categories x 25 ~= 325 held-out
 N_TRAIN_PER_CATEGORY_DEFAULT = 30  # ~= 360 training scenarios before contamination filtering
 
 
@@ -394,7 +430,40 @@ def _classify_target(t: dict, v_os: float, same_line: str | None) -> tuple[str, 
     return role, rules
 
 
+def generate_resume_instance(rnd: random.Random, v_os: float = 10.0) -> dict:
+    """A head_on-family encounter, re-parameterised (via advance_past_cpa()) to a moment
+    after the CPA has already passed -- range now opening. Ground-truth action is
+    'resume_cruising_speed' (return to cruise speed/course), unlike every other category
+    which only ever teaches taking avoiding action."""
+    for _ in range(50):
+        bearing = round(rnd.uniform(-6, 6), 1)
+        rng_nm = round(rnd.uniform(0.4, 1.0), 2)
+        v_ts = round(rnd.uniform(6, 14), 1)
+        try:
+            target = compute_target(bearing, rng_nm, v_ts, v_os)
+            break
+        except ValueError:
+            continue
+    else:
+        raise RuntimeError("no valid geometry found for category 'risk_cleared_resume' after 50 tries")
+    _, orig_rules = classify_encounter(relative_bearing(0.0, target["bearing_from_os_deg"]),
+                                       0.0, target["heading_deg"])
+    target = advance_past_cpa(target, v_os)
+    cpa_m, tcpa_min = cpa_tcpa_m(v_os, target)
+    target.update(_role="cleared", _rules=orig_rules, _cpa_m=cpa_m, _tcpa_min=tcpa_min)
+    return {
+        "category": "risk_cleared_resume",
+        "pass_criteria": next(c for c in CATEGORIES if c["name"] == "risk_cleared_resume")["pass_criteria"],
+        "own_speed": v_os, "targets": [target],
+        "action": "resume_cruising_speed", "action_params": {},
+        "action_params_text": "resume_cruising_speed (return to cruising speed)",
+        "role": "cleared", "rules": orig_rules,
+    }
+
+
 def generate_single_target_instance(cat: dict, rnd: random.Random, v_os: float = 10.0) -> dict:
+    if cat["name"] == "risk_cleared_resume":
+        return generate_resume_instance(rnd, v_os)
     same_line = cat.get("same_line")
     if same_line:
         rng_ahead = round(rnd.uniform(0.3, 0.6), 2)
@@ -461,15 +530,22 @@ def generate_multi_target_instance(tpl: dict, rnd: random.Random, v_os: float = 
     }
 
 
-def generate_population(n_per_category: int, seed: int = 0) -> list[dict]:
+def generate_population(n_per_category: int, seed: int = 0, only_category: str | None = None) -> list[dict]:
     """Deterministic (seeded) population of scenario-fact dicts, no prose yet.
-    Same seed -> same population every time (reproducibility for train/eval split)."""
+    Same seed -> same population every time (reproducibility for train/eval split).
+    `only_category` restricts generation to a single named category -- used to add ONE
+    new category's data on top of already-committed files without touching/regenerating
+    the other (already reviewed) categories."""
     rnd = _rng_for(seed)
     pop: list[dict] = []
     for cat in CATEGORIES:
+        if only_category and cat["name"] != only_category:
+            continue
         for _ in range(n_per_category):
             pop.append(generate_single_target_instance(cat, rnd))
     for tpl in MULTI_TARGET_TEMPLATES:
+        if only_category and tpl["name"] != only_category:
+            continue
         for _ in range(n_per_category):
             pop.append(generate_multi_target_instance(tpl, rnd))
     return pop
@@ -496,15 +572,19 @@ FIXED_QUESTION = "Given the situation above, what action do you take this cycle,
 
 
 def render_situation_narrative(rec: dict) -> str:
-    """Deterministic MOOS-style narrative -- no LLM, exact format agreed with the user."""
+    """Deterministic MOOS-style narrative -- no LLM, exact format agreed with the user.
+    Own-ship/contact phrasing ("Own-ship", 'Ship named "X"', "N other ship(s):") matches
+    the Basic Simulator's narrate.py convention on purpose -- proven to work well there,
+    and avoids a train/inference mismatch if the fine-tuned model is ever used in it."""
     own_speed = rec["own_speed"]
     cruise = own_speed + 7.0  # illustrative "still accelerating toward cruise" framing
     wx, wy = 0.0, 2000.0
+    n = len(rec["targets"])
     lines = [
-        f"{OWN_NAME} is underway at (0.0, 0.0), heading 0.0 degrees, speed {own_speed:.2f}. "
+        f"Own-ship is underway at (0.0, 0.0), heading 0.0 degrees, speed {own_speed:.2f}. "
         f"Target cruise speed is {cruise:.1f} (not yet reached). "
         f"Next waypoint / mission objective is at ({wx:.1f}, {wy:.1f}).",
-        f"{len(rec['targets'])} contact(s) are being tracked:",
+        f"{n} other ship{'s' if n != 1 else ''}:" if n else "No other ships tracked.",
     ]
     all_rules = set(BASE_RULES)
     for i, t in enumerate(rec["targets"]):
@@ -514,18 +594,31 @@ def render_situation_narrative(rec: dict) -> str:
         range_m = math.hypot(x, y)
         closing = closing_rate(own_speed, t)
         all_rules |= set(t["_rules"])
+        is_closing = closing > 0
+        risk_txt = risk_level(t["_cpa_m"], t["_tcpa_min"], closing=is_closing)
+        if is_closing:
+            cpa_phrase = f"Projected CPA: {t['_cpa_m']:.0f} m in {t['_tcpa_min']:.1f} min."
+        elif "_orig_cpa_m" in t:
+            # Already past CPA (advance_past_cpa()'s output) -- the recomputed "CPA" from
+            # here on is just the current, growing range, not the true closest approach,
+            # so state the ACTUAL historical CPA/TCPA instead of the now-meaningless number.
+            cpa_phrase = (f"Closest point of approach was {t['_orig_cpa_m']:.0f} m, "
+                         f"{t['_orig_tcpa_min']:.1f} min ago; range is now increasing.")
+        else:
+            cpa_phrase = (f"Projected CPA: {t['_cpa_m']:.0f} m "
+                         f"(already past closest point of approach; range now increasing).")
         lines.append(
-            f"  - Contact {name}: range {range_m:.0f} m, {bow_phrase(rel_brg)} (relative bearing "
+            f'  - Ship named "{name}": range {range_m:.0f} m, {bow_phrase(rel_brg)} (relative bearing '
             f"{rel_brg:.1f} deg). She is on heading {t['heading_deg']:.1f}, speed {t['speed']:.2f}, "
-            f"closing speed {closing:.2f}. Projected CPA: {t['_cpa_m']:.0f} m in {t['_tcpa_min']:.1f} min. "
-            f"Risk assessment: {risk_level(t['_cpa_m'], t['_tcpa_min'])}. {role_sentence(t['_role'])}"
+            f"closing speed {closing:.2f}. {cpa_phrase} "
+            f"Risk assessment: {risk_txt}. {role_sentence(t['_role'])}"
         )
     rule_order = sorted(all_rules, key=lambda r: int("".join(ch for ch in r if ch.isdigit()) or 0))
     lines.append(f"Applicable COLREG rules given the current situation: {', '.join(rule_order)}.")
     lines.append("Conditions: visibility is clear, (range 10000 m).")
-    lines.append("Allowed actions this cycle: maintain_course, alter_course, set_speed, stop, resume.")
+    lines.append("Allowed actions this cycle: maintain_course, alter_course, set_speed, stop, resume_cruising_speed.")
     lines.append("Candidate action parameters: maintain_course; alter_course (degrees between -30 and 30, "
-                 f"lookahead distance 200 m); set_speed (up to {cruise:.1f}); stop; resume.")
+                 f"lookahead distance 200 m); set_speed (up to {cruise:.1f}); stop; resume_cruising_speed.")
     return "\n".join(lines)
 
 
@@ -537,11 +630,11 @@ COLREG facts -- you NEVER change or second-guess the decision, you only phrase i
 one fluent paragraph a real officer would say, never a telegraphic label:value dump.
 
 Each input record has:
-  - action: the chosen action name (maintain_course | alter_course | stop)
+  - action: the chosen action name (maintain_course | alter_course | set_speed | stop | resume_cruising_speed)
   - action_params_text: the exact parameters already decided (state these verbatim,
     e.g. "alter_course (+30 degrees to starboard, lookahead distance 200 m)")
   - role: the encounter role(s) (mutual | give_way | stand_on | overtaking_give_way |
-    overtaking_stand_on, or a '+'-joined combination for multi-contact encounters)
+    overtaking_stand_on | cleared, or a '+'-joined combination for multi-contact encounters)
   - rules: the COLREG rule numbers engaged (state them by name, e.g. "Rule 15")
 
 Produce ONE fluent paragraph per record: state the action being taken (in the agent's
@@ -646,7 +739,7 @@ def render_wrong_all(client, model: str, recs: list[dict], batch_size: int, max_
               f"({time.time() - t0:.1f}s, total {start + len(batch)}/{len(todo)})", flush=True)
 
 
-def write_scenario_sft_files(recs: list[dict], cache_dir: Path) -> None:
+def write_scenario_sft_files(recs: list[dict], cache_dir: Path, mode: str = "w") -> None:
     """Writes oow_scenario_sft_direct.jsonl / _cot.jsonl directly from the already-rendered
     situation_report/gold_answer -- NOT via build_sft.py, which (a) assumes per-record
     question DIVERSITY for its dedup filter (ours is one fixed question, so it would drop
@@ -654,10 +747,12 @@ def write_scenario_sft_files(recs: list[dict], cache_dir: Path) -> None:
     trace's structured fields instead of using the Claude-authored gold_answer. direct/cot
     share the same content: the gold_answer already fuses the decision with its reasoning
     in one paragraph, so there's no separate 'terse' vs 'step-by-step' version to write.
-    No _rag.jsonl: there's no Track 2 retrieval corpus for this data to ground against."""
+    No _rag.jsonl: there's no Track 2 retrieval corpus for this data to ground against.
+    `mode="a"` appends new-category rows onto already-committed files instead of
+    overwriting the other, already-reviewed categories."""
     direct_path = cache_dir / "oow_scenario_sft_direct.jsonl"
     cot_path = cache_dir / "oow_scenario_sft_cot.jsonl"
-    with direct_path.open("w", encoding="utf-8") as fd, cot_path.open("w", encoding="utf-8") as fc:
+    with direct_path.open(mode, encoding="utf-8") as fd, cot_path.open(mode, encoding="utf-8") as fc:
         for r in recs:
             if not r.get("gold_answer"):
                 continue
@@ -675,10 +770,10 @@ def write_scenario_sft_files(recs: list[dict], cache_dir: Path) -> None:
     print(f"Wrote {direct_path.name} and {cot_path.name}")
 
 
-def write_scenario_dpo_file(recs: list[dict], cache_dir: Path) -> None:
+def write_scenario_dpo_file(recs: list[dict], cache_dir: Path, mode: str = "w") -> None:
     out_path = cache_dir / "oow_scenario_dpo_pairs.jsonl"
     n = 0
-    with out_path.open("w", encoding="utf-8") as f:
+    with out_path.open(mode, encoding="utf-8") as f:
         for r in recs:
             if not r.get("gold_answer") or not r.get("wrong_answer"):
                 continue
@@ -694,14 +789,14 @@ def write_scenario_dpo_file(recs: list[dict], cache_dir: Path) -> None:
     print(f"Wrote {out_path.name} ({n} pairs)")
 
 
-def write_scenario_reflection_file(recs: list[dict], cache_dir: Path) -> None:
+def write_scenario_reflection_file(recs: list[dict], cache_dir: Path, mode: str = "w") -> None:
     """Draft/Critique/Refined triples, same convention as build_reflection.py's output
     (see oow_reflection.jsonl): draft = the bare action name with no parameters or rule
     citation (deliberately vague, not wrong), critique = fixed text pointing out exactly
     that gap, refined = the gold_answer verbatim."""
     out_path = cache_dir / "oow_scenario_reflection.jsonl"
     n = 0
-    with out_path.open("w", encoding="utf-8") as f:
+    with out_path.open(mode, encoding="utf-8") as f:
         for r in recs:
             if not r.get("gold_answer"):
                 continue
@@ -815,14 +910,23 @@ def main() -> None:
     ap.add_argument("--smoke", action="store_true", help="tiny population, still real LLM calls")
     ap.add_argument("--skip-llm", action="store_true",
                     help="geometry+narrative only -- no API calls, no gold_answer, for free dry-run testing")
+    ap.add_argument("--only-category", type=str, default=None,
+                    help="restrict generation to a single named category (e.g. risk_cleared_resume) "
+                         "instead of the full population -- combine with --append to add that one "
+                         "category's data on top of already-committed files.")
+    ap.add_argument("--append", action="store_true",
+                    help="append to existing output files (train jsonl + reasoning traces in 'a' "
+                         "mode; eval JSON is loaded, extended with continuing ids, and rewritten) "
+                         "instead of overwriting them -- for adding one new category's data without "
+                         "touching/regenerating already-reviewed categories.")
     args = ap.parse_args()
 
     n_eval = 2 if args.smoke else args.n_eval_per_category
     n_train = 2 if args.smoke else args.n_train_per_category
 
-    print(f"Generating population: {n_eval + n_train} per category "
-          f"({len(CATEGORIES) + len(MULTI_TARGET_TEMPLATES)} categories)...")
-    pop = generate_population(n_eval + n_train, seed=args.seed)
+    categories_n = 1 if args.only_category else len(CATEGORIES) + len(MULTI_TARGET_TEMPLATES)
+    print(f"Generating population: {n_eval + n_train} per category ({categories_n} categories)...")
+    pop = generate_population(n_eval + n_train, seed=args.seed, only_category=args.only_category)
     eval_recs, train_recs = split_eval_train(pop, n_eval)
     print(f"eval pool: {len(eval_recs)}  train pool: {len(train_recs)}  "
           f"(geometrically disjoint by construction)")
@@ -851,10 +955,14 @@ def main() -> None:
         render_all(client, args.model, eval_recs, args.batch_size, args.max_tokens, "eval")
         render_all(client, args.model, train_recs, args.batch_size, args.max_tokens, "train")
 
-    eval_out = [to_eval_record(r, i + 1) for i, r in enumerate(eval_recs)]
+    existing_eval: list[dict] = []
+    if args.append and EVAL_OUT.exists():
+        existing_eval = json.loads(EVAL_OUT.read_text(encoding="utf-8"))
+    id_offset = len(existing_eval)
+    eval_out = existing_eval + [to_eval_record(r, id_offset + i + 1) for i, r in enumerate(eval_recs)]
     EVAL_OUT.parent.mkdir(parents=True, exist_ok=True)
     EVAL_OUT.write_text(json.dumps(eval_out, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"Wrote {EVAL_OUT} ({len(eval_out)} held-out scenarios)")
+    print(f"Wrote {EVAL_OUT} ({len(eval_out)} held-out scenarios, {len(eval_recs)} new)")
 
     if not args.skip_llm:
         # Track 1 only -- see filter_contamination()'s docstring for why comparing against
@@ -862,21 +970,22 @@ def main() -> None:
         gold_questions = [g["question"] for g in json.loads(Path(args.gold_file).read_text(encoding="utf-8"))]
         train_recs = filter_contamination(train_recs, gold_questions)
 
+    trace_mode = "a" if args.append else "w"
     trace_out = [to_trace_record(r, i + 1) for i, r in enumerate(train_recs)]
     TRACES_OUT.parent.mkdir(parents=True, exist_ok=True)
-    with TRACES_OUT.open("w", encoding="utf-8") as f:
+    with TRACES_OUT.open(trace_mode, encoding="utf-8") as f:
         for t in trace_out:
             f.write(json.dumps(t, ensure_ascii=False) + "\n")
-    print(f"Wrote {TRACES_OUT} ({len(trace_out)} training traces)")
+    print(f"Wrote {TRACES_OUT} ({len(trace_out)} {'new' if args.append else ''} training traces)")
 
     if not args.skip_llm:
         # Second Claude pass: a plausible-but-wrong action, phrased the same way, for
         # DPO's rejected side (see render_wrong_all()'s docstring).
         render_wrong_all(client, args.model, train_recs, args.batch_size, args.max_tokens)
 
-    write_scenario_sft_files(train_recs, CACHE)
-    write_scenario_dpo_file(train_recs, CACHE)
-    write_scenario_reflection_file(train_recs, CACHE)
+    write_scenario_sft_files(train_recs, CACHE, mode=trace_mode)
+    write_scenario_dpo_file(train_recs, CACHE, mode=trace_mode)
+    write_scenario_reflection_file(train_recs, CACHE, mode=trace_mode)
 
 
 if __name__ == "__main__":

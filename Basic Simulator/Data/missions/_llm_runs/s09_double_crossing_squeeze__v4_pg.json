@@ -2,16 +2,16 @@
  "mission_id": "s09_double_crossing_squeeze",
  "config": "v4_pg",
  "tag": "default",
- "generated_at": "2026-09-19T08:07:17.078178+00:00",
+ "generated_at": "2026-09-20T10:18:03.875859+00:00",
  "params": {
   "decision_interval": 10,
   "dt": 10.0,
   "max_steps": 200,
   "enable_thinking": false,
   "max_new_tokens": 256,
-  "k": 4,
+  "k": 2,
   "use_rag": true,
-  "system_prompt": "You are the navigator on a large commercial vessel. You must navigate according to COLREG (the International Regulations for Preventing Collisions at Sea) at all times, avoiding collisions while making safe and efficient progress. Avoiding collisions comes first; once safe, reach the goal via the shortest direct track, with as few manoeuvres as possible and no zigzagging. Ground your reasoning in the provided COLREG excerpts and procedure guidance where given. If no target poses a real risk of collision, recommend holding course. What order do you give to the helm? Reply with ONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"rule_applied\": \"<e.g. Rule 15, or 'none' if no rule applies>\",\n \"reasoning\": \"<one or two sentences>\"}",
+  "system_prompt": "You are the navigator on a large commercial vessel. Your objective is to get the ship to the mission goal (position/bearing/distance given in the situation report) as directly and efficiently as possible -- that is the task. The one hard constraint on every decision, with no exceptions: never put the ship on a collision course with another vessel. When a real risk of collision exists, COLREG (the International Regulations for Preventing Collisions at Sea) governs which vessel gives way and how -- satisfy that constraint first, then resume progress toward the goal. All positions/bearings/headings given below are in metres and degrees, heading 0=north, clockwise, matching compass bearings -- take this as given, don't re-derive or second-guess it. rel.bearing is signed: positive = target is to starboard (right), negative = to port (left), 0=dead ahead, ~180/-180=dead astern. CPA is the closest distance the contact will EVER come to you at current headings/speeds; TCPA is the seconds until that closest point. TCPA=0 does NOT always mean a collision is imminent -- it also occurs when the vessels are already moving apart (closest point already passed); the situation report says so explicitly when that's the case. Judge real risk from the CPA distance itself, not from TCPA alone. DEFAULT PROCEDURE, apply this every single time: the situation report has a line starting \"GOAL COURSE CHECK:\" -- use ONLY that line to decide the goal-correction action and degrees, never a contact's rel.bearing (a contact's rel.bearing is about THAT CONTACT, not the goal, even if the numbers look similar). If \"GOAL COURSE CHECK\" says you're already on the goal bearing, hold_course (for the goal, at least). Otherwise it gives you the exact action (\"turn_left\"/\"turn_right\") and degrees to use -- copy those values directly into your answer, don't recompute them and don't substitute a different number from elsewhere in the report. Your track to the goal must look like a smooth curve or a straight line, NEVER a zigzag -- do not answer turn_right and then turn_left (or vice versa) on consecutive decisions just to chase a small residual mismatch; \"GOAL COURSE CHECK\" already has a 10-degree deadband built in for this. Only override any of this if a target poses a REAL risk of collision, in which case the COLREG-required give-way/stand-on manoeuvre takes precedence instead. Do not just describe the mismatch in your reasoning and then answer hold_course anyway when \"GOAL COURSE CHECK\" calls for a turn -- the action MUST match what that line says, never hold_course when it names a turn. Ground your reasoning in the provided COLREG excerpts and procedure guidance where given. If you are already on the goal bearing (within about 10 degrees) and your current speed is below the nominal/rated speed given for this mission, speed_up instead: reaching the goal sooner (when safe) is part of efficient progress too. What order do you give to the helm? Reply with ONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"rule_applied\": \"<e.g. Rule 15, or 'none' if no rule applies>\",\n \"reasoning\": \"<one or two sentences>\"}",
   "system_prompt_is_custom": false
  },
  "outcome": {
@@ -745,32 +745,32 @@
   {
    "step": 0,
    "time": 0.0,
-   "situation_report": "Own-ship at (0.0, 0.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2400m away.\n2 contact(s):\n  - ts1: range 900m, rel.bearing 45.0 deg, heading 278.5, speed 2.20, CPA 0m, TCPA 293s\n  - ts2: range 900m, rel.bearing -45.0 deg, heading 81.5, speed 2.20, CPA 0m, TCPA 293s",
+   "situation_report": "Own-ship at (0.0, 0.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 2400m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 960s if heading straight there.\n2 other ships:\n  - Ship named \"ts1\": range 900m, rel.bearing 45.0 deg, heading 278.5, speed 2.20 m/s, CPA 0m, TCPA 293s\n  - Ship named \"ts2\": range 900m, rel.bearing -45.0 deg, heading 81.5, speed 2.20 m/s, CPA 0m, TCPA 293s",
    "decision": {
     "action": "hold_course",
     "degrees": 0,
-    "rule_applied": "none",
-    "reasoning": "Both contacts are approaching with CPA at 0m, but there is no risk of collision as they are on reciprocal bearings and will pass each other without crossing paths. No action is required as the situation is safe."
+    "rule_applied": "Rule 15",
+    "reasoning": "The ship is already on the goal bearing and no collision risk is detected with the other vessels as they are on a collision course with each other, not with the own-ship."
    },
    "debug": {
     "config": "v4_pg",
     "retrieved_chunk_ids": [],
     "query_concepts": [],
     "expanded_concepts": [],
-    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. Assess the fused contact picture (bearing/range/CPA/TCPA) against own-ship's course and speed.\n  2. Determine own-ship's role: give way.\n  3. Execute the action: alter_course (+30 degrees to starboard, lookahead distance 200 m).\nApplies when: Minimum CPA stays above the safe-distance threshold.\nAvoid: Own-ship alters course to starboard (not port).; Own-ship keeps clear of the target throughout the pass (does not cut in front).\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 962,
-    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"Both contacts are approaching with CPA at 0m, but there is no risk of collision as they are on reciprocal bearings and will pass each other without crossing paths. No action is required as the situation is safe.\"\n}"
+    "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
+    "user_msg_chars": 1265,
+    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"rule_applied\": \"Rule 15\",\n  \"reasoning\": \"The ship is already on the goal bearing and no collision risk is detected with the other vessels as they are on a collision course with each other, not with the own-ship.\"\n}"
    }
   },
   {
    "step": 10,
    "time": 100.0,
-   "situation_report": "Own-ship at (0.0, 250.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 2150m away.\n2 contact(s):\n  - ts1: range 745m, rel.bearing 58.7 deg, heading 278.5, speed 2.20, CPA 177m, TCPA 235s\n  - ts2: range 745m, rel.bearing -58.7 deg, heading 81.5, speed 2.20, CPA 177m, TCPA 235s",
+   "situation_report": "Own-ship at (0.0, 250.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 2150m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 860s if heading straight there.\n2 other ships:\n  - Ship named \"ts1\": range 745m, rel.bearing 58.7 deg, heading 278.5, speed 2.20 m/s, CPA 177m, TCPA 235s\n  - Ship named \"ts2\": range 745m, rel.bearing -58.7 deg, heading 81.5, speed 2.20 m/s, CPA 177m, TCPA 235s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "No target poses a real risk of collision as the CPA and TCPA are well beyond the safe distance and time thresholds. Therefore, holding course is appropriate."
+    "reasoning": "The ship is already on the goal bearing within the 10-degree deadband, and no immediate collision risk is detected with the other vessels as they are not on a collision course. The CPA and TCPA values indicate they will not come closer than 177m, so no COLREG action is required."
    },
    "debug": {
     "config": "v4_pg",
@@ -778,19 +778,19 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 1000,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No target poses a real risk of collision as the CPA and TCPA are well beyond the safe distance and time thresholds. Therefore, holding course is appropriate.\"}"
+    "user_msg_chars": 1271,
+    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0.0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"The ship is already on the goal bearing within the 10-degree deadband, and no immediate collision risk is detected with the other vessels as they are not on a collision course. The CPA and TCPA values indicate they will not come closer than 177m, so no COLREG action is required.\"\n}"
    }
   },
   {
    "step": 20,
    "time": 200.0,
-   "situation_report": "Own-ship at (0.0, 500.0), heading 0.0, speed 2.50 m/s.\nMission goal at (0.0, 2400.0), 1900m away.\n2 contact(s):\n  - ts1: range 651m, rel.bearing 77.9 deg, heading 278.5, speed 2.20, CPA 353m, TCPA 178s\n  - ts2: range 651m, rel.bearing -77.9 deg, heading 81.5, speed 2.20, CPA 353m, TCPA 178s",
+   "situation_report": "Own-ship at (0.0, 500.0), heading 0.0, speed 2.50 m/s (nominal/rated speed for this mission: 2.50 m/s).\nMission goal at (0.0, 2400.0), 1900m away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 760s if heading straight there.\n2 other ships:\n  - Ship named \"ts1\": range 651m, rel.bearing 77.9 deg, heading 278.5, speed 2.20 m/s, CPA 353m, TCPA 178s\n  - Ship named \"ts2\": range 651m, rel.bearing -77.9 deg, heading 81.5, speed 2.20 m/s, CPA 353m, TCPA 178s",
    "decision": {
     "action": "hold_course",
     "degrees": 0.0,
     "rule_applied": "none",
-    "reasoning": "No target poses a real risk of collision as both contacts are on reciprocal bearings and have CPA and TCPA indicating they will pass safely. Therefore, holding course is appropriate."
+    "reasoning": "The ship is already on the goal bearing within the 10-degree deadband, and no immediate collision risk is detected with the other vessels as they are not on a collision course. The CPA and TCPA values indicate they will not come closer than 353m, so no COLREG action is required."
    },
    "debug": {
     "config": "v4_pg",
@@ -798,8 +798,8 @@
     "query_concepts": [],
     "expanded_concepts": [],
     "pg_guidance": "Procedure guidance (typical general sequence from the procedure graph):\n  1. maintain a proper lookout\n  2. Report intentions to VTS before deviating from planned track.\n  3. Develop a safety management system\nApplies when: Brenda Prior must keep out of the way of Beatrice as the overtaking vessel.; Vessels greater than 40 metres in length with the wheelhouse aft must station a lookout at the bow.\nAvoid: Failure to maintain an effective lookout can lead to collisions.; Failure to maintain an effective lookout can result in collisions.\nFollow this order where applicable, but adapt to the specific situation.",
-    "user_msg_chars": 1000,
-    "raw_response": "{\"action\": \"hold_course\", \"degrees\": 0.0, \"rule_applied\": \"none\", \"reasoning\": \"No target poses a real risk of collision as both contacts are on reciprocal bearings and have CPA and TCPA indicating they will pass safely. Therefore, holding course is appropriate.\"}"
+    "user_msg_chars": 1271,
+    "raw_response": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0.0,\n  \"rule_applied\": \"none\",\n  \"reasoning\": \"The ship is already on the goal bearing within the 10-degree deadband, and no immediate collision risk is detected with the other vessels as they are not on a collision course. The CPA and TCPA values indicate they will not come closer than 353m, so no COLREG action is required.\"\n}"
    }
   }
  ]

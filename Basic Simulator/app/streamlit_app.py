@@ -49,6 +49,22 @@ div[data-testid="stMetric"] {
     background: rgba(20,108,148,0.08); border-radius: 10px; padding: 0.6rem 0.8rem;
     border: 1px solid rgba(20,108,148,0.25);
 }
+/* CPA/TCPA values can list several contacts ("ts1: 120m • ts2: 340m • ..."), and some labels
+   ("Goal bearing / dist") are long too -- both used to get clipped with an ellipsis at a
+   fixed font-size/single line. Letting them WRAP (box grows taller as needed) is simpler and
+   reads better than shrinking the font to force a fit -- a shrunk font on a multi-contact
+   line gets hard to read, whereas a taller box costs nothing since these boxes already sit on
+   their own row above the plot. The actual `nowrap` culprit turned out to be the inner <p>
+   Streamlit renders the text in (not just its stMetricValue/stMetricLabel wrapper divs, which
+   is all the first pass here targeted) -- must override that directly too or the wrapper's
+   `white-space: normal` has no effect on its non-wrapping child. */
+div[data-testid="stMetric"] [data-testid="stMetricValue"],
+div[data-testid="stMetric"] [data-testid="stMetricValue"] p,
+div[data-testid="stMetric"] [data-testid="stMetricLabel"],
+div[data-testid="stMetric"] [data-testid="stMetricLabel"] p {
+    white-space: normal; overflow: visible; text-overflow: unset; overflow-wrap: break-word;
+    line-height: 1.3;
+}
 div[data-testid="stMetric"] [data-testid="stMetricValue"] { font-size: 1.05rem; }
 div[data-testid="stMetric"] [data-testid="stMetricLabel"] { font-size: 0.75rem; }
 .side-panel {
@@ -59,6 +75,18 @@ div[data-testid="stMetric"] [data-testid="stMetricLabel"] { font-size: 0.75rem; 
    plot next to the sidebar; keep them small even if some help text is still long. */
 div[data-testid="stTooltipContent"] {
     max-width: 260px; font-size: 0.8rem; line-height: 1.25rem;
+}
+/* Tighten vertical spacing in the sidebar so more controls fit on one normal screen
+   without scrolling -- Streamlit's default per-widget gap/margin is generous and adds
+   up fast once you stack this many number_input/slider/button rows. */
+section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] {
+    gap: 0.35rem;
+}
+section[data-testid="stSidebar"] div[data-testid="stElementContainer"] {
+    margin-bottom: 0 !important;
+}
+section[data-testid="stSidebar"] label[data-testid="stWidgetLabel"] p {
+    font-size: 0.82rem; margin-bottom: 0.1rem;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -86,9 +114,9 @@ if not st.session_state.splash_dismissed:
     # agent" still works either way (it lazily loads the model on first live click if you
     # skipped preloading here).
     st.checkbox(
-        "\U0001F9E0 Preload LLM agent now (loads Qwen3-8B onto the GPU -- only needed for "
+        "\U0001F9E0 Preload Agent now (loads Qwen3-8B onto the GPU -- only needed for "
         "live 'Ask OOW agent' calls; leave unchecked to just browse missions / replay "
-        "precomputed LLM-driven runs without touching the GPU, e.g. while a background "
+        "precomputed Agent-driven runs without touching the GPU, e.g. while a background "
         "sweep is using it)",
         key="preload_llm",
     )
@@ -101,7 +129,7 @@ if not st.session_state.splash_dismissed:
     elif st.session_state.get("agent_ready", False):
         st.success("\u2705 OOW agent ready (cached).")
     else:
-        st.caption("LLM agent not loaded -- GPU free for other processes. \"Ask OOW agent\" "
+        st.caption("Agent not loaded -- GPU free for other processes. \"Ask OOW agent\" "
                   "will load it on first use if you skip this.")
 
     _, center, _ = st.columns([2, 1, 2])
@@ -130,9 +158,33 @@ if "sim" not in st.session_state or st.session_state.get("_loaded_mission_id") !
     st.session_state.preview_frame_idx = 0
     st.session_state.llm_run_frame_idx = 0
     st.session_state.llm_run_path = None
+    st.session_state.llm_compliance_violations = None
+    st.session_state.llm_compliance_checked_key = None
+    st.session_state._llm_autorun = None
 
 sim: Simulation = st.session_state.sim
 mission = st.session_state.mission
+
+# Play Agent Mission's Auto Run advances one checkpoint per RERUN rather than looping
+# plotly_chart() calls inside a single button click -- each checkpoint gets its own full
+# script run, so the chart/metrics/agent panel can each use ONE stable call site per run
+# (smooth in-place update, no remount/flicker) instead of several calls forced into one run,
+# which both needs a distinct key per call (forcing a remount each time) AND was the exact
+# cause of an earlier StreamlitDuplicateElementKey crash. `_autorun_sleep_s`, if not None
+# after this, tells the end-of-script block below to sleep then advance + rerun.
+_autorun = st.session_state.get("_llm_autorun")
+_autorun_sleep_s = None
+if _autorun and st.session_state.get("sim_view_mode") == "Play Agent Mission" \
+        and st.session_state.get("llm_run_path") == _autorun.get("run_path"):
+    _idx_list = _autorun["idx_list"]
+    if _autorun["i"] < len(_idx_list):
+        st.session_state.llm_run_frame_idx = _idx_list[_autorun["i"]]
+        _autorun_sleep_s = _autorun["speed_s"]
+    else:
+        st.session_state._llm_autorun = None
+else:
+    st.session_state._llm_autorun = None
+
 
 
 _ACTION_TEXT = {
@@ -276,7 +328,11 @@ def _animate_preview(trajectory: list[dict], mission, placeholder, title: str,
 def _render_preview_frame(trajectory: list[dict], mission, placeholder, title: str, frame_idx: int) -> int:
     """Static (non-animating) single-frame render of the preview at `frame_idx` -- used for
     every normal rerun so the preview doesn't replay from scratch just because some unrelated
-    widget elsewhere triggered a rerun. Returns the clamped frame_idx actually rendered."""
+    widget elsewhere triggered a rerun. Returns the clamped frame_idx actually rendered.
+    Called AT MOST ONCE per script run (Play Agent Mission's Auto Run now advances one
+    checkpoint per RERUN instead of looping this in Python -- see `_llm_autorun` above), so a
+    single constant `key` is safe: Streamlit patches the SAME Plotly component's data on every
+    rerun instead of remounting it, which is what keeps stepping/auto-run flicker-free."""
     times = sorted({row["time"] for row in trajectory})
     if not times:
         placeholder.info("Nothing recorded yet.")
@@ -290,8 +346,7 @@ def _render_preview_frame(trajectory: list[dict], mission, placeholder, title: s
     placeholder.plotly_chart(
         trajectory_figure(partial, mission, title=title, x_range=x_range, y_range=y_range,
                           current_time=t, total_time=times[-1], collision=show_collision),
-        # Only called once per script run, but keyed by idx anyway for consistency.
-        use_container_width=True, key=f"chart_preview_frame_{idx}",
+        use_container_width=True, key="chart_preview_frame",
     )
     if show_collision is not None:
         st.error(
@@ -301,65 +356,12 @@ def _render_preview_frame(trajectory: list[dict], mission, placeholder, title: s
     return idx
 
 
-# Plot header/mode-radio/placeholder created here (before the sidebar) so the sidebar's
-# "Full run" button below can render live progress directly into `chart` as it steps --
-# st.columns() containers are positional, not order-dependent, so this still renders in
-# the correct (center) column regardless of running before the sidebar in script order.
-plot_col, side_col = st.columns([3, 2], gap="medium")
-with plot_col:
-    st.caption(f"\U0001F4CB **{mission.name}** ({mission.id}) -- full briefing in the sidebar under Mission.")
-    view = st.radio(
-        "Mode", options=["Scenario preview (no avoidance)", "Manual helm",
-                        "Play LLM Mission", "LLM Real-Time"],
-        horizontal=True, label_visibility="collapsed", key="sim_view_mode",
-        help="Preview: no-avoidance path. Manual helm: steer it live. Play LLM Mission: "
-             "replay a precomputed run. LLM Real-Time: live agent calls.",
-    )
-    _dt_now = st.session_state.get("dt_slider", 10.0)
-
-    # Resolve the state behind the metrics row below from whatever is ACTUALLY on screen for
-    # the current mode -- Scenario preview/Play LLM Mission scrub through a precomputed
-    # trajectory that has nothing to do with the live `sim` object (which stays frozen at
-    # mission start in those two modes, since they never call sim.step()); reading `sim.*`
-    # unconditionally here previously made the metrics look frozen/dead while scrubbing.
-    preview_traj = run_log = run_traj = None
-    metrics_row = None  # (t, x, y, heading, speed)
-    if view == "Scenario preview (no avoidance)":
-        preview_traj = project_scenario(mission, dt=_dt_now)
-        _times = sorted({r["time"] for r in preview_traj})
-        if _times:
-            _idx = max(0, min(st.session_state.get("preview_frame_idx", 0), len(_times) - 1))
-            _row = next(r for r in preview_traj
-                       if r["time"] == _times[_idx] and r["vehicle"] == "own_ship")
-            metrics_row = (_times[_idx], _row["x"], _row["y"], _row["heading"], _row["speed"])
-    elif view == "Play LLM Mission":
-        _run_path = st.session_state.get("llm_run_path")
-        if _run_path:
-            run_log = load_run(_run_path)
-            run_traj = run_log["trajectory"]
-            _times = sorted({r["time"] for r in run_traj})
-            if _times:
-                _idx = max(0, min(st.session_state.get("llm_run_frame_idx", 0), len(_times) - 1))
-                _row = next(r for r in run_traj
-                           if r["time"] == _times[_idx] and r["vehicle"] == "own_ship")
-                metrics_row = (_times[_idx], _row["x"], _row["y"], _row["heading"], _row["speed"])
-    else:
-        metrics_row = (sim.t, sim.own.x, sim.own.y, sim.own.heading, sim.own.speed)
-
-    # Resolve target snapshots (name/x/y/heading/speed) at the SAME resolved time as
-    # metrics_row, for the CPA/TCPA boxes below -- same live-vs-precomputed split as above.
-    targets_now: list[dict] = []
-    if view == "Scenario preview (no avoidance)" and preview_traj and metrics_row:
-        targets_now = [r for r in preview_traj
-                       if r["time"] == metrics_row[0] and r["vehicle"] != "own_ship"]
-    elif view == "Play LLM Mission" and run_traj and metrics_row:
-        targets_now = [r for r in run_traj
-                       if r["time"] == metrics_row[0] and r["vehicle"] != "own_ship"]
-    elif metrics_row:
-        targets_now = [{"vehicle": v.name, "x": v.x, "y": v.y, "heading": v.heading, "speed": v.speed}
-                       for v in sim.targets]
-
-    b1, b2, b3, b4 = st.columns(4)
+def _render_metrics_row(placeholders, mission, metrics_row, targets_now) -> None:
+    """Fills the 4 goal-bearing/heading/CPA/TCPA metric boxes. Split out of the normal
+    top-of-script render so the sidebar's Play Agent Mission auto-run loop can call it again
+    per checkpoint -- otherwise these numbers stayed frozen at whatever frame was on screen
+    when Auto Run was clicked, out of sync with the animating plot."""
+    b1, b2, b3, b4 = placeholders
     if metrics_row:
         _t, _x, _y, _hdg, _spd = metrics_row
         _goal_brg, _goal_rng = bearing_and_range(_x, _y, mission.goal[0], mission.goal[1])
@@ -379,8 +381,117 @@ with plot_col:
             b3.metric("CPA", "no contacts")
             b4.metric("TCPA", "no contacts")
     else:
-        for _b in (b1, b2, b3, b4):
+        for _b in placeholders:
             _b.metric("\u2014", "n/a")
+
+
+def _render_agent_checkpoint(phs: dict, run_log: dict, mission, idx: int) -> None:
+    """Fills the situation-report/decision half of the Play Agent Mission panel for the
+    trajectory tick at `idx`, one placeholder PER PIECE (header/quickfacts/report/decision)
+    instead of one shared `.container()`. Each placeholder is called every run with whatever
+    text applies now (an `st.empty()` placeholder shows NOTHING for a run that doesn't write
+    to it -- content does not persist from a previous run on its own), but because each piece
+    keeps its OWN stable position/identity across reruns, Streamlit only needs to patch the
+    text that actually changed rather than tearing down and rebuilding the whole block --
+    unlike a single `.container()`, which recreates its entire child-element tree every call."""
+    run_times = sorted({r["time"] for r in run_log["trajectory"]})
+    idx = max(0, min(idx, len(run_times) - 1))
+    cp = checkpoint_at_or_before(run_log, run_times[idx])
+    if not cp:
+        phs["header"].caption("No decision recorded at/before this frame yet.")
+        for key in ("quickfacts", "report_label", "report_code", "decision_label", "decision"):
+            phs[key].empty()
+        return
+    phs["header"].caption(f"Nearest decision: step {cp['step']}, t={cp['time']:.0f}s")
+    own_row = next((r for r in run_log["trajectory"]
+                   if r["time"] == cp["time"] and r["vehicle"] == "own_ship"), None)
+    if own_row:
+        phs["quickfacts"].caption(_goal_quickfacts(own_row["x"], own_row["y"], own_row["heading"],
+                                                    own_row["speed"], mission.goal))
+    else:
+        phs["quickfacts"].empty()
+    phs["report_label"].markdown("**Situation report (passed to the Agent)**")
+    phs["report_code"].code(cp.get("situation_report", ""), language=None, wrap_lines=True)
+    phs["decision_label"].markdown("**Agent decision**")
+    phs["decision"].markdown(_describe_decision(cp.get("decision", {})))
+
+
+# Plot header/mode-radio/placeholder created here (before the sidebar) so the sidebar's
+# "Full run" button below can render live progress directly into `chart` as it steps --
+# st.columns() containers are positional, not order-dependent, so this still renders in
+# the correct (center) column regardless of running before the sidebar in script order.
+plot_col, side_col = st.columns([3, 2], gap="medium")
+with side_col:
+    # Header + placeholders created early (before the sidebar) so the sidebar's Play Agent
+    # Mission auto-run driver can push live updates as it steps through checkpoints -- same
+    # reasoning as `chart`/the metric placeholders below. One placeholder PER PIECE (not one
+    # shared `.container()`) so re-rendering only touches the specific text that actually
+    # changed instead of tearing down and rebuilding the whole block every single step (which
+    # read as the panel "fully redrawing/flickering" on each Step click).
+    st.markdown('<div class="side-panel">', unsafe_allow_html=True)
+    st.markdown("#### \U0001F916 Agent")
+    agent_static_ph = st.empty()
+    agent_cp_phs = {
+        "header": st.empty(), "quickfacts": st.empty(), "report_label": st.empty(),
+        "report_code": st.empty(), "decision_label": st.empty(), "decision": st.empty(),
+    }
+
+with plot_col:
+    st.caption(f"\U0001F4CB **{mission.name}** ({mission.id}) -- full briefing in the sidebar under Mission.")
+    view = st.radio(
+        "Mode", options=["Scenario preview (no avoidance)", "Manual helm",
+                        "Play Agent Mission", "Agent Real-Time"],
+        horizontal=True, label_visibility="collapsed", key="sim_view_mode",
+        help="Preview: no-avoidance path. Manual helm: steer it live. Play Agent Mission: "
+             "replay a precomputed run. Agent Real-Time: live agent calls.",
+    )
+    _dt_now = st.session_state.get("dt_slider", 10.0)
+
+    # Resolve the state behind the metrics row below from whatever is ACTUALLY on screen for
+    # the current mode -- Scenario preview/Play LLM Mission scrub through a precomputed
+    # trajectory that has nothing to do with the live `sim` object (which stays frozen at
+    # mission start in those two modes, since they never call sim.step()); reading `sim.*`
+    # unconditionally here previously made the metrics look frozen/dead while scrubbing.
+    preview_traj = run_log = run_traj = None
+    metrics_row = None  # (t, x, y, heading, speed)
+    if view == "Scenario preview (no avoidance)":
+        preview_traj = project_scenario(mission, dt=_dt_now)
+        _times = sorted({r["time"] for r in preview_traj})
+        if _times:
+            _idx = max(0, min(st.session_state.get("preview_frame_idx", 0), len(_times) - 1))
+            _row = next(r for r in preview_traj
+                       if r["time"] == _times[_idx] and r["vehicle"] == "own_ship")
+            metrics_row = (_times[_idx], _row["x"], _row["y"], _row["heading"], _row["speed"])
+    elif view == "Play Agent Mission":
+        _run_path = st.session_state.get("llm_run_path")
+        if _run_path:
+            run_log = load_run(_run_path)
+            run_traj = run_log["trajectory"]
+            _times = sorted({r["time"] for r in run_traj})
+            if _times:
+                _idx = max(0, min(st.session_state.get("llm_run_frame_idx", 0), len(_times) - 1))
+                _row = next(r for r in run_traj
+                           if r["time"] == _times[_idx] and r["vehicle"] == "own_ship")
+                metrics_row = (_times[_idx], _row["x"], _row["y"], _row["heading"], _row["speed"])
+    else:
+        metrics_row = (sim.t, sim.own.x, sim.own.y, sim.own.heading, sim.own.speed)
+
+    # Resolve target snapshots (name/x/y/heading/speed) at the SAME resolved time as
+    # metrics_row, for the CPA/TCPA boxes below -- same live-vs-precomputed split as above.
+    targets_now: list[dict] = []
+    if view == "Scenario preview (no avoidance)" and preview_traj and metrics_row:
+        targets_now = [r for r in preview_traj
+                       if r["time"] == metrics_row[0] and r["vehicle"] != "own_ship"]
+    elif view == "Play Agent Mission" and run_traj and metrics_row:
+        targets_now = [r for r in run_traj
+                       if r["time"] == metrics_row[0] and r["vehicle"] != "own_ship"]
+    elif metrics_row:
+        targets_now = [{"vehicle": v.name, "x": v.x, "y": v.y, "heading": v.heading, "speed": v.speed}
+                       for v in sim.targets]
+
+    b_cols = st.columns(4)
+    metric_phs = [c.empty() for c in b_cols]
+    _render_metrics_row(metric_phs, mission, metrics_row, targets_now)
 
     chart = st.empty()
     st.session_state.setdefault("_animated_active_mode", None)
@@ -388,22 +499,21 @@ with plot_col:
         st.session_state.setdefault("preview_frame_idx", 0)
         if st.session_state._animated_active_mode != view:
             _render_preview_frame(preview_traj, mission, chart,
-                                  f"{mission.name} -- scenario preview (no avoidance)",
+                                  "Scenario preview (no avoidance)",
                                   st.session_state.preview_frame_idx)
             n_preview_frames = len(sorted({r["time"] for r in preview_traj}))
             st.caption(f"Frame {min(st.session_state.preview_frame_idx, n_preview_frames - 1) + 1}/{n_preview_frames} "
                       "-- use the sidebar's Step (advance one frame) or Auto Run (play once) to move through it.")
         else:
             _animate_preview(preview_traj, mission, chart,
-                             f"{mission.name} -- scenario preview (no avoidance)",
-                             speed_s=st.session_state.get("_animated_speed_s", 0.3),
-                             checkpoint_times=st.session_state.get("_animated_checkpoint_times"))
+                             "Scenario preview (no avoidance)",
+                             speed_s=st.session_state.get("_animated_speed_s", 0.3))
             st.caption("Click **Play** in the chart above (or drag its slider) to watch it -- use Step/Reset to go back to frame-by-frame.")
-    elif view == "Play LLM Mission":
+    elif view == "Play Agent Mission":
         available_runs = list_runs_for_mission(mission.id)
         if not available_runs:
             chart.info(
-                f"No precomputed LLM run found for **{mission.id}**. Live per-step model calls "
+                f"No precomputed Agent run found for **{mission.id}**. Live per-step model calls "
                 "were too slow to play interactively, so this mode only plays back runs "
                 "computed upfront. Generate one (outside Streamlit):\n\n"
                 f"`python -m app.run_llm_scenario --missions {mission.id} --configs v3_rag_cot`"
@@ -428,47 +538,56 @@ with plot_col:
             run_traj = run_log["trajectory"]
             run_times = sorted({r["time"] for r in run_traj})
             st.session_state.setdefault("llm_run_frame_idx", 0)
-            if st.session_state._animated_active_mode != view:
-                clamped_idx = _render_preview_frame(
-                    run_traj, mission, chart,
-                    f"{mission.name} -- LLM run ({run_log['config']}/{run_log['tag']})",
-                    st.session_state.llm_run_frame_idx,
-                )
-                st.session_state.llm_run_frame_idx = clamped_idx
-                st.caption(f"Frame {clamped_idx + 1}/{len(run_times)} -- t={run_times[clamped_idx]:.0f}s. "
-                          "Use the sidebar's Step/Run steps/Full run to move through it. See the "
-                          "Agent panel (right) for what was passed to/decided by the model here.")
-            else:
-                _animate_preview(run_traj, mission, chart,
-                                 f"{mission.name} -- LLM run ({run_log['config']}/{run_log['tag']})",
-                                 speed_s=st.session_state.get("_animated_speed_s", 0.3),
-                                 checkpoint_times=st.session_state.get("_animated_checkpoint_times"))
-                st.caption("Click **Play** in the chart above (or drag its slider) to watch it -- use Step/Reset to go back to frame-by-frame.")
+            clamped_idx = _render_preview_frame(
+                run_traj, mission, chart,
+                f"Agent run ({run_log['config']}/{run_log['tag']})",
+                st.session_state.llm_run_frame_idx,
+            )
+            st.session_state.llm_run_frame_idx = clamped_idx
+            st.caption(f"Frame {clamped_idx + 1}/{len(run_times)} -- t={run_times[clamped_idx]:.0f}s. "
+                      "Use the sidebar's Step/Run steps/Auto Run to move through it. See the "
+                      "Agent panel (right) for what was passed to/decided by the model here.")
     else:
-        _render_plot(sim.trajectory, mission, chart, mission.name,
+        _render_plot(sim.trajectory, mission, chart, "",
                     bounds_from=project_scenario(mission, dt=_dt_now))
 
 # ── Sidebar ───────────────────────────────────────────────────────────────
 with st.sidebar:
+    st.header("Ship performance")
+    st.caption("Not wired into the physics yet -- stored here to bring into the simulation later.")
+    sp1, sp2 = st.columns(2)
+    sp1.number_input("Max speed (m/s)", min_value=0.0, value=10.0, step=0.5, key="ship_max_speed")
+    sp2.number_input("Max turn rate (%)", min_value=0.0, value=30.0, step=1.0, key="ship_max_turn_rate_pct")
+    sp3, sp4 = st.columns(2)
+    sp3.number_input("Max acceleration (m/s\u00b2)", min_value=0.0, value=0.2, step=0.05, key="ship_max_accel")
+    sp4.number_input("Max deceleration (m/s\u00b2)", min_value=0.0, value=0.2, step=0.05, key="ship_max_decel")
+    st.number_input("Turn rate (deg/s)", min_value=0.0, value=3.0, step=0.5, key="ship_turn_rate_deg_s")
+    st.divider()
+
     st.header("Mission")
+    m1, m2 = st.columns(2)
+    m1.number_input("Cruise speed (m/s)", min_value=0.0, value=10.0, step=0.5, key="mission_cruise_speed")
+    m2.number_input("Minimal CPA (m)", min_value=0.0, value=500.0, step=50.0, key="mission_min_cpa")
     all_missions = {mid: load_mission(mid) for mid in mission_ids}
-    labels = {mid: f"{m.name}  ({mid})" for mid, m in all_missions.items()}
+    labels = {mid: f"{mid.split('_')[0].upper()} \u2014 {m.name}  ({mid})" for mid, m in all_missions.items()}
     picked = st.selectbox("Scenario", options=mission_ids, format_func=lambda m: labels[m],
                           index=mission_ids.index(st.session_state.mission_id))
     if picked != st.session_state.mission_id:
         st.session_state.mission_id = picked
         st.rerun()
 
-    with st.expander(f"\U0001F4CB {mission.name} briefing", expanded=False):
+    with st.expander("\U0001F4CB Mission content", expanded=False):
         st.markdown(mission.as_text())
 
-    if st.button("\U0001F504 Reset mission", use_container_width=True):
+    if st.button("\U0001F504 Reset mission playback", use_container_width=True):
         st.session_state.sim = Simulation(mission)
         st.session_state.last_decision = None
         st.session_state.last_debug = None
         st.session_state.preview_frame_idx = 0
         st.session_state.llm_run_frame_idx = 0
         st.session_state._animated_active_mode = None
+        st.session_state.llm_compliance_violations = None
+        st.session_state.llm_compliance_checked_key = None
         st.rerun()
 
     st.divider()
@@ -476,7 +595,7 @@ with st.sidebar:
     dt = st.slider("Time step (s)", 1.0, 60.0, 10.0, step=1.0, key="dt_slider")
     sim_mode = st.session_state.get("sim_view_mode", "Manual helm")
     is_preview = sim_mode == "Scenario preview (no avoidance)"
-    is_llm_playback = sim_mode == "Play LLM Mission" and st.session_state.get("llm_run_path")
+    is_llm_playback = sim_mode == "Play Agent Mission" and st.session_state.get("llm_run_path")
     is_frame_scrub = is_preview or is_llm_playback
     _frame_key = "preview_frame_idx" if is_preview else "llm_run_frame_idx"
 
@@ -513,25 +632,35 @@ with st.sidebar:
     speed_level = st.slider("Playback speed", 1, 10, 6, disabled=not is_frame_scrub)
     playback_ms = int(1500 - (speed_level - 1) * (1500 - 60) / 9)  # 1=slowest (1500ms), 10=fastest (60ms)
     if st.button("\U0001F680 Auto Run", use_container_width=True):
-        if is_frame_scrub:
+        if is_preview:
             # Runs exactly once, only on this click -- not on every unrelated rerun, which is
-            # what made the preview feel like it "kept on playing" before this fix.
-            _checkpoint_times = None
-            if is_preview:
-                frame_traj = project_scenario(mission, dt=dt)
-                frame_title = f"{mission.name} -- scenario preview (no avoidance)"
-            else:
-                frame_log = load_run(st.session_state.llm_run_path)
-                frame_traj = frame_log["trajectory"]
-                frame_title = f"{mission.name} -- LLM run ({frame_log['config']}/{frame_log['tag']})"
-                _checkpoint_times = [cp["time"] for cp in frame_log.get("checkpoints", [])]
-            _animate_preview(frame_traj, mission, chart, frame_title,
-                             speed_s=playback_ms / 1000, checkpoint_times=_checkpoint_times)
+            # what made the preview feel like it "kept on playing" before this fix. No agent
+            # panel to keep in sync here, so the native client-side Plotly animation is fine.
+            frame_traj = project_scenario(mission, dt=dt)
+            frame_title = "Scenario preview (no avoidance)"
+            _animate_preview(frame_traj, mission, chart, frame_title, speed_s=playback_ms / 1000)
             st.session_state._animated_active_mode = sim_mode
             st.session_state._animated_speed_s = playback_ms / 1000
-            st.session_state._animated_checkpoint_times = _checkpoint_times
-        elif sim_mode == "Play LLM Mission":
-            st.warning("No precomputed LLM run loaded for this mission -- pick one above the "
+        elif is_llm_playback:
+            # Sets up the job and reruns immediately -- the early "Session state" block at the
+            # top of the script (see `_llm_autorun`) advances one checkpoint per RERUN and the
+            # end-of-script block sleeps/reruns again, so the chart/metrics/Agent panel each
+            # render via their normal single-call-per-run path (smooth in-place update) instead
+            # of being looped here, which forced a remount every checkpoint (distinct keys
+            # needed within one run) and was the exact cause of an earlier
+            # StreamlitDuplicateElementKey crash.
+            frame_log = load_run(st.session_state.llm_run_path)
+            frame_times = sorted({r["time"] for r in frame_log["trajectory"]})
+            checkpoints = frame_log.get("checkpoints") or [{"time": frame_times[-1]}]
+            idx_list = [frame_times.index(cp["time"]) if cp["time"] in frame_times else len(frame_times) - 1
+                       for cp in checkpoints]
+            st.session_state._llm_autorun = {
+                "run_path": st.session_state.llm_run_path, "idx_list": idx_list, "i": 0,
+                "speed_s": max(playback_ms / 1000, 0.4),
+            }
+            st.session_state._animated_active_mode = None
+        elif sim_mode == "Play Agent Mission":
+            st.warning("No precomputed Agent run loaded for this mission -- pick one above the "
                       "plot, or generate one via app/run_llm_scenario.py (see its docstring).")
         else:
             # Distance-aware step cap: a fixed cap (e.g. 200) silently cut runs short whenever
@@ -551,9 +680,9 @@ with st.sidebar:
                     break
                 sim.step(dt)
                 if i % render_every == 0:
-                    _render_plot(sim.trajectory, mission, chart, mission.name, bounds_from=bounds_from)
+                    _render_plot(sim.trajectory, mission, chart, "", bounds_from=bounds_from)
                     time.sleep(0.05)
-            _render_plot(sim.trajectory, mission, chart, mission.name, bounds_from=bounds_from)
+            _render_plot(sim.trajectory, mission, chart, "", bounds_from=bounds_from)
         st.rerun()
 
     st.divider()
@@ -653,10 +782,7 @@ with st.sidebar:
 # (mission caption + the 5-metric row now render at the top of plot_col, above the plot itself)
 
 with side_col:
-    st.markdown('<div class="side-panel">', unsafe_allow_html=True)
-    st.markdown("#### \U0001F916 Agent")
-
-    if sim_mode == "LLM Real-Time":
+    if sim_mode == "Agent Real-Time":
         # The original live/interactive agent panel -- kept exactly as-is, now scoped to
         # this one mode instead of always showing regardless of which mode was picked.
         with st.expander("Situation report", expanded=False):
@@ -745,66 +871,68 @@ with side_col:
         else:
             st.caption("Click \"Ask OOW agent\" for a recommended manoeuvre.")
 
-    elif sim_mode == "Play LLM Mission":
-        # Read-only playback detail for the precomputed run currently loaded/scrubbed in
-        # the plot -- model+params first, then the situation report that was actually PASSED
-        # to the LLM (top half) and what it DECIDED (bottom half), for the nearest checkpoint
-        # at-or-before the frame currently shown.
+    elif sim_mode == "Play Agent Mission":
+        # Read-only playback detail for the precomputed run currently loaded/scrubbed in the
+        # plot -- model+params (static) in agent_static_ph, situation report/decision for the
+        # nearest checkpoint (advanced by the auto-run rerun-driver too) in agent_cp_phs.
+        # Both always re-render: an st.empty() placeholder shows NOTHING on a run that doesn't
+        # write to it, so a "skip if unchanged" shortcut here previously blanked the whole
+        # panel on some reruns instead of just avoiding a redundant draw.
         run_path = st.session_state.get("llm_run_path")
         if not run_path:
-            st.caption("Pick a precomputed run above the plot to see its details here.")
+            agent_static_ph.caption("Pick a precomputed run above the plot to see its details here.")
         else:
             run_log = load_run(run_path)
-            run_times = sorted({r["time"] for r in run_log["trajectory"]})
-            idx = max(0, min(st.session_state.get("llm_run_frame_idx", 0), len(run_times) - 1))
-            st.write("**Model / config:**",
-                    MODEL_CONFIGS.get(run_log["config"], run_log["config"]))
-            params = run_log.get("params", {})
-            st.markdown(_describe_params(params))
-            with st.popover("\U0001F4DD View system prompt", use_container_width=True):
-                st.code(params.get("system_prompt", ""), language=None, wrap_lines=True)
-            cp = checkpoint_at_or_before(run_log, run_times[idx])
-            if cp:
-                st.caption(f"Nearest decision: step {cp['step']}, t={cp['time']:.0f}s")
-                own_row = next((r for r in run_log["trajectory"]
-                               if r["time"] == cp["time"] and r["vehicle"] == "own_ship"), None)
-                if own_row:
-                    st.caption(_goal_quickfacts(own_row["x"], own_row["y"], own_row["heading"],
-                                                own_row["speed"], mission.goal))
-                st.markdown("**Situation report (passed to the LLM)**")
-                st.code(cp.get("situation_report", ""), language=None, wrap_lines=True)
-                st.markdown("**LLM decision**")
-                st.markdown(_describe_decision(cp.get("decision", {})))
-            else:
-                st.caption("No decision recorded at/before this frame yet.")
+            idx = st.session_state.get("llm_run_frame_idx", 0)
+            with agent_static_ph.container():
+                st.write("**Model / config:**",
+                        MODEL_CONFIGS.get(run_log["config"], run_log["config"]))
+                params = run_log.get("params", {})
+                st.markdown(_describe_params(params))
+                with st.popover("\U0001F4DD View system prompt", use_container_width=True):
+                    st.code(params.get("system_prompt", ""), language=None, wrap_lines=True)
+            _render_agent_checkpoint(agent_cp_phs, run_log, mission, idx)
 
     else:
-        st.caption("Switch to \"LLM Real-Time\" to consult the agent live for the current "
-                  "situation, or \"Play LLM Mission\" to review a precomputed run's reasoning.")
+        st.caption("Switch to \"Agent Real-Time\" to consult the agent live for the current "
+                  "situation, or \"Play Agent Mission\" to review a precomputed run's reasoning.")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 with plot_col:
     st.divider()
     st.markdown("#### \u2705 Evaluation")
-    if len(sim.trajectory) < 4:
+    # Score the FULL precomputed trajectory for Play LLM Mission (independent of which
+    # frame is currently scrubbed to) instead of the live `sim.trajectory`, which stays
+    # empty/frozen at mission start in that mode since it never calls sim.step().
+    if sim_mode == "Play Agent Mission":
+        _eval_run_path = st.session_state.get("llm_run_path")
+        eval_traj = load_run(_eval_run_path)["trajectory"] if _eval_run_path else None
+        eval_cache_key = _eval_run_path
+    else:
+        eval_traj = sim.trajectory
+        eval_cache_key = "live"
+
+    if eval_traj is None:
+        st.caption("Pick a precomputed run above the plot to see its score here.")
+    elif len(eval_traj) < 4:
         st.caption("Run a few steps first -- not enough trajectory yet to score.")
     else:
         ec1, ec2 = st.columns([2, 1])
         with ec2:
             if st.button("\U0001F50D Check COLREG compliance (Claude)", use_container_width=True,
-                        help="One-shot LLM judge of the full trajectory so far -- runs on demand "
+                        help="One-shot AI judge of the full trajectory so far -- runs on demand "
                              "only (a real network call), never during live stepping, so it adds "
                              "no latency to the simulation itself."):
                 from app.evaluation import llm_compliance_check
                 with st.spinner("Asking Claude to audit COLREG compliance..."):
                     try:
-                        st.session_state.llm_compliance_violations = llm_compliance_check(sim.trajectory)
-                        st.session_state.llm_compliance_checked_len = len(sim.trajectory)
+                        st.session_state.llm_compliance_violations = llm_compliance_check(eval_traj)
+                        st.session_state.llm_compliance_checked_key = (eval_cache_key, len(eval_traj))
                     except Exception as e:
-                        st.error(f"LLM compliance check failed: {e}")
+                        st.error(f"Compliance check failed: {e}")
         llm_violations = st.session_state.get("llm_compliance_violations")
-        stale = st.session_state.get("llm_compliance_checked_len") != len(sim.trajectory)
+        stale = st.session_state.get("llm_compliance_checked_key") != (eval_cache_key, len(eval_traj))
         if llm_violations is not None:
             if stale:
                 st.caption("\u26A0\uFE0F Trajectory changed since the last compliance check -- re-run for a current result.")
@@ -816,7 +944,7 @@ with plot_col:
             st.caption("\u2139\uFE0F Compliance shows a default score of 1.0 until you run the Claude check above.")
 
         result = score_trajectory(
-            sim.trajectory, start_xy=(mission.own_ship.x, mission.own_ship.y),
+            eval_traj, start_xy=(mission.own_ship.x, mission.own_ship.y),
             goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
             llm_violations=llm_violations if not stale else None,
         )
@@ -855,4 +983,13 @@ with plot_col:
                 c = contact_line(sim.own, tgt)
                 if c["quiet"]:
                     st.caption(f"{c['name']}: quiet (CPA {c['cpa_m']:.0f}m, TCPA {c['tcpa_s']:.0f}s)")
+
+# Play Agent Mission Auto Run driver: everything above has already rendered this checkpoint
+# (chart/metrics/Agent panel), so the user gets to actually SEE it for `_autorun_sleep_s`
+# before advancing -- sleeping any earlier would just delay the render instead.
+if _autorun_sleep_s is not None:
+    time.sleep(_autorun_sleep_s)
+    st.session_state._llm_autorun["i"] += 1
+    st.rerun()
+
 

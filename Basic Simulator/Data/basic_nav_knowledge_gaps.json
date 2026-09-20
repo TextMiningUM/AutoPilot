@@ -1,0 +1,53 @@
+{
+  "source": "Basic Simulator mission-run investigation, 2026-09-19",
+  "description": "Recurring basic-navigation / COLREG-application knowledge gaps observed in Qwen3-8B's own visible chain-of-thought (v2_cot/v3_rag_cot configs, enable_thinking=True) across the OOW mission sweep (Data/missions/Mission No Speed Increase/*.json). Deliberately NOT injected directly into the live system prompt -- doing that for the Rule-13/14/15/17 mapping specifically would hand the model the actual COLREG answer instead of testing whether it can derive/retrieve it itself (same reasoning that led to removing the earlier 'rules of thumb' sentence). Intended instead as source material for (a) additional RAG-corpus chunks so the KNOWLEDGE is retrievable rather than assumed, and (b) SFT/DPO/reflection training examples that TEACH correct application through demonstrations. Not yet wired into any build_*.py / prep_ablation.py script -- this is the raw finding, ready for that follow-up.",
+  "gaps": [
+    {
+      "id": "rule13_overapplied",
+      "gap": "Model treats 'Rule 13' as a generic catch-all for ANY two-vessel encounter ('the responsibilities between vessels'), regardless of actual encounter type -- instead of Rule 13 being overtaking-specific.",
+      "correct_fact": "Rule 13 = overtaking only (vessel coming up from more than 22.5deg abaft the other's beam). Rule 14 = head-on (reciprocal/nearly reciprocal courses). Rule 15 = crossing (give-way vessel keeps clear, normally alters to starboard). Rule 17 = the stand-on vessel's obligations (maintain course/speed, may act only once collision cannot be avoided by the give-way vessel alone).",
+      "severity": "high",
+      "frequency_note": "seen in nearly every v2_cot log sampled across s01,s02,s03,s06,s07,s08,s09,s10,s11 -- the single most common and most consequential gap found",
+      "examples": [
+        {"mission": "s01_head_on", "quote": "Rule 13 is about responsibility between vessels. If both are underway and the CPA is zero, they're on a collision..."},
+        {"mission": "s02_crossing_stbd_fine", "quote": "Rule 13, which deals with the responsibilities between vessels. The own-ship is a power-driven vessel, and the c..."},
+        {"mission": "s10_headon_plus_crossing", "quote": "this is a head-on collision risk. According to COLREG Rule 13, when two vessels are approaching each other on opposite courses, each should keep to the right."},
+        {"mission": "s08_overtaking_os_stands_on", "quote": "Rule 13: When two power-driven vessels are approaching each other so as to involve risk of collision, each shall..."}
+      ]
+    },
+    {
+      "id": "tcpa_misread",
+      "gap": "TCPA near/at 0 is read as 'collision is imminent right now', rather than its actual meaning: the closest point of approach is occurring now or has already passed. Risk should be judged from the CPA distance, not from TCPA alone.",
+      "correct_fact": "TCPA = seconds until the closest point of approach (can be 0 even when CPA is thousands of metres away, if the vessels are currently diverging). Judge collision risk primarily from CPA distance; TCPA only tells you WHEN that closest point occurs, not HOW close it is.",
+      "severity": "high",
+      "frequency_note": "seen repeatedly, including cases where CPA was 3000-6700m (clearly safe) but the model still reasoned 'TCPA is 0, so collision course'",
+      "examples": [
+        {"mission": "s07_overtaking_os_gives_way", "quote": "CPA is 0m, TCPA 467s. That means the contact is on a collision course."},
+        {"mission": "s08_overtaking_os_stands_on", "quote": "CPA (closest point of approach) is 0 meters, TCPA (time to closest point of approach) is 1100 seconds. Wait, CPA is 0 meters? That means the two vessels are on a collision course, right?"},
+        {"mission": "q02_quiet_wide_cpa", "quote": "the CPA is more than the range at CPA (which is 3000m), that suggests they are on a collision course. Wait, no. Wait, the CPA is the closest point of approach..."}
+      ]
+    },
+    {
+      "id": "relative_bearing_sign_confusion",
+      "gap": "Model repeatedly re-derives, and often gets wrong on the first pass, whether a positive/negative relative bearing means port or starboard, and whether values near +-180 mean dead ahead or dead astern.",
+      "correct_fact": "rel.bearing is signed and measured clockwise from the bow: positive = target is to starboard (right), negative = to port (left), 0 = dead ahead, +-180 = dead astern.",
+      "severity": "medium",
+      "frequency_note": "seen in most logs, usually as a multi-sentence 'wait, that means...' detour before reaching the right answer",
+      "examples": [
+        {"mission": "q02_quiet_wide_cpa", "quote": "relative bearing -91.9 degrees. Wait, relative bearing -91.9 degrees means it's almost directly behind the own-ship, right? Because relative be..."},
+        {"mission": "s06_crossing_port_fine", "quote": "a relative bearing of -142.7 degrees would mean the contact is to the left (port side) and behind, because relative bearings are measured clockwise from the bow. Wait, no. Wait, relative bearings are typically measured clockwise from the bow."}
+      ]
+    },
+    {
+      "id": "heading_axis_confusion",
+      "gap": "Model second-guesses whether heading 0 means north/east, and whether x/y map to east/north, even when told the convention -- burning many tokens re-deriving basic geometry instead of using the given facts.",
+      "correct_fact": "heading 0 = north, clockwise, matching compass bearings (own-ship x/y are plain Cartesian metres, not geographic lat/lon).",
+      "severity": "medium",
+      "frequency_note": "seen in q01, s04, s12 and others -- source data predates the heading-convention sentence added to SYSTEM_OOW_AGENT on 2026-09-19, so it's unconfirmed whether that fix alone resolves it",
+      "examples": [
+        {"mission": "s12_converging_cluster", "quote": "The mission is to reach (0.0, 2400.0), which is straight north. So the goal is directly ahead, but the ship is currently heading east. Wait, that's a problem..."},
+        {"mission": "s04_crossing_stbd_abeam", "quote": "the own-ship is moving north (since heading 0.0 is north, but wait, no -- wait, in maritime terms, 0 degrees is north, so heading 0.0 means the ship is pointing north. But the..."}
+      ]
+    }
+  ]
+}
