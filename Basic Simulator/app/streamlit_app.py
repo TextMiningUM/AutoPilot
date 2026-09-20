@@ -21,7 +21,7 @@ for p in (ROOT, REPO_ROOT):
 import streamlit as st
 import streamlit.components.v1 as components
 
-from app.missions import list_mission_ids, load_mission
+from app.missions import list_mission_ids, load_mission, list_mission_sets, MISSIONS_DIR
 from app.simulation import Simulation, project_scenario, find_collision
 from app.narrate import narrate, contact_line, bearing_and_range, relative_bearing, cpa_tcpa
 from app.viz_plotly import trajectory_figure, trajectory_bounds, animated_trajectory_figure
@@ -142,14 +142,27 @@ from app.agents import MODEL_CONFIGS, SYSTEM_OOW_AGENT, ask_oow
 from app.llm_runs import list_runs_for_mission, load_run, checkpoint_at_or_before
 
 # ── Session state ─────────────────────────────────────────────────────────
-mission_ids = list_mission_ids()
-if "mission_id" not in st.session_state:
-    st.session_state.mission_id = mission_ids[0]
-if "sim" not in st.session_state or st.session_state.get("_loaded_mission_id") != st.session_state.mission_id:
-    mission = load_mission(st.session_state.mission_id)
+# Missions live in named subfolders ("sets") under Data/missions/ (e.g. "MIssions Data V1")
+# rather than loose in it -- lets multiple mission batches coexist, picked via the sidebar's
+# "Mission set (folder)" selectbox further down. Read here via session_state BEFORE that
+# widget renders (same one-render-lag pattern as dt_slider/speed_level/wide_plot elsewhere
+# in this file), since mission_ids below depends on which folder is currently active.
+_mission_sets = list_mission_sets()
+_default_mission_set = _mission_sets[0] if _mission_sets else None
+mission_set = st.session_state.get("mission_set")
+if mission_set not in _mission_sets:
+    mission_set = _default_mission_set
+missions_dir = (MISSIONS_DIR / mission_set) if mission_set else MISSIONS_DIR
+
+mission_ids = list_mission_ids(missions_dir)
+if "mission_id" not in st.session_state or st.session_state.mission_id not in mission_ids:
+    st.session_state.mission_id = mission_ids[0] if mission_ids else None
+_mission_key = (mission_set, st.session_state.mission_id)
+if "sim" not in st.session_state or st.session_state.get("_loaded_mission_key") != _mission_key:
+    mission = load_mission(st.session_state.mission_id, missions_dir)
     st.session_state.sim = Simulation(mission)
     st.session_state.mission = mission
-    st.session_state._loaded_mission_id = st.session_state.mission_id
+    st.session_state._loaded_mission_key = _mission_key
     st.session_state.last_decision = None
     st.session_state.last_debug = None
     st.session_state.llm_run_path = None
@@ -543,10 +556,22 @@ with st.sidebar:
     st.divider()
 
     st.header("Mission")
+    if _mission_sets:
+        picked_set = st.selectbox(
+            "Mission set (folder)", options=_mission_sets,
+            index=_mission_sets.index(mission_set) if mission_set in _mission_sets else 0,
+            key="mission_set_picker",
+            help="Folder under Data/missions/ to load mission JSONs from.",
+        )
+        if picked_set != mission_set:
+            st.session_state.mission_set = picked_set
+            st.rerun()
+    else:
+        st.caption("\u26a0\ufe0f No mission-set folders found under Data/missions/.")
     m1, m2 = st.columns(2)
     m1.number_input("Cruise speed (m/s)", min_value=0.0, value=10.0, step=0.5, key="mission_cruise_speed")
     m2.number_input("Minimal CPA (m)", min_value=0.0, value=500.0, step=50.0, key="mission_min_cpa")
-    all_missions = {mid: load_mission(mid) for mid in mission_ids}
+    all_missions = {mid: load_mission(mid, missions_dir) for mid in mission_ids}
     labels = {mid: f"{mid.split('_')[0].upper()} \u2014 {m.name}  ({mid})" for mid, m in all_missions.items()}
     picked = st.selectbox("Scenario", options=mission_ids, format_func=lambda m: labels[m],
                           index=mission_ids.index(st.session_state.mission_id))
