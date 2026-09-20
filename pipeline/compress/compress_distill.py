@@ -220,8 +220,15 @@ def train(args: argparse.Namespace) -> None:
             kd = (kd * mask).sum() / mask.sum().clamp_min(1) * (T * T)
 
             # Hard-label CE
+            # Hard-label CE -- cast to float32 for JUST this call. bf16's cross_entropy
+            # was observed to go NaN from the very first steps on the cloud run
+            # (2026-09-20): log-softmax's precision loss in bf16 is a well-known nan/inf
+            # hotspot, which is why standard mixed-precision recipes always keep the final
+            # loss computation in fp32 even when the rest of the model runs in reduced
+            # precision. This only upcasts a per-micro-batch temporary, not the big
+            # t_logits/s_logits tensors, so it keeps almost all of the bf16 memory saving.
             ce_all = F.cross_entropy(
-                s_logits.view(-1, s_logits.size(-1)),
+                s_logits.view(-1, s_logits.size(-1)).float(),
                 batch["labels"].view(-1),
                 ignore_index=-100, reduction="mean",
             )
