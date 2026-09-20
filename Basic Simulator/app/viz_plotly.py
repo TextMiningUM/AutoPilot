@@ -150,14 +150,20 @@ def animated_trajectory_figure(trajectory: list[dict], mission: Mission,
                                y_range: tuple[float, float] | None = None,
                                frame_times: list[float] | None = None,
                                collision: dict | None = None,
-                               frame_duration_ms: int = 400) -> go.Figure:
+                               frame_duration_ms: int = 400,
+                               metrics_by_time: dict[float, str] | None = None,
+                               decision_by_time: dict[float, str] | None = None) -> go.Figure:
     """Same visuals as trajectory_figure(), but as ONE figure with native Plotly go.Frame
     animation (Play/Pause button + slider) instead of many separate st.plotly_chart() calls.
     Streamlit requires a unique `key` per plotly_chart() call within a single script run, so
     looping placeholder.plotly_chart() to animate forces a full component remount every frame
     -- that remount is what caused the flicker/blank-screen-until-the-end bug. Native frames
     animate entirely client-side (zero Streamlit round-trips), so there's nothing to remount.
-    """
+    `metrics_by_time`/`decision_by_time` (keyed by exact frame time) render as extra in-plot
+    annotation boxes per frame -- since the native slider/Play button never talks back to
+    Streamlit, this is the only way to keep the goal-bearing/CPA/decision text in sync with
+    whatever frame the user is currently looking at (a server-side panel has no way to know
+    which frame the client-side animation is on)."""
     data: dict[str, list[tuple[float, float, float, float, float]]] = defaultdict(list)
     for row in trajectory:
         data[row["vehicle"]].append((row["time"], row["x"], row["y"], row["heading"], row["speed"]))
@@ -222,6 +228,30 @@ def animated_trajectory_figure(trajectory: list[dict], mission: Mission,
             bgcolor="#d32f2f", bordercolor="#7a0000", borderwidth=1, borderpad=6,
         )
 
+    def _metrics_annotation(text):
+        return dict(
+            text=text, x=0.99, y=0.99, xref="paper", yref="paper",
+            xanchor="right", yanchor="top", showarrow=False, align="left",
+            font=dict(size=12, color="#0b3d63"),
+            bgcolor="rgba(255,255,255,0.85)", bordercolor="#0b3d63", borderwidth=1, borderpad=6,
+        )
+
+    def _decision_annotation(text):
+        return dict(
+            text=text, x=0.99, y=0.78, xref="paper", yref="paper",
+            xanchor="right", yanchor="top", showarrow=False, align="left",
+            font=dict(size=12, color="#5a3d00"),
+            bgcolor="rgba(255,247,224,0.9)", bordercolor="#a67c00", borderwidth=1, borderpad=6,
+        )
+
+    def _extra_annotations(t):
+        anns = []
+        if metrics_by_time and t in metrics_by_time:
+            anns.append(_metrics_annotation(metrics_by_time[t]))
+        if decision_by_time and t in decision_by_time:
+            anns.append(_decision_annotation(decision_by_time[t]))
+        return anns
+
     frames = []
     for t in frame_times:
         frame_data = []
@@ -231,7 +261,7 @@ def animated_trajectory_figure(trajectory: list[dict], mission: Mission,
                 x=[lx], y=[ly], marker=dict(size=_arrow_size(lspd), angle=lhdg),
                 hovertext=[f"{name}: heading {lhdg:.0f}\u00b0, speed {lspd:.2f} m/s"],
             ))
-        anns = [_time_annotation(t)]
+        anns = [_time_annotation(t)] + _extra_annotations(t)
         if collision is not None and t >= collision["time"]:
             anns.append(_collision_annotation())
         frames.append(go.Frame(name=f"{t:.0f}", data=frame_data, traces=marker_idx,
@@ -247,7 +277,7 @@ def animated_trajectory_figure(trajectory: list[dict], mission: Mission,
         yaxis["range"] = list(y_range)
         yaxis["autorange"] = False
 
-    init_annotations = [_time_annotation(t0)]
+    init_annotations = [_time_annotation(t0)] + _extra_annotations(t0)
     if collision is not None and t0 >= collision["time"]:
         init_annotations.append(_collision_annotation())
 
