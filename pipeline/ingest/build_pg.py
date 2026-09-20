@@ -63,13 +63,30 @@ MAX_SOURCES = 5
 _VESSEL_RE = re.compile(
     r"\b(?:MV|MY|SV|SS|FV|MS|USS)\s+(?:[A-Z][a-z']+|[A-Z']{2,})(?:[ -](?:[A-Z][a-z']+|[A-Z']{2,})){0,3}(?:'s)?")
 _ALLCAPS_NAME_RE = re.compile(r"\b[A-Z][A-Z']{3,25}\b(?:,\s*\b[A-Z][A-Z']{3,25}\b)+")
+# Bare proper names with no ship-type prefix (e.g. "Brenda Prior must keep out of the
+# way...") slipped through both regexes above -- these leaked verbatim into other
+# missions' PG guidance text via `constraints`/`warnings` (condition/pitfalls edge
+# attributes), which were never run through normalize_action()'s masking at all (only
+# the `action` step text was). Two consecutive Title-Case words immediately followed by
+# a verb/possessive cue is a much stronger "this is a name" signal than a single
+# capitalized word (which is just as often ordinary sentence-initial capitalization,
+# e.g. "Vessels must...").
+_BARE_NAME_RE = re.compile(
+    r"\b[A-Z][a-z']+(?:\s+[A-Z][a-z']+){1,2}\b"
+    r"(?=\s+(?:must|shall|should|would|could|did|does|will|is|was|were|has|had|'s)\b)")
+_NAME_AS_VESSEL_RE = re.compile(r"\b[A-Z][a-z']{2,20}\b(?=\s+as\s+the\s+\w[\w -]*\s+vessel\b)")
+
+
+def _mask_vessel_names(text: str) -> str:
+    a = _VESSEL_RE.sub("the other vessel", text)
+    a = _ALLCAPS_NAME_RE.sub("the other vessel", a)
+    a = _BARE_NAME_RE.sub("the other vessel", a)
+    a = _NAME_AS_VESSEL_RE.sub("the other vessel", a)
+    return re.sub(r"\s+", " ", a).strip()
 
 
 def normalize_action(action: str) -> str:
-    a = _VESSEL_RE.sub("the other vessel", action)
-    a = _ALLCAPS_NAME_RE.sub("the other vessel", a)
-    a = re.sub(r"\s+", " ", a).strip()
-    return _detense(a)
+    return _detense(_mask_vessel_names(action))
 
 
 # conversation traces log steps in past tense ("Initiated a call"), reasoning
@@ -176,8 +193,8 @@ def collect_steps(trace_files: list[Path]) -> list[dict]:
             out.append({
                 "family": classify_family(t),
                 "steps": steps,
-                "constraints": [c for c in (t.get("constraints") or []) if c],
-                "warnings": [w for w in (t.get("warnings") or []) if w],
+                "constraints": [_mask_vessel_names(c) for c in (t.get("constraints") or []) if c],
+                "warnings": [_mask_vessel_names(w) for w in (t.get("warnings") or []) if w],
                 "source_file": r.get("source_file", tf.name),
             })
             n_used += 1

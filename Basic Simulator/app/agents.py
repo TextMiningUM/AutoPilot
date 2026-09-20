@@ -56,7 +56,7 @@ from pipeline.ingest.pg_guidance import ProceduralGraph, render_guidance
 from pipeline.eval.prep_ablation import format_context
 
 from app.missions import Mission, Vessel
-from app.narrate import narrate
+from app.narrate import contact_line, narrate
 
 MODEL_ID = "Qwen/Qwen3-8B"
 
@@ -244,6 +244,31 @@ def _parse_json_action(text: str) -> dict:
             "reasoning": f"[parse error -- raw model output] {text[:300]}", "_parse_error": True}
 
 
+def _pg_match_query(mission: Mission, own: Vessel) -> str:
+    """Short COLREG-encounter phrase used ONLY to retrieve procedural-graph guidance --
+    never shown to the model in place of the real situation report. render_guidance()'s
+    node/family matching is embedding-similarity based against a graph built from
+    incident-report/Track2 reasoning traces ("crossing situation", "give-way vessel",
+    "Rule 15", ...); narrate()'s situation report is deliberately numeric/geometric
+    (headings, CPA/TCPA) with NO rule/encounter words at all, so as not to leak the
+    answer to the model -- but that same omission also made every PG anchor/family
+    match fail and fall back to one generic default (verified: identical pg_guidance
+    text for all 14 missions before this fix). classify_encounter()/contact_line()
+    already compute the real encounter type + rule(s) per contact for the Evaluation
+    panel; reusing that here (not shown to the model) is exactly the retrieval-query
+    role RAG's own query already plays."""
+    if not mission.targets:
+        return "routine passage, no other traffic, no close-quarters encounter"
+    contacts = [contact_line(own, t) for t in mission.targets]
+    live = [c for c in contacts if not c["quiet"]]
+    if not live:
+        return "routine passage, no close-quarters encounter, maintain course and speed"
+    pick = min(live, key=lambda c: c["cpa_m"])
+    enc = pick["encounter"].replace("_", " ")
+    rules = " and ".join(pick["rules"]) if pick["rules"] else "none"
+    return f"{enc} encounter, applicable {rules}, give-way/stand-on obligations"
+
+
 def build_oow_prompt(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
                      system_prompt: str | None = None,
                      k: int = 6, dense_n: int = 40) -> tuple[list[dict], dict]:
@@ -277,7 +302,7 @@ def build_oow_prompt(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
     if spec["pg"]:
         graph = pg_graphs.get(spec["pg"])
         if graph is not None:
-            pg_text = render_guidance(situation, graph)
+            pg_text = render_guidance(_pg_match_query(mission, own), graph)
 
     user_parts = []
     if spec["cot"]:
@@ -352,12 +377,16 @@ def _generate(tok, mdl, messages: list[dict], max_new_tokens: int = 256,
 
 
 def effective_generation_params(config: str, enable_thinking: bool, max_new_tokens: int) -> tuple[bool, int]:
-    """CoT configs (v2_cot/v3_rag_cot) force enable_thinking=True + a larger token budget
-    inside ask_oow() regardless of what's passed in (see ask_oow's docstring) -- callers
-    that log/display `params` (e.g. run_llm_scenario.py) should call this instead of
-    logging their own raw pre-override values, which previously showed "Thinking: off"
-    even on runs where it was actually forced on."""
-    if _CONFIG_SPECS.get(config, {}).get("cot"):
+    """CoT configs (v2_cot/v3_rag_cot) AND PG configs (v4_pg/v5_pg_incident/v6_pg_scenario)
+    force enable_thinking=True + a larger token budget inside ask_oow() regardless of what's
+    passed in -- PG guidance is a dense, structured procedure block the model needs the same
+    reasoning room to weigh (accept/adapt/ignore) as CoT's own step-by-step instruction; with
+    thinking off it was just being ignored outright (verified: v4/v5/v6_pg decisions were
+    near-identical to v0_base's, same failures). Callers that log/display `params`
+    (e.g. run_llm_scenario.py) should call this instead of logging their own raw pre-override
+    values, which previously showed "Thinking: off" even on runs where it was actually forced on."""
+    spec = _CONFIG_SPECS.get(config, {})
+    if spec.get("cot") or spec.get("pg"):
         return True, max(max_new_tokens, 2048)
     return enable_thinking, max_new_tokens
 
@@ -376,7 +405,7 @@ def ask_oow(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
     # giving your final answer", but the JSON schema's "reasoning" field is capped at 1-2
     # sentences -- with enable_thinking=False (the default, since Qwen3's native <think>
     # channel is otherwise the single biggest latency cost) there was literally nowhere for
-    # that step-by-step reasoning to go. CoT configs therefore always force thinking on
+    # that step-by-step reasoning to go. CoT AND PG configs therefore always force thinking on
     # (ignoring the caller's enable_thinking) and get extra token budget so the reasoning
     # doesn't crowd out the final JSON -- regardless of latency settings elsewhere.
     # NOTE: 512 was NOT enough -- verified on s01-s12 (busy, multi-contact scenarios) that
