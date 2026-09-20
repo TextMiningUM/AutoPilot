@@ -21,7 +21,7 @@ for p in (ROOT, REPO_ROOT):
 import streamlit as st
 import streamlit.components.v1 as components
 
-from app.missions import list_mission_ids, load_mission, list_mission_sets, MISSIONS_DIR
+from app.missions import list_mission_ids, load_mission
 from app.simulation import Simulation, project_scenario, find_collision
 from app.narrate import narrate, contact_line, bearing_and_range, relative_bearing, cpa_tcpa
 from app.viz_plotly import trajectory_figure, trajectory_bounds, animated_trajectory_figure
@@ -139,30 +139,17 @@ if not st.session_state.splash_dismissed:
 # Available after the splash gate above (which imports app.agents and warms its caches
 # on the very first run) -- re-importing here is a cheap sys.modules lookup, not a reload.
 from app.agents import MODEL_CONFIGS, SYSTEM_OOW_AGENT, ask_oow
-from app.llm_runs import list_runs_for_mission, load_run, checkpoint_at_or_before
+from app.llm_runs import list_runs_for_mission, load_run, checkpoint_at_or_before, list_run_sets, BASE_RUNS_DIR
 
 # ── Session state ─────────────────────────────────────────────────────────
-# Missions live in named subfolders ("sets") under Data/missions/ (e.g. "MIssions Data V1")
-# rather than loose in it -- lets multiple mission batches coexist, picked via the sidebar's
-# "Mission set (folder)" selectbox further down. Read here via session_state BEFORE that
-# widget renders (same one-render-lag pattern as dt_slider/speed_level/wide_plot elsewhere
-# in this file), since mission_ids below depends on which folder is currently active.
-_mission_sets = list_mission_sets()
-_default_mission_set = _mission_sets[0] if _mission_sets else None
-mission_set = st.session_state.get("mission_set")
-if mission_set not in _mission_sets:
-    mission_set = _default_mission_set
-missions_dir = (MISSIONS_DIR / mission_set) if mission_set else MISSIONS_DIR
-
-mission_ids = list_mission_ids(missions_dir)
-if "mission_id" not in st.session_state or st.session_state.mission_id not in mission_ids:
-    st.session_state.mission_id = mission_ids[0] if mission_ids else None
-_mission_key = (mission_set, st.session_state.mission_id)
-if "sim" not in st.session_state or st.session_state.get("_loaded_mission_key") != _mission_key:
-    mission = load_mission(st.session_state.mission_id, missions_dir)
+mission_ids = list_mission_ids()
+if "mission_id" not in st.session_state:
+    st.session_state.mission_id = mission_ids[0]
+if "sim" not in st.session_state or st.session_state.get("_loaded_mission_id") != st.session_state.mission_id:
+    mission = load_mission(st.session_state.mission_id)
     st.session_state.sim = Simulation(mission)
     st.session_state.mission = mission
-    st.session_state._loaded_mission_key = _mission_key
+    st.session_state._loaded_mission_id = st.session_state.mission_id
     st.session_state.last_decision = None
     st.session_state.last_debug = None
     st.session_state.llm_run_path = None
@@ -428,24 +415,35 @@ def _render_agent_detail(ph, mission) -> None:
 # "Full run" button below can render live progress directly into `chart` as it steps --
 # st.columns() containers are positional, not order-dependent, so this still renders in
 # the correct (center) column regardless of running before the sidebar in script order.
-# `wide_plot` (toggle lives in the sidebar's Simulation section) swaps the side-by-side
-# columns for a full-width plot + the Agent panel as a collapsible expander below it --
-# read here via session_state BEFORE the toggle widget itself runs (same one-render-lag
-# pattern already used for dt_slider/speed_level elsewhere in this file), so the layout
-# takes effect starting the NEXT rerun after it's flipped.
-_wide_plot = st.session_state.get("wide_plot", False)
-if _wide_plot:
-    plot_col = st.container()
-    side_col = st.expander("\U0001F916 Agent panel", expanded=False)
-else:
-    plot_col, side_col = st.columns([3, 2], gap="medium")
+# The Agent panel always stays beside the plot (never moves below -- two different layout
+# experiences was explicitly rejected) with a fixed gray background so its boundary with the
+# plot is visible; its width cycles through a few presets via the button at its own top,
+# same idea as a resizable panel but without needing a fragile JS drag-handle hack (Streamlit
+# has no native mouse-drag column resize).
+_PANEL_WIDTH_PRESETS = {"Narrow": [4, 1], "Normal": [3, 2], "Wide": [1, 1]}
+_panel_width = st.session_state.get("agent_panel_width", "Normal")
+if _panel_width not in _PANEL_WIDTH_PRESETS:
+    _panel_width = "Normal"
+plot_col, side_col = st.columns(_PANEL_WIDTH_PRESETS[_panel_width], gap="medium")
 with side_col:
+    side_panel = st.container(key="agent_panel")
+st.markdown(
+    "<style>.st-key-agent_panel {background-color: rgba(128, 128, 128, 0.12); "
+    "border-radius: 0.5rem; padding: 0.75rem;}</style>",
+    unsafe_allow_html=True,
+)
+with side_panel:
     # Header + placeholders created early (before the sidebar/plot) -- `agent_static_ph` holds
     # the Model/config/params info (only changes when switching runs), `agent_detail_ph` holds
     # the full situation report/reasoning for whichever moment the "Show details" button (near
     # the plot) was last used to inspect -- see the Play Agent Mission section in plot_col.
-    if not _wide_plot:
-        st.markdown("#### \U0001F916 Agent")
+    hdr_col, width_col = st.columns([4, 1])
+    hdr_col.markdown("#### \U0001F916 Agent")
+    if width_col.button("\u2194\ufe0f", key="cycle_agent_panel_width",
+                        help=f"Panel width: {_panel_width} -- click to cycle"):
+        names = list(_PANEL_WIDTH_PRESETS)
+        st.session_state.agent_panel_width = names[(names.index(_panel_width) + 1) % len(names)]
+        st.rerun()
     agent_static_ph = st.empty()
     agent_detail_ph = st.empty()
 
@@ -483,7 +481,26 @@ with plot_col:
                          speed_s=_speed_s, metrics_by_time=metrics_by_time)
         st.caption("Click **Play** in the chart above (or drag its slider) to move through it.")
     elif view == "Play Agent Mission":
-        available_runs = list_runs_for_mission(mission.id)
+        run_sets = list_run_sets()
+        if run_sets:
+            picked_run_set = st.selectbox(
+                "Run set (folder)", options=run_sets,
+                index=run_sets.index(st.session_state.get("llm_run_set", run_sets[0]))
+                      if st.session_state.get("llm_run_set", run_sets[0]) in run_sets else 0,
+                key="llm_run_set_picker",
+                help="Which Data/missions/ subfolder of precomputed runs to browse -- e.g. an "
+                     "archived sweep batch (\"MIssions Data V1\", \"Mission No Speed Increase\") "
+                     "vs. the live _llm_runs/ folder that new runs are written to by default.",
+            )
+            if picked_run_set != st.session_state.get("llm_run_set"):
+                st.session_state.llm_run_set = picked_run_set
+                st.rerun()
+            runs_dir = BASE_RUNS_DIR / picked_run_set
+        else:
+            picked_run_set = None
+            runs_dir = BASE_RUNS_DIR / "_llm_runs"
+            st.caption("\u26a0\ufe0f No run-log folders found under Data/missions/.")
+        available_runs = list_runs_for_mission(mission.id, runs_dir)
         if not available_runs:
             chart.info(
                 f"No precomputed Agent run found for **{mission.id}**. Live per-step model calls "
@@ -496,7 +513,7 @@ with plot_col:
                          for i, r in enumerate(available_runs)}
             picked_run_i = st.selectbox(
                 "Precomputed run", options=list(run_labels), format_func=lambda i: run_labels[i],
-                key="llm_run_picked_i",
+                key=f"llm_run_picked_i__{picked_run_set}__{mission.id}",
                 help="Generated by app/run_llm_scenario.py -- asks the agent every N steps "
                      "(stored per-run) and saves the full trajectory + every situation "
                      "report/recommendation, so playback here never calls the model.",
@@ -521,7 +538,7 @@ with plot_col:
             # bidirectional link without a custom component -- see repo memory), so this is a
             # deliberate separate pick instead of trying to mirror the plot automatically.
             # Just records the pick in session_state -- `_render_agent_detail` (called from
-            # side_col, EVERY run) is what actually renders it, so agent_detail_ph never goes
+            # side_panel, EVERY run) is what actually renders it, so agent_detail_ph never goes
             # blank on an unrelated rerun (an st.empty() placeholder shows NOTHING for any run
             # that doesn't write to it -- writing directly here would only survive the ONE
             # rerun triggered by this click).
@@ -556,22 +573,10 @@ with st.sidebar:
     st.divider()
 
     st.header("Mission")
-    if _mission_sets:
-        picked_set = st.selectbox(
-            "Mission set (folder)", options=_mission_sets,
-            index=_mission_sets.index(mission_set) if mission_set in _mission_sets else 0,
-            key="mission_set_picker",
-            help="Folder under Data/missions/ to load mission JSONs from.",
-        )
-        if picked_set != mission_set:
-            st.session_state.mission_set = picked_set
-            st.rerun()
-    else:
-        st.caption("\u26a0\ufe0f No mission-set folders found under Data/missions/.")
     m1, m2 = st.columns(2)
     m1.number_input("Cruise speed (m/s)", min_value=0.0, value=10.0, step=0.5, key="mission_cruise_speed")
     m2.number_input("Minimal CPA (m)", min_value=0.0, value=500.0, step=50.0, key="mission_min_cpa")
-    all_missions = {mid: load_mission(mid, missions_dir) for mid in mission_ids}
+    all_missions = {mid: load_mission(mid) for mid in mission_ids}
     labels = {mid: f"{mid.split('_')[0].upper()} \u2014 {m.name}  ({mid})" for mid, m in all_missions.items()}
     picked = st.selectbox("Scenario", options=mission_ids, format_func=lambda m: labels[m],
                           index=mission_ids.index(st.session_state.mission_id))
@@ -592,9 +597,6 @@ with st.sidebar:
 
     st.divider()
     st.header("Simulation")
-    st.toggle("\u2194\ufe0f Wide plot (Agent panel below, collapsible)", key="wide_plot",
-             help="Moves the Agent panel below the plot instead of beside it, so the plot "
-                  "gets the full width. Takes effect on the next interaction.")
     dt = st.slider("Time step (s)", 1.0, 60.0, 10.0, step=1.0, key="dt_slider")
     sim_mode = st.session_state.get("sim_view_mode", "Manual helm")
     is_preview = sim_mode == "Scenario preview (no avoidance)"
@@ -749,7 +751,7 @@ with st.sidebar:
 # ── Single-page, ergonomic layout: plot centered, agent + evaluation stacked on the right ──
 # (mission caption + the 5-metric row now render at the top of plot_col, above the plot itself)
 
-with side_col:
+with side_panel:
     if sim_mode == "Agent Real-Time":
         # The original live/interactive agent panel -- kept exactly as-is, now scoped to
         # this one mode instead of always showing regardless of which mode was picked.

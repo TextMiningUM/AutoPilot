@@ -1,7 +1,4 @@
-"""Mission loading: Data/missions/<set>/*.json -> in-memory Mission objects. Missions live
-in named subfolders ("sets", e.g. "MIssions Data V1") under MISSIONS_DIR rather than loose
-in MISSIONS_DIR itself, so multiple mission batches can coexist and the app can let the user
-pick which folder to load from (see list_mission_sets())."""
+"""Mission loading: Data/missions/*.json -> in-memory Mission objects."""
 from __future__ import annotations
 import json
 from dataclasses import dataclass, field
@@ -10,10 +7,6 @@ from pathlib import Path
 APP_DIR = Path(__file__).resolve().parent
 ROOT = APP_DIR.parent
 MISSIONS_DIR = ROOT / "Data" / "missions"
-# Folders that hold something other than mission-definition JSONs (precomputed run logs,
-# sweep backups, ...) -- never offered as a selectable mission set even if they contain
-# `.json` files, since load_mission() would fail on their (very different) schema.
-_NON_MISSION_SET_NAMES = {"_llm_runs", "Mission No Speed Increase"}
 
 
 @dataclass
@@ -57,42 +50,7 @@ def _vessel(name: str, d: dict) -> Vessel:
                    heading=float(d["heading"]), speed=float(d["speed"]))
 
 
-def _is_mission_file(path: Path) -> bool:
-    """A mission-definition JSON has these top-level keys -- distinguishes it from a
-    precomputed run log (mission_id/config/trajectory/...) that might live alongside it."""
-    try:
-        d = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    return isinstance(d, dict) and "own_ship" in d and "goal" in d
-
-
-def list_mission_sets(base_dir: Path = MISSIONS_DIR) -> list[str]:
-    """Subfolder names directly under `base_dir` that contain at least one real mission
-    JSON -- these are the selectable "mission sets" in the sidebar's folder picker."""
-    sets = []
-    for p in sorted(base_dir.iterdir()):
-        if not p.is_dir() or p.name in _NON_MISSION_SET_NAMES or p.name.startswith("_"):
-            continue
-        if any(_is_mission_file(f) for f in p.glob("*.json")):
-            sets.append(p.name)
-    return sets
-
-
-def _resolve_missions_dir(missions_dir: Path | None) -> Path:
-    """`None` (the default for every function below) resolves to the first mission SET
-    folder (e.g. "MIssions Data V1") rather than MISSIONS_DIR itself -- mission JSONs no
-    longer live loose in MISSIONS_DIR, so this keeps every caller that doesn't explicitly
-    pass a folder (CLI scripts like run_llm_scenario.py/sweep_llm_params.py/
-    sweep_dashboard.py) working unchanged against whichever set is first alphabetically."""
-    if missions_dir is not None:
-        return missions_dir
-    sets = list_mission_sets()
-    return (MISSIONS_DIR / sets[0]) if sets else MISSIONS_DIR
-
-
-def load_mission(mission_id: str, missions_dir: Path | None = None) -> Mission:
-    missions_dir = _resolve_missions_dir(missions_dir)
+def load_mission(mission_id: str, missions_dir: Path = MISSIONS_DIR) -> Mission:
     path = missions_dir / f"{mission_id}.json"
     d = json.loads(path.read_text(encoding="utf-8"))
     return Mission(
@@ -105,12 +63,10 @@ def load_mission(mission_id: str, missions_dir: Path | None = None) -> Mission:
     )
 
 
-def list_mission_ids(missions_dir: Path | None = None) -> list[str]:
-    missions_dir = _resolve_missions_dir(missions_dir)
+def list_mission_ids(missions_dir: Path = MISSIONS_DIR) -> list[str]:
     return sorted(p.stem for p in missions_dir.glob("*.json"))
 
 
-def load_all_missions(missions_dir: Path | None = None) -> dict[str, Mission]:
-    missions_dir = _resolve_missions_dir(missions_dir)
+def load_all_missions(missions_dir: Path = MISSIONS_DIR) -> dict[str, Mission]:
     return {mid: load_mission(mid, missions_dir) for mid in list_mission_ids(missions_dir)}
 

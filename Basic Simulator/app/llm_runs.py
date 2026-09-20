@@ -18,7 +18,8 @@ from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent
 ROOT = APP_DIR.parent
-RUNS_DIR = ROOT / "Data" / "missions" / "_llm_runs"
+BASE_RUNS_DIR = ROOT / "Data" / "missions"
+RUNS_DIR = BASE_RUNS_DIR / "_llm_runs"
 
 
 def run_log_path(mission_id: str, config: str, tag: str = "default") -> Path:
@@ -31,13 +32,25 @@ def run_log_path(mission_id: str, config: str, tag: str = "default") -> Path:
     return RUNS_DIR / f"{mission_id}__{config}__{tag}.json"
 
 
-def list_runs_for_mission(mission_id: str) -> list[dict]:
+def list_run_sets() -> list[str]:
+    """Subfolder names directly under Data/missions/ that contain at least one precomputed
+    run-log JSON ("{mission_id}__{config}[__{tag}].json") -- selectable in the sidebar's
+    run-folder picker so archived batches (e.g. "Mission No Speed Increase", a legacy sweep
+    kept for comparison) and the live `_llm_runs/` folder can all be browsed for playback."""
+    sets = []
+    for p in sorted(BASE_RUNS_DIR.iterdir()):
+        if p.is_dir() and any(p.glob("*__*.json")):
+            sets.append(p.name)
+    return sets
+
+
+def list_runs_for_mission(mission_id: str, runs_dir: Path = RUNS_DIR) -> list[dict]:
     """Returns [{"config","tag","path","generated_at","outcome"}] for every precomputed
     run available for this mission, newest first. Corrupt/unreadable files are skipped."""
-    if not RUNS_DIR.exists():
+    if not runs_dir.exists():
         return []
     out = []
-    for p in RUNS_DIR.glob(f"{mission_id}__*.json"):
+    for p in runs_dir.glob(f"{mission_id}__*.json"):
         try:
             log = json.loads(p.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
