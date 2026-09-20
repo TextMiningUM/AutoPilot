@@ -22,8 +22,8 @@ import streamlit.components.v1 as components
 
 from app.missions import list_mission_ids, load_mission
 from app.simulation import Simulation, project_scenario, find_collision
-from app.narrate import narrate, contact_line
-from app.viz_plotly import trajectory_figure, trajectory_bounds
+from app.narrate import narrate, contact_line, bearing_and_range, relative_bearing, cpa_tcpa
+from app.viz_plotly import trajectory_figure, trajectory_bounds, animated_trajectory_figure
 from app.evaluation import score_trajectory
 
 st.set_page_config(page_title="OOW COLREG Simulator", page_icon="\U0001F9ED", layout="wide")
@@ -49,9 +49,16 @@ div[data-testid="stMetric"] {
     background: rgba(20,108,148,0.08); border-radius: 10px; padding: 0.6rem 0.8rem;
     border: 1px solid rgba(20,108,148,0.25);
 }
+div[data-testid="stMetric"] [data-testid="stMetricValue"] { font-size: 1.05rem; }
+div[data-testid="stMetric"] [data-testid="stMetricLabel"] { font-size: 0.75rem; }
 .side-panel {
     background: rgba(20,108,148,0.05); border-radius: 12px; padding: 0.8rem 1rem;
     border: 1px solid rgba(20,108,148,0.18); margin-bottom: 0.8rem;
+}
+/* Cap the native `help=` hover tooltips -- they were wide/tall enough to spill over the
+   plot next to the sidebar; keep them small even if some help text is still long. */
+div[data-testid="stTooltipContent"] {
+    max-width: 260px; font-size: 0.8rem; line-height: 1.25rem;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -71,14 +78,31 @@ if not st.session_state.splash_dismissed:
     # Load the retrieval index + Qwen3-8B onto the GPU here (once per server process,
     # cached via st.cache_resource) so later "Ask OOW agent" clicks are as fast as
     # possible instead of paying the load cost on the first real question.
-    from app.agents import preload
-    if not st.session_state.get("agent_ready", False):
+    # NOT automatic anymore -- opt-in via the checkbox below. Rationale: browsing
+    # missions, Scenario preview, and replaying precomputed LLM-driven runs are all pure
+    # JSON/CPU work needing no model at all, but eagerly loading Qwen3-8B here used to grab
+    # the whole 8GB GPU regardless -- fatal if a background sweep/training process is
+    # already using it. Leaving this unchecked lets you browse/replay freely; "Ask OOW
+    # agent" still works either way (it lazily loads the model on first live click if you
+    # skipped preloading here).
+    st.checkbox(
+        "\U0001F9E0 Preload LLM agent now (loads Qwen3-8B onto the GPU -- only needed for "
+        "live 'Ask OOW agent' calls; leave unchecked to just browse missions / replay "
+        "precomputed LLM-driven runs without touching the GPU, e.g. while a background "
+        "sweep is using it)",
+        key="preload_llm",
+    )
+    if st.session_state.get("preload_llm") and not st.session_state.get("agent_ready", False):
+        from app.agents import preload
         with st.status("Loading OOW agent (retrieval index + Qwen3-8B)...", expanded=True) as status:
             preload(status_cb=st.write)
             status.update(label="\u2705 OOW agent ready", state="complete", expanded=False)
         st.session_state.agent_ready = True
-    else:
+    elif st.session_state.get("agent_ready", False):
         st.success("\u2705 OOW agent ready (cached).")
+    else:
+        st.caption("LLM agent not loaded -- GPU free for other processes. \"Ask OOW agent\" "
+                  "will load it on first use if you skip this.")
 
     _, center, _ = st.columns([2, 1, 2])
     with center:
@@ -111,16 +135,62 @@ sim: Simulation = st.session_state.sim
 mission = st.session_state.mission
 
 
-def _next_chart_key(prefix: str = "chart") -> str:
-    """Plotly charts need a unique `key` per st.plotly_chart() call within a script run --
-    _animate_preview()/the Full-run loop call it many times per run (once per animation
-    frame), and without a distinct key each call Streamlit raises
-    StreamlitDuplicateElementId (auto-generated IDs collide when params match). A simple
-    incrementing counter in session_state guarantees uniqueness regardless of how many
-    times any of the render functions below are called in a single run."""
-    n = st.session_state.get("_chart_key_counter", 0) + 1
-    st.session_state["_chart_key_counter"] = n
-    return f"{prefix}_{n}"
+_ACTION_TEXT = {
+    "turn_left": "Turn to \u2b05\ufe0f port",
+    "turn_right": "Turn to \u27a1\ufe0f starboard",
+    "hold_course": "\u2b1c Hold course and speed",
+    "speed_up": "\u2b06\ufe0f Increase speed",
+    "slow_down": "\u2b07\ufe0f Reduce speed",
+    "stop": "\U0001F6D1 Stop (all-stop)",
+}
+
+
+def _describe_decision(decision: dict) -> str:
+    """Human-readable rendering of a decision dict ({action, degrees, rule_applied,
+    reasoning}) for end-user display -- replaces a raw st.json() dump with plain sentences:
+    what the helm order actually is (or that nothing changes), which COLREG rule was cited,
+    and the model's own reasoning."""
+    action = decision.get("action", "hold_course")
+    label = _ACTION_TEXT.get(action, action)
+    if action in ("turn_left", "turn_right") and decision.get("degrees") is not None:
+        label += f" by {float(decision['degrees']):.0f}\u00b0"
+    rule = decision.get("rule_applied") or "none"
+    lines = [f"**Helm order:** {label}", f"**Rule applied:** {rule}"]
+    if decision.get("reasoning"):
+        lines.append(f"**Reasoning:** {decision['reasoning']}")
+    return "\n\n".join(lines)
+
+
+def _describe_params(params: dict) -> str:
+    """Human-readable rendering of a precomputed run's `params` block (decision_interval,
+    dt, max_steps, enable_thinking, max_new_tokens, k, use_rag, ...) instead of raw JSON."""
+    lines = [
+        f"**Decisions:** every {params.get('decision_interval', '?')} step(s), "
+        f"dt={params.get('dt', '?')}s, max {params.get('max_steps', '?')} steps total",
+        f"**Thinking:** {'on' if params.get('enable_thinking') else 'off'}  \u2022  "
+        f"**Max new tokens:** {params.get('max_new_tokens', '?')}",
+    ]
+    if params.get("use_rag"):
+        lines.append(f"**RAG context:** on (k={params.get('k', '?')} chunks)")
+    else:
+        lines.append("**RAG context:** off")
+    lines.append("**System prompt:** " +
+                ("custom (edited)" if params.get("system_prompt_is_custom") else "default"))
+    return "\n\n".join(lines)
+
+
+def _goal_quickfacts(x: float, y: float, heading: float, speed: float,
+                     goal_xy: tuple[float, float]) -> str:
+    """One-line summary of bearing/heading-to-goal + ETA, pulled out and shown prominently
+    ABOVE the full situation report -- these numbers (added so the model can steer back onto
+    a direct course after avoiding a target) were easy to miss buried inside the wall of text."""
+    gx, gy = goal_xy
+    brg, rng = bearing_and_range(x, y, gx, gy)
+    off = relative_bearing(heading, brg)
+    side = "starboard" if off > 0 else "port"
+    eta = f"\u2248{rng / speed:.0f}s" if speed > 0 else "never (stopped)"
+    return (f"\U0001F3AF Goal bearing **{brg:.0f}\u00b0** ({abs(off):.0f}\u00b0 to **{side}** of "
+           f"current heading {heading:.0f}\u00b0) \u2022 {rng:.0f}m away \u2022 ETA {eta}")
 
 
 def _render_plot(trajectory: list[dict], mission, placeholder, title: str,
@@ -148,7 +218,11 @@ def _render_plot(trajectory: list[dict], mission, placeholder, title: str,
         trajectory_figure(render_traj, mission, title=title, x_range=x_range, y_range=y_range,
                           current_time=render_times[-1] if render_times else None,
                           total_time=times[-1] if times else None, collision=collision),
-        use_container_width=True, key=_next_chart_key("render_plot"),
+        # Streamlit requires a unique key per element within a single script run (not just
+        # across reruns) -- the Full-run loop below calls this repeatedly in one run, so the
+        # key must vary per call. len(trajectory) grows every step, which gives uniqueness
+        # "for free" without needing a separate counter.
+        use_container_width=True, key=f"chart_render_plot_{len(trajectory)}",
     )
     if collision is not None:
         st.error(
@@ -158,30 +232,40 @@ def _render_plot(trajectory: list[dict], mission, placeholder, title: str,
 
 
 def _animate_preview(trajectory: list[dict], mission, placeholder, title: str,
-                     speed_s: float = 0.05, max_frames: int = 80) -> None:
-    """One-shot playback from t=0 for the (static, precomputed) Scenario preview -- without
-    this, _render_plot draws the WHOLE trajectory in a single call, which looks like it
-    'jumps straight to the end' since the current-position arrow lands on the final point
-    immediately. Redraws are throttled to `max_frames` total so a long preview doesn't spend
-    most of its time re-rendering Plotly."""
+                     speed_s: float = 0.3, max_frames: int = 80,
+                     checkpoint_times: list[float] | None = None) -> None:
+    """Renders ONE native Plotly frames-animation (Play/Pause button + slider) instead of
+    looping placeholder.plotly_chart() in Python. Streamlit requires a unique `key` per
+    plotly_chart() call within a single script run, so a Python loop forces a full component
+    remount every frame -- that's what caused the flicker/blank-screen-until-the-end bug.
+    A single native-frames figure animates entirely client-side (click Play in the chart).
+    `speed_s` (seconds/frame) comes straight from the sidebar's "Playback speed" slider.
+    `checkpoint_times`, if given (Play LLM Mission), animates through only the actual LLM
+    DECISION moments instead of every raw simulation tick -- a 200-step run only makes a new
+    decision every `decision_interval` (e.g. 10) steps, so animating every single tick showed
+    ~20x more frames than there were actual changes in situation report/LLM decision."""
     if not trajectory:
         placeholder.info("Nothing recorded yet.")
         return
     times = sorted({row["time"] for row in trajectory})
     collision = find_collision(trajectory)
     x_range, y_range = trajectory_bounds(trajectory, mission)
-    render_every = max(1, len(times) // max_frames)
-    for i, t in enumerate(times):
-        if i % render_every != 0 and i != len(times) - 1:
-            continue
-        partial = [row for row in trajectory if row["time"] <= t]
-        show_collision = collision if (collision is not None and t >= collision["time"]) else None
-        placeholder.plotly_chart(
-            trajectory_figure(partial, mission, title=title, x_range=x_range, y_range=y_range,
-                              current_time=t, total_time=times[-1], collision=show_collision),
-            use_container_width=True, key=_next_chart_key("animate_preview"),
-        )
-        time.sleep(speed_s)
+    if checkpoint_times:
+        frame_times = sorted(t for t in checkpoint_times if t in set(times))
+        if not frame_times or frame_times[-1] != times[-1]:
+            frame_times = frame_times + [times[-1]]
+    else:
+        render_every = max(1, len(times) // max_frames)
+        frame_times = [t for i, t in enumerate(times)
+                      if i % render_every == 0 or i == len(times) - 1]
+    placeholder.plotly_chart(
+        animated_trajectory_figure(trajectory, mission, title=title, x_range=x_range, y_range=y_range,
+                                   frame_times=frame_times, collision=collision,
+                                   frame_duration_ms=max(int(speed_s * 1000), 60)),
+        # One mount per Auto-Run click -- a stable key is fine here (unlike a loop).
+        use_container_width=True, key="chart_animate_preview",
+    )
+    st.caption("\u25b6 Click **Play** in the chart (or drag the slider) to animate.")
     if collision is not None:
         st.error(
             f"\U0001F4A5 Collision with **{collision['vehicle']}** at t={collision['time']:.0f}s "
@@ -206,7 +290,8 @@ def _render_preview_frame(trajectory: list[dict], mission, placeholder, title: s
     placeholder.plotly_chart(
         trajectory_figure(partial, mission, title=title, x_range=x_range, y_range=y_range,
                           current_time=t, total_time=times[-1], collision=show_collision),
-        use_container_width=True, key=_next_chart_key("preview_frame"),
+        # Only called once per script run, but keyed by idx anyway for consistency.
+        use_container_width=True, key=f"chart_preview_frame_{idx}",
     )
     if show_collision is not None:
         st.error(
@@ -222,33 +307,104 @@ def _render_preview_frame(trajectory: list[dict], mission, placeholder, title: s
 # the correct (center) column regardless of running before the sidebar in script order.
 plot_col, side_col = st.columns([3, 2], gap="medium")
 with plot_col:
-    st.markdown("#### \U0001F4C8 Plot")
+    st.caption(f"\U0001F4CB **{mission.name}** ({mission.id}) -- full briefing in the sidebar under Mission.")
     view = st.radio(
-        "Mode", options=["Scenario preview (no avoidance)", "Manual helm", "LLM driven"],
+        "Mode", options=["Scenario preview (no avoidance)", "Manual helm",
+                        "Play LLM Mission", "LLM Real-Time"],
         horizontal=True, label_visibility="collapsed", key="sim_view_mode",
-        help="Scenario preview projects the whole mission forward at current heading/speed "
-             "with no steering -- the raw encounter geometry. Manual helm shows the live "
-             "trajectory as you steer it with the sidebar's Port/Starboard/Speed controls. "
-             "LLM driven also shows the live trajectory, but 'Full run' (sidebar) drives it "
-             "by repeatedly asking the OOW agent instead of you steering manually.",
+        help="Preview: no-avoidance path. Manual helm: steer it live. Play LLM Mission: "
+             "replay a precomputed run. LLM Real-Time: live agent calls.",
     )
-    chart = st.empty()
     _dt_now = st.session_state.get("dt_slider", 10.0)
+
+    # Resolve the state behind the metrics row below from whatever is ACTUALLY on screen for
+    # the current mode -- Scenario preview/Play LLM Mission scrub through a precomputed
+    # trajectory that has nothing to do with the live `sim` object (which stays frozen at
+    # mission start in those two modes, since they never call sim.step()); reading `sim.*`
+    # unconditionally here previously made the metrics look frozen/dead while scrubbing.
+    preview_traj = run_log = run_traj = None
+    metrics_row = None  # (t, x, y, heading, speed)
     if view == "Scenario preview (no avoidance)":
         preview_traj = project_scenario(mission, dt=_dt_now)
+        _times = sorted({r["time"] for r in preview_traj})
+        if _times:
+            _idx = max(0, min(st.session_state.get("preview_frame_idx", 0), len(_times) - 1))
+            _row = next(r for r in preview_traj
+                       if r["time"] == _times[_idx] and r["vehicle"] == "own_ship")
+            metrics_row = (_times[_idx], _row["x"], _row["y"], _row["heading"], _row["speed"])
+    elif view == "Play LLM Mission":
+        _run_path = st.session_state.get("llm_run_path")
+        if _run_path:
+            run_log = load_run(_run_path)
+            run_traj = run_log["trajectory"]
+            _times = sorted({r["time"] for r in run_traj})
+            if _times:
+                _idx = max(0, min(st.session_state.get("llm_run_frame_idx", 0), len(_times) - 1))
+                _row = next(r for r in run_traj
+                           if r["time"] == _times[_idx] and r["vehicle"] == "own_ship")
+                metrics_row = (_times[_idx], _row["x"], _row["y"], _row["heading"], _row["speed"])
+    else:
+        metrics_row = (sim.t, sim.own.x, sim.own.y, sim.own.heading, sim.own.speed)
+
+    # Resolve target snapshots (name/x/y/heading/speed) at the SAME resolved time as
+    # metrics_row, for the CPA/TCPA boxes below -- same live-vs-precomputed split as above.
+    targets_now: list[dict] = []
+    if view == "Scenario preview (no avoidance)" and preview_traj and metrics_row:
+        targets_now = [r for r in preview_traj
+                       if r["time"] == metrics_row[0] and r["vehicle"] != "own_ship"]
+    elif view == "Play LLM Mission" and run_traj and metrics_row:
+        targets_now = [r for r in run_traj
+                       if r["time"] == metrics_row[0] and r["vehicle"] != "own_ship"]
+    elif metrics_row:
+        targets_now = [{"vehicle": v.name, "x": v.x, "y": v.y, "heading": v.heading, "speed": v.speed}
+                       for v in sim.targets]
+
+    b1, b2, b3, b4 = st.columns(4)
+    if metrics_row:
+        _t, _x, _y, _hdg, _spd = metrics_row
+        _goal_brg, _goal_rng = bearing_and_range(_x, _y, mission.goal[0], mission.goal[1])
+        b1.metric("Goal bearing / dist", f"{_goal_brg:.0f}\u00b0 / {_goal_rng:.0f}m")
+        b2.metric("Our heading / speed", f"{_hdg:.0f}\u00b0 / {_spd:.2f} m/s")
+        if targets_now:
+            cpas, tcpas = [], []
+            for tgt in targets_now:
+                cpa_m, tcpa_s = cpa_tcpa(_x, _y, _hdg, _spd, tgt["x"], tgt["y"],
+                                        tgt["heading"], tgt["speed"])
+                name = tgt.get("vehicle", "?")
+                cpas.append(f"{name}: {cpa_m:.0f}m")
+                tcpas.append(f"{name}: {tcpa_s:.0f}s")
+            b3.metric("CPA", " \u2022 ".join(cpas))
+            b4.metric("TCPA", " \u2022 ".join(tcpas))
+        else:
+            b3.metric("CPA", "no contacts")
+            b4.metric("TCPA", "no contacts")
+    else:
+        for _b in (b1, b2, b3, b4):
+            _b.metric("\u2014", "n/a")
+
+    chart = st.empty()
+    st.session_state.setdefault("_animated_active_mode", None)
+    if view == "Scenario preview (no avoidance)":
         st.session_state.setdefault("preview_frame_idx", 0)
-        _render_preview_frame(preview_traj, mission, chart,
-                              f"{mission.name} -- scenario preview (no avoidance)",
-                              st.session_state.preview_frame_idx)
-        n_preview_frames = len(sorted({r["time"] for r in preview_traj}))
-        st.caption(f"Frame {min(st.session_state.preview_frame_idx, n_preview_frames - 1) + 1}/{n_preview_frames} "
-                  "-- use the sidebar's Step (advance one frame) or Full run (play once) to move through it.")
-    elif view == "LLM driven":
+        if st.session_state._animated_active_mode != view:
+            _render_preview_frame(preview_traj, mission, chart,
+                                  f"{mission.name} -- scenario preview (no avoidance)",
+                                  st.session_state.preview_frame_idx)
+            n_preview_frames = len(sorted({r["time"] for r in preview_traj}))
+            st.caption(f"Frame {min(st.session_state.preview_frame_idx, n_preview_frames - 1) + 1}/{n_preview_frames} "
+                      "-- use the sidebar's Step (advance one frame) or Auto Run (play once) to move through it.")
+        else:
+            _animate_preview(preview_traj, mission, chart,
+                             f"{mission.name} -- scenario preview (no avoidance)",
+                             speed_s=st.session_state.get("_animated_speed_s", 0.3),
+                             checkpoint_times=st.session_state.get("_animated_checkpoint_times"))
+            st.caption("Click **Play** in the chart above (or drag its slider) to watch it -- use Step/Reset to go back to frame-by-frame.")
+    elif view == "Play LLM Mission":
         available_runs = list_runs_for_mission(mission.id)
         if not available_runs:
             chart.info(
                 f"No precomputed LLM run found for **{mission.id}**. Live per-step model calls "
-                "were too slow to play interactively, so LLM driven mode only plays back runs "
+                "were too slow to play interactively, so this mode only plays back runs "
                 "computed upfront. Generate one (outside Streamlit):\n\n"
                 f"`python -m app.run_llm_scenario --missions {mission.id} --configs v3_rag_cot`"
             )
@@ -260,30 +416,34 @@ with plot_col:
                 key="llm_run_picked_i",
                 help="Generated by app/run_llm_scenario.py -- asks the agent every N steps "
                      "(stored per-run) and saves the full trajectory + every situation "
-                     "report/recommendation, so playback here never calls the model.",
+                     "report/recommendation, so playback here never calls the model. See the "
+                     "Agent panel for the model/params/situation-report/decision at this frame.",
             )
             picked_run_path = str(available_runs[picked_run_i]["path"])
             if st.session_state.get("llm_run_path") != picked_run_path:
                 st.session_state.llm_run_path = picked_run_path
                 st.session_state.llm_run_frame_idx = 0
+                st.session_state._animated_active_mode = None
             run_log = load_run(picked_run_path)
             run_traj = run_log["trajectory"]
             run_times = sorted({r["time"] for r in run_traj})
             st.session_state.setdefault("llm_run_frame_idx", 0)
-            clamped_idx = _render_preview_frame(
-                run_traj, mission, chart,
-                f"{mission.name} -- LLM run ({run_log['config']}/{run_log['tag']})",
-                st.session_state.llm_run_frame_idx,
-            )
-            st.session_state.llm_run_frame_idx = clamped_idx
-            st.caption(f"Frame {clamped_idx + 1}/{len(run_times)} -- t={run_times[clamped_idx]:.0f}s. "
-                      "Use the sidebar's Step/Run steps/Full run to move through it.")
-            cp = checkpoint_at_or_before(run_log, run_times[clamped_idx])
-            if cp:
-                with st.expander(f"\U0001F9E0 Agent decision at t={cp['time']:.0f}s (step {cp['step']})",
-                                 expanded=True):
-                    st.code(cp.get("situation_report", ""), language=None)
-                    st.json(cp.get("decision", {}), expanded=False)
+            if st.session_state._animated_active_mode != view:
+                clamped_idx = _render_preview_frame(
+                    run_traj, mission, chart,
+                    f"{mission.name} -- LLM run ({run_log['config']}/{run_log['tag']})",
+                    st.session_state.llm_run_frame_idx,
+                )
+                st.session_state.llm_run_frame_idx = clamped_idx
+                st.caption(f"Frame {clamped_idx + 1}/{len(run_times)} -- t={run_times[clamped_idx]:.0f}s. "
+                          "Use the sidebar's Step/Run steps/Full run to move through it. See the "
+                          "Agent panel (right) for what was passed to/decided by the model here.")
+            else:
+                _animate_preview(run_traj, mission, chart,
+                                 f"{mission.name} -- LLM run ({run_log['config']}/{run_log['tag']})",
+                                 speed_s=st.session_state.get("_animated_speed_s", 0.3),
+                                 checkpoint_times=st.session_state.get("_animated_checkpoint_times"))
+                st.caption("Click **Play** in the chart above (or drag its slider) to watch it -- use Step/Reset to go back to frame-by-frame.")
     else:
         _render_plot(sim.trajectory, mission, chart, mission.name,
                     bounds_from=project_scenario(mission, dt=_dt_now))
@@ -306,6 +466,9 @@ with st.sidebar:
         st.session_state.sim = Simulation(mission)
         st.session_state.last_decision = None
         st.session_state.last_debug = None
+        st.session_state.preview_frame_idx = 0
+        st.session_state.llm_run_frame_idx = 0
+        st.session_state._animated_active_mode = None
         st.rerun()
 
     st.divider()
@@ -313,23 +476,33 @@ with st.sidebar:
     dt = st.slider("Time step (s)", 1.0, 60.0, 10.0, step=1.0, key="dt_slider")
     sim_mode = st.session_state.get("sim_view_mode", "Manual helm")
     is_preview = sim_mode == "Scenario preview (no avoidance)"
-    is_llm_playback = sim_mode == "LLM driven" and st.session_state.get("llm_run_path")
+    is_llm_playback = sim_mode == "Play LLM Mission" and st.session_state.get("llm_run_path")
     is_frame_scrub = is_preview or is_llm_playback
     _frame_key = "preview_frame_idx" if is_preview else "llm_run_frame_idx"
 
-    if st.button("\u25B6 Step", use_container_width=True,
-                help="Advances one frame of the loaded run/preview instead of stepping the "
-                     "real simulation." if is_frame_scrub else None):
+    sb_col, sf_col = st.columns(2)
+    if sb_col.button("\u2b05\ufe0f Step back", use_container_width=True, disabled=not is_frame_scrub):
+        st.session_state[_frame_key] = max(0, st.session_state.get(_frame_key, 0) - 1)
+        st.session_state._animated_active_mode = None
+        st.rerun()
+    if sf_col.button("\u27a1\ufe0f Step forward", use_container_width=True):
         if is_frame_scrub:
             st.session_state[_frame_key] = st.session_state.get(_frame_key, 0) + 1
+            st.session_state._animated_active_mode = None
         else:
             sim.step(dt)
         st.rerun()
-    rs_col1, rs_col2 = st.columns([1, 2])
-    n_auto = rs_col1.number_input("Steps", 1, 100, 10, step=1)
-    if rs_col2.button("\u25B6\u25B6\u25B6 Run steps", use_container_width=True):
+
+    rs_col1, rs_col2, rs_col3 = st.columns(3)
+    n_auto = rs_col2.number_input("Steps", 1, 100, 10, step=1, label_visibility="collapsed")
+    if rs_col1.button("\u23ea Steps", use_container_width=True, disabled=not is_frame_scrub):
+        st.session_state[_frame_key] = max(0, st.session_state.get(_frame_key, 0) - int(n_auto))
+        st.session_state._animated_active_mode = None
+        st.rerun()
+    if rs_col3.button("Steps \u23e9", use_container_width=True):
         if is_frame_scrub:
             st.session_state[_frame_key] = st.session_state.get(_frame_key, 0) + int(n_auto)
+            st.session_state._animated_active_mode = None
         else:
             for _ in range(int(n_auto)):
                 if sim.reached_goal():
@@ -337,15 +510,13 @@ with st.sidebar:
                 sim.step(dt)
         st.rerun()
 
-    if st.button("\U0001F680 Full run", use_container_width=True,
-                help="Scenario preview / LLM driven: plays the loaded (precomputed) "
-                     "trajectory through once, start to finish -- no model calls, since "
-                     "LLM driven only plays back runs computed upfront (see app/"
-                     "run_llm_scenario.py). Manual helm: dead-reckons to completion (goal "
-                     "reached, collision, or a step cap), animating the plot live as it goes."):
+    speed_level = st.slider("Playback speed", 1, 10, 6, disabled=not is_frame_scrub)
+    playback_ms = int(1500 - (speed_level - 1) * (1500 - 60) / 9)  # 1=slowest (1500ms), 10=fastest (60ms)
+    if st.button("\U0001F680 Auto Run", use_container_width=True):
         if is_frame_scrub:
             # Runs exactly once, only on this click -- not on every unrelated rerun, which is
             # what made the preview feel like it "kept on playing" before this fix.
+            _checkpoint_times = None
             if is_preview:
                 frame_traj = project_scenario(mission, dt=dt)
                 frame_title = f"{mission.name} -- scenario preview (no avoidance)"
@@ -353,9 +524,13 @@ with st.sidebar:
                 frame_log = load_run(st.session_state.llm_run_path)
                 frame_traj = frame_log["trajectory"]
                 frame_title = f"{mission.name} -- LLM run ({frame_log['config']}/{frame_log['tag']})"
-            _animate_preview(frame_traj, mission, chart, frame_title)
-            st.session_state[_frame_key] = len(sorted({r["time"] for r in frame_traj})) - 1
-        elif sim_mode == "LLM driven":
+                _checkpoint_times = [cp["time"] for cp in frame_log.get("checkpoints", [])]
+            _animate_preview(frame_traj, mission, chart, frame_title,
+                             speed_s=playback_ms / 1000, checkpoint_times=_checkpoint_times)
+            st.session_state._animated_active_mode = sim_mode
+            st.session_state._animated_speed_s = playback_ms / 1000
+            st.session_state._animated_checkpoint_times = _checkpoint_times
+        elif sim_mode == "Play LLM Mission":
             st.warning("No precomputed LLM run loaded for this mission -- pick one above the "
                       "plot, or generate one via app/run_llm_scenario.py (see its docstring).")
         else:
@@ -392,17 +567,17 @@ with st.sidebar:
     # Arrow-key / D-pad layout: Speed up on top, Port/Stop/Starboard in the middle row,
     # Slow down on the bottom -- matches the physical arrow-key mental model requested.
     _, up_col, _ = st.columns(3)
-    if up_col.button("\u2B06\uFE0F", use_container_width=True, help="Speed up + step"):
+    if up_col.button("\u2B06\uFE0F", use_container_width=True):
         sim.speed_up(); sim.step(dt); st.rerun()
     left_col, mid_col, right_col = st.columns(3)
-    if left_col.button("\u2B05\uFE0F", use_container_width=True, help="Port + step"):
+    if left_col.button("\u2B05\uFE0F", use_container_width=True):
         sim.turn_left(degrees); sim.step(dt); st.rerun()
-    if mid_col.button("\u23F9\uFE0F", use_container_width=True, help="Stop + step"):
+    if mid_col.button("\u23F9\uFE0F", use_container_width=True):
         sim.stop_vessel(); sim.step(dt); st.rerun()
-    if right_col.button("\u27A1\uFE0F", use_container_width=True, help="Starboard + step"):
+    if right_col.button("\u27A1\uFE0F", use_container_width=True):
         sim.turn_right(degrees); sim.step(dt); st.rerun()
     _, down_col, _ = st.columns(3)
-    if down_col.button("\u2B07\uFE0F", use_container_width=True, help="Slow down + step"):
+    if down_col.button("\u2B07\uFE0F", use_container_width=True):
         sim.slow_down(); sim.step(dt); st.rerun()
 
     # Arrow-key bridge: this iframe's JS reaches into the PARENT document (same-origin,
@@ -467,11 +642,7 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-    if st.button("\U0001F6D1 Shut down & free GPU", use_container_width=True,
-                help="Unloads the model + retrieval index and terminates this server process "
-                     "so the GPU is fully released -- closing the browser tab alone does NOT "
-                     "do this, the Streamlit process keeps running (and keeps the VRAM) until "
-                     "killed."):
+    if st.button("\U0001F6D1 Shut down & free GPU", use_container_width=True):
         from app.agents import unload
         with st.spinner("Freeing GPU memory and shutting down..."):
             unload()
@@ -479,102 +650,138 @@ with st.sidebar:
         os._exit(0)
 
 # ── Single-page, ergonomic layout: plot centered, agent + evaluation stacked on the right ──
-st.caption(f"\U0001F4CB **{mission.name}** ({mission.id}) -- full briefing in the sidebar under Mission.")
-
-m1, m2, m3, m4, m5 = st.columns(5)
-m1.metric("Time elapsed", f"{sim.t:.0f} s")
-m2.metric("Heading", f"{sim.own.heading:.1f}\u00b0")
-m3.metric("Speed", f"{sim.own.speed:.2f} m/s")
-cpa_now = sim.min_cpa_now()
-m4.metric("Closest range now", "n/a" if cpa_now == float("inf") else f"{cpa_now:.0f} m")
-m5.metric("Reached goal?", "Yes" if sim.reached_goal() else "No")
+# (mission caption + the 5-metric row now render at the top of plot_col, above the plot itself)
 
 with side_col:
     st.markdown('<div class="side-panel">', unsafe_allow_html=True)
     st.markdown("#### \U0001F916 Agent")
-    with st.expander("Situation report", expanded=False):
-        st.code(narrate(mission, sim.own), language=None)
 
-    model_config = st.selectbox(
-        "Model / prompt config", options=list(MODEL_CONFIGS),
-        format_func=lambda k: MODEL_CONFIGS[k],
-        index=list(MODEL_CONFIGS).index("v3_rag_cot"), key="model_config_select",
-        help="Same 8 configs as the notebook's \u00a711 prompt ablation study: a bare-Qwen "
-             "baseline plus v0_base..v6_pg_scenario.",
-    )
+    if sim_mode == "LLM Real-Time":
+        # The original live/interactive agent panel -- kept exactly as-is, now scoped to
+        # this one mode instead of always showing regardless of which mode was picked.
+        with st.expander("Situation report", expanded=False):
+            st.caption(_goal_quickfacts(sim.own.x, sim.own.y, sim.own.heading, sim.own.speed,
+                                       mission.goal))
+            st.code(narrate(mission, sim.own), language=None, wrap_lines=True)
 
-    gc1, gc2 = st.columns(2)
-    enable_thinking = gc1.toggle(
-        "\U0001F9E0 Thinking", value=False, key="thinking_toggle",
-        help="Qwen3's native hidden <think>...</think> reasoning channel. Off by default -- "
-             "it's the single biggest latency cost and isn't needed for a JSON-only answer. "
-             "Turn on to see/allow visible step-by-step reasoning (slower).",
-    )
-    max_new_tokens = gc2.number_input(
-        "Max new tokens", min_value=64, max_value=1024, value=256, step=32, key="max_new_tokens_input",
-        help="Hard cap on generated response length. Higher = slower but more room for "
-             "reasoning text before the JSON (relevant mainly with Thinking on).",
-    )
-    rag_k = st.slider(
-        "RAG chunks (k)", min_value=1, max_value=6, value=4, key="rag_k_slider",
-        help="Only affects v1_rag/v3_rag_cot. Each retrieved COLREG excerpt adds ~500 tokens "
-             "to the PROMPT (not the response) -- this is why those two configs are slower "
-             "than bare_qwen/v0_base even with generation length unchanged. Lower = faster "
-             "prefill, less context; 6 is the ablation study's default.",
-    )
-    use_rag = st.toggle(
-        "\U0001F4DA Use RAG context", value=True, key="use_rag_toggle",
-        help="Only affects v1_rag/v3_rag_cot. Off forces k=0 (no retrieved excerpts injected) "
-             "-- use this for a quick apples-to-apples speed comparison against bare_qwen/v0_base.",
-    )
-    effective_k = int(rag_k) if use_rag else 0
+        model_config = st.selectbox(
+            "Model / prompt config", options=list(MODEL_CONFIGS),
+            format_func=lambda k: MODEL_CONFIGS[k],
+            index=list(MODEL_CONFIGS).index("v3_rag_cot"), key="model_config_select",
+            help="Same 8 configs as the notebook's \u00a711 prompt ablation study: a bare-Qwen "
+                 "baseline plus v0_base..v6_pg_scenario.",
+        )
 
-    if model_config in ("v1_rag", "v3_rag_cot"):
-        from app.agents import rag_context_preview
-        preview = rag_context_preview(mission, sim.own, k=effective_k)
-        if preview["chars"]:
-            st.caption(
-                f"\U0001F4CF Context preview: ~{preview['chars']:,} chars "
-                f"(~{preview['chars'] // 4:,} tokens est.) from {preview['chunks']} chunk(s)"
-            )
+        gc1, gc2 = st.columns(2)
+        enable_thinking = gc1.toggle(
+            "\U0001F9E0 Thinking", value=False, key="thinking_toggle",
+            help="Qwen3's native hidden <think>...</think> reasoning channel. Off by default -- "
+                 "it's the single biggest latency cost and isn't needed for a JSON-only answer. "
+                 "Turn on to see/allow visible step-by-step reasoning (slower).",
+        )
+        max_new_tokens = gc2.number_input(
+            "Max new tokens", min_value=64, max_value=1024, value=256, step=32, key="max_new_tokens_input",
+            help="Hard cap on generated response length. Higher = slower but more room for "
+                 "reasoning text before the JSON (relevant mainly with Thinking on).",
+        )
+        rag_k = st.slider(
+            "RAG chunks (k)", min_value=1, max_value=6, value=4, key="rag_k_slider",
+            help="Only affects v1_rag/v3_rag_cot. Each retrieved COLREG excerpt adds ~500 tokens "
+                 "to the PROMPT (not the response) -- this is why those two configs are slower "
+                 "than bare_qwen/v0_base even with generation length unchanged. Lower = faster "
+                 "prefill, less context; 6 is the ablation study's default.",
+        )
+        use_rag = st.toggle(
+            "\U0001F4DA Use RAG context", value=True, key="use_rag_toggle",
+            help="Only affects v1_rag/v3_rag_cot. Off forces k=0 (no retrieved excerpts injected) "
+                 "-- use this for a quick apples-to-apples speed comparison against bare_qwen/v0_base.",
+        )
+        effective_k = int(rag_k) if use_rag else 0
+
+        if model_config in ("v1_rag", "v3_rag_cot"):
+            from app.agents import rag_context_preview
+            preview = rag_context_preview(mission, sim.own, k=effective_k)
+            if preview["chars"]:
+                st.caption(
+                    f"\U0001F4CF Context preview: ~{preview['chars']:,} chars "
+                    f"(~{preview['chars'] // 4:,} tokens est.) from {preview['chunks']} chunk(s)"
+                )
+            else:
+                st.caption("\U0001F4CF Context preview: RAG off -- no excerpts will be injected.")
+
+        if st.button("\U0001F9E0 Ask OOW agent", type="primary", use_container_width=True):
+            with st.spinner(f"Retrieving context + generating ({MODEL_CONFIGS[model_config]})..."):
+                decision, debug = ask_oow(mission, sim.own, config=model_config,
+                                          system_prompt=st.session_state.get("custom_system_prompt"),
+                                          max_new_tokens=int(max_new_tokens), enable_thinking=enable_thinking,
+                                          k=effective_k)
+            st.session_state.last_decision = decision
+            st.session_state.last_debug = debug
+
+        decision = st.session_state.last_decision
+        debug = st.session_state.last_debug
+        if decision:
+            st.markdown("**Recommendation**")
+            st.markdown(_describe_decision(decision))
+            b1, b2 = st.columns(2)
+            if b1.button("\u2705 Apply", use_container_width=True):
+                sim.apply_action(decision)
+                sim.step(dt)
+                st.rerun()
+            b2.button("\U0001F6AB Ignore", use_container_width=True)
+
+            with st.expander("Retrieval / grounding detail"):
+                st.write("**Config used:**", MODEL_CONFIGS.get(debug.get("config"), debug.get("config")))
+                st.write("**Prompt sent (user turn):**", f"{debug.get('user_msg_chars', 0):,} chars "
+                        f"(~{debug.get('user_msg_chars', 0) // 4:,} tokens est.)")
+                st.write("**Retrieved COLREG chunk IDs:**", debug.get("retrieved_chunk_ids"))
+                st.write("**Query concepts:**", debug.get("query_concepts"))
+                st.write("**Expanded concepts:**", debug.get("expanded_concepts"))
+                if debug.get("pg_guidance"):
+                    st.markdown("**Procedural-graph guidance**")
+                    st.code(debug["pg_guidance"], language=None, wrap_lines=True)
+                st.markdown("**Raw model output**")
+                st.code(debug.get("raw_response", ""), language=None, wrap_lines=True)
         else:
-            st.caption("\U0001F4CF Context preview: RAG off -- no excerpts will be injected.")
+            st.caption("Click \"Ask OOW agent\" for a recommended manoeuvre.")
 
-    if st.button("\U0001F9E0 Ask OOW agent", type="primary", use_container_width=True):
-        with st.spinner(f"Retrieving context + generating ({MODEL_CONFIGS[model_config]})..."):
-            decision, debug = ask_oow(mission, sim.own, config=model_config,
-                                      system_prompt=st.session_state.get("custom_system_prompt"),
-                                      max_new_tokens=int(max_new_tokens), enable_thinking=enable_thinking,
-                                      k=effective_k)
-        st.session_state.last_decision = decision
-        st.session_state.last_debug = debug
+    elif sim_mode == "Play LLM Mission":
+        # Read-only playback detail for the precomputed run currently loaded/scrubbed in
+        # the plot -- model+params first, then the situation report that was actually PASSED
+        # to the LLM (top half) and what it DECIDED (bottom half), for the nearest checkpoint
+        # at-or-before the frame currently shown.
+        run_path = st.session_state.get("llm_run_path")
+        if not run_path:
+            st.caption("Pick a precomputed run above the plot to see its details here.")
+        else:
+            run_log = load_run(run_path)
+            run_times = sorted({r["time"] for r in run_log["trajectory"]})
+            idx = max(0, min(st.session_state.get("llm_run_frame_idx", 0), len(run_times) - 1))
+            st.write("**Model / config:**",
+                    MODEL_CONFIGS.get(run_log["config"], run_log["config"]))
+            params = run_log.get("params", {})
+            st.markdown(_describe_params(params))
+            with st.popover("\U0001F4DD View system prompt", use_container_width=True):
+                st.code(params.get("system_prompt", ""), language=None, wrap_lines=True)
+            cp = checkpoint_at_or_before(run_log, run_times[idx])
+            if cp:
+                st.caption(f"Nearest decision: step {cp['step']}, t={cp['time']:.0f}s")
+                own_row = next((r for r in run_log["trajectory"]
+                               if r["time"] == cp["time"] and r["vehicle"] == "own_ship"), None)
+                if own_row:
+                    st.caption(_goal_quickfacts(own_row["x"], own_row["y"], own_row["heading"],
+                                                own_row["speed"], mission.goal))
+                st.markdown("**Situation report (passed to the LLM)**")
+                st.code(cp.get("situation_report", ""), language=None, wrap_lines=True)
+                st.markdown("**LLM decision**")
+                st.markdown(_describe_decision(cp.get("decision", {})))
+            else:
+                st.caption("No decision recorded at/before this frame yet.")
 
-    decision = st.session_state.last_decision
-    debug = st.session_state.last_debug
-    if decision:
-        st.markdown("**Recommendation**")
-        st.json(decision, expanded=False)
-        b1, b2 = st.columns(2)
-        if b1.button("\u2705 Apply", use_container_width=True):
-            sim.apply_action(decision)
-            sim.step(dt)
-            st.rerun()
-        b2.button("\U0001F6AB Ignore", use_container_width=True)
-
-        with st.expander("Retrieval / grounding detail"):
-            st.write("**Config used:**", MODEL_CONFIGS.get(debug.get("config"), debug.get("config")))
-            st.write("**Prompt sent (user turn):**", f"{debug.get('user_msg_chars', 0):,} chars "
-                    f"(~{debug.get('user_msg_chars', 0) // 4:,} tokens est.)")
-            st.write("**Retrieved COLREG chunk IDs:**", debug.get("retrieved_chunk_ids"))
-            st.write("**Query concepts:**", debug.get("query_concepts"))
-            st.write("**Expanded concepts:**", debug.get("expanded_concepts"))
-            if debug.get("pg_guidance"):
-                st.markdown("**Procedural-graph guidance**")
-                st.code(debug["pg_guidance"], language=None)
-            st.markdown("**Raw model output**")
-            st.code(debug.get("raw_response", ""), language=None)
     else:
-        st.caption("Click \"Ask OOW agent\" for a recommended manoeuvre.")
+        st.caption("Switch to \"LLM Real-Time\" to consult the agent live for the current "
+                  "situation, or \"Play LLM Mission\" to review a precomputed run's reasoning.")
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 with plot_col:

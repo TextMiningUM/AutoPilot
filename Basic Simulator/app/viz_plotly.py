@@ -143,3 +143,144 @@ def trajectory_figure(trajectory: list[dict], mission: Mission,
     )
     return fig
 
+
+def animated_trajectory_figure(trajectory: list[dict], mission: Mission,
+                               title: str | None = None,
+                               x_range: tuple[float, float] | None = None,
+                               y_range: tuple[float, float] | None = None,
+                               frame_times: list[float] | None = None,
+                               collision: dict | None = None,
+                               frame_duration_ms: int = 400) -> go.Figure:
+    """Same visuals as trajectory_figure(), but as ONE figure with native Plotly go.Frame
+    animation (Play/Pause button + slider) instead of many separate st.plotly_chart() calls.
+    Streamlit requires a unique `key` per plotly_chart() call within a single script run, so
+    looping placeholder.plotly_chart() to animate forces a full component remount every frame
+    -- that remount is what caused the flicker/blank-screen-until-the-end bug. Native frames
+    animate entirely client-side (zero Streamlit round-trips), so there's nothing to remount.
+    """
+    data: dict[str, list[tuple[float, float, float, float, float]]] = defaultdict(list)
+    for row in trajectory:
+        data[row["vehicle"]].append((row["time"], row["x"], row["y"], row["heading"], row["speed"]))
+    for v in data:
+        data[v].sort(key=lambda p: p[0])
+    vehicles = list(data.keys())
+    targets_order = [t.name for t in mission.targets]
+    all_times = sorted({p[0] for series in data.values() for p in series})
+    frame_times = frame_times or all_times
+    total_time = all_times[-1] if all_times else 0.0
+
+    def _pos_at(series, t):
+        pts = [p for p in series if p[0] <= t]
+        return pts[-1] if pts else series[0]
+
+    fig = go.Figure()
+
+    for name in vehicles:
+        xs, ys = [p[1] for p in data[name]], [p[2] for p in data[name]]
+        fig.add_trace(go.Scatter(
+            x=xs, y=ys, mode="lines", name=f"{name} (path)",
+            line=dict(width=1.5, dash="dot", color=_color_for(name, targets_order)),
+            opacity=0.45, showlegend=False,
+        ))
+
+    gx, gy = mission.goal
+    fig.add_trace(go.Scatter(
+        x=[gx], y=[gy], mode="markers+text", text=["goal"], textposition="top center",
+        marker=dict(size=16, symbol="star", color="#ffd700", line=dict(width=1, color="#7a6200")),
+        name="goal",
+    ))
+    n_static = len(vehicles) + 1
+
+    t0 = frame_times[0] if frame_times else (all_times[0] if all_times else 0.0)
+    for name in vehicles:
+        _, lx, ly, lhdg, lspd = _pos_at(data[name], t0)
+        fig.add_trace(go.Scatter(
+            x=[lx], y=[ly], mode="markers+text", text=[name], textposition="top center",
+            marker=dict(size=_arrow_size(lspd), symbol="arrow", angle=lhdg,
+                       color=_color_for(name, targets_order),
+                       line=dict(width=1, color="rgba(0,0,0,0.35)")),
+            name=name,
+            hovertext=[f"{name}: heading {lhdg:.0f}\u00b0, speed {lspd:.2f} m/s"],
+            hoverinfo="text",
+        ))
+    marker_idx = list(range(n_static, n_static + len(vehicles)))
+
+    def _time_annotation(t):
+        return dict(
+            text=f"<b>t = {t:.0f}s / {total_time:.0f}s</b>", x=0.01, y=0.99,
+            xref="paper", yref="paper", xanchor="left", yanchor="top", showarrow=False,
+            font=dict(size=15, color="#0b3d63"),
+            bgcolor="rgba(255,255,255,0.75)", bordercolor="#0b3d63", borderwidth=1, borderpad=4,
+        )
+
+    def _collision_annotation():
+        return dict(
+            text=f"<b>\U0001F4A5 COLLISION with {collision['vehicle']} at t={collision['time']:.0f}s "
+                 f"(range {collision['range_m']:.0f}m)</b>",
+            x=0.5, y=1.06, xref="paper", yref="paper", xanchor="center", yanchor="bottom",
+            showarrow=False, font=dict(size=13, color="#ffffff"),
+            bgcolor="#d32f2f", bordercolor="#7a0000", borderwidth=1, borderpad=6,
+        )
+
+    frames = []
+    for t in frame_times:
+        frame_data = []
+        for name in vehicles:
+            _, lx, ly, lhdg, lspd = _pos_at(data[name], t)
+            frame_data.append(go.Scatter(
+                x=[lx], y=[ly], marker=dict(size=_arrow_size(lspd), angle=lhdg),
+                hovertext=[f"{name}: heading {lhdg:.0f}\u00b0, speed {lspd:.2f} m/s"],
+            ))
+        anns = [_time_annotation(t)]
+        if collision is not None and t >= collision["time"]:
+            anns.append(_collision_annotation())
+        frames.append(go.Frame(name=f"{t:.0f}", data=frame_data, traces=marker_idx,
+                               layout=go.Layout(annotations=anns)))
+    fig.frames = frames
+
+    xaxis: dict = dict(title="x (m)")
+    yaxis: dict = dict(title="y (m)", scaleanchor="x", scaleratio=1)
+    if x_range is not None:
+        xaxis["range"] = list(x_range)
+        xaxis["autorange"] = False
+    if y_range is not None:
+        yaxis["range"] = list(y_range)
+        yaxis["autorange"] = False
+
+    init_annotations = [_time_annotation(t0)]
+    if collision is not None and t0 >= collision["time"]:
+        init_annotations.append(_collision_annotation())
+
+    slider_steps = [
+        dict(method="animate", label=f"{t:.0f}s",
+            args=[[f"{t:.0f}"], dict(mode="immediate", frame=dict(duration=0, redraw=True),
+                                     transition=dict(duration=0))])
+        for t in frame_times
+    ]
+
+    fig.update_layout(
+        title=title or f"{mission.name} ({mission.id})",
+        xaxis=xaxis, yaxis=yaxis,
+        legend=dict(orientation="h", yanchor="top", y=-0.14, xanchor="center", x=0.5),
+        margin=dict(l=10, r=10, t=60, b=60),
+        height=620,
+        annotations=init_annotations,
+        updatemenus=[dict(
+            type="buttons", showactive=False, x=0.0, y=-0.22, xanchor="left", yanchor="top",
+            buttons=[
+                dict(label="\u25b6 Play", method="animate",
+                    args=[None, dict(frame=dict(duration=frame_duration_ms, redraw=True),
+                                     fromcurrent=True, transition=dict(duration=0))]),
+                dict(label="\u23f8 Pause", method="animate",
+                    args=[[None], dict(mode="immediate", frame=dict(duration=0, redraw=False),
+                                       transition=dict(duration=0))]),
+            ],
+        )],
+        sliders=[dict(
+            active=0, x=0.12, y=-0.22, len=0.85, xanchor="left", yanchor="top",
+            currentvalue=dict(prefix="t=", suffix="s", visible=True),
+            steps=slider_steps,
+        )],
+    )
+    return fig
+

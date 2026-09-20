@@ -32,7 +32,7 @@ for p in (ROOT, REPO_ROOT):
 
 from app.missions import list_mission_ids, load_mission
 from app.simulation import Simulation, COLLISION_RADIUS_M
-from app.agents import ask_oow, MODEL_CONFIGS, SYSTEM_OOW_AGENT
+from app.agents import ask_oow, MODEL_CONFIGS, SYSTEM_OOW_AGENT, effective_generation_params
 from app.llm_runs import RUNS_DIR, run_log_path
 
 # Fixed, not a CLI option -- keeps every generated log directly comparable (asking the agent
@@ -42,7 +42,7 @@ DECISION_INTERVAL = 10
 
 def run_one(mission_id: str, config: str, tag: str = "default",
            dt: float = 10.0, max_steps: int = 200, enable_thinking: bool = False,
-           max_new_tokens: int = 256, k: int = 4, use_rag: bool = True,
+           max_new_tokens: int = 256, k: int = 2, use_rag: bool = True,
            system_prompt: str | None = None, force: bool = False) -> Path:
     out_path = run_log_path(mission_id, config, tag)
     if out_path.exists() and not force:
@@ -55,6 +55,11 @@ def run_one(mission_id: str, config: str, tag: str = "default",
     effective_k = k if use_rag else 0
     outcome = "max_steps_reached"
     step = 0
+    # What ask_oow() will ACTUALLY use once inside (it silently forces thinking+budget up
+    # for CoT configs regardless of what's passed) -- log this instead of the raw args so
+    # the dashboard doesn't show "Thinking: off" for a run that in fact had it forced on.
+    effective_thinking, effective_max_new_tokens = effective_generation_params(
+        config, enable_thinking, max_new_tokens)
 
     for step in range(max_steps):
         if sim.reached_goal():
@@ -64,10 +69,16 @@ def run_one(mission_id: str, config: str, tag: str = "default",
             outcome = "collision"
             break
         if step % DECISION_INTERVAL == 0:
+            _t_cp = time.time()
             decision, debug = ask_oow(
                 mission, sim.own, config=config, system_prompt=system_prompt,
                 max_new_tokens=max_new_tokens, enable_thinking=enable_thinking, k=effective_k,
             )
+            # Per-checkpoint progress -- without this, a slow config (e.g. RAG+CoT combined,
+            # which can take 10x longer per call than CoT alone) looked indistinguishable
+            # from a hung process for the whole run's duration.
+            print(f"    checkpoint {len(checkpoints) + 1} (step {step}/{max_steps}): "
+                  f"{decision.get('action')} -- {time.time() - _t_cp:.1f}s", flush=True)
             checkpoints.append({
                 "step": step, "time": sim.t,
                 "situation_report": debug.get("situation"),
@@ -82,7 +93,7 @@ def run_one(mission_id: str, config: str, tag: str = "default",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "params": {
             "decision_interval": DECISION_INTERVAL, "dt": dt, "max_steps": max_steps,
-            "enable_thinking": enable_thinking, "max_new_tokens": max_new_tokens,
+            "enable_thinking": effective_thinking, "max_new_tokens": effective_max_new_tokens,
             "k": k, "use_rag": use_rag,
             "system_prompt": system_prompt or SYSTEM_OOW_AGENT,
             "system_prompt_is_custom": system_prompt is not None,
@@ -112,7 +123,7 @@ def main() -> None:
     ap.add_argument("--enable-thinking", action="store_true",
                     help="enable Qwen3's native hidden reasoning channel (slower)")
     ap.add_argument("--max-new-tokens", type=int, default=256)
-    ap.add_argument("--k", type=int, default=4, help="RAG chunks for v1_rag/v3_rag_cot")
+    ap.add_argument("--k", type=int, default=2, help="RAG chunks for v1_rag/v3_rag_cot")
     ap.add_argument("--no-rag", action="store_true", help="force k=0 regardless of --k")
     ap.add_argument("--system-prompt-file", type=Path, default=None,
                     help="path to a text file with a custom system prompt override "

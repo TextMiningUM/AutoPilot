@@ -7,7 +7,7 @@ logs -- this is "run_llm_scenario for every config, then rank by score", and inh
 resume-safety (skips a (mission,config,tag) combo whose log already exists, unless --force).
 
 COARSE-FIRST DESIGN: by default this sweeps only the 8 model CONFIGS per mission (thinking
-off, k=4 fixed, same defaults as run_llm_scenario.py) -- a full config x thinking x k grid
+off, k=2 fixed, same defaults as run_llm_scenario.py) -- a full config x thinking x k grid
 would be far too many model calls for this hardware. Once you know which config wins per
 mission, run a second, narrower pass to refine just the winning config's other parameters,
 e.g.:
@@ -118,7 +118,7 @@ def main() -> None:
     ap.add_argument("--max-steps", type=int, default=200)
     ap.add_argument("--enable-thinking", action="store_true")
     ap.add_argument("--max-new-tokens", type=int, default=256)
-    ap.add_argument("--k", type=int, default=4)
+    ap.add_argument("--k", type=int, default=2)
     ap.add_argument("--no-rag", action="store_true")
     ap.add_argument("--force", action="store_true", help="recompute even if a log already exists")
     args = ap.parse_args()

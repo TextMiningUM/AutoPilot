@@ -68,12 +68,26 @@ QUIET_CPA_M = 300.0
 def contact_line(own: Vessel, tgt: Vessel) -> dict:
     _, rng = bearing_and_range(own.x, own.y, tgt.x, tgt.y)
     cpa, tcpa = cpa_tcpa(own.x, own.y, own.heading, own.speed, tgt.x, tgt.y, tgt.heading, tgt.speed)
+    # Same dot-product sign check as inside cpa_tcpa(), duplicated here rather than
+    # changing cpa_tcpa()'s 2-tuple return -- streamlit_app.py's metric boxes call
+    # cpa_tcpa() directly and only need the numbers. Tells us whether the RAW (unclamped)
+    # time-to-closest-approach was negative, i.e. the closest point already happened and
+    # the vessels are now diverging, vs still closing -- a bare "TCPA 0s" doesn't
+    # distinguish these, and the model was repeatedly misreading the former as "collision
+    # imminent" even with an explicit system-prompt clarification (see basic_simulator.md).
+    oh, th = math.radians(own.heading), math.radians(tgt.heading)
+    vox, voy = own.speed * math.sin(oh), own.speed * math.cos(oh)
+    vtx, vty = tgt.speed * math.sin(th), tgt.speed * math.cos(th)
+    dx, dy = tgt.x - own.x, tgt.y - own.y
+    dvx, dvy = vtx - vox, vty - voy
+    rel_sq = dvx ** 2 + dvy ** 2
+    closing = rel_sq >= 1e-6 and -(dx * dvx + dy * dvy) > 0
     enc, rules, rel = classify_encounter(own.x, own.y, own.heading, tgt.x, tgt.y, tgt.heading)
     quiet = tcpa > QUIET_TCPA_S or cpa > QUIET_CPA_M
     return {
         "name": tgt.name, "range_m": rng, "rel_bearing_deg": rel,
         "heading": tgt.heading, "speed": tgt.speed,
-        "cpa_m": cpa, "tcpa_s": tcpa, "encounter": enc, "rules": rules, "quiet": quiet,
+        "cpa_m": cpa, "tcpa_s": tcpa, "closing": closing, "encounter": enc, "rules": rules, "quiet": quiet,
     }
 
 
@@ -101,23 +115,41 @@ def narrate(mission: Mission, own: Vessel) -> str:
     lines = [f"Own-ship at ({own.x:.1f}, {own.y:.1f}), heading {own.heading:.1f}, "
              f"speed {own.speed:.2f} m/s (nominal/rated speed for this mission: "
              f"{nominal_speed:.2f} m/s)."]
-    side = "starboard" if off_course > 0 else "port"
     lines.append(f"Mission goal at ({gx:.1f}, {gy:.1f}), {goal_rng:.0f}m away, bearing "
-                f"{goal_brg:.1f} deg ({abs(off_course):.0f} deg to {side} of current heading).")
+                f"{goal_brg:.1f} deg.")
+    # A separate, unmistakable line for the ONE number that drives the goal-correction
+    # decision -- observed the model repeatedly grabbing a CONTACT's rel.bearing instead
+    # (e.g. reasoning "the goal is 82 deg off" while quoting a target's rel.bearing of
+    # -82.4, when the goal line itself said "0 deg to port") when this was buried mid-
+    # sentence in the goal line above ("42 deg to starboard of current heading" reads too
+    # much like a contact's rel.bearing phrasing). This line is ONLY ever about the goal,
+    # never about a contact, and spells out the exact action to copy when off course.
+    if abs(off_course) <= 10:
+        lines.append("GOAL COURSE CHECK: heading is ALREADY on the goal bearing (within "
+                     "10 deg) -- no turn needed for the goal.")
+    else:
+        side = "starboard" if off_course > 0 else "port"
+        turn_action = "turn_right" if off_course > 0 else "turn_left"
+        lines.append(f"GOAL COURSE CHECK: heading is {abs(off_course):.0f} deg off the goal "
+                    f"bearing, to {side} -- to correct, use action \"{turn_action}\" with "
+                    f"degrees={abs(off_course):.0f} (unless a target poses a real collision "
+                    f"risk, which takes precedence).")
     if own.speed > 0:
         eta = goal_rng / own.speed
         lines.append(f"At current speed, ETA to goal \u2248 {eta:.0f}s if heading straight there.")
     else:
         lines.append("At current speed (stopped), the goal will never be reached.")
     if not mission.targets:
-        lines.append("No contacts tracked.")
+        lines.append("No other ships tracked.")
     else:
-        lines.append(f"{len(mission.targets)} contact(s):")
+        n = len(mission.targets)
+        lines.append(f"{n} other ship{'s' if n != 1 else ''}:")
         for tgt in mission.targets:
             c = contact_line(own, tgt)
+            tcpa_note = "" if c["closing"] else " (already past closest point, ranges now increasing)"
             lines.append(
-                f"  - {c['name']}: range {c['range_m']:.0f}m, rel.bearing {c['rel_bearing_deg']:.1f} deg, "
-                f"heading {c['heading']:.1f}, speed {c['speed']:.2f}, CPA {c['cpa_m']:.0f}m, "
-                f"TCPA {c['tcpa_s']:.0f}s"
+                f'  - Ship named "{c["name"]}": range {c["range_m"]:.0f}m, rel.bearing '
+                f"{c['rel_bearing_deg']:.1f} deg, heading {c['heading']:.1f}, speed {c['speed']:.2f} m/s, "
+                f"CPA {c['cpa_m']:.0f}m, TCPA {c['tcpa_s']:.0f}s{tcpa_note}"
             )
     return "\n".join(lines)

@@ -96,25 +96,51 @@ change. Reply with ONLY a JSON object, no other text:
 # prep_ablation.py's build_prompts_track2(). Editable at runtime from the sidebar's
 # "System prompt" popover (streamlit_app.py) -- the override is passed in as build_oow_prompt's
 # `system_prompt` arg and replaces this default for every config EXCEPT bare_qwen.
-SYSTEM_OOW_AGENT = """You are the navigator on a large commercial vessel. You must navigate \
-according to COLREG (the International Regulations for Preventing Collisions at Sea) at all \
-times, avoiding collisions while making safe and efficient progress. Avoiding collisions comes \
-first; once safe, reach the goal via the shortest direct track, with as few manoeuvres as \
-possible and no zigzagging. Ground your reasoning in the provided COLREG excerpts and procedure \
-guidance where given. If no target poses a real risk of collision, recommend holding course -- \
-but if your current speed is below the nominal/rated speed given for this mission, consider \
-speeding up instead of just holding your current pace: reaching the goal sooner (when safe) is \
-part of efficient progress too, not just the shortest path. If you already manoeuvred to avoid a \
-target and no target now poses a risk, do not just keep holding that avoidance heading \
-indefinitely -- steer back toward the goal bearing given in the situation report. What order do \
-you give to the helm? Reply with ONLY a JSON object, no other text:
+SYSTEM_OOW_AGENT = """You are the navigator on a large commercial vessel. Your objective is to \
+get the ship to the mission goal (position/bearing/distance given in the situation report) as \
+directly and efficiently as possible -- that is the task. The one hard constraint on every \
+decision, with no exceptions: never put the ship on a collision course with another vessel. \
+When a real risk of collision exists, COLREG (the International Regulations for Preventing \
+Collisions at Sea) governs which vessel gives way and how -- satisfy that constraint first, \
+then resume progress toward the goal. All positions/bearings/headings given below are in \
+metres and degrees, heading 0=north, clockwise, matching compass bearings -- take this as \
+given, don't re-derive or second-guess it. rel.bearing is signed: positive = target is to \
+starboard (right), negative = to port (left), 0=dead ahead, ~180/-180=dead astern. CPA is the \
+closest distance the contact will EVER come to you at current headings/speeds; TCPA is the \
+seconds until that closest point. TCPA=0 does NOT always mean a collision is imminent -- it \
+also occurs when the vessels are already moving apart (closest point already passed); the \
+situation report says so explicitly when that's the case. Judge real risk from the CPA \
+distance itself, not from TCPA alone. DEFAULT PROCEDURE, apply this every single time: the \
+situation report has a line starting "GOAL COURSE CHECK:" -- use ONLY that line to decide the \
+goal-correction action and degrees, never a contact's rel.bearing (a contact's rel.bearing is \
+about THAT CONTACT, not the goal, even if the numbers look similar). If "GOAL COURSE CHECK" \
+says you're already on the goal bearing, hold_course (for the goal, at least). Otherwise it \
+gives you the exact action ("turn_left"/"turn_right") and degrees to use -- copy those values \
+directly into your answer, don't recompute them and don't substitute a different number from \
+elsewhere in the report. Your track to the goal must look like a smooth curve or a straight \
+line, NEVER a zigzag -- do not answer turn_right and then turn_left (or vice versa) on \
+consecutive decisions just to chase a small residual mismatch; "GOAL COURSE CHECK" already \
+has a 10-degree deadband built in for this. Only override any of this if a target poses a REAL \
+risk of collision, in which case the COLREG-required give-way/stand-on manoeuvre takes \
+precedence instead. Do not just describe the mismatch in your reasoning and then answer \
+hold_course anyway when "GOAL COURSE CHECK" calls for a turn -- the action MUST match what \
+that line says, never hold_course when it names a turn. Ground your reasoning in the provided \
+COLREG excerpts and procedure guidance where given. If you are already on the goal bearing \
+(within about 10 degrees) and your current speed is below the nominal/rated speed given for \
+this mission, speed_up instead: reaching the goal sooner (when safe) is part of efficient \
+progress too. What order do you give to the helm? Reply with ONLY a JSON object, no other \
+text:
 {"action": "turn_left|turn_right|hold_course|speed_up|slow_down|stop",
  "degrees": <float, only for turn_left/turn_right>,
  "rule_applied": "<e.g. Rule 15, or 'none' if no rule applies>",
  "reasoning": "<one or two sentences>"}"""
 
 COT_INSTR = ("Think step by step through the encounter, the applicable COLREG rule(s), and the "
-            "give-way/stand-on obligations BEFORE giving your final answer.")
+            "give-way/stand-on obligations BEFORE giving your final answer. Keep this reasoning "
+            "BRIEF -- 3 to 5 short sentences covering only: the encounter type, the applicable "
+            "rule (if any), and why the chosen action resolves it. Take the given coordinates/ "
+            "bearings/heading convention as fact -- do not re-derive or second-guess basic "
+            "geometry already stated in the situation report.")
 
 
 @st.cache_resource(show_spinner="Loading OOW retrieval index (RAG + Procedural Graphs)...")
@@ -182,16 +208,40 @@ def unload() -> None:
         torch.cuda.empty_cache()
 
 
+def _extract_json_objects(text: str) -> list[str]:
+    """Balanced-brace scan for every top-level {...} object in `text`, in order of
+    appearance -- unlike a single greedy `\\{.*\\}` regex, this doesn't stitch multiple
+    separate objects (and whatever sits between them) into one invalid blob."""
+    objs, depth, start = [], 0, None
+    for i, ch in enumerate(text):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    objs.append(text[start:i + 1])
+                    start = None
+    return objs
+
+
 def _parse_json_action(text: str) -> dict:
     text = re.sub(r"^```(json)?|```$", "", text.strip(), flags=re.MULTILINE).strip()
-    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-    if match:
-        text = match.group(0)
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        return {"action": "hold_course", "rule_applied": "none",
-                "reasoning": f"[parse error -- raw model output] {text[:300]}", "_parse_error": True}
+    # Prefer the LAST complete {...} object that actually parses as an action dict -- Qwen3
+    # sometimes echoes the JSON once before </think> closes and once again after (a
+    # duplicate-answer pattern seen in the sweep logs), which the previous single greedy
+    # first-{-to-last-} match stitched into one invalid blob spanning both copies.
+    for candidate in reversed(_extract_json_objects(text)):
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict) and "action" in parsed:
+            return parsed
+    return {"action": "hold_course", "rule_applied": "none",
+            "reasoning": f"[parse error -- raw model output] {text[:300]}", "_parse_error": True}
 
 
 def build_oow_prompt(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
@@ -275,8 +325,17 @@ def _generate(tok, mdl, messages: list[dict], max_new_tokens: int = 256,
     text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True,
                                    enable_thinking=enable_thinking)
     inp = tok(text, return_tensors="pt", truncation=True, max_length=4096).to(mdl.device)
+    # Stop as soon as the JSON object closes instead of always burning the full
+    # max_new_tokens budget -- the schema always ends with `"reasoning": "...text"}`, so
+    # the literal `"}` tail is a safe, specific stop signal (unlike a bare "}", which could
+    # falsely trigger on a stray brace inside a CoT config's free-form <think> reasoning).
+    # Previously EVERY call ran to max_new_tokens even when the model finished in a
+    # fraction of that, which is most of them (CoT configs get 2048 tokens of headroom
+    # for the rare long <think> block, but the median response is much shorter -- see
+    # basic_simulator.md's raw_len_chars stats).
     out = mdl.generate(**inp, max_new_tokens=max_new_tokens, do_sample=False,
-                       temperature=1.0, top_p=1.0, pad_token_id=tok.eos_token_id)
+                       temperature=1.0, top_p=1.0, pad_token_id=tok.eos_token_id,
+                       stop_strings="\"}", tokenizer=tok)
     result = tok.decode(out[0][inp["input_ids"].shape[1]:], skip_special_tokens=True)
     # Free this call's KV-cache/activation buffers back to the free-VRAM pool immediately
     # instead of letting PyTorch's caching allocator hold them as "reserved". On an 8GB
@@ -290,6 +349,17 @@ def _generate(tok, mdl, messages: list[dict], max_new_tokens: int = 256,
         torch.cuda.empty_cache()
     return result
 
+
+
+def effective_generation_params(config: str, enable_thinking: bool, max_new_tokens: int) -> tuple[bool, int]:
+    """CoT configs (v2_cot/v3_rag_cot) force enable_thinking=True + a larger token budget
+    inside ask_oow() regardless of what's passed in (see ask_oow's docstring) -- callers
+    that log/display `params` (e.g. run_llm_scenario.py) should call this instead of
+    logging their own raw pre-override values, which previously showed "Thinking: off"
+    even on runs where it was actually forced on."""
+    if _CONFIG_SPECS.get(config, {}).get("cot"):
+        return True, max(max_new_tokens, 2048)
+    return enable_thinking, max_new_tokens
 
 
 def ask_oow(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
@@ -313,9 +383,7 @@ def ask_oow(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
     # the <think> block routinely ran past 512 tokens without ever closing, truncating
     # before the JSON and falling back to the hold_course parse-error default every single
     # time (100% collision rate, not a real quality signal). 2048 gives real headroom.
-    if _CONFIG_SPECS.get(config, {}).get("cot"):
-        enable_thinking = True
-        max_new_tokens = max(max_new_tokens, 2048)
+    enable_thinking, max_new_tokens = effective_generation_params(config, enable_thinking, max_new_tokens)
     messages, debug = build_oow_prompt(mission, own, config=config, system_prompt=system_prompt, k=k)
     tok, mdl = _load_qwen()
     raw = _generate(tok, mdl, messages, max_new_tokens=max_new_tokens, enable_thinking=enable_thinking)
