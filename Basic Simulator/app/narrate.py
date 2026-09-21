@@ -44,19 +44,39 @@ def recommended_decision_interval(mission: Mission, dt: float = 10.0) -> int:
     the agent's own responsibility (see SYSTEM_OOW_AGENT), same as reaching the goal, so a
     sparser decision cadence genuinely means fewer chances to react, not just fewer LLM calls
     with a safety net underneath. Callers should still let a user/CLI override this, never treat
-    it as mandatory."""
+    it as mandatory.
+
+    Additionally capped so the mission's own total transit time (start to goal, at own-ship's
+    nominal speed) always gets at least a handful of decision points -- the TCPA-based
+    thresholds above were tuned against the original missions' ~2.5 m/s speed scale, where
+    the WHOLE mission takes 1000s+ regardless of how "urgent" its encounter looked. Imazu's
+    20 m/s missions break that assumption: Imazu01's encounter has min_tcpa=25s (still
+    classified "urgent" -> 10 steps = 100s under the logic above), but the ENTIRE mission
+    is only 50s long -- so the single decision at t=0 was the only one ever made, before
+    both the encounter AND the whole mission had already finished. This cap only binds when
+    a mission's own transit time is short relative to its TCPA-based cadence (i.e. fast,
+    short missions like Imazu); for the original slower/longer missions transit time is
+    already generous relative to their cadence, so this never changes their behaviour."""
     if not mission.targets:
-        return 20
-    min_tcpa = min(
-        cpa_tcpa(mission.own_ship.x, mission.own_ship.y, mission.own_ship.heading, mission.own_ship.speed,
-                t.x, t.y, t.heading, t.speed)[1]
-        for t in mission.targets
-    )
-    if min_tcpa < 250:
-        return 10
-    if min_tcpa < 600:
-        return 15
-    return 20
+        base = 20
+    else:
+        min_tcpa = min(
+            cpa_tcpa(mission.own_ship.x, mission.own_ship.y, mission.own_ship.heading, mission.own_ship.speed,
+                    t.x, t.y, t.heading, t.speed)[1]
+            for t in mission.targets
+        )
+        if min_tcpa < 250:
+            base = 10
+        elif min_tcpa < 600:
+            base = 15
+        else:
+            base = 20
+    own = mission.own_ship
+    gx, gy = mission.goal
+    transit_s = math.hypot(gx - own.x, gy - own.y) / own.speed if own.speed > 0 else float("inf")
+    min_decisions_across_transit = 5
+    transit_cap = max(1, math.floor(transit_s / min_decisions_across_transit / dt))
+    return max(1, min(base, transit_cap))
 
 
 def classify_encounter(own_x: float, own_y: float, own_hdg: float,
