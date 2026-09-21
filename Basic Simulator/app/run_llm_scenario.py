@@ -81,11 +81,18 @@ def run_one(mission_id: str, config: str, tag: str = "default",
 
     _t_run_start = time.time()
     for step in range(max_steps):
+        # Collision check FIRST, and with a `dt`-second look-ahead horizon: two fast-
+        # closing vessels (e.g. a 20 m/s head-on Imazu encounter) can pass by/through each
+        # other entirely within the UPCOMING step, so a same-instant-only check (or one
+        # that runs only after reached_goal() already said no) can silently miss a real
+        # collision -- confirmed on Imazu01/v1_rag, which reached its goal well after
+        # passing straight through a target with the outcome never once recording it. See
+        # Simulation.min_cpa_now()/find_collision()'s docstrings for the confirmed numbers.
+        if sim.min_cpa_now(horizon_s=dt) < COLLISION_RADIUS_M:
+            outcome = "collision"
+            break
         if sim.reached_goal():
             outcome = "reached_goal"
-            break
-        if sim.min_cpa_now() < COLLISION_RADIUS_M:
-            outcome = "collision"
             break
         if step % effective_interval == 0:
             _t_cp = time.time()

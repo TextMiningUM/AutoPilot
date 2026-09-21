@@ -172,30 +172,88 @@ class Simulation:
         gx, gy = self.mission.goal
         return math.hypot(self.own.x - gx, self.own.y - gy) <= radius
 
-    def min_cpa_now(self) -> float:
-        """Closest current range to any target -- for a quick live safety readout."""
+    def min_cpa_now(self, horizon_s: float | None = None) -> float:
+        """Closest current range to any target -- for a quick live safety readout. If
+        `horizon_s` is given, ALSO checks the closest approach over the next `horizon_s`
+        seconds (each vessel's CURRENT heading/speed projected forward, same relative-
+        velocity CPA math as app.narrate.cpa_tcpa) -- a same-instant-only check can miss a
+        fast-closing pair that passes by/through each other entirely within one upcoming
+        simulation step (see find_collision()'s docstring for a confirmed real example:
+        two 20 m/s head-on vessels crossed with an interpolated min range of 11.2m despite
+        being 79m+ apart at both of the surrounding 10s samples)."""
         if not self.targets:
             return float("inf")
-        return min(math.hypot(self.own.x - t.x, self.own.y - t.y) for t in self.targets)
+        now = min(math.hypot(self.own.x - t.x, self.own.y - t.y) for t in self.targets)
+        if horizon_s is None:
+            return now
+        best = now
+        for t in self.targets:
+            cpa, tcpa = cpa_tcpa(self.own.x, self.own.y, self.own.heading, self.own.speed,
+                                 t.x, t.y, t.heading, t.speed)
+            if tcpa <= horizon_s:
+                best = min(best, cpa)
+        return best
+
+
+def _segment_min_range(t0: float, o0: tuple[float, float], tg0: tuple[float, float],
+                       t1: float, o1: tuple[float, float], tg1: tuple[float, float]
+                       ) -> tuple[float, float]:
+    """Closest own-ship/target range WITHIN [t0, t1], assuming each vessel moves in a
+    straight line between its two recorded endpoints (true for this project's kinematics --
+    step() moves every vessel at a constant heading/speed for the whole dt). Returns
+    (min_range_m, time_of_min_range) -- reconstructing velocity from the position delta
+    rather than trusting the recorded heading/speed fields avoids any ambiguity about
+    whether a row's heading/speed reflects the value AT t0 or the (already rate-limited,
+    already-applied) value used to reach t1."""
+    dt = t1 - t0
+    if dt <= 0:
+        return math.hypot(o0[0] - tg0[0], o0[1] - tg0[1]), t0
+    vox, voy = (o1[0] - o0[0]) / dt, (o1[1] - o0[1]) / dt
+    vtx, vty = (tg1[0] - tg0[0]) / dt, (tg1[1] - tg0[1]) / dt
+    dx, dy = tg0[0] - o0[0], tg0[1] - o0[1]
+    dvx, dvy = vtx - vox, vty - voy
+    rel_sq = dvx ** 2 + dvy ** 2
+    if rel_sq < 1e-9:
+        return math.hypot(dx, dy), t0
+    # Standard CPA formula gives t* directly in SECONDS elapsed from t0 (not a [0,1]
+    # fraction of the interval) since dvx/dvy are already true m/s velocities -- clamp to
+    # the segment's own [0, dt] bound, not [0, 1].
+    t_star = max(0.0, min(dt, -(dx * dvx + dy * dvy) / rel_sq))
+    rng = math.hypot(dx + dvx * t_star, dy + dvy * t_star)
+    return rng, t0 + t_star
 
 
 def find_collision(trajectory: list[dict], radius: float = COLLISION_RADIUS_M) -> dict | None:
-    """Scans a recorded trajectory for the first time any target comes within
-    `radius` metres of own_ship. Returns {"time","vehicle","x","y","range_m"} for
-    the earliest such moment, or None if the run never got that close."""
+    """Scans a recorded trajectory for the first time any target comes within `radius`
+    metres of own_ship -- checking not just the recorded sample instants but the CLOSEST
+    APPROACH WITHIN each consecutive pair of samples (see _segment_min_range), since two
+    fast-closing vessels (e.g. a 20 m/s head-on Imazu encounter) can pass each other
+    entirely between two dt=10s samples without either endpoint ever recording a
+    within-radius distance -- confirmed on Imazu01/v1_rag: sampled distances 260.8m (t=20s)
+    then 79.2m (t=30s), yet evaluate_run.py's interpolated min_cpa_over_run() found 11.2m
+    (an actual collision) strictly between those two samples. Returns
+    {"time","vehicle","x","y","range_m"} for the earliest such moment, or None if the run
+    never got that close."""
     by_time: dict[float, dict[str, dict]] = defaultdict(dict)
     for row in trajectory:
         by_time[row["time"]][row["vehicle"]] = row
-    for t in sorted(by_time):
-        own = by_time[t].get("own_ship")
-        if not own:
-            continue
-        for name, row in by_time[t].items():
-            if name == "own_ship":
+    times = sorted(by_time)
+    target_names = {name for row in by_time.values() for name in row if name != "own_ship"}
+    for name in sorted(target_names):
+        prev_t, prev_o, prev_tg = None, None, None
+        for t in times:
+            own_row, tgt_row = by_time[t].get("own_ship"), by_time[t].get(name)
+            if not own_row or not tgt_row:
                 continue
-            dist = math.hypot(own["x"] - row["x"], own["y"] - row["y"])
-            if dist < radius:
-                return {"time": t, "vehicle": name, "x": row["x"], "y": row["y"], "range_m": dist}
+            o, tg = (own_row["x"], own_row["y"]), (tgt_row["x"], tgt_row["y"])
+            if prev_t is not None:
+                rng, rng_t = _segment_min_range(prev_t, prev_o, prev_tg, t, o, tg)
+                if rng < radius:
+                    frac = 0.0 if t == prev_t else (rng_t - prev_t) / (t - prev_t)
+                    x = prev_o[0] + frac * (o[0] - prev_o[0])
+                    y = prev_o[1] + frac * (o[1] - prev_o[1])
+                    return {"time": rng_t, "vehicle": name, "x": x, "y": y, "range_m": rng}
+            prev_t, prev_o, prev_tg = t, o, tg
     return None
 
 
