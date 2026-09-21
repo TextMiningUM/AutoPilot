@@ -150,7 +150,7 @@ from app.llm_runs import list_runs_for_mission, load_run, checkpoint_at_or_befor
 _UI_PREFS_PATH = ROOT / "Data" / "_ui_prefs.json"
 _UI_PREFS_KEYS = [
     "ship_max_speed", "ship_max_turn_rate_pct", "ship_max_accel", "ship_max_decel",
-    "ship_turn_rate_deg_s", "mission_min_cpa", "dt_slider",
+    "ship_turn_rate_deg_s", "mission_min_cpa",
 ]
 
 
@@ -180,15 +180,15 @@ if "_ui_prefs_loaded" not in st.session_state:
 
 # ── Session state ─────────────────────────────────────────────────────────
 def build_vessel_constraints(mission: Mission) -> VesselConstraints:
-    """Reads the sidebar's Ship performance/Mission/Simulation widgets straight out of
-    session_state (same one-render-lag pattern as dt_slider/wide_plot elsewhere in this
-    file -- on the very first run these keys don't exist yet, hence the defaults, which
-    match each widget's own `value=`) into one VesselConstraints -- the single source of
-    truth the kinematics layer (app/simulation.py) and the OOW agent's prompt both read,
-    instead of each hardcoding its own copy of these numbers. cruise_speed_mps always
-    matches `mission`'s own designed speed (never a separately user-set value) -- the
-    nominal/rated-speed reference the agent's prompt reports must reflect what this
-    mission actually runs at, same reasoning as run_llm_scenario.py's CLI path."""
+    """Reads the sidebar's Ship performance/Mission widgets straight out of session_state
+    (same one-render-lag pattern as wide_plot elsewhere in this file -- on the very first
+    run these keys don't exist yet, hence the defaults, which match each widget's own
+    `value=`) into one VesselConstraints -- the single source of truth the kinematics layer
+    (app/simulation.py) and the OOW agent's prompt both read, instead of each hardcoding its
+    own copy of these numbers. cruise_speed_mps always matches `mission`'s own designed
+    speed (never a separately user-set value) -- the nominal/rated-speed reference the
+    agent's prompt reports must reflect what this mission actually runs at, same reasoning
+    as run_llm_scenario.py's CLI path."""
     g = st.session_state.get
     return VesselConstraints(
         max_speed_mps=g("ship_max_speed", 10.0),
@@ -198,7 +198,7 @@ def build_vessel_constraints(mission: Mission) -> VesselConstraints:
         turn_rate_deg_s=g("ship_turn_rate_deg_s", 3.0),
         cruise_speed_mps=mission.own_ship.speed,
         min_cpa_m=g("mission_min_cpa", 500.0),
-        time_step_s=g("dt_slider", 10.0),
+        time_step_s=10.0,
     )
 
 
@@ -521,9 +521,8 @@ with plot_col:
         help="Preview: no-avoidance path. Manual helm: steer it live. Play Agent Mission: "
              "replay a precomputed run. Agent Real-Time: live agent calls.",
     )
-    _dt_now = st.session_state.get("dt_slider", 10.0)
-    _speed_level = st.session_state.get("speed_level", 6)
-    _speed_s = (1500 - (_speed_level - 1) * (1500 - 60) / 9) / 1000  # matches the sidebar slider
+    _dt_now = 10.0
+    _speed_s = (1500 - (6 - 1) * (1500 - 60) / 9) / 1000  # fixed mid-range animation speed
 
     # Scenario Preview and Play Agent Mission show goal-bearing/CPA/TCPA (and, for Play Agent
     # Mission, a short decision summary) baked directly into the plot's own native animation
@@ -628,8 +627,7 @@ with plot_col:
 with st.sidebar:
     st.header("Ship performance")
     st.caption("Feeds the kinematics layer (VesselConstraints) that rate-limits own-ship's "
-              "heading/speed changes -- see the Simulation section below for the time step "
-              "these per-second rates are applied over.")
+              "heading/speed changes -- applied over a fixed 10s simulation time step.")
     sp1, sp2 = st.columns(2)
     sp1.number_input("Max speed (m/s)", min_value=0.0, value=10.0, step=0.5, key="ship_max_speed")
     sp2.number_input("Max rudder angle (deg)", min_value=0.0, value=30.0, step=1.0, key="ship_max_turn_rate_pct",
@@ -666,16 +664,11 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-    st.header("Simulation")
-    dt = st.slider("Time step (s)", 1.0, 60.0, 10.0, step=1.0, key="dt_slider")
+    dt = 10.0  # fixed simulation time step (s) -- no longer a user-adjustable slider
     sim_mode = st.session_state.get("sim_view_mode", "Manual helm")
     is_preview = sim_mode == "Scenario preview (no avoidance)"
     is_llm_playback = sim_mode == "Play Agent Mission"
     is_frame_scrub = is_preview or is_llm_playback
-
-    st.slider("Playback speed", 1, 10, 6, key="speed_level",
-             help="Speed of the native Play button/animation in the plot above "
-                  "(Scenario Preview / Play Agent Mission only).")
 
     if not is_frame_scrub:
         # Scenario Preview/Play Agent Mission no longer need Step/Auto Run controls here --
