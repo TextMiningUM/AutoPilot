@@ -48,7 +48,7 @@ import numpy as np
 import streamlit as st
 import torch
 from sentence_transformers import SentenceTransformer
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TextStreamer
 
 from core import AgentPaths, EMBEDDER_MODEL
 from pipeline.ingest.build_kg import kg_retrieve
@@ -393,10 +393,17 @@ def _generate(tok, mdl, messages: list[dict], max_new_tokens: int = 256,
     # fallbacks seen in the sweep. no_repeat_ngram_size=4 hard-blocks any 4-token sequence
     # from repeating at all -- enough to break a whole-sentence loop like that one, too
     # short to block legitimate short repeats (e.g. saying "Rule 15" twice in one reply).
+    # AUTOPILOT_STREAM=1 prints tokens to stdout live as they're generated (via
+    # transformers' TextStreamer) -- opt-in only, for watching a slow/long-running CLI
+    # sweep (tail -f the log) to see the actual <think> reasoning as it happens instead
+    # of waiting minutes for the whole response with no visibility into what it's doing.
+    streamer = TextStreamer(tok, skip_prompt=True, skip_special_tokens=True) \
+        if os.environ.get("AUTOPILOT_STREAM") else None
     out = mdl.generate(**inp, max_new_tokens=max_new_tokens, do_sample=False,
                        temperature=1.0, top_p=1.0, pad_token_id=tok.eos_token_id,
                        stop_strings="\"}", tokenizer=tok,
-                       repetition_penalty=1.15, no_repeat_ngram_size=4)
+                       repetition_penalty=1.15, no_repeat_ngram_size=4,
+                       streamer=streamer)
     result = tok.decode(out[0][inp["input_ids"].shape[1]:], skip_special_tokens=True)
     # Free this call's KV-cache/activation buffers back to the free-VRAM pool immediately
     # instead of letting PyTorch's caching allocator hold them as "reserved". On an 8GB
