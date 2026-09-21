@@ -39,7 +39,7 @@ for p in (ROOT, REPO_ROOT):
         sys.path.insert(0, str(p))
 
 from app.missions import list_mission_ids, load_mission, mission_to_dict
-from app.simulation import Simulation, VesselConstraints, COLLISION_RADIUS_M
+from app.simulation import Simulation, VesselConstraints, find_collision
 from app.agents import ask_oow, MODEL_CONFIGS, SYSTEM_OOW_AGENT, effective_generation_params
 from app.evaluation import llm_compliance_check, score_trajectory
 from app.llm_runs import RUNS_DIR, run_log_path
@@ -81,16 +81,6 @@ def run_one(mission_id: str, config: str, tag: str = "default",
 
     _t_run_start = time.time()
     for step in range(max_steps):
-        # Collision check FIRST, and with a `dt`-second look-ahead horizon: two fast-
-        # closing vessels (e.g. a 20 m/s head-on Imazu encounter) can pass by/through each
-        # other entirely within the UPCOMING step, so a same-instant-only check (or one
-        # that runs only after reached_goal() already said no) can silently miss a real
-        # collision -- confirmed on Imazu01/v1_rag, which reached its goal well after
-        # passing straight through a target with the outcome never once recording it. See
-        # Simulation.min_cpa_now()/find_collision()'s docstrings for the confirmed numbers.
-        if sim.min_cpa_now(horizon_s=dt) < COLLISION_RADIUS_M:
-            outcome = "collision"
-            break
         if sim.reached_goal():
             outcome = "reached_goal"
             break
@@ -117,6 +107,18 @@ def run_one(mission_id: str, config: str, tag: str = "default",
             })
             sim.apply_action(decision)
         sim.step(dt)
+        # Check the step JUST recorded (not a forward prediction -- see
+        # Simulation.min_cpa_now()'s docstring for why a predictive check is unsafe here)
+        # against the interpolated, ground-truth collision finder ALSO used for scoring
+        # (evaluate_run.py) and plotting (find_collision()) -- two fast-closing vessels
+        # (e.g. a 20 m/s head-on Imazu encounter) can pass by/through each other entirely
+        # within one dt=10s step, so a same-instant-only check right after stepping could
+        # still miss it; this reuses the exact interpolation-aware logic that already
+        # catches that case, so outcome="collision" can never be reported without the
+        # saved trajectory actually showing it.
+        if find_collision(sim.trajectory) is not None:
+            outcome = "collision"
+            break
 
     latency_s = time.time() - _t_run_start
 

@@ -172,27 +172,21 @@ class Simulation:
         gx, gy = self.mission.goal
         return math.hypot(self.own.x - gx, self.own.y - gy) <= radius
 
-    def min_cpa_now(self, horizon_s: float | None = None) -> float:
-        """Closest current range to any target -- for a quick live safety readout. If
-        `horizon_s` is given, ALSO checks the closest approach over the next `horizon_s`
-        seconds (each vessel's CURRENT heading/speed projected forward, same relative-
-        velocity CPA math as app.narrate.cpa_tcpa) -- a same-instant-only check can miss a
-        fast-closing pair that passes by/through each other entirely within one upcoming
-        simulation step (see find_collision()'s docstring for a confirmed real example:
-        two 20 m/s head-on vessels crossed with an interpolated min range of 11.2m despite
-        being 79m+ apart at both of the surrounding 10s samples)."""
+    def min_cpa_now(self) -> float:
+        """Closest CURRENT range to any target -- a quick, cheap, instantaneous safety
+        readout. Deliberately NOT predictive (no forward projection): an earlier version
+        of this projected forward using each vessel's current heading/speed to catch a
+        collision before it happened, but that could "predict" a collision that then never
+        gets recorded at all -- the simulation loop would stop BEFORE the predicted moment,
+        so the saved trajectory never shows the vessels actually getting close, while
+        outcome still said "collision" (confirmed on Imazu01/bare_qwen: outcome=collision,
+        but the saved trajectory's last recorded distance was 260m -- the loop broke 3
+        steps early based on a projection that was never verified against what actually
+        happened). See run_llm_scenario.py's loop: it now checks collision AFTER each step,
+        against the trajectory actually recorded so far, using find_collision() below."""
         if not self.targets:
             return float("inf")
-        now = min(math.hypot(self.own.x - t.x, self.own.y - t.y) for t in self.targets)
-        if horizon_s is None:
-            return now
-        best = now
-        for t in self.targets:
-            cpa, tcpa = cpa_tcpa(self.own.x, self.own.y, self.own.heading, self.own.speed,
-                                 t.x, t.y, t.heading, t.speed)
-            if tcpa <= horizon_s:
-                best = min(best, cpa)
-        return best
+        return min(math.hypot(self.own.x - t.x, self.own.y - t.y) for t in self.targets)
 
 
 def _segment_min_range(t0: float, o0: tuple[float, float], tg0: tuple[float, float],
