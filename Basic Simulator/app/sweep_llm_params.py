@@ -72,8 +72,12 @@ def score_one(mission, log: dict) -> dict:
     uses elsewhere (Evaluation panel, LLM compliance check) -- safety gate, then weighted
     compliance/temporal/spatial/manoeuvre/smoothness. Keeps the FULL per-axis breakdown
     (violations list, min CPA, path ratios, manoeuvre counts, ...), not just the top-line
-    scores, so the on-disk summary is self-sufficient for later inspection."""
-    result = score_trajectory(
+    scores, so the on-disk summary is self-sufficient for later inspection.
+
+    Prefers the log's OWN embedded "evaluation" (written by run_llm_scenario.py's run_one()
+    at save time) over recomputing -- only recomputes for older logs from before that field
+    existed."""
+    result = log.get("evaluation") or score_trajectory(
         log["trajectory"], start_xy=(mission.own_ship.x, mission.own_ship.y),
         goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
         safe_distance_m=_DEFAULT_MIN_CPA_M,
@@ -88,6 +92,7 @@ def score_one(mission, log: dict) -> dict:
         "manoeuvre": result["manoeuvre"], "latency_s": log.get("latency_s"),
         "colreg_llm_check": log.get("colreg_llm_check"),
     }
+
 
 
 def _load_summary_file() -> dict:

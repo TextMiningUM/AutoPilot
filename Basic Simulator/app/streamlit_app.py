@@ -947,6 +947,7 @@ with plot_col:
     # log at all, or to re-verify) -- but a click here only ever updates this browser
     # session's state, it is NEVER written back to the run log file on disk.
     precomputed_check = None
+    precomputed_evaluation = None
     if sim_mode == "Play Agent Mission":
         _eval_run_path = st.session_state.get("llm_run_path")
         _eval_run_log = load_run(_eval_run_path) if _eval_run_path else None
@@ -954,6 +955,7 @@ with plot_col:
         eval_cache_key = _eval_run_path
         if _eval_run_log:
             precomputed_check = _eval_run_log.get("colreg_llm_check")
+            precomputed_evaluation = _eval_run_log.get("evaluation")
     else:
         eval_traj = sim.trajectory
         eval_cache_key = "live"
@@ -1021,13 +1023,20 @@ with plot_col:
             st.caption("\u2139\uFE0F Compliance shows a default score of 0.0 (unaudited) until you "
                       "run the Claude check above.")
 
-        result = score_trajectory(
-            eval_traj, start_xy=(mission.own_ship.x, mission.own_ship.y),
-            goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
-            safe_distance_m=sim.constraints.min_cpa_m,
-            llm_violations=llm_violations,
-            llm_compliance_score=(audit.get("compliance_score") if audit else None),
-        )
+        # Reuse the run log's own saved "evaluation" (written by run_llm_scenario.py at
+        # save time) instead of recomputing, but ONLY when the audit actually in use is
+        # that same saved one -- a fresh live click this session must recompute so the
+        # scores reflect the NEW audit, not the stale on-disk one.
+        if audit_source == "saved in the run log" and precomputed_evaluation is not None:
+            result = precomputed_evaluation
+        else:
+            result = score_trajectory(
+                eval_traj, start_xy=(mission.own_ship.x, mission.own_ship.y),
+                goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
+                safe_distance_m=sim.constraints.min_cpa_m,
+                llm_violations=llm_violations,
+                llm_compliance_score=(audit.get("compliance_score") if audit else None),
+            )
         verdict = result["verdict"]
         badge_cls = "badge-pass" if verdict == "PASS" else "badge-fail"
         st.markdown(

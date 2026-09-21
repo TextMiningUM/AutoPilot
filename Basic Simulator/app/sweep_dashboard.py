@@ -107,9 +107,13 @@ def _score_log(mission_id: str, log: dict, tag: str, path: Path,
     """Same composite scoring sweep_llm_params.py's score_one() applies to a freshly
     computed run -- duplicated here (rather than imported) because sweep_llm_params.py
     pulls in app.run_llm_scenario -> app.agents -> torch/transformers, which this
-    read-only, always-import-light dashboard must never load."""
+    read-only, always-import-light dashboard must never load.
+
+    Prefers the log's OWN embedded "evaluation" (written by run_llm_scenario.py's run_one()
+    at save time) over recomputing -- faster (skips the CSV round-trip through
+    evaluate_run.py) and only recomputes for older logs from before that field existed."""
     mission = MISSION_OBJS[mission_id]
-    result = score_trajectory(
+    result = log.get("evaluation") or score_trajectory(
         log["trajectory"], start_xy=(mission.own_ship.x, mission.own_ship.y),
         goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
         safe_distance_m=_DEFAULT_MIN_CPA_M,

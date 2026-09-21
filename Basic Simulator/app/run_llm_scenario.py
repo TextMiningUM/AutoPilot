@@ -38,10 +38,10 @@ for p in (ROOT, REPO_ROOT):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from app.missions import list_mission_ids, load_mission
+from app.missions import list_mission_ids, load_mission, mission_to_dict
 from app.simulation import Simulation, VesselConstraints, COLLISION_RADIUS_M
 from app.agents import ask_oow, MODEL_CONFIGS, SYSTEM_OOW_AGENT, effective_generation_params
-from app.evaluation import llm_compliance_check
+from app.evaluation import llm_compliance_check, score_trajectory
 from app.llm_runs import RUNS_DIR, run_log_path
 from app.narrate import recommended_decision_interval
 
@@ -135,6 +135,19 @@ def run_one(mission_id: str, config: str, tag: str = "default",
         "mission_id": mission_id, "config": config, "tag": tag,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "latency_s": latency_s,
+        # Both embedded in full (not just mission_id, a lookup key into a SEPARATE file)
+        # so this one log file is self-sufficient even if Data/missions/{id}.json is later
+        # moved, renamed, or this log itself gets archived into its own subfolder without
+        # that file alongside it -- see app.missions.mission_from_dict/mission_to_dict and
+        # app.evaluation.score_trajectory.
+        "mission": mission_to_dict(mission),
+        "evaluation": score_trajectory(
+            sim.trajectory, start_xy=(mission.own_ship.x, mission.own_ship.y),
+            goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
+            safe_distance_m=constraints.min_cpa_m,
+            llm_violations=colreg_llm_check["violations"],
+            llm_compliance_score=colreg_llm_check["compliance_score"],
+        ),
         "colreg_llm_check": colreg_llm_check,
         "params": {
             "decision_interval": effective_interval, "dt": dt, "max_steps": max_steps,
@@ -154,7 +167,8 @@ def run_one(mission_id: str, config: str, tag: str = "default",
           f"{len(colreg_llm_check['compliant_actions'])} compliant action(s))"
           if colreg_llm_check["checked"] else f"not checked ({colreg_llm_check['error']})")
     print(f"  [done] {out_path.name}  outcome={outcome}  steps={step}  "
-          f"checkpoints={len(checkpoints)}  latency={latency_s:.1f}s  colreg_check={_cc}")
+          f"checkpoints={len(checkpoints)}  latency={latency_s:.1f}s  colreg_check={_cc} "
+          f"composite={log['evaluation']['composite_score']:.3f}")
     return out_path
 
 
