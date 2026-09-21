@@ -86,6 +86,26 @@ def recommended_decision_interval(mission: Mission, dt: float = 10.0) -> int:
     return max(1, min(base, transit_cap))
 
 
+def recommended_max_steps(mission: Mission, dt: float = 10.0) -> int:
+    """How many simulation steps a run needs to have a realistic chance of reaching the
+    goal, sized from the mission's OWN straight-line transit distance/speed rather than one
+    fixed number for every mission (same reasoning as recommended_decision_interval's
+    transit_cap above). A fixed 200-step budget (run_llm_scenario.py's old default) was
+    tuned against the original ~2.5 m/s-scale missions; Sawada-scale Imazu missions (12 NM
+    transit at 12/8.4 kt) need ~3600-5100s just to go straight there, which a 200*10s=2000s
+    budget can never reach -- every job silently scored max_steps_reached/0.2 regardless of
+    how well it avoided collisions. *1.5 leaves headroom for avoidance detours (same
+    multiplier streamlit_app.py's Auto-Run button already uses for the same reason);
+    +10/min 20 floor keeps very short/quiet missions from getting an unreasonably tiny cap;
+    1200 ceiling bounds worst-case sweep runtime."""
+    own = mission.own_ship
+    gx, gy = mission.goal
+    straight_dist = math.hypot(gx - own.x, gy - own.y)
+    est_speed = max(own.speed, 0.1)
+    needed_steps = int((straight_dist / est_speed * 1.5) / dt) + 10
+    return min(1200, max(20, needed_steps))
+
+
 def classify_encounter(own_x: float, own_y: float, own_hdg: float,
                         tgt_x: float, tgt_y: float, tgt_hdg: float) -> tuple[str, list[str], float]:
     """Correct Rule 13 check: overtaking is defined by the bearing of OWN-SHIP

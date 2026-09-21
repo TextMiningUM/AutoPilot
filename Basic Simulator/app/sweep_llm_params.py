@@ -151,7 +151,11 @@ def main() -> None:
                          "--enable-thinking) coexist with the coarse sweep's logs instead of "
                          "overwriting them")
     ap.add_argument("--dt", type=float, default=10.0)
-    ap.add_argument("--max-steps", type=int, default=200)
+    ap.add_argument("--max-steps", type=int, default=None,
+                    help="total step budget -- default: a per-mission recommendation sized "
+                         "from the mission's own straight-line transit distance/speed (see "
+                         "app.narrate.recommended_max_steps); set explicitly to force the same "
+                         "budget across every mission in the sweep")
     ap.add_argument("--decision-interval", type=int, default=None,
                     help="steps between LLM decisions -- default: per-mission recommendation "
                          "(see app.narrate.recommended_decision_interval); set explicitly to "

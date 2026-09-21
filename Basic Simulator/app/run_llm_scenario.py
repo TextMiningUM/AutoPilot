@@ -43,11 +43,11 @@ from app.simulation import Simulation, VesselConstraints, find_collision
 from app.agents import ask_oow, MODEL_CONFIGS, SYSTEM_OOW_AGENT, effective_generation_params
 from app.evaluation import llm_compliance_check, score_trajectory
 from app.llm_runs import RUNS_DIR, run_log_path
-from app.narrate import recommended_decision_interval
+from app.narrate import recommended_decision_interval, recommended_max_steps
 
 
 def run_one(mission_id: str, config: str, tag: str = "default",
-           dt: float = 10.0, max_steps: int = 200, enable_thinking: bool = False,
+           dt: float = 10.0, max_steps: int | None = None, enable_thinking: bool = False,
            max_new_tokens: int = 256, k: int = 2, use_rag: bool = True,
            system_prompt: str | None = None, force: bool = False,
            decision_interval: int | None = None, check_colreg_compliance: bool = True) -> Path:
@@ -59,6 +59,7 @@ def run_one(mission_id: str, config: str, tag: str = "default",
     mission = load_mission(mission_id)
     effective_interval = (decision_interval if decision_interval is not None
                           else recommended_decision_interval(mission, dt))
+    max_steps = max_steps if max_steps is not None else recommended_max_steps(mission, dt)
     # time_step_s matches --dt (not VesselConstraints' own default) so the agent's per-step
     # turn-degrees estimate in the prompt (see agents.build_oow_prompt) stays accurate
     # regardless of what --dt this run actually uses. cruise_speed_mps matches the mission's
@@ -192,7 +193,11 @@ def main() -> None:
                          "same config twice with --tag thinking_on --enable-thinking vs the "
                          "default, then compare both logs for the same mission")
     ap.add_argument("--dt", type=float, default=10.0, help="simulation time step (s)")
-    ap.add_argument("--max-steps", type=int, default=200)
+    ap.add_argument("--max-steps", type=int, default=None,
+                    help="total step budget -- default: a per-mission recommendation sized "
+                         "from the mission's own straight-line transit distance/speed (see "
+                         "app.narrate.recommended_max_steps); set explicitly to force the same "
+                         "budget across every mission in this run")
     ap.add_argument("--decision-interval", type=int, default=None,
                     help="simulation steps between LLM decision calls -- default: a per-mission "
                          "recommendation (short for a fast-closing encounter, long for a quiet/slow "
