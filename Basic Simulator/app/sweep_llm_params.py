@@ -83,7 +83,7 @@ def score_one(mission, log: dict) -> dict:
         "composite_score": result["composite_score"], "verdict": result["verdict"],
         "safety": result["safety"], "compliance": result["compliance"],
         "temporal": result["temporal"], "spatial": result["spatial"],
-        "manoeuvre": result["manoeuvre"],
+        "manoeuvre": result["manoeuvre"], "latency_s": log.get("latency_s"),
     }
 
 

@@ -76,7 +76,7 @@ def _score_log(mission_id: str, log: dict, tag: str) -> dict:
         "composite_score": result["composite_score"], "verdict": result["verdict"],
         "safety": result["safety"], "compliance": result["compliance"],
         "temporal": result["temporal"], "spatial": result["spatial"],
-        "manoeuvre": result["manoeuvre"],
+        "manoeuvre": result["manoeuvre"], "latency_s": log.get("latency_s"),
     }
 
 
@@ -106,6 +106,21 @@ def _scan_mission_runs(mission_id: str) -> dict[str, dict]:
         rows[config] = _score_log(mission_id, log, tag or "default")
     return rows
 
+
+
+def _axis_cols(r: dict) -> dict:
+    """Flattens one scored row's per-axis breakdown into the handful of columns the
+    leaderboard/per-mission tables both show next to the composite score -- safety/
+    compliance/temporal/spatial/manoeuvre are each already a 0-1 axis score, latency is the
+    whole run's wall-clock compute time (None for older logs generated before run_llm_
+    scenario.py started recording it)."""
+    latency = r.get("latency_s")
+    return {
+        "safety": r["safety"]["score"], "compliance": r["compliance"]["score"],
+        "temporal": r["temporal"]["temporal_score"], "spatial": r["spatial"]["spatial_score"],
+        "manoeuvre": r["manoeuvre"]["manoeuvre_score"],
+        "latency_s": round(latency, 1) if latency is not None else None,
+    }
 
 
 def _read_current_job() -> tuple[tuple[str, str] | None, str]:
@@ -198,14 +213,17 @@ def _render() -> None:
     for mission_id in MISSIONS:
         rows = rows_by_mission[mission_id]
         if not rows:
-            leaderboard.append({"mission": mission_id, "done": "0/8", "best_config": "\u2014",
-                                "composite": None, "verdict": "\u2014"})
+            leaderboard.append({
+                "mission": mission_id, "done": "0/8", "best_config": "\u2014",
+                "composite": None, "verdict": "\u2014", "safety": None, "compliance": None,
+                "temporal": None, "spatial": None, "manoeuvre": None, "latency_s": None,
+            })
             continue
         best = max(rows.values(), key=lambda r: r["composite_score"])
         leaderboard.append({
             "mission": mission_id, "done": f"{len(rows)}/{len(CONFIGS)}",
             "best_config": best["config"], "composite": best["composite_score"],
-            "verdict": best["verdict"],
+            "verdict": best["verdict"], **_axis_cols(best),
         })
     st.dataframe(leaderboard, width="stretch", hide_index=True)
 
@@ -230,11 +248,18 @@ def _render() -> None:
                 is_current = current_job == (mission_id, config)
                 if r is None:
                     status = "\U0001F504 running" if is_current else "\u23F3 pending"
-                    table.append({"config": config, "status": status, "composite": None,
-                                 "verdict": None})
+                    table.append({
+                        "config": config, "status": status, "composite": None,
+                        "verdict": None, "safety": None, "compliance": None,
+                        "temporal": None, "spatial": None, "manoeuvre": None,
+                        "latency_s": None,
+                    })
                 else:
-                    table.append({"config": config, "status": "\u2705 done",
-                                 "composite": r["composite_score"], "verdict": r["verdict"]})
+                    table.append({
+                        "config": config, "status": "\u2705 done",
+                        "composite": r["composite_score"], "verdict": r["verdict"],
+                        **_axis_cols(r),
+                    })
             st.dataframe(table, width="stretch", hide_index=True)
 
             done_configs = [c for c in CONFIGS if rows.get(c) is not None]
@@ -243,12 +268,14 @@ def _render() -> None:
                                       key=f"detail_pick_{mission_id}")
                 r = rows[picked]
                 with st.popover(f"\U0001F4C4 {picked} \u2014 details"):
-                    m_cols = st.columns(5)
+                    m_cols = st.columns(6)
                     m_cols[0].metric("Safety", r["safety"]["score"])
                     m_cols[1].metric("Compliance", r["compliance"]["score"])
                     m_cols[2].metric("Temporal", r["temporal"]["temporal_score"])
                     m_cols[3].metric("Spatial", r["spatial"]["spatial_score"])
                     m_cols[4].metric("Manoeuvre", r["manoeuvre"]["manoeuvre_score"])
+                    latency = r.get("latency_s")
+                    m_cols[5].metric("Latency", f"{latency:.0f}s" if latency is not None else "\u2014")
                     st.markdown(_describe_run(r))
 
 

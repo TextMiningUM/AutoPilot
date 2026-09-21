@@ -78,6 +78,7 @@ def run_one(mission_id: str, config: str, tag: str = "default",
     effective_thinking, effective_max_new_tokens = effective_generation_params(
         config, enable_thinking, max_new_tokens)
 
+    _t_run_start = time.time()
     for step in range(max_steps):
         if sim.reached_goal():
             outcome = "reached_goal"
@@ -106,9 +107,11 @@ def run_one(mission_id: str, config: str, tag: str = "default",
             sim.apply_action(decision)
         sim.step(dt)
 
+    latency_s = time.time() - _t_run_start
     log = {
         "mission_id": mission_id, "config": config, "tag": tag,
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "latency_s": latency_s,
         "params": {
             "decision_interval": effective_interval, "dt": dt, "max_steps": max_steps,
             "enable_thinking": effective_thinking, "max_new_tokens": effective_max_new_tokens,
@@ -122,7 +125,8 @@ def run_one(mission_id: str, config: str, tag: str = "default",
     }
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(log, ensure_ascii=False, indent=1), encoding="utf-8")
-    print(f"  [done] {out_path.name}  outcome={outcome}  steps={step}  checkpoints={len(checkpoints)}")
+    print(f"  [done] {out_path.name}  outcome={outcome}  steps={step}  "
+          f"checkpoints={len(checkpoints)}  latency={latency_s:.1f}s")
     return out_path
 
 
