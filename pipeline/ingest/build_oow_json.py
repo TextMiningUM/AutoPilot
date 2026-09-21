@@ -8,14 +8,18 @@ through a generic multi-document classifier -- unlike VHF's ~45 heterogeneous do
 `build_vhf_json.py`).
 
 `build_extra_docs()` (called from `main()` too) handles everything else dropped into
-OOW_Protocols/ that ISN'T the COLREG text -- currently a handful of navigation-maths/
+OOW_Protocols/ that ISN'T the raw COLREG text -- a handful of navigation-maths/
 radar-plotting reference docs (bearings, CPA/TCPA, compass conventions) added to fix a
 confirmed TCPA-misread gap found via Basic Simulator mission runs (see
-`Data/basic_nav_knowledge_gaps.json`). These are few and each has its own clear
-structure, so -- same reasoning as the COLREG parser -- each gets its own small,
-specific parser (`parse_markdown_doc` for the plain-heading .md references,
+`Data/basic_nav_knowledge_gaps.json`), plus `simple_colreg.json` (added later): a
+plain-English, example-driven explanation of each COLREG rule, pre-chunked one entry per
+rule by whoever authored it, as a companion to (not a replacement for) the verbatim
+`COLREG-Consolidated-2018.pdf` text parsed by `parse_document()` above. These are few and
+each has its own clear structure, so -- same reasoning as the COLREG parser -- each gets
+its own small, specific parser (`parse_markdown_doc` for the plain-heading .md references,
 `parse_radar_workbook` for the "Lesson N.N" PDF, `parse_navmath_drills` for the
-already-Q&A-shaped drill set) rather than one generic classifier for just five files.
+already-Q&A-shaped drill set, `parse_simple_colreg` for the already-chunked-per-rule
+explainer) rather than one generic classifier for just a handful of files.
 
 Output schema matches the convention `pipeline/ingest/build_rag.py` expects (one JSON
 per document, glob'd automatically -- no wiring needed elsewhere):
@@ -398,6 +402,40 @@ def parse_navmath_drills(json_path: Path) -> dict:
            "publisher": "Auto Pilot project (derived from tdgil.com)", "language": "en", "chapters": chapters}
 
 
+def parse_simple_colreg(json_path: Path) -> dict:
+    """simple_colreg.json is already one pre-chunked record PER RULE (chunk_id, part,
+    rule_ref, title, plain_explanation, examples, official_text, chunk_text) -- a
+    plain-English/example-driven companion to the verbatim colreg_consolidated_2018.json
+    text above, not a replacement for it. Each record becomes its own 'rule'-type section
+    (STANDALONE_TYPES in build_rag.py keeps every rule its own chunk, never merged with a
+    neighbour), grouped into chapters by `part` exactly like the official text's PART/
+    Section grouping. Uses `chunk_text` (title + plain_explanation + examples) as the
+    indexed text rather than `official_text`, since the verbatim rule text is already
+    covered by colreg_consolidated_2018.json -- indexing it twice would just duplicate the
+    same legal text under two document_ids for no retrieval benefit."""
+    records = json.loads(json_path.read_text(encoding="utf-8"))
+    by_part: dict[str, list[dict]] = {}
+    for r in records:
+        by_part.setdefault(r.get("part", "General"), []).append(r)
+
+    chapters = []
+    for part, items in by_part.items():
+        sections = []
+        for r in items:
+            text = r["chunk_text"]
+            concepts, topics = tag_text(text)
+            sections.append({
+                "section_id": stable_id("simple_colreg", r["chunk_id"]),
+                "title": f"{r['rule_ref']} - {r['title']}",
+                "type": "rule", "text": text, "concepts": concepts, "topics": topics, "pages": [],
+            })
+        chapters.append({"title": part, "sections": sections})
+    return {"document_id": "simple_colreg", "source_file": json_path.name,
+           "source_type": "regulation_plain_explainer",
+           "publisher": "Auto Pilot project (derived from COLREG-Consolidated-2018.pdf)",
+           "language": "en", "chapters": chapters}
+
+
 _EXTRA_MD_DOCS = [
     ("compass_directions_reference.md", "compass_directions_reference", "reference", "Auto Pilot project"),
     ("tdgil_bearings.md", "tdgil_bearings", "guide", "tdgil.com"),
@@ -439,6 +477,17 @@ def build_extra_docs() -> None:
         print(f"Parsed nav_maths_drills.json: {len(doc['chapters'])} categories, {n_sections} sections -> {out.name}")
     else:
         print("  [skip] nav_maths_drills.json not found")
+
+    simple_colreg_file = paths.source_dir / "simple_colreg.json"
+    if simple_colreg_file.exists():
+        doc = parse_simple_colreg(simple_colreg_file)
+        n_sections = sum(len(c["sections"]) for c in doc["chapters"])
+        out = JSON_OUT_DIR / "simple_colreg.json"
+        out.write_text(json.dumps(doc, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"Parsed simple_colreg.json: {len(doc['chapters'])} chapters, {n_sections} sections -> {out.name}")
+    else:
+        print("  [skip] simple_colreg.json not found")
+
 
 
 def main() -> None:
