@@ -11,6 +11,8 @@ import re
 import tempfile
 from pathlib import Path
 
+from app.simulation import GOAL_RADIUS_M
+
 APP_DIR = Path(__file__).resolve().parent
 ROOT = APP_DIR.parent               # Basic Simulator/
 WORKSPACE_ROOT = ROOT.parent        # Auto Pilot/ (.env lives here)
@@ -25,7 +27,7 @@ evaluate_run = _evaluate_run_mod.evaluate_run
 def score_trajectory(trajectory_rows: list[dict], start_xy: tuple[float, float],
                       goal_xy: tuple[float, float], nominal_speed: float,
                       own_vehicle: str = "own_ship", collision_radius_m: float = 15.0,
-                      safe_distance_m: float = 50.0,
+                      safe_distance_m: float = 50.0, reached_radius_m: float = GOAL_RADIUS_M,
                       llm_violations: list[str] | None = None,
                       llm_compliance_score: float | None = None) -> dict:
     """trajectory_rows: list of {time, vehicle, x, y, heading, speed} dicts
@@ -49,7 +51,8 @@ def score_trajectory(trajectory_rows: list[dict], start_xy: tuple[float, float],
         return evaluate_run(
             tmp_path, own_vehicle=own_vehicle, start_xy=start_xy, goal_xy=goal_xy,
             nominal_speed=nominal_speed, collision_radius_m=collision_radius_m,
-            safe_distance_m=safe_distance_m, violation_checks=violation_checks, verbose=False,
+            safe_distance_m=safe_distance_m, reached_radius_m=reached_radius_m,
+            violation_checks=violation_checks, verbose=False,
             llm_compliance_score=llm_compliance_score,
         )
     finally:

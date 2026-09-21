@@ -285,7 +285,7 @@ DEFAULT_WEIGHTS = {
 }
 
 def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
-                  collision_radius_m=15.0, safe_distance_m=50.0,
+                  collision_radius_m=15.0, safe_distance_m=50.0, reached_radius_m=25.0,
                   violation_checks=(), weights=None, verbose=True,
                   llm_compliance_score=None):
     weights = weights or DEFAULT_WEIGHTS
@@ -294,7 +294,7 @@ def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
     targets = {k: v for k, v in data.items() if k != own_vehicle}
 
     passed, min_cpa, safety_score = safety_axis(own, targets, collision_radius_m, safe_distance_m)
-    eff = efficiency_axes(own, start_xy, goal_xy, nominal_speed)
+    eff = efficiency_axes(own, start_xy, goal_xy, nominal_speed, reached_radius_m=reached_radius_m)
     man = manoeuvre_and_smoothness_axes(own)
     violations, compliance_score = compliance_axis(own, violation_checks, llm_compliance_score)
 

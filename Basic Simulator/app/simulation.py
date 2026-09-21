@@ -10,9 +10,16 @@ from dataclasses import dataclass, replace
 
 from app.missions import Mission, Vessel
 from app.narrate import cpa_tcpa, relative_bearing
+from app.units import nm_to_m
 
 # Matches evaluate_run.py's default collision_radius_m -- keep in sync.
 COLLISION_RADIUS_M = 15.0
+# 0.1 NM: generous relative to one simulation step's own travel distance (~60-85m at
+# Sawada-scale 12/8.4kt speeds and dt=10s) yet still small (~1.5%) relative to the 12NM
+# transit -- a fixed 25m tolerance (tuned for the old, much slower/shorter missions) was
+# tighter than a single step could reliably land inside, confirmed on Imazu01/v0_base:
+# closest recorded sample was 48m, never <=25m, despite genuinely passing the goal.
+GOAL_RADIUS_M = nm_to_m(0.1)
 
 
 @dataclass
@@ -168,9 +175,24 @@ class Simulation:
             self.stop_vessel()
         # "hold_course" (or anything unrecognised) -> no-op by design
 
-    def reached_goal(self, radius: float = 25.0) -> bool:
-        gx, gy = self.mission.goal
-        return math.hypot(self.own.x - gx, self.own.y - gy) <= radius
+    def reached_goal(self, radius: float = GOAL_RADIUS_M) -> bool:
+        """Checks the closest approach WITHIN the last recorded step, not just the current
+        instantaneous position -- Sawada-scale Imazu missions move ~60-85m per 10s step
+        (more than this radius), so a fast vessel can pass within `radius` of the goal
+        strictly BETWEEN two recorded samples without either endpoint's own instantaneous
+        distance ever registering it. Same class of bug find_collision()/_segment_min_range
+        already accounts for; reused here with the goal as a stationary "target".
+        Confirmed on Imazu01/v0_base: closest recorded SAMPLE was 48m (never <=25m), yet the
+        run overshot the goal and looped away instead of ever finishing -- interpolating the
+        step it happened in shows the ship actually passed within radius."""
+        goal = self.mission.goal
+        own_rows = [r for r in self.trajectory if r["vehicle"] == "own_ship"]
+        if len(own_rows) < 2:
+            return math.hypot(self.own.x - goal[0], self.own.y - goal[1]) <= radius
+        prev, cur = own_rows[-2], own_rows[-1]
+        rng, _ = _segment_min_range(prev["time"], (prev["x"], prev["y"]), goal,
+                                    cur["time"], (cur["x"], cur["y"]), goal)
+        return rng <= radius
 
     def min_cpa_now(self) -> float:
         """Closest CURRENT range to any target -- a quick, cheap, instantaneous safety
