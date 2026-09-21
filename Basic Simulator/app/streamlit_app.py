@@ -940,10 +940,20 @@ with plot_col:
     # Score the FULL precomputed trajectory for Play LLM Mission (independent of which
     # frame is currently scrubbed to) instead of the live `sim.trajectory`, which stays
     # empty/frozen at mission start in that mode since it never calls sim.step().
+    # precomputed_check: the colreg_llm_check ALREADY saved inside the loaded run log by
+    # run_llm_scenario.py's run_one() (the sweep) -- shown automatically, no button click
+    # needed, since that audit already exists on disk. The live "Check COLREG compliance"
+    # button below still lets you force a FRESH check (e.g. for a mode with no precomputed
+    # log at all, or to re-verify) -- but a click here only ever updates this browser
+    # session's state, it is NEVER written back to the run log file on disk.
+    precomputed_check = None
     if sim_mode == "Play Agent Mission":
         _eval_run_path = st.session_state.get("llm_run_path")
-        eval_traj = load_run(_eval_run_path)["trajectory"] if _eval_run_path else None
+        _eval_run_log = load_run(_eval_run_path) if _eval_run_path else None
+        eval_traj = _eval_run_log["trajectory"] if _eval_run_log else None
         eval_cache_key = _eval_run_path
+        if _eval_run_log:
+            precomputed_check = _eval_run_log.get("colreg_llm_check")
     else:
         eval_traj = sim.trajectory
         eval_cache_key = "live"
@@ -953,12 +963,21 @@ with plot_col:
     elif len(eval_traj) < 4:
         st.caption("Run a few steps first -- not enough trajectory yet to score.")
     else:
+        if precomputed_check and precomputed_check.get("checked"):
+            _pc_score = precomputed_check.get("compliance_score")
+            _pc_score_str = f"{_pc_score:.2f}" if isinstance(_pc_score, (int, float)) else "?"
+            st.caption(f"\U0001F4BE This run already has a saved COLREG audit from when it was "
+                      f"computed (score **{_pc_score_str}**) -- shown below automatically. The "
+                      f"button only runs a NEW, separate check for this browser session; it "
+                      f"does not overwrite the saved one on disk.")
+
         ec1, ec2 = st.columns([2, 1])
         with ec2:
             if st.button("\U0001F50D Check COLREG compliance (Claude)", use_container_width=True,
                         help="One-shot AI judge of the full trajectory so far -- runs on demand "
                              "only (a real network call), never during live stepping, so it adds "
-                             "no latency to the simulation itself."):
+                             "no latency to the simulation itself. Result is kept in THIS "
+                             "browser session only -- never written back to the run log file."):
                 from app.evaluation import llm_compliance_check
                 with st.spinner("Asking Claude to audit COLREG compliance..."):
                     try:
@@ -966,33 +985,38 @@ with plot_col:
                         st.session_state.llm_compliance_checked_key = (eval_cache_key, len(eval_traj))
                     except Exception as e:
                         st.error(f"Compliance check failed: {e}")
-        audit = st.session_state.get("llm_compliance_audit")
-        llm_violations = audit.get("violations") if audit else None
+        session_audit = st.session_state.get("llm_compliance_audit")
         stale = st.session_state.get("llm_compliance_checked_key") != (eval_cache_key, len(eval_traj))
+        if session_audit is not None and not stale:
+            audit, audit_source = session_audit, "this session's live check"
+        elif precomputed_check and precomputed_check.get("checked"):
+            audit, audit_source = precomputed_check, "saved in the run log"
+        else:
+            audit, audit_source = None, None
+        llm_violations = audit.get("violations") if audit else None
+        if session_audit is not None and stale:
+            st.caption("\u26A0\uFE0F Trajectory changed since the last compliance check -- re-run for a current result.")
         if audit is not None:
-            if stale:
-                st.caption("\u26A0\uFE0F Trajectory changed since the last compliance check -- re-run for a current result.")
+            n_v, n_c = len(audit["violations"]), len(audit["compliant_actions"])
+            score = audit.get("compliance_score")
+            score_str = f"{score:.2f}" if isinstance(score, (int, float)) else "?"
+            if n_v:
+                st.caption(f"\U0001F916 Compliance score **{score_str}** ({audit_source}) -- Claude "
+                          f"found {n_v} COLREG violation(s) and {n_c} correctly handled manoeuvre(s).")
             else:
-                n_v, n_c = len(audit["violations"]), len(audit["compliant_actions"])
-                score = audit.get("compliance_score")
-                score_str = f"{score:.2f}" if isinstance(score, (int, float)) else "?"
-                if n_v:
-                    st.caption(f"\U0001F916 Compliance score **{score_str}** -- Claude found {n_v} "
-                              f"COLREG violation(s) and {n_c} correctly handled manoeuvre(s).")
-                else:
-                    st.caption(f"\U0001F916 Compliance score **{score_str}** -- Claude found no "
-                              f"COLREG violations ({n_c} manoeuvre(s) audited as correct).")
-                with st.popover("\U0001F4C4 Full COLREG audit"):
-                    if audit["violations"]:
-                        st.markdown("**Violations**")
-                        for v in audit["violations"]:
-                            st.markdown(f"- {v}")
-                    if audit["compliant_actions"]:
-                        st.markdown("**Correctly handled**")
-                        for c in audit["compliant_actions"]:
-                            st.markdown(f"- {c}")
-                    if not audit["violations"] and not audit["compliant_actions"]:
-                        st.caption("Nothing to audit -- no manoeuvres/encounters in this trajectory.")
+                st.caption(f"\U0001F916 Compliance score **{score_str}** ({audit_source}) -- Claude "
+                          f"found no COLREG violations ({n_c} manoeuvre(s) audited as correct).")
+            with st.popover("\U0001F4C4 Full COLREG audit"):
+                if audit["violations"]:
+                    st.markdown("**Violations**")
+                    for v in audit["violations"]:
+                        st.markdown(f"- {v}")
+                if audit["compliant_actions"]:
+                    st.markdown("**Correctly handled**")
+                    for c in audit["compliant_actions"]:
+                        st.markdown(f"- {c}")
+                if not audit["violations"] and not audit["compliant_actions"]:
+                    st.caption("Nothing to audit -- no manoeuvres/encounters in this trajectory.")
         else:
             st.caption("\u2139\uFE0F Compliance shows a default score of 0.0 (unaudited) until you "
                       "run the Claude check above.")
@@ -1001,8 +1025,8 @@ with plot_col:
             eval_traj, start_xy=(mission.own_ship.x, mission.own_ship.y),
             goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
             safe_distance_m=sim.constraints.min_cpa_m,
-            llm_violations=llm_violations if not stale else None,
-            llm_compliance_score=(audit.get("compliance_score") if audit and not stale else None),
+            llm_violations=llm_violations,
+            llm_compliance_score=(audit.get("compliance_score") if audit else None),
         )
         verdict = result["verdict"]
         badge_cls = "badge-pass" if verdict == "PASS" else "badge-fail"
@@ -1015,7 +1039,9 @@ with plot_col:
         e1.metric("Safety", result["safety"]["score"],
                   help=f"min CPA {result['safety']['min_cpa_m']} m, passed={result['safety']['passed']}")
         e2.metric("Compl.", result["compliance"]["score"],
-                  help=f"{len(result['compliance']['violations'])} violation(s)")
+                  help=(f"{len(result['compliance']['violations'])} violation(s) -- from Claude's "
+                       f"audit ({audit_source})" if audit is not None
+                       else "0.0 = not yet audited by Claude (see the button above)"))
         e3.metric("Temp.", result["temporal"].get("temporal_score"))
         e4.metric("Spatial", result["spatial"].get("spatial_score"))
         e5.metric("Man.", result["manoeuvre"].get("manoeuvre_score"),
@@ -1025,7 +1051,13 @@ with plot_col:
                 for v in result["compliance"]["violations"]:
                     st.write(f"- {v}")
         with st.expander("Full result JSON"):
-            st.json(result)
+            # score_trajectory()'s own result dict has no field distinguishing "compliance
+            # score 0 because unaudited" from "compliance score 0 because Claude found it
+            # non-compliant" -- both look identical here (score: 0, violations: []) since an
+            # audited-clean case is always score 1.0 with empty violations, never 0. Inject
+            # this one extra key purely for the JSON dump so that ambiguity can't recur.
+            st.json({**result, "compliance_audit_status": audit_source or "NOT audited yet "
+                    "(default score 0.0 -- click 'Check COLREG compliance' above)"})
 
         with st.expander("Degeneracy check (always the same answer?)"):
             st.caption(
