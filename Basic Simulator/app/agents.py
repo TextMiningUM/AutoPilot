@@ -258,7 +258,7 @@ def _parse_json_action(text: str) -> dict:
             "reasoning": f"[parse error -- raw model output] {text[:300]}", "_parse_error": True}
 
 
-def _pg_match_query(mission: Mission, own: Vessel) -> str:
+def _pg_match_query(own: Vessel, targets: list[Vessel]) -> str:
     """Short COLREG-encounter phrase used ONLY to retrieve procedural-graph guidance --
     never shown to the model in place of the real situation report. render_guidance()'s
     node/family matching is embedding-similarity based against a graph built from
@@ -270,10 +270,17 @@ def _pg_match_query(mission: Mission, own: Vessel) -> str:
     text for all 14 missions before this fix). classify_encounter()/contact_line()
     already compute the real encounter type + rule(s) per contact for the Evaluation
     panel; reusing that here (not shown to the model) is exactly the retrieval-query
-    role RAG's own query already plays."""
-    if not mission.targets:
+    role RAG's own query already plays.
+    `targets` MUST be the simulation's live, currently-moving contact list (Simulation.
+    targets) -- NEVER `mission.targets` (bug fixed 2026-09-21: this used to take `mission`
+    and read mission.targets directly, so the encounter classification driving THIS
+    retrieval was computed against each contact's frozen t=0 position forever; verified
+    concretely on s01_head_on__v4_pg that this flipped a real close-quarters Rule 15/16
+    crossing at t=100s, CPA 285m, into a false 'routine passage' match, handing the model
+    generic lookout guidance instead of give-way guidance at the moment it mattered most)."""
+    if not targets:
         return "routine passage, no other traffic, no close-quarters encounter"
-    contacts = [contact_line(own, t) for t in mission.targets]
+    contacts = [contact_line(own, t) for t in targets]
     live = [c for c in contacts if not c["quiet"]]
     if not live:
         return "routine passage, no close-quarters encounter, maintain course and speed"
@@ -283,11 +290,14 @@ def _pg_match_query(mission: Mission, own: Vessel) -> str:
     return f"{enc} encounter, applicable {rules}, give-way/stand-on obligations"
 
 
-def build_oow_prompt(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
+def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], config: str = "v3_rag_cot",
                      system_prompt: str | None = None,
                      k: int = 6, dense_n: int = 40,
                      constraints: VesselConstraints | None = None) -> tuple[list[dict], dict]:
     """Returns (messages, debug_info) for the selected MODEL_CONFIGS key.
+    `targets` MUST be the simulation's live, currently-moving contact list (Simulation.
+    targets), passed straight through to narrate()/_pg_match_query() -- see their
+    docstrings for the bug this fixes (mission.targets is frozen at t=0).
     `system_prompt`, if given, overrides SYSTEM_OOW_AGENT for every config except
     bare_qwen (which always keeps its own separate, deliberately minimal prompt as the
     true ablation baseline). debug_info exposes what was retrieved, for the Agent panel
@@ -307,7 +317,7 @@ def build_oow_prompt(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
     if config not in _CONFIG_SPECS:
         raise ValueError(f"Unknown model config {config!r}; choose one of {list(MODEL_CONFIGS)}")
     spec = _CONFIG_SPECS[config]
-    situation = narrate(mission, own, cruise_speed_mps=constraints.cruise_speed_mps if constraints else None)
+    situation = narrate(mission, own, targets, cruise_speed_mps=constraints.cruise_speed_mps if constraints else None)
 
     if spec["bare"]:
         user_msg = f"Situation:\n{situation}\n\nRecommend exactly ONE manoeuvre as the specified JSON object."
@@ -329,7 +339,7 @@ def build_oow_prompt(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
     if spec["pg"]:
         graph = pg_graphs.get(spec["pg"])
         if graph is not None:
-            pg_text = render_guidance(_pg_match_query(mission, own), graph)
+            pg_text = render_guidance(_pg_match_query(own, targets), graph)
 
     user_parts = []
     if spec["cot"] or spec["pg"]:
@@ -370,14 +380,17 @@ def build_oow_prompt(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
     return messages, debug
 
 
-def rag_context_preview(mission: Mission, own: Vessel, k: int = 6, dense_n: int = 40) -> dict:
+def rag_context_preview(mission: Mission, own: Vessel, targets: list[Vessel],
+                        k: int = 6, dense_n: int = 40) -> dict:
     """CPU-only preview of what v1_rag/v3_rag_cot would inject for the given k, without
     touching the GPU/model -- lets the Agent panel show a live "context size" readout as
-    the user adjusts the RAG on/off switch and chunk-count slider."""
+    the user adjusts the RAG on/off switch and chunk-count slider. `targets` MUST be the
+    simulation's live contact list (Simulation.targets), not mission.targets -- see
+    narrate()'s docstring."""
     if k <= 0:
         return {"chars": 0, "chunks": 0}
     embedder, embs, ids, kg, chunk_by_id, _ = _load_retrieval()
-    situation = narrate(mission, own)
+    situation = narrate(mission, own, targets)
     hits, _, _ = kg_retrieve(situation, embedder, embs, ids, kg, k=k, dense_n=dense_n)
     ctx = format_context(hits, chunk_by_id)
     return {"chars": len(ctx), "chunks": len(hits)}
@@ -454,11 +467,13 @@ def effective_generation_params(config: str, enable_thinking: bool, max_new_toke
     return enable_thinking, max_new_tokens
 
 
-def ask_oow(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
+def ask_oow(mission: Mission, own: Vessel, targets: list[Vessel], config: str = "v3_rag_cot",
            system_prompt: str | None = None, max_new_tokens: int = 256,
            enable_thinking: bool = False, k: int = 6,
            constraints: VesselConstraints | None = None) -> tuple[dict, dict]:
-    """Returns (decision_json, debug_info). `config` is one of MODEL_CONFIGS's keys;
+    """Returns (decision_json, debug_info). `targets` MUST be the simulation's live,
+    currently-moving contact list (Simulation.targets) -- NEVER mission.targets, see
+    narrate()'s docstring for the bug this fixes. `config` is one of MODEL_CONFIGS's keys;
     `system_prompt`, if given, overrides SYSTEM_OOW_AGENT (see build_oow_prompt).
     `max_new_tokens`/`enable_thinking` control generation speed (see _generate); `k`
     controls how many RAG chunks get injected for v1_rag/v3_rag_cot -- each retrieved
@@ -481,7 +496,7 @@ def ask_oow(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
     # about and pushed some generations past 2048 too (same parse-error/hold_course failure
     # mode, reproduced on s01_head_on/v2_cot) -- bumped to 3072.
     enable_thinking, max_new_tokens = effective_generation_params(config, enable_thinking, max_new_tokens)
-    messages, debug = build_oow_prompt(mission, own, config=config, system_prompt=system_prompt, k=k,
+    messages, debug = build_oow_prompt(mission, own, targets, config=config, system_prompt=system_prompt, k=k,
                                        constraints=constraints)
     tok, mdl = _load_qwen()
     raw = _generate(tok, mdl, messages, max_new_tokens=max_new_tokens, enable_thinking=enable_thinking)

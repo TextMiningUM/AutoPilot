@@ -90,7 +90,7 @@ def run_one(mission_id: str, config: str, tag: str = "default",
         if step % effective_interval == 0:
             _t_cp = time.time()
             decision, debug = ask_oow(
-                mission, sim.own, config=config, system_prompt=system_prompt,
+                mission, sim.own, sim.targets, config=config, system_prompt=system_prompt,
                 max_new_tokens=max_new_tokens, enable_thinking=enable_thinking, k=effective_k,
                 constraints=constraints,
             )

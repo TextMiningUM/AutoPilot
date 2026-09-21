@@ -822,7 +822,7 @@ with side_panel:
         with st.expander("Situation report", expanded=False):
             st.caption(_goal_quickfacts(sim.own.x, sim.own.y, sim.own.heading, sim.own.speed,
                                        mission.goal))
-            st.code(narrate(mission, sim.own), language=None, wrap_lines=True)
+            st.code(narrate(mission, sim.own, sim.targets), language=None, wrap_lines=True)
 
         model_config = st.selectbox(
             "Model / prompt config", options=list(MODEL_CONFIGS),
@@ -860,7 +860,7 @@ with side_panel:
 
         if model_config in ("v1_rag", "v3_rag_cot"):
             from app.agents import rag_context_preview
-            preview = rag_context_preview(mission, sim.own, k=effective_k)
+            preview = rag_context_preview(mission, sim.own, sim.targets, k=effective_k)
             if preview["chars"]:
                 st.caption(
                     f"\U0001F4CF Context preview: ~{preview['chars']:,} chars "
@@ -871,7 +871,7 @@ with side_panel:
 
         if st.button("\U0001F9E0 Ask OOW agent", type="primary", use_container_width=True):
             with st.spinner(f"Retrieving context + generating ({MODEL_CONFIGS[model_config]})..."):
-                decision, debug = ask_oow(mission, sim.own, config=model_config,
+                decision, debug = ask_oow(mission, sim.own, sim.targets, config=model_config,
                                           system_prompt=st.session_state.get("custom_system_prompt"),
                                           max_new_tokens=int(max_new_tokens), enable_thinking=enable_thinking,
                                           k=effective_k, constraints=sim.constraints)
@@ -1035,7 +1035,7 @@ with plot_col:
             )
             if mission.id.startswith("q"):
                 st.write("This is a **quiet** scenario -- correct recommendation is `hold_course`.")
-            for tgt in mission.targets:
+            for tgt in sim.targets:
                 c = contact_line(sim.own, tgt)
                 if c["quiet"]:
                     st.caption(f"{c['name']}: quiet (CPA {c['cpa_m']:.0f}m, TCPA {c['tcpa_s']:.0f}s)")

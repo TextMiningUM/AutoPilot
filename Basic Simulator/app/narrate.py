@@ -117,13 +117,20 @@ def contact_line(own: Vessel, tgt: Vessel) -> dict:
     }
 
 
-def narrate(mission: Mission, own: Vessel, cruise_speed_mps: float | None = None) -> str:
+def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_mps: float | None = None) -> str:
     """Situation report text handed to the OOW agent -- own-ship state, goal, and every
-    target's range/bearing/heading/speed/CPA/TCPA. Deliberately leaves out encounter
-    classification, applicable rule(s), and the quiet tag: those are exactly what the
-    agent is being asked to work out, so handing them over in the prompt would leak the
-    answer instead of testing whether the model can derive it. contact_line() still
-    computes/returns them (used elsewhere, e.g. the Evaluation panel's degeneracy check).
+    target's range/bearing/heading/speed/CPA/TCPA. `targets` MUST be the simulation's live,
+    currently-moving contact list (Simulation.targets) -- NEVER `mission.targets`, which is
+    the static definition frozen at t=0 and never mutated as the run progresses (bug fixed
+    2026-09-21: this function used to read mission.targets directly, so every contact's
+    range/bearing/CPA/TCPA was computed against its ORIGINAL position forever, silently
+    diverging from reality by kilometres over a long run while own-ship's own side of the
+    same calculation was correctly live).
+    Deliberately leaves out encounter classification, applicable rule(s), and the quiet
+    tag: those are exactly what the agent is being asked to work out, so handing them over
+    in the prompt would leak the answer instead of testing whether the model can derive it.
+    contact_line() still computes/returns them (used elsewhere, e.g. the Evaluation panel's
+    degeneracy check).
     Also reports a nominal/rated speed reference (mission.own_ship.speed by default -- the
     mission's ORIGINAL starting speed, distinct from `own.speed`, which mutates as the run
     progresses -- or `cruise_speed_mps` when given, which now always equals that same
@@ -168,12 +175,12 @@ def narrate(mission: Mission, own: Vessel, cruise_speed_mps: float | None = None
         lines.append(f"At current speed, ETA to goal \u2248 {eta:.0f}s if heading straight there.")
     else:
         lines.append("At current speed (stopped), the goal will never be reached.")
-    if not mission.targets:
+    if not targets:
         lines.append("No other ships tracked.")
     else:
-        n = len(mission.targets)
+        n = len(targets)
         lines.append(f"{n} other ship{'s' if n != 1 else ''}:")
-        for tgt in mission.targets:
+        for tgt in targets:
             c = contact_line(own, tgt)
             tcpa_note = "" if c["closing"] else " (already past closest point, ranges now increasing)"
             lines.append(
