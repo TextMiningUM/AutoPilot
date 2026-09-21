@@ -1,0 +1,46 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Building Procedural Graph for domain OOW
+  oow_reasoning_traces.jsonl: 247 traces with >=2 ordered steps
+  oow_incident_reasoning_traces.jsonl: 65 traces with >=2 ordered steps
+  oow_scenario_reasoning_traces.jsonl: 360 traces with >=2 ordered steps
+Loading embedder...
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 2634.17it/s]
+Canonicalizing 2087 step actions...
+  -> 720 canonical procedure nodes
+
+Saved /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/oow_pg.json
+  traces=672  steps=2087  nodes=720  edges=640
+  families: {'colreg_encounter': 600, 'general': 69, 'safety': 1, 'routine_call': 1, 'distress': 1}
+
+Top 8 transitions by support:
+  [360x] Assess the fused contact picture (bearing/range/CPA/TCPA) ag  ->  Determine own-ship's role: give way.
+  [241x] Determine own-ship's role: give way.  ->  Execute the action: alter_course (+30 degrees to starboard, 
+  [ 90x] Determine own-ship's role: give way.  ->  Execute the action: maintain_course.
+  [ 29x] Determine own-ship's role: give way.  ->  Execute the action: stop.
+  [  4x] Maintain course and speed  ->  take action to avoid collision
+  [  3x] check the effectiveness of the action taken  ->  slacken speed or stop if necessary
+  [  2x] take action to avoid collision  ->  make substantial alterations of course or speed
+  [  2x] make substantial alterations of course or speed  ->  check the effectiveness of the action taken
+
+Sample greedy path per family:
+  colreg_encounter:
+    -> Assess the fused contact picture (bearing/range/CPA/TCPA) against own-ship's course and sp
+    -> Determine own-ship's role: give way.
+    -> Execute the action: alter_course (+30 degrees to starboard, lookahead distance 200 m).
+  general:
+    -> maintain a proper lookout
+    -> do not leave the bridge until properly relieved
+    -> assess the situation before being the sole lookout
+    -> summon assistance if unable to maintain undivided attention
+  safety:
+    -> Make a SECURITE call on VHF-FM channel 13 before crossing the Houston Ship Channel.
+    -> Avoid meeting east bound tows between Bolivar Peninsula Buoy 15 and Buoy 20.
+    -> Communicate any changes in speed to other vessels.
+    -> Steer clear of sandbars and stay within the buoy lines.
+  routine_call:
+    -> Communicate concerns to the pilot
+    -> Use a warning message marker
+  distress:
+    -> Petunia Seaways should have reduced speed significantly to allow for better situational as
+Exception ignored in: <_io.BufferedWriter name=24>
+BrokenPipeError: [Errno 32] Broken pipe

@@ -1,0 +1,197 @@
+[2026-09-18 22:36:12] ===== OOW CHAIN START (N=50 TAG=n50 MAX_STAGE=33) =====
+[2026-09-18 22:36:12] workspace: /home/ubuntu/AutoPilot
+[2026-09-18 22:36:12] python:    /home/ubuntu/AutoPilot/.venv/bin/python
+[2026-09-18 22:36:12] gpu:      NVIDIA A30, 24576 MiB
+[2026-09-18 22:36:12] --- § 1: normalise the 500-Q&A gold file -> {question, gold_answer, expected_points} ---
+[2026-09-18 22:36:12] ================================================================================
+[2026-09-18 22:36:12] STAGE 01_gold_norm  required=true
+[2026-09-18 22:36:12] cmd: python -m pipeline.ingest.build_oow_gold_norm
+[2026-09-18 22:36:12] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/01_gold_norm.log
+[2026-09-18 22:36:12] --------------------------------------------------------------------------------
+[2026-09-18 22:36:13] STAGE 01_gold_norm  exit=0  duration=0min
+[2026-09-18 22:36:13] --- § 2-4: COLREG source -> JSON -> RAG chunks -> Knowledge Graph ---
+[2026-09-18 22:36:13] ================================================================================
+[2026-09-18 22:36:13] STAGE 02_oow_json  required=false
+[2026-09-18 22:36:13] cmd: python -m pipeline.ingest.build_oow_json
+[2026-09-18 22:36:13] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/02_oow_json.log
+[2026-09-18 22:36:13] --------------------------------------------------------------------------------
+[2026-09-18 22:36:17] STAGE 02_oow_json  exit=0  duration=0min
+[2026-09-18 22:36:17] ================================================================================
+[2026-09-18 22:36:17] STAGE 03_rag  required=false
+[2026-09-18 22:36:17] cmd: python -m pipeline.ingest.build_rag
+[2026-09-18 22:36:17] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/03_rag.log
+[2026-09-18 22:36:17] --------------------------------------------------------------------------------
+[2026-09-18 22:36:39] STAGE 03_rag  exit=0  duration=0min
+[2026-09-18 22:36:39] ================================================================================
+[2026-09-18 22:36:39] STAGE 04_kg  required=false
+[2026-09-18 22:36:39] cmd: python -m pipeline.ingest.build_kg
+[2026-09-18 22:36:39] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/04_kg.log
+[2026-09-18 22:36:39] --------------------------------------------------------------------------------
+[2026-09-18 22:36:53] STAGE 04_kg  exit=0  duration=0min
+[2026-09-18 22:36:53] --- § 5: rule-text reasoning-trace extraction (needs OPENAI_API_KEY, resume-safe) ---
+[2026-09-18 22:36:53] ================================================================================
+[2026-09-18 22:36:53] STAGE 05_reasoning  required=false
+[2026-09-18 22:36:53] cmd: python -m pipeline.track1.extract_reasoning
+[2026-09-18 22:36:53] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/05_reasoning.log
+[2026-09-18 22:36:53] --------------------------------------------------------------------------------
+[2026-09-18 22:36:54] STAGE 05_reasoning  exit=0  duration=0min
+[2026-09-18 22:36:54] --- § 5.1: real-world incident reports (screen -> excerpt -> extract) ---
+[2026-09-18 22:36:54] ================================================================================
+[2026-09-18 22:36:54] STAGE 06_screen_incidents  required=false
+[2026-09-18 22:36:54] cmd: python -m pipeline.ingest.screen_incidents
+[2026-09-18 22:36:54] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/06_screen_incidents.log
+[2026-09-18 22:36:54] --------------------------------------------------------------------------------
+[2026-09-18 22:36:57] STAGE 06_screen_incidents  exit=0  duration=0min
+[2026-09-18 22:36:57] ================================================================================
+[2026-09-18 22:36:57] STAGE 07_incident_excerpts  required=false
+[2026-09-18 22:36:57] cmd: python -m pipeline.ingest.build_incident_excerpts --min-score 15
+[2026-09-18 22:36:57] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/07_incident_excerpts.log
+[2026-09-18 22:36:57] --------------------------------------------------------------------------------
+[2026-09-18 22:36:57] STAGE 07_incident_excerpts  exit=0  duration=0min
+[2026-09-18 22:36:57] ================================================================================
+[2026-09-18 22:36:57] STAGE 08_incident_reasoning  required=false
+[2026-09-18 22:36:57] cmd: python -m pipeline.track1.extract_incident_reasoning
+[2026-09-18 22:36:57] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/08_incident_reasoning.log
+[2026-09-18 22:36:57] --------------------------------------------------------------------------------
+[2026-09-18 22:36:59] STAGE 08_incident_reasoning  exit=0  duration=0min
+[2026-09-18 22:36:59] --- § 6: Track 1 training data from rule text ---
+[2026-09-18 22:36:59] ================================================================================
+[2026-09-18 22:36:59] STAGE 09_sft_rule  required=false
+[2026-09-18 22:36:59] cmd: python -m pipeline.track1.build_sft --out-prefix oow_sft --gold-file Data/OOW/OOW_Eval/colreg_qa_500_normalised.json
+[2026-09-18 22:36:59] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/09_sft_rule.log
+[2026-09-18 22:36:59] --------------------------------------------------------------------------------
+[2026-09-18 22:37:29] STAGE 09_sft_rule  exit=0  duration=0min
+[2026-09-18 22:37:29] ================================================================================
+[2026-09-18 22:37:29] STAGE 10_multihop  required=false
+[2026-09-18 22:37:29] cmd: python -m pipeline.track1.build_multihop --traces-file Data/OOW/OOW_Agents_Training/oow_reasoning_traces.jsonl Data/OOW/OOW_Agents_Training/oow_incident_reasoning_traces.jsonl Data/OOW/OOW_Agents_Training/oow_scenario_reasoning_traces.jsonl --out-file Data/OOW/OOW_Agents_Training/oow_multihop.jsonl --gold-file Data/OOW/OOW_Eval/colreg_qa_500_normalised.json
+[2026-09-18 22:37:29] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/10_multihop.log
+[2026-09-18 22:37:29] --------------------------------------------------------------------------------
+[2026-09-18 22:37:45] STAGE 10_multihop  exit=0  duration=0min
+[2026-09-18 22:37:45] ================================================================================
+[2026-09-18 22:37:45] STAGE 11_dpo_rule  required=false
+[2026-09-18 22:37:45] cmd: python -m pipeline.track1.build_rlhf --out-file Data/OOW/OOW_Agents_Training/oow_dpo_pairs.jsonl --gold-file Data/OOW/OOW_Eval/colreg_qa_500_normalised.json
+[2026-09-18 22:37:45] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/11_dpo_rule.log
+[2026-09-18 22:37:45] --------------------------------------------------------------------------------
+[2026-09-18 22:37:59] STAGE 11_dpo_rule  exit=0  duration=0min
+[2026-09-18 22:37:59] ================================================================================
+[2026-09-18 22:37:59] STAGE 12_reflection_rule  required=false
+[2026-09-18 22:37:59] cmd: python -m pipeline.track1.build_reflection --out-file Data/OOW/OOW_Agents_Training/oow_reflection.jsonl --gold-file Data/OOW/OOW_Eval/colreg_qa_500_normalised.json
+[2026-09-18 22:37:59] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/12_reflection_rule.log
+[2026-09-18 22:37:59] --------------------------------------------------------------------------------
+[2026-09-18 22:38:13] STAGE 12_reflection_rule  exit=0  duration=0min
+[2026-09-18 22:38:13] --- § 6.1: Track 1 training data from real incident excerpts ---
+[2026-09-18 22:38:13] ================================================================================
+[2026-09-18 22:38:13] STAGE 13_sft_incident  required=false
+[2026-09-18 22:38:13] cmd: python -m pipeline.track1.build_sft --traces-file Data/OOW/OOW_Agents_Training/oow_incident_reasoning_traces.jsonl --out-prefix oow_incident_sft --gold-file Data/OOW/OOW_Eval/colreg_qa_500_normalised.json
+[2026-09-18 22:38:13] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/13_sft_incident.log
+[2026-09-18 22:38:13] --------------------------------------------------------------------------------
+[2026-09-18 22:38:30] STAGE 13_sft_incident  exit=0  duration=0min
+[2026-09-18 22:38:30] ================================================================================
+[2026-09-18 22:38:30] STAGE 14_dpo_incident  required=false
+[2026-09-18 22:38:30] cmd: python -m pipeline.track1.build_rlhf --traces-file Data/OOW/OOW_Agents_Training/oow_incident_reasoning_traces.jsonl --out-file Data/OOW/OOW_Agents_Training/oow_incident_dpo_pairs.jsonl --gold-file Data/OOW/OOW_Eval/colreg_qa_500_normalised.json
+[2026-09-18 22:38:30] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/14_dpo_incident.log
+[2026-09-18 22:38:30] --------------------------------------------------------------------------------
+[2026-09-18 22:38:44] STAGE 14_dpo_incident  exit=0  duration=0min
+[2026-09-18 22:38:44] ================================================================================
+[2026-09-18 22:38:44] STAGE 15_reflection_incident  required=false
+[2026-09-18 22:38:44] cmd: python -m pipeline.track1.build_reflection --traces-file Data/OOW/OOW_Agents_Training/oow_incident_reasoning_traces.jsonl --out-file Data/OOW/OOW_Agents_Training/oow_incident_reflection.jsonl --gold-file Data/OOW/OOW_Eval/colreg_qa_500_normalised.json
+[2026-09-18 22:38:44] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/15_reflection_incident.log
+[2026-09-18 22:38:44] --------------------------------------------------------------------------------
+[2026-09-18 22:38:57] STAGE 15_reflection_incident  exit=0  duration=0min
+[2026-09-18 22:38:57] --- § 7 / § 12.9: gold-claims enrichment (needs ANTHROPIC_API_KEY, resume-safe) ---
+[2026-09-18 22:38:57] ================================================================================
+[2026-09-18 22:38:57] STAGE 16_gold_claims_enrich  required=false
+[2026-09-18 22:38:57] cmd: python -m pipeline.eval.enrich_gold_claims --files Data/OOW/OOW_Eval/colreg_qa_500_normalised.json
+[2026-09-18 22:38:57] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/16_gold_claims_enrich.log
+[2026-09-18 22:38:57] --------------------------------------------------------------------------------
+[2026-09-18 22:38:59] STAGE 16_gold_claims_enrich  exit=0  duration=0min
+[2026-09-18 22:38:59] ================================================================================
+[2026-09-18 22:38:59] STAGE 17_gold_claims_check  required=false
+[2026-09-18 22:38:59] cmd: python -m pipeline.eval.gold_claims --check Data/OOW/OOW_Eval/colreg_qa_500_normalised_claims.json
+[2026-09-18 22:38:59] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/17_gold_claims_check.log
+[2026-09-18 22:38:59] --------------------------------------------------------------------------------
+[2026-09-18 22:38:59] STAGE 17_gold_claims_check  exit=0  duration=0min
+[2026-09-18 22:38:59] --- § 8: Procedural Graphs -- merged + 3 source-scoped, then step-order SFT data ---
+[2026-09-18 22:38:59] ================================================================================
+[2026-09-18 22:38:59] STAGE 18_pg_merged  required=false
+[2026-09-18 22:38:59] cmd: python -m pipeline.ingest.build_pg
+[2026-09-18 22:38:59] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/18_pg_merged.log
+[2026-09-18 22:38:59] --------------------------------------------------------------------------------
+[2026-09-18 22:39:15] STAGE 18_pg_merged  exit=0  duration=0min
+[2026-09-18 22:39:15] ================================================================================
+[2026-09-18 22:39:15] STAGE 19_pg_rule  required=false
+[2026-09-18 22:39:15] cmd: python -m pipeline.ingest.build_pg --traces-file Data/OOW/OOW_Agents_Training/oow_reasoning_traces.jsonl --out-file Data/OOW/OOW_Agents_Training/oow_pg_rule.json
+[2026-09-18 22:39:15] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/19_pg_rule.log
+[2026-09-18 22:39:15] --------------------------------------------------------------------------------
+[2026-09-18 22:39:28] STAGE 19_pg_rule  exit=0  duration=0min
+[2026-09-18 22:39:28] ================================================================================
+[2026-09-18 22:39:28] STAGE 20_pg_incident  required=false
+[2026-09-18 22:39:28] cmd: python -m pipeline.ingest.build_pg --traces-file Data/OOW/OOW_Agents_Training/oow_incident_reasoning_traces.jsonl --out-file Data/OOW/OOW_Agents_Training/oow_pg_incident.json
+[2026-09-18 22:39:28] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/20_pg_incident.log
+[2026-09-18 22:39:28] --------------------------------------------------------------------------------
+[2026-09-18 22:39:41] STAGE 20_pg_incident  exit=0  duration=0min
+[2026-09-18 22:39:41] ================================================================================
+[2026-09-18 22:39:41] STAGE 21_pg_scenario  required=false
+[2026-09-18 22:39:41] cmd: python -m pipeline.ingest.build_pg --traces-file Data/OOW/OOW_Agents_Training/oow_scenario_reasoning_traces.jsonl --out-file Data/OOW/OOW_Agents_Training/oow_pg_scenario.json
+[2026-09-18 22:39:41] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/21_pg_scenario.log
+[2026-09-18 22:39:41] --------------------------------------------------------------------------------
+[2026-09-18 22:39:55] STAGE 21_pg_scenario  exit=0  duration=0min
+[2026-09-18 22:39:55] ================================================================================
+[2026-09-18 22:39:55] STAGE 22_pg_sft  required=false
+[2026-09-18 22:39:55] cmd: python -m pipeline.track1.build_pg_sft --gold-file Data/OOW/OOW_Eval/colreg_qa_500_normalised.json
+[2026-09-18 22:39:55] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/22_pg_sft.log
+[2026-09-18 22:39:55] --------------------------------------------------------------------------------
+[2026-09-18 22:42:17] ===== OOW CHAIN START (N=50 TAG=n50 MAX_STAGE=33) =====
+[2026-09-18 22:42:17] workspace: /home/ubuntu/AutoPilot
+[2026-09-18 22:42:17] python:    /home/ubuntu/AutoPilot/.venv/bin/python
+[2026-09-18 22:42:17] gpu:      NVIDIA A30, 24576 MiB
+[2026-09-18 22:42:17] --- § 1: normalise the 500-Q&A gold file -> {question, gold_answer, expected_points} ---
+[2026-09-18 22:42:17] STAGE 01_gold_norm  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] --- § 2-4: COLREG source -> JSON -> RAG chunks -> Knowledge Graph ---
+[2026-09-18 22:42:17] STAGE 02_oow_json  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] STAGE 03_rag  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] STAGE 04_kg  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] --- § 5: rule-text reasoning-trace extraction (needs OPENAI_API_KEY, resume-safe) ---
+[2026-09-18 22:42:17] STAGE 05_reasoning  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] --- § 5.1: real-world incident reports (screen -> excerpt -> extract) ---
+[2026-09-18 22:42:17] STAGE 06_screen_incidents  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] STAGE 07_incident_excerpts  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] STAGE 08_incident_reasoning  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] --- § 6: Track 1 training data from rule text ---
+[2026-09-18 22:42:17] STAGE 09_sft_rule  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] STAGE 10_multihop  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] STAGE 11_dpo_rule  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] STAGE 12_reflection_rule  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] --- § 6.1: Track 1 training data from real incident excerpts ---
+[2026-09-18 22:42:17] STAGE 13_sft_incident  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] STAGE 14_dpo_incident  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] STAGE 15_reflection_incident  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] --- § 7 / § 12.9: gold-claims enrichment (needs ANTHROPIC_API_KEY, resume-safe) ---
+[2026-09-18 22:42:17] STAGE 16_gold_claims_enrich  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] STAGE 17_gold_claims_check  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] --- § 8: Procedural Graphs -- merged + 3 source-scoped, then step-order SFT data ---
+[2026-09-18 22:42:17] STAGE 18_pg_merged  skipped (RESUME_FROM=22)
+[2026-09-18 22:42:17] ================================================================================
+[2026-09-18 22:42:17] STAGE 22_pg_sft  required=false
+[2026-09-18 22:42:17] cmd: python -m pipeline.track1.build_pg_sft --gold-file Data/OOW/OOW_Eval/colreg_qa_500_normalised.json
+[2026-09-18 22:42:17] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/22_pg_sft.log
+[2026-09-18 22:42:17] --------------------------------------------------------------------------------
+[2026-09-18 22:42:31] STAGE 22_pg_sft  exit=0  duration=0min
+[2026-09-18 22:42:31] ================================================================================
+[2026-09-18 22:42:31] STAGE 23_pg_sft_incident  required=false
+[2026-09-18 22:42:31] cmd: python -m pipeline.track1.build_pg_sft --gold-file Data/OOW/OOW_Eval/colreg_qa_500_normalised.json --pg-file Data/OOW/OOW_Agents_Training/oow_pg_incident.json --out-file Data/OOW/OOW_Agents_Training/oow_pg_incident_sft.jsonl
+[2026-09-18 22:42:31] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/23_pg_sft_incident.log
+[2026-09-18 22:42:31] --------------------------------------------------------------------------------
+[2026-09-18 22:42:44] STAGE 23_pg_sft_incident  exit=0  duration=0min
+[2026-09-18 22:42:44] --- § 10 / § 10.1: base-Qwen baseline, Track 1 + Track 2 (n=50) ---
+[2026-09-18 22:42:44] ================================================================================
+[2026-09-18 22:42:44] STAGE 24_eval_qwen_base  required=false
+[2026-09-18 22:42:44] cmd: python -m pipeline.eval.eval_finetuned --model Qwen/Qwen3-8B --tag oow_qwen_base_n50 --gold-file Data/OOW/OOW_Eval/colreg_qa_500_normalised.json --force-4bit --n 50
+[2026-09-18 22:42:44] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/24_eval_qwen_base.log
+[2026-09-18 22:42:44] --------------------------------------------------------------------------------
+[2026-09-18 22:42:58] STAGE 24_eval_qwen_base  exit=0  duration=0min
+[2026-09-18 22:42:58] ================================================================================
+[2026-09-18 22:42:58] STAGE 25_eval_qwen_base_colreg  required=false
+[2026-09-18 22:42:58] cmd: python -m pipeline.eval.eval_oow_scenarios --model Qwen/Qwen3-8B --tag oow_qwen_base_n50 --force-4bit --n 50
+[2026-09-18 22:42:58] log: /home/ubuntu/AutoPilot/Data/OOW/OOW_Agents_Training/overnight_logs/25_eval_qwen_base_colreg.log
+[2026-09-18 22:42:58] --------------------------------------------------------------------------------
