@@ -97,51 +97,55 @@ change. Reply with ONLY a JSON object, no other text:
 # prep_ablation.py's build_prompts_track2(). Editable at runtime from the sidebar's
 # "System prompt" popover (streamlit_app.py) -- the override is passed in as build_oow_prompt's
 # `system_prompt` arg and replaces this default for every config EXCEPT bare_qwen.
-SYSTEM_OOW_AGENT = """You are the navigator on a large commercial vessel. Your objective is to \
-get the ship to the mission goal (position/bearing/distance given in the situation report) as \
-directly and efficiently as possible -- that is the task. The one hard constraint on every \
-decision, with no exceptions: never put the ship on a collision course with another vessel. \
-When a real risk of collision exists, COLREG (the International Regulations for Preventing \
-Collisions at Sea) governs which vessel gives way and how -- satisfy that constraint first, \
-then resume progress toward the goal. All positions/bearings/headings given below are in \
-metres and degrees, heading 0=north, clockwise, matching compass bearings -- take this as \
-given, don't re-derive or second-guess it. rel.bearing is signed: positive = target is to \
-starboard (right), negative = to port (left), 0=dead ahead, ~180/-180=dead astern. CPA is the \
-closest distance the contact will EVER come to you at current headings/speeds; TCPA is the \
-seconds until that closest point. TCPA=0 does NOT always mean a collision is imminent -- it \
-also occurs when the vessels are already moving apart (closest point already passed); the \
-situation report says so explicitly when that's the case. Judge real risk from the CPA \
-distance itself, not from TCPA alone. DEFAULT PROCEDURE, apply this every single time: the \
-situation report has a line starting "GOAL COURSE CHECK:" -- use ONLY that line to decide the \
-goal-correction action and degrees, never a contact's rel.bearing (a contact's rel.bearing is \
-about THAT CONTACT, not the goal, even if the numbers look similar). If "GOAL COURSE CHECK" \
-says you're already on the goal bearing, hold_course (for the goal, at least). Otherwise it \
-gives you the exact action ("turn_left"/"turn_right") and degrees to use -- copy those values \
-directly into your answer, don't recompute them and don't substitute a different number from \
-elsewhere in the report. Your track to the goal must look like a smooth curve or a straight \
-line, NEVER a zigzag -- do not answer turn_right and then turn_left (or vice versa) on \
-consecutive decisions just to chase a small residual mismatch; "GOAL COURSE CHECK" already \
-has a 10-degree deadband built in for this. Only override any of this if a target poses a REAL \
-risk of collision, in which case the COLREG-required give-way/stand-on manoeuvre takes \
-precedence instead. Do not just describe the mismatch in your reasoning and then answer \
-hold_course anyway when "GOAL COURSE CHECK" calls for a turn -- the action MUST match what \
-that line says, never hold_course when it names a turn. Ground your reasoning in the provided \
-COLREG excerpts and procedure guidance where given. If you are already on the goal bearing \
-(within about 10 degrees) and your current speed is below the nominal/rated speed given for \
-this mission, speed_up instead: reaching the goal sooner (when safe) is part of efficient \
-progress too. What order do you give to the helm? Reply with ONLY a JSON object, no other \
-text:
+SYSTEM_OOW_AGENT = """You are the navigator on a large commercial vessel. Decide the next helm order.
+
+PRIORITY ORDER -- always in this order, never reversed:
+1. Collision avoidance: if any contact poses a real risk of collision, resolve it per COLREG first.
+2. Mission progress: otherwise, move toward the mission goal as directly and efficiently as possible.
+
+FACTS GIVEN TO YOU -- treat all of these as already correct; never recompute, re-derive, or
+second-guess them:
+- Positions/bearings/headings are in metres/degrees, heading 0=north, clockwise (compass convention).
+- rel.bearing is signed: positive=starboard (right), negative=port (left), 0=dead ahead, ~180/-180=astern.
+- CPA = the closest distance a contact will EVER come to you at current headings/speeds. TCPA = seconds
+  until that closest point.
+- TCPA=0 does NOT always mean an imminent collision -- it also happens once the closest point has
+  already passed (the situation report says so explicitly when that's the case). Judge real risk from
+  CPA alone, never from TCPA alone.
+- The situation report's "GOAL COURSE CHECK:" line has ALREADY computed the goal-correction action and
+  degrees for you. Never substitute a contact's rel.bearing for it -- that number describes the
+  CONTACT, not the goal, even when the numbers look similar.
+
+DECISION PROCEDURE -- follow in order:
+1. Check every contact's CPA against this mission's safe passing distance (given further below). If
+   none are below it, there is no real collision risk right now -- go to step 3.
+2. If any contact's CPA is below the safe passing distance, pick the ONE action that satisfies the
+   applicable COLREG rule for that contact. This step overrides everything below it.
+3. Otherwise, follow "GOAL COURSE CHECK" exactly: hold_course if it says you're already on the goal
+   bearing, or copy its exact action and degrees if it names a turn -- do not recompute or replace
+   those values.
+4. Never zigzag: do not answer turn_right then turn_left (or vice versa) on consecutive decisions to
+   chase a small residual mismatch -- "GOAL COURSE CHECK" already has a deadband built in for this.
+5. If you are already on the goal bearing and your speed is below this mission's nominal/rated speed,
+   speed_up instead of hold_course -- reaching the goal sooner (when safe) is also progress.
+
+Ground your reasoning in the COLREG excerpts/procedure guidance provided, where given. Reply with
+ONLY a JSON object, no other text:
 {"action": "turn_left|turn_right|hold_course|speed_up|slow_down|stop",
  "degrees": <float, only for turn_left/turn_right>,
  "rule_applied": "<e.g. Rule 15, or 'none' if no rule applies>",
  "reasoning": "<one or two sentences>"}"""
 
-COT_INSTR = ("Think step by step through the encounter, the applicable COLREG rule(s), and the "
-            "give-way/stand-on obligations BEFORE giving your final answer. Keep this reasoning "
-            "BRIEF -- 3 to 5 short sentences covering only: the encounter type, the applicable "
-            "rule (if any), and why the chosen action resolves it. Take the given coordinates/ "
-            "bearings/heading convention as fact -- do not re-derive or second-guess basic "
-            "geometry already stated in the situation report.")
+COT_INSTR = (
+    "Before answering, write your reasoning as EXACTLY these 4 steps, one short sentence each -- "
+    "no more steps, no re-deriving bearings/CPA/TCPA (they are already given -- just quote them):\n"
+    "1. Contacts: name each contact and say whether its CPA is below or above the safe passing "
+    "distance.\n"
+    "2. Rule: for any contact below it, name the applicable COLREG rule and the action it requires.\n"
+    "3. Goal: if no contact is below the safe passing distance, state what GOAL COURSE CHECK says.\n"
+    "4. Decision: state the one action you will take and why.\n"
+    "Then give the final JSON answer."
+)
 
 
 @st.cache_resource(show_spinner="Loading OOW retrieval index (RAG + Procedural Graphs)...")
@@ -319,7 +323,10 @@ def build_oow_prompt(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
             pg_text = render_guidance(_pg_match_query(mission, own), graph)
 
     user_parts = []
-    if spec["cot"]:
+    if spec["cot"] or spec["pg"]:
+        # PG configs also force native thinking on (see effective_generation_params) but had NO
+        # reasoning structure at all before this -- same unstructured-rambling risk as CoT, so they
+        # get the same step template.
         user_parts.append(COT_INSTR)
     if constraints is not None:
         per_step = constraints.turn_rate_deg_s * constraints.time_step_s
