@@ -119,6 +119,10 @@ def main() -> None:
                          "overwriting them")
     ap.add_argument("--dt", type=float, default=10.0)
     ap.add_argument("--max-steps", type=int, default=200)
+    ap.add_argument("--decision-interval", type=int, default=None,
+                    help="steps between LLM decisions -- default: per-mission recommendation "
+                         "(see app.narrate.recommended_decision_interval); set explicitly to "
+                         "force the same cadence across every mission in the sweep")
     ap.add_argument("--enable-thinking", action="store_true")
     ap.add_argument("--max-new-tokens", type=int, default=256)
     ap.add_argument("--k", type=int, default=2)
@@ -134,6 +138,7 @@ def main() -> None:
         missions, args.configs, tag=args.tag, dt=args.dt, max_steps=args.max_steps,
         enable_thinking=args.enable_thinking, max_new_tokens=args.max_new_tokens,
         k=args.k, use_rag=not args.no_rag, force=args.force,
+        decision_interval=args.decision_interval,
     )
     print(f"\nSaved incrementally to: {SUMMARY_FILE}")
 

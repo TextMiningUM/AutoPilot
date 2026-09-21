@@ -33,6 +33,31 @@ def cpa_tcpa(ox: float, oy: float, ohdg: float, ospd: float,
     return math.hypot(dx + dvx * t, dy + dvy * t), t
 
 
+def recommended_decision_interval(mission: Mission, dt: float = 10.0) -> int:
+    """How many simulation steps should pass between LLM decision calls for this mission,
+    based on how urgent its closest encounter is at t=0 -- a fast-closing contact (short
+    TCPA) keeps the same cadence used before this existed (10 steps), while a quiet mission
+    (no contacts, or a slow-developing one) can safely go longer between (expensive) LLM
+    calls without missing anything, cutting how many calls a full run needs. Never shorter
+    than 10 -- this is meant to REDUCE call volume for calm missions, not add extra calls to
+    tight ones. The simulator's own min_cpa backstop (see Simulation._enforce_min_cpa) runs
+    every physics step regardless of this interval, so safety never depends on how often the
+    LLM itself is consulted. Callers should still let a user/CLI override this, never treat
+    it as mandatory."""
+    if not mission.targets:
+        return 20
+    min_tcpa = min(
+        cpa_tcpa(mission.own_ship.x, mission.own_ship.y, mission.own_ship.heading, mission.own_ship.speed,
+                t.x, t.y, t.heading, t.speed)[1]
+        for t in mission.targets
+    )
+    if min_tcpa < 250:
+        return 10
+    if min_tcpa < 600:
+        return 15
+    return 20
+
+
 def classify_encounter(own_x: float, own_y: float, own_hdg: float,
                         tgt_x: float, tgt_y: float, tgt_hdg: float) -> tuple[str, list[str], float]:
     """Correct Rule 13 check: overtaking is defined by the bearing of OWN-SHIP

@@ -1,13 +1,21 @@
 """Precompute an LLM-driven mission run and save it as a replayable log.
 
-Calls the OOW agent only every DECISION_INTERVAL (fixed at 10) steps, dead-reckoning at the
-last decision in between; the streamlit UI's "LLM driven" mode then just scrubs through the
-saved trajectory instead of calling the (slow) model live -- that per-step latency is why
-Full Run felt unusable interactively (see repo memory, Basic Simulator section).
+Calls the OOW agent only every `decision_interval` steps, dead-reckoning at the last decision
+in between; the streamlit UI's "LLM driven" mode then just scrubs through the saved
+trajectory instead of calling the (slow) model live -- that per-step latency is why Full Run
+felt unusable interactively (see repo memory, Basic Simulator section).
 
-Every agent parameter used (config, thinking, max_new_tokens, k, system prompt, dt) is
-stored alongside the trajectory, so multiple variations of the SAME mission can be run
-under different --tag values and compared side by side later.
+`decision_interval` defaults to a PER-MISSION recommendation (app.narrate.
+recommended_decision_interval -- short for a fast-closing encounter, long for a quiet/slow
+one) rather than one fixed value for every mission, since a slow mission with nothing
+urgent happening doesn't need the same (expensive) call cadence as a tight crossing --
+pass --decision-interval to override it. Comparability across configs is preserved because
+ALL configs run against the SAME mission still get the SAME interval (just not necessarily
+the same interval as some OTHER mission).
+
+Every agent parameter used (config, thinking, max_new_tokens, k, system prompt, dt,
+decision_interval) is stored alongside the trajectory, so multiple variations of the SAME
+mission can be run under different --tag values and compared side by side later.
 
 Run one:
     python -m app.run_llm_scenario --missions s01_head_on --configs v3_rag_cot
@@ -34,22 +42,22 @@ from app.missions import list_mission_ids, load_mission
 from app.simulation import Simulation, VesselConstraints, COLLISION_RADIUS_M
 from app.agents import ask_oow, MODEL_CONFIGS, SYSTEM_OOW_AGENT, effective_generation_params
 from app.llm_runs import RUNS_DIR, run_log_path
-
-# Fixed, not a CLI option -- keeps every generated log directly comparable (asking the agent
-# more/less often would itself be a confound when comparing configs/tags against each other).
-DECISION_INTERVAL = 10
+from app.narrate import recommended_decision_interval
 
 
 def run_one(mission_id: str, config: str, tag: str = "default",
            dt: float = 10.0, max_steps: int = 200, enable_thinking: bool = False,
            max_new_tokens: int = 256, k: int = 2, use_rag: bool = True,
-           system_prompt: str | None = None, force: bool = False) -> Path:
+           system_prompt: str | None = None, force: bool = False,
+           decision_interval: int | None = None) -> Path:
     out_path = run_log_path(mission_id, config, tag)
     if out_path.exists() and not force:
         print(f"  [skip] {out_path.name} already exists (use --force to overwrite)")
         return out_path
 
     mission = load_mission(mission_id)
+    effective_interval = (decision_interval if decision_interval is not None
+                          else recommended_decision_interval(mission, dt))
     # time_step_s matches --dt (not VesselConstraints' own default) so the agent's per-step
     # turn-degrees estimate in the prompt (see agents.build_oow_prompt) stays accurate
     # regardless of what --dt this run actually uses. cruise_speed_mps matches the mission's
@@ -77,7 +85,7 @@ def run_one(mission_id: str, config: str, tag: str = "default",
         if sim.min_cpa_now() < COLLISION_RADIUS_M:
             outcome = "collision"
             break
-        if step % DECISION_INTERVAL == 0:
+        if step % effective_interval == 0:
             _t_cp = time.time()
             decision, debug = ask_oow(
                 mission, sim.own, config=config, system_prompt=system_prompt,
@@ -102,7 +110,7 @@ def run_one(mission_id: str, config: str, tag: str = "default",
         "mission_id": mission_id, "config": config, "tag": tag,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "params": {
-            "decision_interval": DECISION_INTERVAL, "dt": dt, "max_steps": max_steps,
+            "decision_interval": effective_interval, "dt": dt, "max_steps": max_steps,
             "enable_thinking": effective_thinking, "max_new_tokens": effective_max_new_tokens,
             "k": k, "use_rag": use_rag,
             "system_prompt": system_prompt or SYSTEM_OOW_AGENT,
@@ -130,6 +138,11 @@ def main() -> None:
                          "default, then compare both logs for the same mission")
     ap.add_argument("--dt", type=float, default=10.0, help="simulation time step (s)")
     ap.add_argument("--max-steps", type=int, default=200)
+    ap.add_argument("--decision-interval", type=int, default=None,
+                    help="simulation steps between LLM decision calls -- default: a per-mission "
+                         "recommendation (short for a fast-closing encounter, long for a quiet/slow "
+                         "one, see app.narrate.recommended_decision_interval); set explicitly to "
+                         "force the same cadence across every mission in this run")
     ap.add_argument("--enable-thinking", action="store_true",
                     help="enable Qwen3's native hidden reasoning channel (slower)")
     ap.add_argument("--max-new-tokens", type=int, default=256)
@@ -156,6 +169,7 @@ def main() -> None:
             dt=args.dt, max_steps=args.max_steps, enable_thinking=args.enable_thinking,
             max_new_tokens=args.max_new_tokens, k=args.k, use_rag=not args.no_rag,
             system_prompt=system_prompt, force=args.force,
+            decision_interval=args.decision_interval,
         )
         print(f"  took {time.time() - t0:.1f}s")
 
