@@ -22,7 +22,7 @@ for p in (ROOT, REPO_ROOT):
 import streamlit as st
 import streamlit.components.v1 as components
 
-from app.missions import list_mission_ids, load_mission
+from app.missions import Mission, list_mission_ids, load_mission
 from app.simulation import Simulation, VesselConstraints, project_scenario, find_collision
 from app.narrate import narrate, contact_line, bearing_and_range, relative_bearing, cpa_tcpa
 from app.viz_plotly import trajectory_figure, trajectory_bounds, animated_trajectory_figure
@@ -150,7 +150,7 @@ from app.llm_runs import list_runs_for_mission, load_run, checkpoint_at_or_befor
 _UI_PREFS_PATH = ROOT / "Data" / "_ui_prefs.json"
 _UI_PREFS_KEYS = [
     "ship_max_speed", "ship_max_turn_rate_pct", "ship_max_accel", "ship_max_decel",
-    "ship_turn_rate_deg_s", "mission_cruise_speed", "mission_min_cpa", "dt_slider",
+    "ship_turn_rate_deg_s", "mission_min_cpa", "dt_slider",
 ]
 
 
@@ -179,13 +179,16 @@ if "_ui_prefs_loaded" not in st.session_state:
     st.session_state._ui_prefs_loaded = True
 
 # ── Session state ─────────────────────────────────────────────────────────
-def build_vessel_constraints() -> VesselConstraints:
+def build_vessel_constraints(mission: Mission) -> VesselConstraints:
     """Reads the sidebar's Ship performance/Mission/Simulation widgets straight out of
     session_state (same one-render-lag pattern as dt_slider/wide_plot elsewhere in this
     file -- on the very first run these keys don't exist yet, hence the defaults, which
     match each widget's own `value=`) into one VesselConstraints -- the single source of
     truth the kinematics layer (app/simulation.py) and the OOW agent's prompt both read,
-    instead of each hardcoding its own copy of these numbers."""
+    instead of each hardcoding its own copy of these numbers. cruise_speed_mps always
+    matches `mission`'s own designed speed (never a separately user-set value) -- the
+    nominal/rated-speed reference the agent's prompt reports must reflect what this
+    mission actually runs at, same reasoning as run_llm_scenario.py's CLI path."""
     g = st.session_state.get
     return VesselConstraints(
         max_speed_mps=g("ship_max_speed", 10.0),
@@ -193,7 +196,7 @@ def build_vessel_constraints() -> VesselConstraints:
         max_acceleration_mps2=g("ship_max_accel", 0.2),
         max_deceleration_mps2=g("ship_max_decel", 0.2),
         turn_rate_deg_s=g("ship_turn_rate_deg_s", 3.0),
-        cruise_speed_mps=g("mission_cruise_speed", 10.0),
+        cruise_speed_mps=mission.own_ship.speed,
         min_cpa_m=g("mission_min_cpa", 500.0),
         time_step_s=g("dt_slider", 10.0),
     )
@@ -205,7 +208,7 @@ if "mission_id" not in st.session_state:
     st.session_state.mission_id = mission_ids[0]
 if "sim" not in st.session_state or st.session_state.get("_loaded_mission_id") != st.session_state.mission_id:
     mission = load_mission(st.session_state.mission_id)
-    st.session_state.sim = Simulation(mission, build_vessel_constraints())
+    st.session_state.sim = Simulation(mission, build_vessel_constraints(mission))
     st.session_state.mission = mission
     st.session_state._loaded_mission_id = st.session_state.mission_id
     st.session_state.last_decision = None
@@ -219,7 +222,7 @@ sim: Simulation = st.session_state.sim
 # Refreshed every rerun (not just at mission load/reset) so a sidebar tweak -- e.g. testing
 # a slower turn_rate_deg_s -- takes effect on the very next step without losing the ship's
 # current position/heading/speed the way constructing a brand-new Simulation would.
-sim.constraints = build_vessel_constraints()
+sim.constraints = build_vessel_constraints(st.session_state.mission)
 mission = st.session_state.mission
 
 
@@ -642,9 +645,7 @@ with st.sidebar:
     st.divider()
 
     st.header("Mission")
-    m1, m2 = st.columns(2)
-    m1.number_input("Cruise speed (m/s)", min_value=0.0, value=10.0, step=0.5, key="mission_cruise_speed")
-    m2.number_input("Minimal CPA (m)", min_value=0.0, value=500.0, step=50.0, key="mission_min_cpa")
+    st.number_input("Minimal CPA (m)", min_value=0.0, value=500.0, step=50.0, key="mission_min_cpa")
     all_missions = {mid: load_mission(mid) for mid in mission_ids}
     labels = {mid: f"{mid.split('_')[0].upper()} \u2014 {m.name}  ({mid})" for mid, m in all_missions.items()}
     picked = st.selectbox("Scenario", options=mission_ids, format_func=lambda m: labels[m],
@@ -657,7 +658,7 @@ with st.sidebar:
         st.markdown(mission.as_text())
 
     if st.button("\U0001F504 Reset mission playback", use_container_width=True):
-        st.session_state.sim = Simulation(mission, build_vessel_constraints())
+        st.session_state.sim = Simulation(mission, build_vessel_constraints(mission))
         st.session_state.last_decision = None
         st.session_state.last_debug = None
         st.session_state.llm_compliance_violations = None

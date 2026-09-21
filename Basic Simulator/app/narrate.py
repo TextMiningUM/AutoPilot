@@ -126,10 +126,10 @@ def narrate(mission: Mission, own: Vessel, cruise_speed_mps: float | None = None
     computes/returns them (used elsewhere, e.g. the Evaluation panel's degeneracy check).
     Also reports a nominal/rated speed reference (mission.own_ship.speed by default -- the
     mission's ORIGINAL starting speed, distinct from `own.speed`, which mutates as the run
-    progresses -- or `cruise_speed_mps` when given, e.g. from the live simulator's
-    VesselConstraints/sidebar "Cruise speed" setting, so a user-configured resume speed
-    actually reaches the agent instead of always falling back to whatever speed the mission
-    file happened to start at) and an ETA-at-current-speed: without a speed reference point
+    progresses -- or `cruise_speed_mps` when given, which now always equals that same
+    starting speed too -- see build_vessel_constraints() in streamlit_app.py and run_one()
+    in run_llm_scenario.py -- since each mission's own speed is treated as its intended
+    cruising speed, not a slow start to accelerate away from) and an ETA-at-current-speed: without a speed reference point
     or any sense of time cost, the model had no basis to ever consider speed_up over
     hold_course (observed: 0/1697 decisions across the full sweep ever chose speed_up).
     Also reports the goal BEARING and how many degrees off-course the current heading is:
