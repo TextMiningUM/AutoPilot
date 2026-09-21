@@ -393,13 +393,17 @@ def _generate(tok, mdl, messages: list[dict], max_new_tokens: int = 256,
     # fraction of that, which is most of them (CoT configs get 2048 tokens of headroom
     # for the rare long <think> block, but the median response is much shorter -- see
     # basic_simulator.md's raw_len_chars stats).
-    # repetition_penalty/no_repeat_ngram_size: greedy decoding (do_sample=False) has no
-    # built-in defense against looping -- found CoT/PG configs repeating the EXACT same
-    # "Rule 15 says..." sentence 20+ times verbatim (never self-correcting, never closing
-    # the JSON) until max_new_tokens ran out, causing most of the parse-error/hold_course
-    # fallbacks seen in the sweep. no_repeat_ngram_size=4 hard-blocks any 4-token sequence
-    # from repeating at all -- enough to break a whole-sentence loop like that one, too
-    # short to block legitimate short repeats (e.g. saying "Rule 15" twice in one reply).
+    # repetition_penalty: greedy decoding (do_sample=False) has no built-in defense against
+    # looping -- found CoT/PG configs repeating the EXACT same "Rule 15 says..." sentence 20+
+    # times verbatim (never self-correcting, never closing the JSON) until max_new_tokens ran
+    # out, causing most of the parse-error/hold_course fallbacks seen in the sweep. A mild
+    # repetition_penalty discourages that without banning any exact token sequence outright.
+    # Tried no_repeat_ngram_size=4 as well -- REVERTED: observed on a cloud A30 re-test that
+    # hard-blocking every repeated 4-gram forces the model off a CORRECT number (e.g. a given
+    # distance) once it needs to restate it a second time, since repeating it verbatim is now
+    # forbidden -- produced garbled/hallucinated distances and even stray CJK characters
+    # instead. repetition_penalty alone still stops the sentence-level loop without this
+    # side effect.
     # AUTOPILOT_STREAM=1 prints tokens to stdout live as they're generated (via
     # transformers' TextStreamer) -- opt-in only, for watching a slow/long-running CLI
     # sweep (tail -f the log) to see the actual <think> reasoning as it happens instead
@@ -409,7 +413,7 @@ def _generate(tok, mdl, messages: list[dict], max_new_tokens: int = 256,
     out = mdl.generate(**inp, max_new_tokens=max_new_tokens, do_sample=False,
                        temperature=1.0, top_p=1.0, pad_token_id=tok.eos_token_id,
                        stop_strings="\"}", tokenizer=tok,
-                       repetition_penalty=1.15, no_repeat_ngram_size=4,
+                       repetition_penalty=1.15,
                        streamer=streamer)
     result = tok.decode(out[0][inp["input_ids"].shape[1]:], skip_special_tokens=True)
     # Free this call's KV-cache/activation buffers back to the free-VRAM pool immediately
