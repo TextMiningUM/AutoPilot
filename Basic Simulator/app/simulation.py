@@ -97,13 +97,19 @@ class Simulation:
         """Mandatory min_cpa_m backstop -- min_cpa_m is no longer just advisory context handed
         to the OOW agent's prompt; if the CURRENTLY commanded target_heading/target_speed
         (whatever the agent, manual helm, or the goal-tracking logic last set) would leave the
-        worst-case projected CPA below constraints.min_cpa_m, this overrides the command with
-        whichever discrete emergency manoeuvre -- hard turn to starboard/port (at
-        max_rudder_angle_deg, the full available helm), an emergency stop, or a turn+stop
-        combination -- achieves the BEST projected CPA. Critically, it overrides to that best
-        candidate even when it STILL can't reach min_cpa_m (a genuinely unavoidable
+        worst-case projected CPA (the closest approach the encounter will EVER reach, per
+        cpa_tcpa()'s constant-velocity projection -- not the current range, which TCPA>0 means
+        hasn't been reached yet) below constraints.min_cpa_m, this overrides the command with
+        whichever discrete hard turn -- to starboard or to port, at max_rudder_angle_deg, the
+        full available helm -- achieves the BEST projected CPA. Critically, it overrides to
+        that best candidate even when it STILL can't reach min_cpa_m (a genuinely unavoidable
         close-quarters situation): the point is to always steer toward the safest available
         outcome, never to blindly accept a worse one just because the threshold is already lost.
+        Deliberately NEVER reduces speed (let alone to 0) -- a stopped ship can't manoeuvre at
+        all (turning while dead in the water changes nothing: position only updates by
+        speed*dt), so a forced stop here would strand the ship rudderless for the rest of the
+        encounter with no way for this same backstop to ever resume it. An actual emergency
+        stop is left to the agent's own explicit "stop" action, never imposed by this backstop.
         Never overrides a command that's already safe (min_cpa_m satisfied) or when there are no
         targets to be safe from."""
         self.min_cpa_override_active = False
@@ -118,8 +124,6 @@ class Simulation:
         for dh in (c.max_rudder_angle_deg, -c.max_rudder_angle_deg):
             hdg = (self.own.heading + dh) % 360
             candidates.append((hdg, self.target_speed))
-            candidates.append((hdg, 0.0))
-        candidates.append((self.own.heading, 0.0))
 
         best_heading, best_speed, best_cpa = self.target_heading, self.target_speed, agent_cpa
         for hdg, spd in candidates:
