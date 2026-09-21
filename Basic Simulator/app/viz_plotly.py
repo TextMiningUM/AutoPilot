@@ -27,11 +27,29 @@ def _arrow_size(speed: float, base: float = 14.0, scale: float = 4.0,
 
 
 def trajectory_bounds(trajectory: list[dict], mission: Mission,
-                       pad_frac: float = 0.12) -> tuple[tuple[float, float], tuple[float, float]]:
-    """Fixed x/y axis range spanning the WHOLE trajectory (+ goal), so playback frames
-    don't rescale/jump as points accumulate."""
-    xs = [row["x"] for row in trajectory] + [mission.goal[0]]
-    ys = [row["y"] for row in trajectory] + [mission.goal[1]]
+                       pad_frac: float = 0.12,
+                       target_margin_factor: float = 2.0) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Fixed x/y axis range spanning own-ship's WHOLE trajectory (+ goal), so playback
+    frames don't rescale/jump as points accumulate. Target positions are included too, but
+    ONLY within `target_margin_factor` times own-ship's own span -- a target that just
+    sails off in a straight line for a long, non-terminating run (own-ship successfully
+    avoided it, then the run continues to max_steps) can travel far further than own-ship
+    ever does, which would otherwise balloon the axes and squash the actually-relevant
+    encounter into an illegible sliver. Confirmed: Imazu01/v3_rag_cot -- ts1 at 20 m/s over
+    2000s travelled 40km while own-ship moved under 1km on the same run."""
+    own_rows = [row for row in trajectory if row["vehicle"] == "own_ship"]
+    xs = [row["x"] for row in own_rows] + [mission.goal[0]]
+    ys = [row["y"] for row in own_rows] + [mission.goal[1]]
+    x_lo, x_hi = min(xs), max(xs)
+    y_lo, y_hi = min(ys), max(ys)
+    own_span = max(x_hi - x_lo, y_hi - y_lo, 1.0)
+    margin = own_span * target_margin_factor
+    for row in trajectory:
+        if row["vehicle"] == "own_ship":
+            continue
+        if x_lo - margin <= row["x"] <= x_hi + margin and y_lo - margin <= row["y"] <= y_hi + margin:
+            xs.append(row["x"])
+            ys.append(row["y"])
     x_lo, x_hi = min(xs), max(xs)
     y_lo, y_hi = min(ys), max(ys)
     x_pad = (x_hi - x_lo) * pad_frac or 50.0
