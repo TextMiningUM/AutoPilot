@@ -974,12 +974,14 @@ with plot_col:
                 st.caption("\u26A0\uFE0F Trajectory changed since the last compliance check -- re-run for a current result.")
             else:
                 n_v, n_c = len(audit["violations"]), len(audit["compliant_actions"])
+                score = audit.get("compliance_score")
+                score_str = f"{score:.2f}" if isinstance(score, (int, float)) else "?"
                 if n_v:
-                    st.caption(f"\U0001F916 Claude found {n_v} COLREG violation(s) and {n_c} "
-                              "correctly handled manoeuvre(s).")
+                    st.caption(f"\U0001F916 Compliance score **{score_str}** -- Claude found {n_v} "
+                              f"COLREG violation(s) and {n_c} correctly handled manoeuvre(s).")
                 else:
-                    st.caption(f"\U0001F916 Claude found no COLREG violations -- {n_c} manoeuvre(s) "
-                              "audited as correct.")
+                    st.caption(f"\U0001F916 Compliance score **{score_str}** -- Claude found no "
+                              f"COLREG violations ({n_c} manoeuvre(s) audited as correct).")
                 with st.popover("\U0001F4C4 Full COLREG audit"):
                     if audit["violations"]:
                         st.markdown("**Violations**")
@@ -992,13 +994,15 @@ with plot_col:
                     if not audit["violations"] and not audit["compliant_actions"]:
                         st.caption("Nothing to audit -- no manoeuvres/encounters in this trajectory.")
         else:
-            st.caption("\u2139\uFE0F Compliance shows a default score of 1.0 until you run the Claude check above.")
+            st.caption("\u2139\uFE0F Compliance shows a default score of 0.0 (unaudited) until you "
+                      "run the Claude check above.")
 
         result = score_trajectory(
             eval_traj, start_xy=(mission.own_ship.x, mission.own_ship.y),
             goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
             safe_distance_m=sim.constraints.min_cpa_m,
             llm_violations=llm_violations if not stale else None,
+            llm_compliance_score=(audit.get("compliance_score") if audit and not stale else None),
         )
         verdict = result["verdict"]
         badge_cls = "badge-pass" if verdict == "PASS" else "badge-fail"

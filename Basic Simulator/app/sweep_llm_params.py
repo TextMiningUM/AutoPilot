@@ -77,6 +77,8 @@ def score_one(mission, log: dict) -> dict:
         log["trajectory"], start_xy=(mission.own_ship.x, mission.own_ship.y),
         goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
         safe_distance_m=_DEFAULT_MIN_CPA_M,
+        llm_violations=(log.get("colreg_llm_check") or {}).get("violations"),
+        llm_compliance_score=(log.get("colreg_llm_check") or {}).get("compliance_score"),
     )
     return {
         "config": log["config"], "tag": log["tag"],

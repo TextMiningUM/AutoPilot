@@ -237,16 +237,23 @@ def manoeuvre_and_smoothness_axes(own, heading_rate_deadband_deg_s=0.6,
 # COLREG compliance axis (pluggable — this needs scenario-specific rule
 # checks; a couple of concrete, generically-useful ones are included)
 # ---------------------------------------------------------------------
-def compliance_axis(own, violation_checks):
-    """violation_checks: list of callables(own_trajectory) -> list[str]
-    (each returns a list of human-readable violation descriptions, empty
-    if none found). Score = 1.0 with zero violations, decaying per
-    violation found. Plug in scenario-specific checks (e.g. from
-    scenarios_manifest.json's pass_criteria) here."""
+def compliance_axis(own, violation_checks, llm_compliance_score=None):
+    """violation_checks: list of callables(own_trajectory) -> list[str] (each returns a
+    list of human-readable violation descriptions, empty if none found) -- kept only to
+    surface violation text for display; the actual SCORE now comes directly from
+    `llm_compliance_score` (Claude's own 0-1 audit judgement, see app.evaluation.
+    llm_compliance_check) instead of a local `1 - 0.34*count` decay, because a bare
+    violation COUNT can't tell a technical lateness apart from a violation that caused an
+    actual near-miss or collision -- Claude's score is asked to weigh severity, not just
+    tally rule numbers.
+
+    Score = 0.0 (NOT innocent-until-proven -- unaudited) until `llm_compliance_score` is
+    given, i.e. until the on-demand Claude COLREG audit has actually been run once for this
+    trajectory and its result passed in here."""
     violations = []
     for check in violation_checks:
         violations.extend(check(own))
-    score = max(0.0, 1.0 - 0.34 * len(violations))  # 3 violations -> 0
+    score = 0.0 if llm_compliance_score is None else max(0.0, min(1.0, llm_compliance_score))
     return violations, score
 
 
@@ -279,7 +286,8 @@ DEFAULT_WEIGHTS = {
 
 def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
                   collision_radius_m=15.0, safe_distance_m=50.0,
-                  violation_checks=(), weights=None, verbose=True):
+                  violation_checks=(), weights=None, verbose=True,
+                  llm_compliance_score=None):
     weights = weights or DEFAULT_WEIGHTS
     data = load_csv(csv_path)
     own = data[own_vehicle]
@@ -288,7 +296,7 @@ def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
     passed, min_cpa, safety_score = safety_axis(own, targets, collision_radius_m, safe_distance_m)
     eff = efficiency_axes(own, start_xy, goal_xy, nominal_speed)
     man = manoeuvre_and_smoothness_axes(own)
-    violations, compliance_score = compliance_axis(own, violation_checks)
+    violations, compliance_score = compliance_axis(own, violation_checks, llm_compliance_score)
 
     if not passed:
         composite = 0.0

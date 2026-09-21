@@ -26,13 +26,17 @@ def score_trajectory(trajectory_rows: list[dict], start_xy: tuple[float, float],
                       goal_xy: tuple[float, float], nominal_speed: float,
                       own_vehicle: str = "own_ship", collision_radius_m: float = 15.0,
                       safe_distance_m: float = 50.0,
-                      llm_violations: list[str] | None = None) -> dict:
+                      llm_violations: list[str] | None = None,
+                      llm_compliance_score: float | None = None) -> dict:
     """trajectory_rows: list of {time, vehicle, x, y, heading, speed} dicts
     (Simulation.trajectory) -> evaluate_run.py's full result dict (verdict,
     composite_score, safety/compliance/temporal/spatial/manoeuvre breakdown).
-    `llm_violations`, if given (from llm_compliance_check(), called separately
-    and on demand -- see its docstring for why), feeds real COLREG violations
-    into the compliance axis instead of the default always-empty check list."""
+    `llm_violations`, if given (from llm_compliance_check(), called separately and on
+    demand -- see its docstring for why), is only used to surface violation TEXT in the
+    result -- the compliance SCORE itself comes from `llm_compliance_score` (Claude's own
+    0-1 audit judgement, same call). Compliance defaults to 0.0 (unaudited, not
+    innocent-until-proven) until that on-demand check has actually been run and its
+    result passed in here."""
     violation_checks = ()
     if llm_violations:
         violation_checks = (lambda _own, _v=list(llm_violations): _v,)
@@ -46,6 +50,7 @@ def score_trajectory(trajectory_rows: list[dict], start_xy: tuple[float, float],
             tmp_path, own_vehicle=own_vehicle, start_xy=start_xy, goal_xy=goal_xy,
             nominal_speed=nominal_speed, collision_radius_m=collision_radius_m,
             safe_distance_m=safe_distance_m, violation_checks=violation_checks, verbose=False,
+            llm_compliance_score=llm_compliance_score,
         )
     finally:
         Path(tmp_path).unlink(missing_ok=True)
@@ -72,13 +77,33 @@ and why that resolves the encounter correctly). \
 Each compliant-action string must cover, in this order, as one or two sentences: (1) WHEN it \
 happened, (2) WHAT own-ship did, (3) WHY that was the CORRECT thing to do under COLREG (name \
 the rule number and the specific requirement it satisfies). \
+Finally, give ONE overall compliance_score for the whole trajectory, a float from 0.0 to 1.0, \
+using these anchors (pick the closest, or interpolate between two if the situation is a genuine \
+in-between case) -- judge by SEVERITY AND CONSEQUENCE, not just by counting violations: \
+1.0 = fully compliant, every applicable rule followed correctly, zero violations. \
+0.75 = materially compliant with only a minor/technical shortcoming (e.g. a correct-direction \
+manoeuvre that was slightly late or slightly less than "early and substantial"), but it never \
+created a real close-quarters situation. \
+0.5 = at least one genuine rule violation (wrong give-way response, or a prohibited port \
+alteration) occurred, but it did NOT create an unsafe close-quarters situation -- a safe CPA was \
+maintained throughout despite the improper manoeuvre. \
+0.25 = one or more violations that DID create a real close-quarters/unsafe-CPA situation (a \
+near-miss), though no actual collision occurred. \
+0.0 = repeated or serious violations that directly caused (or were the proximate cause of) an \
+actual collision, or such systematic non-compliance that own-ship's behaviour cannot be \
+considered COLREG-aware at all. \
+If violations is empty, compliance_score MUST be 1.0. If violations is non-empty, \
+compliance_score MUST be less than 1.0, chosen using the anchors above. \
 Reply with ONLY a JSON object, no other text -- no preamble, no analysis, no summary before or \
 after it:
 {"violations": ["t=<seconds>s: <what own-ship did> -- violates Rule <n> because <reason>; the \
 COLREG-compliant action would have been <concrete correct manoeuvre>.", ...],
  "compliant_actions": ["t=<seconds>s: <what own-ship did> -- correctly satisfies Rule <n> \
-because <reason>.", ...]}
-If own-ship made no manoeuvres/encounters worth auditing at all, return both as empty lists."""
+because <reason>.", ...],
+ "compliance_score": <float 0.0-1.0, see anchors above>}
+If own-ship made no manoeuvres/encounters worth auditing at all, return both lists empty and \
+compliance_score 1.0."""
+
 
 
 
@@ -122,11 +147,13 @@ def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_sh
     Deliberately NOT called during live stepping -- it's a single network round-trip
     (real latency), so it must only run on demand, once, after a run is complete (or
     paused), triggered by an explicit UI button. score_trajectory()'s normal local
-    scoring never calls this -- compliance defaults to "no violations found" (score 1.0)
-    until this is explicitly run and its ["violations"] is passed back in as `llm_violations`.
+    scoring never calls this -- compliance defaults to 0.0 (unaudited, NOT
+    innocent-until-proven) until this is explicitly run and its ["compliance_score"] is
+    passed back in as `llm_compliance_score`.
 
-    Returns {"violations": [...], "compliant_actions": [...]} (both lists of explanation
-    strings; empty violations = fully compliant per Claude's audit)."""
+    Returns {"violations": [...], "compliant_actions": [...], "compliance_score": float}
+    (compliance_score is Claude's own 0.0-1.0 severity-weighted judgement, see
+    LLM_COMPLIANCE_SYSTEM's anchors -- 1.0 only when violations is empty)."""
     import anthropic
     from core.io import load_env
 
@@ -153,9 +180,17 @@ def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_sh
         except json.JSONDecodeError:
             continue
         if isinstance(parsed, dict) and "violations" in parsed:
+            violations = [str(v) for v in parsed["violations"]]
+            score = parsed.get("compliance_score")
+            # Fall back to a safe binary reading (1.0/0.0) if Claude omitted the field or
+            # returned something that isn't a plain number -- never silently treat an
+            # un-scored response as perfect.
+            if not isinstance(score, (int, float)):
+                score = 1.0 if not violations else 0.0
             return {
-                "violations": [str(v) for v in parsed["violations"]],
+                "violations": violations,
                 "compliant_actions": [str(v) for v in parsed.get("compliant_actions", [])],
+                "compliance_score": max(0.0, min(1.0, float(score))),
             }
     return {"violations": [f"[LLM compliance check -- could not parse response] {text[:200]}"],
-           "compliant_actions": []}
+           "compliant_actions": [], "compliance_score": 0.0}

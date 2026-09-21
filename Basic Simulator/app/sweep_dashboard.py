@@ -113,6 +113,8 @@ def _score_log(mission_id: str, log: dict, tag: str, path: Path,
         log["trajectory"], start_xy=(mission.own_ship.x, mission.own_ship.y),
         goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
         safe_distance_m=_DEFAULT_MIN_CPA_M,
+        llm_violations=(log.get("colreg_llm_check") or {}).get("violations"),
+        llm_compliance_score=(log.get("colreg_llm_check") or {}).get("compliance_score"),
     )
     latency_s = log.get("latency_s")
     latency_is_estimate = latency_s is None
@@ -161,14 +163,17 @@ def _colreg_status(r: dict) -> str:
     """Narrow-column status for the end-of-mission Anthropic Claude COLREG compliance
     check (app.evaluation.llm_compliance_check, run automatically by run_llm_scenario.py's
     run_one() -- see its colreg_llm_check field): compact enough for a dataframe cell, full
-    violations text lives in the "View details" popover instead (_describe_run) since it can
-    be long. "--" covers both older logs generated before this check existed at all, and
-    logs where it was explicitly skipped (--no-colreg-check)."""
+    violations/compliant-actions text lives in the "View details" popover instead
+    (_describe_run) since it can be long. "--" covers both older logs generated before this
+    check existed at all, and logs where it was explicitly skipped (--no-colreg-check) --
+    NOT the same as a checked 0.0 (audited and found non-compliant)."""
     check = r.get("colreg_llm_check")
     if not check or not check.get("checked"):
         return "\u2014"
+    score = check.get("compliance_score")
     violations = check.get("violations") or []
-    return "\u2705" if not violations else f"\u26A0\uFE0F {len(violations)}"
+    score_str = f"{score:.2f}" if isinstance(score, (int, float)) else "?"
+    return f"\u2705 {score_str}" if not violations else f"\u26A0\uFE0F {score_str} ({len(violations)})"
 
 
 def _axis_cols(r: dict) -> dict:
@@ -265,11 +270,14 @@ def _describe_run(r: dict) -> str:
     else:
         violations = check.get("violations") or []
         compliant_actions = check.get("compliant_actions") or []
+        score = check.get("compliance_score")
+        score_str = f"{score:.2f}" if isinstance(score, (int, float)) else "?"
         if not violations:
-            lines.append(f"- Claude found no COLREG violations "
-                        f"({len(compliant_actions)} manoeuvre(s) audited as correct).")
+            lines.append(f"- Compliance score **{score_str}** -- Claude found no COLREG "
+                        f"violations ({len(compliant_actions)} manoeuvre(s) audited as correct).")
         else:
-            lines.append(f"- Claude flagged {len(violations)} violation(s):")
+            lines.append(f"- Compliance score **{score_str}** -- Claude flagged "
+                        f"{len(violations)} violation(s):")
             for v in violations:
                 lines.append(f"  - {v}")
         if compliant_actions:
