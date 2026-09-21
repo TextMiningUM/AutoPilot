@@ -53,7 +53,6 @@ class Simulation:
         self.target_heading: float = self.own.heading
         self.target_speed: float = self.own.speed
         self.status: str = "CRUISING"  # deterministic AVOIDING/CRUISING, see _update_behaviour_status()
-        self.min_cpa_override_active: bool = False  # see _enforce_min_cpa()
         self.trajectory: list[dict] = []
         self.agent_log: list[dict] = []  # {t, narration, oow_decision}
         self._record()
@@ -82,59 +81,6 @@ class Simulation:
             avoiding = False
         self.status = "AVOIDING" if avoiding else "CRUISING"
 
-    def _min_cpa_for(self, heading: float, speed: float) -> float:
-        """Worst-case (smallest) projected CPA across all targets if own-ship immediately
-        adopted the given heading/speed -- constant-velocity extrapolation, same model as
-        cpa_tcpa() elsewhere. Used only to compare CANDIDATE manoeuvres in _enforce_min_cpa();
-        the actual kinematics still rate-limits how fast own-ship gets there regardless of
-        which candidate wins."""
-        if not self.targets:
-            return float("inf")
-        return min(cpa_tcpa(self.own.x, self.own.y, heading, speed,
-                            t.x, t.y, t.heading, t.speed)[0] for t in self.targets)
-
-    def _enforce_min_cpa(self) -> None:
-        """Mandatory min_cpa_m backstop -- min_cpa_m is no longer just advisory context handed
-        to the OOW agent's prompt; if the CURRENTLY commanded target_heading/target_speed
-        (whatever the agent, manual helm, or the goal-tracking logic last set) would leave the
-        worst-case projected CPA (the closest approach the encounter will EVER reach, per
-        cpa_tcpa()'s constant-velocity projection -- not the current range, which TCPA>0 means
-        hasn't been reached yet) below constraints.min_cpa_m, this overrides the command with
-        whichever discrete hard turn -- to starboard or to port, at max_rudder_angle_deg, the
-        full available helm -- achieves the BEST projected CPA. Critically, it overrides to
-        that best candidate even when it STILL can't reach min_cpa_m (a genuinely unavoidable
-        close-quarters situation): the point is to always steer toward the safest available
-        outcome, never to blindly accept a worse one just because the threshold is already lost.
-        Deliberately NEVER reduces speed (let alone to 0) -- a stopped ship can't manoeuvre at
-        all (turning while dead in the water changes nothing: position only updates by
-        speed*dt), so a forced stop here would strand the ship rudderless for the rest of the
-        encounter with no way for this same backstop to ever resume it. An actual emergency
-        stop is left to the agent's own explicit "stop" action, never imposed by this backstop.
-        Never overrides a command that's already safe (min_cpa_m satisfied) or when there are no
-        targets to be safe from."""
-        self.min_cpa_override_active = False
-        if not self.targets:
-            return
-        agent_cpa = self._min_cpa_for(self.target_heading, self.target_speed)
-        if agent_cpa >= self.constraints.min_cpa_m:
-            return
-
-        c = self.constraints
-        candidates = [(self.target_heading, self.target_speed)]
-        for dh in (c.max_rudder_angle_deg, -c.max_rudder_angle_deg):
-            hdg = (self.own.heading + dh) % 360
-            candidates.append((hdg, self.target_speed))
-
-        best_heading, best_speed, best_cpa = self.target_heading, self.target_speed, agent_cpa
-        for hdg, spd in candidates:
-            cpa = self._min_cpa_for(hdg, spd)
-            if cpa > best_cpa:
-                best_cpa, best_heading, best_speed = cpa, hdg, spd
-
-        if best_cpa > agent_cpa:
-            self.target_heading, self.target_speed = best_heading, best_speed
-            self.min_cpa_override_active = True
-
     def _advance_own_kinematics(self, dt: float) -> None:
         """Rate-limits own-ship's heading/speed toward target_heading/target_speed
         by at most this step's turn-rate/acceleration allowance -- never jumps
@@ -158,7 +104,6 @@ class Simulation:
     def step(self, dt: float | None = None) -> None:
         dt = self.constraints.time_step_s if dt is None else dt
         self._update_behaviour_status()
-        self._enforce_min_cpa()
         self._advance_own_kinematics(dt)
         for v in [self.own] + self.targets:
             h = math.radians(v.heading)

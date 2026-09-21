@@ -40,9 +40,10 @@ def recommended_decision_interval(mission: Mission, dt: float = 10.0) -> int:
     (no contacts, or a slow-developing one) can safely go longer between (expensive) LLM
     calls without missing anything, cutting how many calls a full run needs. Never shorter
     than 10 -- this is meant to REDUCE call volume for calm missions, not add extra calls to
-    tight ones. The simulator's own min_cpa backstop (see Simulation._enforce_min_cpa) runs
-    every physics step regardless of this interval, so safety never depends on how often the
-    LLM itself is consulted. Callers should still let a user/CLI override this, never treat
+    tight ones. There is no simulator-level min_cpa backstop -- meeting min_cpa is entirely
+    the agent's own responsibility (see SYSTEM_OOW_AGENT), same as reaching the goal, so a
+    sparser decision cadence genuinely means fewer chances to react, not just fewer LLM calls
+    with a safety net underneath. Callers should still let a user/CLI override this, never treat
     it as mandatory."""
     if not mission.targets:
         return 20
