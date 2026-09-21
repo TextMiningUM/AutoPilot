@@ -119,10 +119,13 @@ def run_one(mission_id: str, config: str, tag: str = "default",
     # already offered as an on-demand button in the live UI). A failure here (missing API
     # key, network error, ...) must not take the rest of a long sweep down -- recorded as
     # "checked: false" with the error message instead of raising.
-    colreg_llm_check = {"checked": False, "violations": None, "error": None}
+    colreg_llm_check = {"checked": False, "violations": None, "compliant_actions": None,
+                        "error": None}
     if check_colreg_compliance:
         try:
-            colreg_llm_check["violations"] = llm_compliance_check(sim.trajectory)
+            audit = llm_compliance_check(sim.trajectory)
+            colreg_llm_check["violations"] = audit["violations"]
+            colreg_llm_check["compliant_actions"] = audit["compliant_actions"]
             colreg_llm_check["checked"] = True
         except Exception as exc:
             colreg_llm_check["error"] = str(exc)
@@ -145,8 +148,9 @@ def run_one(mission_id: str, config: str, tag: str = "default",
     }
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(log, ensure_ascii=False, indent=1), encoding="utf-8")
-    _cc = (f"{len(colreg_llm_check['violations'])} violation(s)" if colreg_llm_check["checked"]
-          else f"not checked ({colreg_llm_check['error']})")
+    _cc = (f"{len(colreg_llm_check['violations'])} violation(s), "
+          f"{len(colreg_llm_check['compliant_actions'])} compliant action(s)"
+          if colreg_llm_check["checked"] else f"not checked ({colreg_llm_check['error']})")
     print(f"  [done] {out_path.name}  outcome={outcome}  steps={step}  "
           f"checkpoints={len(checkpoints)}  latency={latency_s:.1f}s  colreg_check={_cc}")
     return out_path

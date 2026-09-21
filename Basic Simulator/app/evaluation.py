@@ -54,25 +54,31 @@ def score_trajectory(trajectory_rows: list[dict], start_xy: tuple[float, float],
 LLM_COMPLIANCE_SYSTEM = """You are a COLREG compliance auditor reviewing a completed vessel \
 trajectory. You are given the full time-series track (time, vehicle, x, y, heading, speed) for \
 own-ship and every target vessel it encountered, in metres and degrees (heading 0=north, \
-clockwise, matching compass bearings). Determine whether own-ship's manoeuvres complied with the \
-International Regulations for Preventing Collisions at Sea (COLREG): the correct give-way/ \
-stand-on role for each encounter type (head-on, crossing, overtaking), early and substantial \
-action by the give-way vessel (normally to starboard), never altering to port toward a vessel on \
-own-ship's own port side, and the stand-on vessel holding course/speed unless it became clearly \
-necessary to act. \
-For EVERY violation you find, explain it fully rather than just naming the rule -- a reader must \
-be able to understand exactly what went wrong without re-reading the raw trajectory themselves. \
-Each violation string must cover ALL of the following, in this order, as one or two sentences: \
-(1) WHEN it happened (approximate time in seconds, taken from the track), (2) WHAT own-ship \
-actually did at that moment (heading/course change or lack of one, relative to the target(s) \
-involved), (3) WHY that violates COLREG (name the rule number and the specific requirement it \
-breaches), and (4) WHAT the COLREG-compliant manoeuvre would have been instead (concrete: which \
-direction to turn, or to hold course/speed, and why that resolves the encounter correctly). \
+clockwise, matching compass bearings). Audit EVERY course/speed change own-ship made, and every \
+encounter (head-on, crossing, overtaking) it was involved in, against the International \
+Regulations for Preventing Collisions at Sea (COLREG): the correct give-way/stand-on role for \
+each encounter type, early and substantial action by the give-way vessel (normally to \
+starboard), never altering to port toward a vessel on own-ship's own port side, and the \
+stand-on vessel holding course/speed unless it became clearly necessary to act. \
+This is a full audit, not just a list of mistakes -- classify EVERY manoeuvre/encounter you \
+review as either a violation or correctly handled, and explain BOTH kinds fully so a reader \
+understands the whole encounter without re-reading the raw trajectory themselves. \
+Each violation string must cover, in this order, as one or two sentences: (1) WHEN it happened \
+(approximate time in seconds), (2) WHAT own-ship actually did at that moment (heading/course \
+change or lack of one, relative to the target(s) involved), (3) WHY that violates COLREG (name \
+the rule number and the specific requirement it breaches), and (4) WHAT the COLREG-compliant \
+manoeuvre would have been instead (concrete: which direction to turn, or to hold course/speed, \
+and why that resolves the encounter correctly). \
+Each compliant-action string must cover, in this order, as one or two sentences: (1) WHEN it \
+happened, (2) WHAT own-ship did, (3) WHY that was the CORRECT thing to do under COLREG (name \
+the rule number and the specific requirement it satisfies). \
 Reply with ONLY a JSON object, no other text -- no preamble, no analysis, no summary before or \
 after it:
 {"violations": ["t=<seconds>s: <what own-ship did> -- violates Rule <n> because <reason>; the \
-COLREG-compliant action would have been <concrete correct manoeuvre>.", ...]}
-If own-ship's manoeuvres were fully compliant, return an empty violations list."""
+COLREG-compliant action would have been <concrete correct manoeuvre>.", ...],
+ "compliant_actions": ["t=<seconds>s: <what own-ship did> -- correctly satisfies Rule <n> \
+because <reason>.", ...]}
+If own-ship made no manoeuvres/encounters worth auditing at all, return both as empty lists."""
 
 
 
@@ -108,16 +114,19 @@ def _format_trajectory_csv(trajectory_rows: list[dict]) -> str:
 
 
 def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_ship",
-                         model: str = "claude-sonnet-4-5") -> list[str]:
-    """One-shot LLM judge of full-trajectory COLREG compliance, using Anthropic Claude.
+                         model: str = "claude-sonnet-4-5") -> dict:
+    """One-shot LLM judge of full-trajectory COLREG compliance, using Anthropic Claude -- a
+    full two-sided AUDIT (what was done wrong AND what was done right, each explained), not
+    just a list of mistakes.
 
     Deliberately NOT called during live stepping -- it's a single network round-trip
     (real latency), so it must only run on demand, once, after a run is complete (or
     paused), triggered by an explicit UI button. score_trajectory()'s normal local
     scoring never calls this -- compliance defaults to "no violations found" (score 1.0)
-    until this is explicitly run and its result is passed back in as `llm_violations`.
+    until this is explicitly run and its ["violations"] is passed back in as `llm_violations`.
 
-    Returns a list of violation description strings (empty list = compliant)."""
+    Returns {"violations": [...], "compliant_actions": [...]} (both lists of explanation
+    strings; empty violations = fully compliant per Claude's audit)."""
     import anthropic
     from core.io import load_env
 
@@ -129,9 +138,9 @@ def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_sh
     client = anthropic.Anthropic(api_key=key)
     user_msg = f"Trajectory (own_vehicle={own_vehicle}):\n\n{_format_trajectory_csv(trajectory_rows)}"
     resp = client.messages.create(
-        # 2048 (not the old 800) -- each violation is now a full when/what/why/correct-action
-        # explanation instead of one short sentence, and a run can have several violations.
-        model=model, max_tokens=2048, system=LLM_COMPLIANCE_SYSTEM,
+        # 3072 (not the old 800) -- every manoeuvre now gets a full when/what/why explanation
+        # (violation OR compliant), not just a short sentence per mistake.
+        model=model, max_tokens=3072, system=LLM_COMPLIANCE_SYSTEM,
         messages=[{"role": "user", "content": user_msg}],
     )
     text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
@@ -144,5 +153,9 @@ def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_sh
         except json.JSONDecodeError:
             continue
         if isinstance(parsed, dict) and "violations" in parsed:
-            return [str(v) for v in parsed["violations"]]
-    return [f"[LLM compliance check -- could not parse response] {text[:200]}"]
+            return {
+                "violations": [str(v) for v in parsed["violations"]],
+                "compliant_actions": [str(v) for v in parsed.get("compliant_actions", [])],
+            }
+    return {"violations": [f"[LLM compliance check -- could not parse response] {text[:200]}"],
+           "compliant_actions": []}

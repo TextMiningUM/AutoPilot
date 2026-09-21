@@ -257,19 +257,25 @@ def _describe_run(r: dict) -> str:
                     f"{man['mean_abs_speed_rate']:.3f} m/s\u00b2).")
 
     lines.append("")
-    lines.append("**Claude COLREG compliance check** (end-of-mission, Anthropic API)")
+    lines.append("**Claude COLREG compliance check** (end-of-mission, Anthropic API -- full audit)")
     check = r.get("colreg_llm_check")
     if not check or not check.get("checked"):
         reason = (check or {}).get("error") or "not run for this log (older log, or --no-colreg-check)"
         lines.append(f"- Not checked -- {reason}.")
     else:
         violations = check.get("violations") or []
+        compliant_actions = check.get("compliant_actions") or []
         if not violations:
-            lines.append("- Claude found no COLREG violations in this trajectory.")
+            lines.append(f"- Claude found no COLREG violations "
+                        f"({len(compliant_actions)} manoeuvre(s) audited as correct).")
         else:
             lines.append(f"- Claude flagged {len(violations)} violation(s):")
             for v in violations:
                 lines.append(f"  - {v}")
+        if compliant_actions:
+            lines.append(f"- Correctly handled ({len(compliant_actions)}):")
+            for c in compliant_actions:
+                lines.append(f"  - {c}")
     return "\n".join(lines)
 
 

@@ -214,7 +214,7 @@ if "sim" not in st.session_state or st.session_state.get("_loaded_mission_id") !
     st.session_state.last_decision = None
     st.session_state.last_debug = None
     st.session_state.llm_run_path = None
-    st.session_state.llm_compliance_violations = None
+    st.session_state.llm_compliance_audit = None
     st.session_state.llm_compliance_checked_key = None
     st.session_state._agent_detail_cp_i = None
 
@@ -659,7 +659,7 @@ with st.sidebar:
         st.session_state.sim = Simulation(mission, build_vessel_constraints(mission))
         st.session_state.last_decision = None
         st.session_state.last_debug = None
-        st.session_state.llm_compliance_violations = None
+        st.session_state.llm_compliance_audit = None
         st.session_state.llm_compliance_checked_key = None
         st.rerun()
 
@@ -962,19 +962,35 @@ with plot_col:
                 from app.evaluation import llm_compliance_check
                 with st.spinner("Asking Claude to audit COLREG compliance..."):
                     try:
-                        st.session_state.llm_compliance_violations = llm_compliance_check(eval_traj)
+                        st.session_state.llm_compliance_audit = llm_compliance_check(eval_traj)
                         st.session_state.llm_compliance_checked_key = (eval_cache_key, len(eval_traj))
                     except Exception as e:
                         st.error(f"Compliance check failed: {e}")
-        llm_violations = st.session_state.get("llm_compliance_violations")
+        audit = st.session_state.get("llm_compliance_audit")
+        llm_violations = audit.get("violations") if audit else None
         stale = st.session_state.get("llm_compliance_checked_key") != (eval_cache_key, len(eval_traj))
-        if llm_violations is not None:
+        if audit is not None:
             if stale:
                 st.caption("\u26A0\uFE0F Trajectory changed since the last compliance check -- re-run for a current result.")
-            elif llm_violations:
-                st.caption(f"\U0001F916 Claude found {len(llm_violations)} COLREG violation(s).")
             else:
-                st.caption("\U0001F916 Claude found no COLREG violations in this run.")
+                n_v, n_c = len(audit["violations"]), len(audit["compliant_actions"])
+                if n_v:
+                    st.caption(f"\U0001F916 Claude found {n_v} COLREG violation(s) and {n_c} "
+                              "correctly handled manoeuvre(s).")
+                else:
+                    st.caption(f"\U0001F916 Claude found no COLREG violations -- {n_c} manoeuvre(s) "
+                              "audited as correct.")
+                with st.popover("\U0001F4C4 Full COLREG audit"):
+                    if audit["violations"]:
+                        st.markdown("**Violations**")
+                        for v in audit["violations"]:
+                            st.markdown(f"- {v}")
+                    if audit["compliant_actions"]:
+                        st.markdown("**Correctly handled**")
+                        for c in audit["compliant_actions"]:
+                            st.markdown(f"- {c}")
+                    if not audit["violations"] and not audit["compliant_actions"]:
+                        st.caption("Nothing to audit -- no manoeuvres/encounters in this trajectory.")
         else:
             st.caption("\u2139\uFE0F Compliance shows a default score of 1.0 until you run the Claude check above.")
 
