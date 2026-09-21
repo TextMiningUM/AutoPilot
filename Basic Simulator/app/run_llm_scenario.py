@@ -93,13 +93,16 @@ def run_one(mission_id: str, config: str, tag: str = "default",
                 max_new_tokens=max_new_tokens, enable_thinking=enable_thinking, k=effective_k,
                 constraints=constraints,
             )
+            cp_latency_s = time.time() - _t_cp
             # Per-checkpoint progress -- without this, a slow config (e.g. RAG+CoT combined,
             # which can take 10x longer per call than CoT alone) looked indistinguishable
             # from a hung process for the whole run's duration.
             print(f"    checkpoint {len(checkpoints) + 1} (step {step}/{max_steps}): "
-                  f"{decision.get('action')} -- {time.time() - _t_cp:.1f}s", flush=True)
+                  f"{decision.get('action')} -- {cp_latency_s:.1f}s", flush=True)
             checkpoints.append({
                 "step": step, "time": sim.t,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "latency_s": cp_latency_s,
                 "situation_report": debug.get("situation"),
                 "decision": decision,
                 "debug": {kk: vv for kk, vv in debug.items() if kk != "situation"},
