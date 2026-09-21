@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
@@ -60,7 +61,49 @@ TOTAL_JOBS = len(MISSIONS) * len(CONFIGS)
 MISSION_OBJS = {m: load_mission(m) for m in MISSIONS}  # cheap: just json + dataclasses
 
 
-def _score_log(mission_id: str, log: dict, tag: str) -> dict:
+def _generated_at_index() -> list[tuple[datetime, Path]]:
+    """Peeks just the top-level "generated_at" out of every run log in RUNS_DIR (across ALL
+    missions/configs, not just one), sorted chronologically -- used to ESTIMATE wall-clock
+    latency for older logs that predate run_llm_scenario.py recording latency_s directly.
+    Within one sequential sweep (one job computed after another on the same host, writing
+    its log the instant it finishes), the gap between a job's own generated_at and the
+    immediately PRECEDING job's generated_at approximates that job's own compute time.
+    "generated_at" is embedded IN the JSON content itself, so unlike file mtime it survives
+    being scp'd between machines unchanged -- but the estimate is still only valid for
+    consecutive entries actually produced back-to-back by the SAME sequential process (see
+    the sanity cap in _estimate_latency below)."""
+    entries: list[tuple[datetime, Path]] = []
+    for path in RUNS_DIR.glob("*.json"):
+        if path.name.startswith("_sweep_"):
+            continue
+        try:
+            gen_at = json.loads(path.read_text(encoding="utf-8")).get("generated_at")
+            ts = datetime.fromisoformat(gen_at) if gen_at else None
+        except (json.JSONDecodeError, OSError, ValueError):
+            ts = None
+        if ts is not None:
+            entries.append((ts, path))
+    entries.sort(key=lambda e: e[0])
+    return entries
+
+
+def _estimate_latency(path: Path, index: list[tuple[datetime, Path]]) -> float | None:
+    """Gap to the immediately preceding entry in _generated_at_index()'s chronological
+    order -- None if `path` is the very first entry overall, or if the gap is implausibly
+    large (> 1h, almost certainly a different sweep session/host rather than this job's own
+    compute time) or non-positive (clock skew between hosts)."""
+    for i, (ts, p) in enumerate(index):
+        if p != path:
+            continue
+        if i == 0:
+            return None
+        delta = (ts - index[i - 1][0]).total_seconds()
+        return delta if 0 < delta <= 3600 else None
+    return None
+
+
+def _score_log(mission_id: str, log: dict, tag: str, path: Path,
+               gen_at_index: list[tuple[datetime, Path]]) -> dict:
     """Same composite scoring sweep_llm_params.py's score_one() applies to a freshly
     computed run -- duplicated here (rather than imported) because sweep_llm_params.py
     pulls in app.run_llm_scenario -> app.agents -> torch/transformers, which this
@@ -71,16 +114,21 @@ def _score_log(mission_id: str, log: dict, tag: str) -> dict:
         goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
         safe_distance_m=_DEFAULT_MIN_CPA_M,
     )
+    latency_s = log.get("latency_s")
+    latency_is_estimate = latency_s is None
+    if latency_is_estimate:
+        latency_s = _estimate_latency(path, gen_at_index)
     return {
         "config": log.get("config"), "tag": log.get("tag", tag),
         "composite_score": result["composite_score"], "verdict": result["verdict"],
         "safety": result["safety"], "compliance": result["compliance"],
         "temporal": result["temporal"], "spatial": result["spatial"],
-        "manoeuvre": result["manoeuvre"], "latency_s": log.get("latency_s"),
+        "manoeuvre": result["manoeuvre"], "latency_s": latency_s,
+        "latency_is_estimate": latency_is_estimate,
     }
 
 
-def _scan_mission_runs(mission_id: str) -> dict[str, dict]:
+def _scan_mission_runs(mission_id: str, gen_at_index: list[tuple[datetime, Path]]) -> dict[str, dict]:
     """Globs RUNS_DIR for every {mission_id}__*.json (mission id is a fixed prefix; the
     remainder up to ".json" is "{config}" or "{config}__{tag}", split on the first "__"
     since config names themselves only ever use single underscores) and scores each file
@@ -103,7 +151,7 @@ def _scan_mission_runs(mission_id: str) -> dict[str, dict]:
         except (json.JSONDecodeError, OSError):
             continue
         latest_mtime[config] = mtime
-        rows[config] = _score_log(mission_id, log, tag or "default")
+        rows[config] = _score_log(mission_id, log, tag or "default", path, gen_at_index)
     return rows
 
 
@@ -111,15 +159,22 @@ def _scan_mission_runs(mission_id: str) -> dict[str, dict]:
 def _axis_cols(r: dict) -> dict:
     """Flattens one scored row's per-axis breakdown into the handful of columns the
     leaderboard/per-mission tables both show next to the composite score -- safety/
-    compliance/temporal/spatial/manoeuvre are each already a 0-1 axis score, latency is the
-    whole run's wall-clock compute time (None for older logs generated before run_llm_
-    scenario.py started recording it)."""
+    compliance/temporal/spatial/manoeuvre are each already a 0-1 axis score. latency is the
+    whole run's wall-clock compute time: exact (from run_llm_scenario.py's own latency_s)
+    for logs generated after that field was added, or a "~"-prefixed ESTIMATE (derived from
+    the gap to the previous log's generated_at, see _estimate_latency) for older ones, or
+    None if no estimate was possible either (first log ever, or an implausible gap)."""
     latency = r.get("latency_s")
+    if latency is None:
+        latency_str = None
+    elif r.get("latency_is_estimate"):
+        latency_str = f"~{latency:.0f}s"
+    else:
+        latency_str = f"{latency:.0f}s"
     return {
         "safety": r["safety"]["score"], "compliance": r["compliance"]["score"],
         "temporal": r["temporal"]["temporal_score"], "spatial": r["spatial"]["spatial_score"],
-        "manoeuvre": r["manoeuvre"]["manoeuvre_score"],
-        "latency_s": round(latency, 1) if latency is not None else None,
+        "manoeuvre": r["manoeuvre"]["manoeuvre_score"], "latency": latency_str,
     }
 
 
@@ -187,7 +242,8 @@ def _describe_run(r: dict) -> str:
 
 
 def _render() -> None:
-    rows_by_mission = {m: _scan_mission_runs(m) for m in MISSIONS}
+    gen_at_index = _generated_at_index()
+    rows_by_mission = {m: _scan_mission_runs(m, gen_at_index) for m in MISSIONS}
     done = sum(len(rows) for rows in rows_by_mission.values())
 
     current_job, current_job_age = _read_current_job()
@@ -216,7 +272,7 @@ def _render() -> None:
             leaderboard.append({
                 "mission": mission_id, "done": "0/8", "best_config": "\u2014",
                 "composite": None, "verdict": "\u2014", "safety": None, "compliance": None,
-                "temporal": None, "spatial": None, "manoeuvre": None, "latency_s": None,
+                "temporal": None, "spatial": None, "manoeuvre": None, "latency": None,
             })
             continue
         best = max(rows.values(), key=lambda r: r["composite_score"])
@@ -252,7 +308,7 @@ def _render() -> None:
                         "config": config, "status": status, "composite": None,
                         "verdict": None, "safety": None, "compliance": None,
                         "temporal": None, "spatial": None, "manoeuvre": None,
-                        "latency_s": None,
+                        "latency": None,
                     })
                 else:
                     table.append({
@@ -275,7 +331,13 @@ def _render() -> None:
                     m_cols[3].metric("Spatial", r["spatial"]["spatial_score"])
                     m_cols[4].metric("Manoeuvre", r["manoeuvre"]["manoeuvre_score"])
                     latency = r.get("latency_s")
-                    m_cols[5].metric("Latency", f"{latency:.0f}s" if latency is not None else "\u2014")
+                    if latency is None:
+                        latency_str = "\u2014"
+                    elif r.get("latency_is_estimate"):
+                        latency_str = f"~{latency:.0f}s"
+                    else:
+                        latency_str = f"{latency:.0f}s"
+                    m_cols[5].metric("Latency", latency_str)
                     st.markdown(_describe_run(r))
 
 
