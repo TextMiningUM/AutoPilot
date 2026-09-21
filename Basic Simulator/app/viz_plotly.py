@@ -2,11 +2,13 @@
 to work directly off Simulation.trajectory (a live in-memory list of rows)
 instead of a static CSV, and to show the mission goal."""
 from __future__ import annotations
+import math
 from collections import defaultdict
 
 import plotly.graph_objects as go
 
 from app.missions import Mission
+from app.simulation import _segment_min_range
 from app.units import mps_to_kn, m_to_nm
 
 _COLORS = {"own_ship": "#1f77b4"}
@@ -26,6 +28,60 @@ def _arrow_size(speed: float, base: float = 14.0, scale: float = 4.0,
     plot shows relative speed, not just heading."""
     return max(min_size, min(max_size, base + speed * scale))
 
+
+def _actual_range_stats(trajectory: list[dict], target_name: str,
+                        up_to_time: float) -> tuple[float, float] | tuple[None, None]:
+    """ACTUAL (not predicted -- unlike cpa_tcpa()) range from own-ship to `target_name` right
+    now, and the minimum such range recorded up to `up_to_time` -- interpolating the closest
+    approach WITHIN each consecutive pair of samples (same _segment_min_range() find_collision()
+    already uses), not just the sampled endpoints, so a fast pass-by between two recorded steps
+    isn't missed. Returns (now_range_m, min_range_m), or (None, None) if `target_name` has no
+    recorded rows yet at/before up_to_time."""
+    own_rows = sorted((r for r in trajectory if r["vehicle"] == "own_ship" and r["time"] <= up_to_time),
+                      key=lambda r: r["time"])
+    tgt_rows = sorted((r for r in trajectory if r["vehicle"] == target_name and r["time"] <= up_to_time),
+                      key=lambda r: r["time"])
+    if not own_rows or not tgt_rows:
+        return None, None
+    by_own = {r["time"]: r for r in own_rows}
+    by_tgt = {r["time"]: r for r in tgt_rows}
+    common = sorted(set(by_own) & set(by_tgt))
+    if not common:
+        return None, None
+    now_o, now_tg = by_own[common[-1]], by_tgt[common[-1]]
+    now_range = math.hypot(now_o["x"] - now_tg["x"], now_o["y"] - now_tg["y"])
+    min_range = now_range
+    prev_t, prev_o, prev_tg = None, None, None
+    for t in common:
+        o, tg = by_own[t], by_tgt[t]
+        if prev_t is not None:
+            rng, _ = _segment_min_range(prev_t, (prev_o["x"], prev_o["y"]), (prev_tg["x"], prev_tg["y"]),
+                                        t, (o["x"], o["y"]), (tg["x"], tg["y"]))
+            min_range = min(min_range, rng)
+        prev_t, prev_o, prev_tg = t, o, tg
+    return now_range, min_range
+
+
+def _distance_box_text(trajectory: list[dict], targets_order: list[str], up_to_time: float) -> str | None:
+    """Multi-line 'now/min actual range' readout for every target, for the new bottom-right
+    plot annotation -- distinct from the existing CPA/TCPA box, which is a PREDICTED future
+    closest approach, not what has actually happened in the run so far."""
+    lines = ["\U0001F4CF Actual range"]
+    for name in targets_order:
+        now_r, min_r = _actual_range_stats(trajectory, name, up_to_time)
+        if now_r is None:
+            continue
+        lines.append(f"{name}: now {m_to_nm(now_r):.3f} NM \u2022 min {m_to_nm(min_r):.3f} NM")
+    return "<br>".join(lines) if len(lines) > 1 else None
+
+
+def _distance_annotation(text: str) -> dict:
+    return dict(
+        text=text, x=0.99, y=0.01, xref="paper", yref="paper",
+        xanchor="right", yanchor="bottom", showarrow=False, align="left",
+        font=dict(size=12, color="#0b3d63"),
+        bgcolor="rgba(255,255,255,0.85)", bordercolor="#0b3d63", borderwidth=1, borderpad=6,
+    )
 
 def trajectory_bounds(trajectory: list[dict], mission: Mission,
                        pad_frac: float = 0.12,
@@ -143,6 +199,10 @@ def trajectory_figure(trajectory: list[dict], mission: Mission,
             xanchor="left", yanchor="top", showarrow=False, font=dict(size=15, color="#0b3d63"),
             bgcolor="rgba(255,255,255,0.75)", bordercolor="#0b3d63", borderwidth=1, borderpad=4,
         ))
+    if targets_order and current_time is not None:
+        dist_text = _distance_box_text(trajectory, targets_order, current_time)
+        if dist_text:
+            annotations.append(_distance_annotation(dist_text))
     if collision is not None:
         annotations.append(dict(
             text=f"<b>\U0001F4A5 COLLISION with {collision['vehicle']} at t={collision['time']:.0f}s "
@@ -269,6 +329,10 @@ def animated_trajectory_figure(trajectory: list[dict], mission: Mission,
             anns.append(_metrics_annotation(metrics_by_time[t]))
         if decision_by_time and t in decision_by_time:
             anns.append(_decision_annotation(decision_by_time[t]))
+        if targets_order:
+            dist_text = _distance_box_text(trajectory, targets_order, t)
+            if dist_text:
+                anns.append(_distance_annotation(dist_text))
         return anns
 
     frames = []
