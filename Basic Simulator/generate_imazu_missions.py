@@ -1,18 +1,83 @@
-"""One-off generator: Data/missions/Imazu01.json .. Imazu22.json from the canonical
-Imazu benchmark's own MOOS-IvP reference files (Data/Imazu Missions/imazu/imazu/NN/NN.ini).
+"""Generator: Data/missions/Imazu01.json .. Imazu22.json from Sawada et al. (2021)'s own
+Table 1/Table 4 (J. Mar. Sci. Technol. 26(2), 509-524, DOI 10.1007/s00773-020-00755-0) --
+the canonical Imazu-problem reference paper. Positions are in nautical miles and speeds in
+knots, matching the paper exactly, NOT rescaled to this project's other missions' metre/m-s
+convention -- fields are unit-labelled (x_nm/y_nm/heading_deg/speed_kn) rather than bare
+x/y/speed specifically to avoid the kind of unit ambiguity that caused the mission.targets
+staleness bug earlier in this project. These files are NOT yet loadable by app/missions.py
+-- that conversion (NM/kt -> the physics engine's internal m/m/s at load time, via
+app/units.py) is wired up in the next phase.
 
-Positions/headings/speeds are taken EXACTLY as given in each .ini (own-ship + every
-IMAZU_TSn vehicle) -- NOT rescaled to this project's other missions' speed/distance
-convention -- so results on these missions are directly comparable to other papers that
-use the same published Imazu problem set. Only the heading sign convention is normalised
-(.ini uses signed degrees, e.g. -90; our schema uses 0-360).
+COORDINATE CONVENTION: Sawada's (X, Y) has X = the own-ship transit axis (north-equivalent,
+own-ship's heading 0 moves along +X) and Y = the perpendicular axis (east-equivalent) --
+confirmed by checking that own-ship's own track (X: -6 -> +6, Y=0, heading=0) only makes
+sense if a heading-0 velocity is purely +X. Mapped directly onto this project's own
+(x=east, y=north) schema as x_nm=Y, y_nm=X (i.e. just relabelling which axis is called x
+vs y, not an actual geometric transform -- physical north/east values are preserved 1:1).
+
+HEADING CONVENTION: independently verified (see repo history/PR for the full 50-target-
+instance check) that Sawada's heading is a standard MATH angle -- velocity = (cos(heading),
+sin(heading)) in (X, Y) -- which, once mapped onto this project's (x=east, y=north) axes,
+numerically equals this project's own compass-bearing heading (0=north, clockwise) with NO
+transformation needed. Verified against the paper's own explicit design rule ("each target
+ship is positioned such that it collides with own-ship at the origin, at TCPA=30 minutes,
+if course/speed are held") for EVERY target in all 22 cases: computing each target's
+required bearing to the origin and comparing it to the heading-implied bearing gives an
+EXACT match (within transcription rounding) for 49 of the 50 target instances. The single
+exception is Case 2's ts1, published as heading=90.0 -- required bearing analysis gives
+exactly 270.0 deg (the opposite direction) instead, a 180-degree discrepancy with no
+intermediate cases anywhere else in the table (ruling out a systematic error) -- treated
+as a one-off correction of a published typo, see that target's own "source_note" field.
+
+SPEED CONVENTION: Sawada's own design rule (target distance from origin = speed x 30
+minutes) gives an unambiguous, paper-internal way to identify which targets get the
+8.4kt "overtaken vessel" exception instead of the 12.0kt nominal speed: every single
+target in Table 4 sits at EXACTLY 6.000 NM (12.0kt x 0.5h) or EXACTLY 4.200 NM (8.4kt x
+0.5h) from the origin, with no target at any intermediate distance -- so the exception
+list (ts1 in cases 3, 7, 15, 16, 17, 20, 22) is read directly off the table's own
+geometry, not guessed from which cases "look like" overtaking in the literature.
 """
 import json
-import re
+import math
 from pathlib import Path
 
-IMAZU_DIR = Path("Basic Simulator/Data/Imazu Missions/imazu/imazu")
 OUT_DIR = Path("Basic Simulator/Data/missions")
+
+FAST_KT = 12.0
+SLOW_KT = 8.4
+OWN_START_NM = (0.0, -6.0)   # (x_nm=east, y_nm=north) -- Sawada (X=-6, Y=0)
+GOAL_NM = (0.0, 6.0)         # Sawada (X=6, Y=0)
+OWN_HEADING_DEG = 0.0
+
+# Sawada et al. (2021) Table 4 -- (X, Y, heading_deg) per target, per case, exactly as
+# published EXCEPT Case 2 ts1's heading (see module docstring + that target's source_note).
+TABLE4 = {
+    1:  [(6.000, 0.000, 180.0)],
+    2:  [(0.000, 6.000, 270.0)],   # published 90.0 -- corrected, see source_note below
+    3:  [(-4.200, 0.000, 0.0)],
+    4:  [(-4.243, -4.243, 45.0)],
+    5:  [(6.000, 0.000, 180.0), (0.000, 6.000, -90.0)],
+    6:  [(-5.909, 1.042, -10.0), (-4.243, 4.243, -45.0)],
+    7:  [(-4.200, 0.000, 0.0), (-4.243, 4.243, -45.0)],
+    8:  [(6.000, 0.000, 180.0), (0.000, 6.000, -90.0)],
+    9:  [(-5.196, 3.000, -30.0), (0.000, 6.000, -90.0)],
+    10: [(0.000, 6.000, -90.0), (-5.796, -1.553, 15.0)],
+    11: [(0.000, -6.000, 90.0), (-5.196, 3.000, -30.0)],
+    12: [(-4.243, 4.243, -45.0), (-5.909, 1.042, -10.0)],
+    13: [(6.000, 0.000, 180.0), (-5.909, -1.042, 10.0), (-4.243, -4.243, 45.0)],
+    14: [(-5.909, 1.042, -10.0), (-4.243, 4.243, -45.0), (0.000, 6.000, -90.0)],
+    15: [(-4.200, 0.000, 0.0), (-4.243, 4.243, -45.0), (0.000, 6.000, -90.0)],
+    16: [(-2.970, -2.970, 45.0), (0.000, -6.000, 90.0), (0.000, 6.000, -90.0)],
+    17: [(-4.200, 0.000, 0.0), (-5.909, -1.042, 10.0), (-4.243, 4.243, -45.0)],
+    18: [(4.243, 4.243, -135.0), (-5.796, 1.553, -15.0), (-5.196, 3.000, -30.0)],
+    19: [(-5.796, -1.553, 15.0), (-5.796, 1.553, -15.0), (4.243, 4.243, -135.0)],
+    20: [(-4.200, 0.000, 0.0), (-5.796, 1.553, -15.0), (0.000, 6.000, -90.0)],
+    21: [(-5.796, 1.553, -15.0), (-5.796, -1.553, 15.0), (0.000, 6.000, -90.0)],
+    22: [(-4.200, 0.000, 0.0), (-4.243, 4.243, -45.0), (0.000, 6.000, -90.0)],
+}
+# ts1 in exactly these cases sits at 4.200 NM from the origin (8.4kt x 0.5h), every other
+# target at 6.000 NM (12.0kt x 0.5h) -- see module docstring.
+SLOW_TARGET_CASES = {3, 7, 15, 16, 17, 20, 22}
 
 RULE_MAP = {
     "head_on": ["Rule 14"],
@@ -63,43 +128,7 @@ CRITERIA_MAP = {
 }
 
 
-def parse_ini(path: Path) -> dict:
-    section = None
-    default_speed = None
-    vehicles: dict[str, dict] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        m = re.match(r"\[(.+)\]", line)
-        if m:
-            section = m.group(1)
-            if section.startswith("vehicle:"):
-                vehicles[section.split(":", 1)[1]] = {}
-            continue
-        if "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        key, val = key.strip(), val.strip()
-        if section == "DEFAULT" and key == "speed":
-            default_speed = float(val)
-        elif section and section.startswith("vehicle:"):
-            vname = section.split(":", 1)[1]
-            if key in ("start", "waypoint"):
-                sub = {}
-                for part in val.split(","):
-                    k2, _, v2 = part.strip().partition("=")
-                    sub[k2.strip()] = float(v2.strip())
-                vehicles[vname][key] = sub
-            elif key == "speed":
-                vehicles[vname]["speed"] = float(val)
-    for v in vehicles.values():
-        v.setdefault("speed", default_speed)
-    return vehicles
-
-
 def bearing_from(ox: float, oy: float, tx: float, ty: float) -> float:
-    import math
     return math.degrees(math.atan2(tx - ox, ty - oy))
 
 
@@ -129,31 +158,35 @@ def fineness(bearing: float) -> str:
 
 def build_mission(case_num: int) -> dict:
     nn = f"{case_num:02d}"
-    ini_path = IMAZU_DIR / nn / f"{nn}.ini"
-    vehicles = parse_ini(ini_path)
-    own = vehicles["LLM_SHIP"]
-    ox, oy = own["start"]["x"], own["start"]["y"]
-    own_speed = own["speed"]
-    target_names = sorted(k for k in vehicles if k != "LLM_SHIP")
+    ox, oy = OWN_START_NM
+    own_speed = FAST_KT
+    slow_here = case_num in SLOW_TARGET_CASES
 
     types, summaries, targets_json = [], [], []
-    for tname in target_names:
-        t = vehicles[tname]
-        tx, ty, theading, tspeed = t["start"]["x"], t["start"]["y"], t["start"]["heading"], t["speed"]
+    for i, (sx, sy, heading) in enumerate(TABLE4[case_num], start=1):
+        # Sawada (X, Y) -> our (x_nm=east=Y, y_nm=north=X) -- see module docstring.
+        tx, ty = sy, sx
+        tspeed = SLOW_KT if (slow_here and i == 1) else FAST_KT
         bearing = bearing_from(ox, oy, tx, ty)
-        ttype = classify(bearing, theading, tspeed, own_speed)
+        ttype = classify(bearing, heading, tspeed, own_speed)
         types.append(ttype)
-        label = tname.replace("IMAZU_TS", "ts").lower()
-        fill = {"t": label, "fine": fineness(bearing)}
-        summaries.append(SUMMARY_MAP[ttype].format(**fill))
-        targets_json.append({
-            "name": label, "x": round(tx, 3), "y": round(ty, 3),
-            "heading": round(theading % 360, 1), "speed": tspeed,
-        })
+        label = f"ts{i}"
+        summaries.append(SUMMARY_MAP[ttype].format(t=label, fine=fineness(bearing)))
+        target = {"name": label, "x_nm": round(tx, 3), "y_nm": round(ty, 3),
+                  "heading_deg": heading % 360, "speed_kn": tspeed}
+        if case_num == 2 and i == 1:
+            target["source_note"] = ("heading corrected from Table 4's published 90.0 deg "
+                                     "to 270.0 deg -- required-bearing-to-origin analysis "
+                                     "(own-ship's TCPA=30min design rule) gives an exact "
+                                     "180 deg mismatch at the published value, the only "
+                                     "such mismatch across all 50 target instances in "
+                                     "Table 4 (all 49 others match exactly); treated as a "
+                                     "one-off correction of a published typo.")
+        targets_json.append(target)
 
-    unique_types = list(dict.fromkeys(types))  # first-seen order, de-duplicated
+    unique_types = list(dict.fromkeys(types))
     name_parts = " + ".join(NAME_MAP[t] for t in unique_types)
-    n = len(target_names)
+    n = len(types)
     name = f"Imazu {case_num:02d} -- {name_parts}" + (f" ({n} targets)" if n > 1 else "")
 
     rule_refs = []
@@ -179,11 +212,10 @@ def build_mission(case_num: int) -> dict:
     criteria.append("Minimum CPA to ALL targets stays above the safe-distance threshold.")
 
     description = (
-        f"Canonical Imazu problem {case_num} (Sawada/Zhai Appendix D reconstruction), "
-        f"reproduced with the exact own-ship/target start positions, headings, and speeds "
-        f"from the reference scenario in Data/Imazu Missions/imazu/imazu/{nn}/{nn}.ini -- "
-        f"kept geometrically identical to the published benchmark so results can be "
-        f"compared directly against other papers using the same Imazu case. "
+        f"Canonical Imazu problem {case_num}, reproduced from Sawada et al. (2021) Table 4 "
+        f"(J. Mar. Sci. Technol. 26(2), 509-524) -- exact published own-ship/target start "
+        f"positions (NM), headings (deg), and speeds (kn), so results are directly "
+        f"comparable against other papers using the same published Imazu problem set. "
         + "; ".join(summaries) + "."
     )
 
@@ -191,8 +223,9 @@ def build_mission(case_num: int) -> dict:
         "id": f"Imazu{nn}", "name": name, "rule_refs": rule_refs,
         "own_ship_role": own_ship_role, "description": description,
         "pass_criteria": criteria,
-        "own_ship": {"x": ox, "y": oy, "heading": own["start"]["heading"], "speed": own_speed},
-        "goal": {"x": own["waypoint"]["x"], "y": own["waypoint"]["y"]},
+        "own_ship": {"x_nm": OWN_START_NM[0], "y_nm": OWN_START_NM[1],
+                    "heading_deg": OWN_HEADING_DEG, "speed_kn": own_speed},
+        "goal": {"x_nm": GOAL_NM[0], "y_nm": GOAL_NM[1]},
         "targets": targets_json,
     }
 

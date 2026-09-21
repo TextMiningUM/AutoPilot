@@ -27,6 +27,7 @@ from app.simulation import Simulation, VesselConstraints, project_scenario, find
 from app.narrate import narrate, contact_line, bearing_and_range, relative_bearing, cpa_tcpa
 from app.viz_plotly import trajectory_figure, trajectory_bounds, animated_trajectory_figure
 from app.evaluation import score_trajectory
+from app.units import kn_to_mps, mps_to_kn, m_to_nm, nm_to_m
 
 st.set_page_config(page_title="OOW COLREG Simulator", page_icon="\U0001F9ED", layout="wide")
 
@@ -149,8 +150,8 @@ from app.llm_runs import list_runs_for_mission, load_run, checkpoint_at_or_befor
 # hardcoded widget default on every restart despite looking "saved" while the app ran.
 _UI_PREFS_PATH = ROOT / "Data" / "_ui_prefs.json"
 _UI_PREFS_KEYS = [
-    "ship_max_speed", "ship_max_turn_rate_pct", "ship_max_accel", "ship_max_decel",
-    "ship_turn_rate_deg_s", "mission_min_cpa",
+    "ship_max_speed_kn", "ship_max_turn_rate_pct", "ship_max_accel_kn_s", "ship_max_decel_kn_s",
+    "ship_turn_rate_deg_s", "mission_min_cpa_nm",
 ]
 
 
@@ -188,16 +189,18 @@ def build_vessel_constraints(mission: Mission) -> VesselConstraints:
     own copy of these numbers. cruise_speed_mps always matches `mission`'s own designed
     speed (never a separately user-set value) -- the nominal/rated-speed reference the
     agent's prompt reports must reflect what this mission actually runs at, same reasoning
-    as run_llm_scenario.py's CLI path."""
+    as run_llm_scenario.py's CLI path. Sidebar widgets are entered/displayed in NM/kt
+    (matching Sawada et al. (2021)'s units); converted to this project's internal m/m-s
+    here, at the one edge where the UI meets the physics engine (see app/units.py)."""
     g = st.session_state.get
     return VesselConstraints(
-        max_speed_mps=g("ship_max_speed", 10.0),
+        max_speed_mps=kn_to_mps(g("ship_max_speed_kn", 19.4)),
         max_rudder_angle_deg=g("ship_max_turn_rate_pct", 30.0),
-        max_acceleration_mps2=g("ship_max_accel", 0.2),
-        max_deceleration_mps2=g("ship_max_decel", 0.2),
+        max_acceleration_mps2=kn_to_mps(g("ship_max_accel_kn_s", 0.4)),
+        max_deceleration_mps2=kn_to_mps(g("ship_max_decel_kn_s", 0.4)),
         turn_rate_deg_s=g("ship_turn_rate_deg_s", 3.0),
         cruise_speed_mps=mission.own_ship.speed,
-        min_cpa_m=g("mission_min_cpa", 500.0),
+        min_cpa_m=nm_to_m(g("mission_min_cpa_nm", 0.27)),
         time_step_s=10.0,
     )
 
@@ -300,7 +303,7 @@ def _goal_quickfacts(x: float, y: float, heading: float, speed: float,
     side = "starboard" if off > 0 else "port"
     eta = f"\u2248{rng / speed:.0f}s" if speed > 0 else "never (stopped)"
     return (f"\U0001F3AF Goal bearing **{brg:.0f}\u00b0** ({abs(off):.0f}\u00b0 to **{side}** of "
-           f"current heading {heading:.0f}\u00b0) \u2022 {rng:.0f}m away \u2022 ETA {eta}")
+           f"current heading {heading:.0f}\u00b0) \u2022 {m_to_nm(rng):.3f} NM away \u2022 ETA {eta}")
 
 
 def _build_metrics_by_time(trajectory: list[dict], mission) -> dict[float, str]:
@@ -318,12 +321,12 @@ def _build_metrics_by_time(trajectory: list[dict], mission) -> dict[float, str]:
             continue
         targets = [r for r in trajectory if r["time"] == t and r["vehicle"] != "own_ship"]
         brg, rng = bearing_and_range(own_row["x"], own_row["y"], mission.goal[0], mission.goal[1])
-        lines = [f"\U0001F3AF Goal {brg:.0f}\u00b0 \u2022 {rng:.0f}m",
-                f"Heading {own_row['heading']:.0f}\u00b0 \u2022 {own_row['speed']:.2f} m/s"]
+        lines = [f"\U0001F3AF Goal {brg:.0f}\u00b0 \u2022 {m_to_nm(rng):.3f} NM",
+                f"Heading {own_row['heading']:.0f}\u00b0 \u2022 {mps_to_kn(own_row['speed']):.2f} kt"]
         for tgt in targets:
             cpa_m, tcpa_s = cpa_tcpa(own_row["x"], own_row["y"], own_row["heading"], own_row["speed"],
                                     tgt["x"], tgt["y"], tgt["heading"], tgt["speed"])
-            lines.append(f"{tgt['vehicle']}: CPA {cpa_m:.0f}m \u2022 TCPA {tcpa_s:.0f}s")
+            lines.append(f"{tgt['vehicle']}: CPA {m_to_nm(cpa_m):.3f} NM \u2022 TCPA {tcpa_s:.0f}s")
         out[t] = "<br>".join(lines)
     return out
 
@@ -374,7 +377,7 @@ def _render_plot(trajectory: list[dict], mission, placeholder, title: str,
     if collision is not None:
         st.error(
             f"\U0001F4A5 Collision with **{collision['vehicle']}** at t={collision['time']:.0f}s "
-            f"(range {collision['range_m']:.0f}m)."
+            f"(range {m_to_nm(collision['range_m']):.3f} NM)."
         )
 
 
@@ -411,7 +414,7 @@ def _animate_preview(trajectory: list[dict], mission, placeholder, title: str,
     if collision is not None:
         st.error(
             f"\U0001F4A5 Collision with **{collision['vehicle']}** at t={collision['time']:.0f}s "
-            f"(range {collision['range_m']:.0f}m)."
+            f"(range {m_to_nm(collision['range_m']):.3f} NM)."
         )
 
 
@@ -423,15 +426,15 @@ def _render_metrics_row(placeholders, mission, metrics_row, targets_now) -> None
     if metrics_row:
         _t, _x, _y, _hdg, _spd = metrics_row
         _goal_brg, _goal_rng = bearing_and_range(_x, _y, mission.goal[0], mission.goal[1])
-        b1.metric("Goal bearing / dist", f"{_goal_brg:.0f}\u00b0 / {_goal_rng:.0f}m")
-        b2.metric("Our heading / speed", f"{_hdg:.0f}\u00b0 / {_spd:.2f} m/s")
+        b1.metric("Goal bearing / dist", f"{_goal_brg:.0f}\u00b0 / {m_to_nm(_goal_rng):.3f} NM")
+        b2.metric("Our heading / speed", f"{_hdg:.0f}\u00b0 / {mps_to_kn(_spd):.2f} kt")
         if targets_now:
             cpas, tcpas = [], []
             for tgt in targets_now:
                 cpa_m, tcpa_s = cpa_tcpa(_x, _y, _hdg, _spd, tgt["x"], tgt["y"],
                                         tgt["heading"], tgt["speed"])
                 name = tgt.get("vehicle", "?")
-                cpas.append(f"{name}: {cpa_m:.0f}m")
+                cpas.append(f"{name}: {m_to_nm(cpa_m):.3f} NM")
                 tcpas.append(f"{name}: {tcpa_s:.0f}s")
             b3.metric("CPA", " \u2022 ".join(cpas))
             b4.metric("TCPA", " \u2022 ".join(tcpas))
@@ -629,21 +632,21 @@ with st.sidebar:
     st.caption("Feeds the kinematics layer (VesselConstraints) that rate-limits own-ship's "
               "heading/speed changes -- applied over a fixed 10s simulation time step.")
     sp1, sp2 = st.columns(2)
-    sp1.number_input("Max speed (m/s)", min_value=0.0, value=10.0, step=0.5, key="ship_max_speed")
+    sp1.number_input("Max speed (kt)", min_value=0.0, value=19.4, step=1.0, key="ship_max_speed_kn")
     sp2.number_input("Max rudder angle (deg)", min_value=0.0, value=30.0, step=1.0, key="ship_max_turn_rate_pct",
                      help="Informational only -- not yet enforced as a heading-change limit. "
                           "turn_rate_deg_s below is the one actual limit on how fast heading "
                           "can change per step.")
     sp3, sp4 = st.columns(2)
-    sp3.number_input("Max acceleration (m/s\u00b2)", min_value=0.0, value=0.2, step=0.05, key="ship_max_accel")
-    sp4.number_input("Max deceleration (m/s\u00b2)", min_value=0.0, value=0.2, step=0.05, key="ship_max_decel")
+    sp3.number_input("Max acceleration (kt/s)", min_value=0.0, value=0.4, step=0.1, key="ship_max_accel_kn_s")
+    sp4.number_input("Max deceleration (kt/s)", min_value=0.0, value=0.4, step=0.1, key="ship_max_decel_kn_s")
     st.number_input("Turn rate (deg/s)", min_value=0.0, value=3.0, step=0.5, key="ship_turn_rate_deg_s",
                     help="The only actively-enforced limit on how many degrees own-ship's "
                          "heading may change per simulation step.")
     st.divider()
 
     st.header("Mission")
-    st.number_input("Minimal CPA (m)", min_value=0.0, value=500.0, step=50.0, key="mission_min_cpa")
+    st.number_input("Minimal CPA (NM)", min_value=0.0, value=0.27, step=0.05, key="mission_min_cpa_nm")
     all_missions = {mid: load_mission(mid) for mid in mission_ids}
     labels = {mid: f"{mid.split('_')[0].upper()} \u2014 {m.name}  ({mid})" for mid, m in all_missions.items()}
     picked = st.selectbox("Scenario", options=mission_ids, format_func=lambda m: labels[m],
@@ -1052,7 +1055,8 @@ with plot_col:
         )
         e1, e2, e3, e4, e5 = st.columns(5)
         e1.metric("Safety", result["safety"]["score"],
-                  help=f"min CPA {result['safety']['min_cpa_m']} m, passed={result['safety']['passed']}")
+                  help=f"min CPA {m_to_nm(result['safety']['min_cpa_m']):.3f} NM, "
+                       f"passed={result['safety']['passed']}")
         e2.metric("Compl.", result["compliance"]["score"],
                   help=(f"{len(result['compliance']['violations'])} violation(s) -- from Claude's "
                        f"audit ({audit_source})" if audit is not None
@@ -1085,7 +1089,8 @@ with plot_col:
             for tgt in sim.targets:
                 c = contact_line(sim.own, tgt)
                 if c["quiet"]:
-                    st.caption(f"{c['name']}: quiet (CPA {c['cpa_m']:.0f}m, TCPA {c['tcpa_s']:.0f}s)")
+                    st.caption(f"{c['name']}: quiet (CPA {m_to_nm(c['cpa_m']):.3f} NM, "
+                              f"TCPA {c['tcpa_s']:.0f}s)")
 
 # Persist the sidebar's current Ship performance/Mission values to disk on every rerun --
 # must run last (after the sidebar widgets above have written this run's values into

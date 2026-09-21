@@ -7,6 +7,7 @@ from collections import defaultdict
 import plotly.graph_objects as go
 
 from app.missions import Mission
+from app.units import mps_to_kn, m_to_nm
 
 _COLORS = {"own_ship": "#1f77b4"}
 _PALETTE = ["#d62728", "#2ca02c", "#9467bd", "#8c564b", "#e377c2"]
@@ -105,7 +106,7 @@ def trajectory_figure(trajectory: list[dict], mission: Mission,
                        color=_color_for(name, targets_order),
                        line=dict(width=1, color="rgba(0,0,0,0.35)")),
             name=name,
-            hovertext=[f"{name}: heading {lhdg:.0f}\u00b0, speed {lspd:.2f} m/s"],
+            hovertext=[f"{name}: heading {lhdg:.0f}\u00b0, speed {mps_to_kn(lspd):.2f} kt"],
             hoverinfo="text",
         ))
 
@@ -145,7 +146,7 @@ def trajectory_figure(trajectory: list[dict], mission: Mission,
     if collision is not None:
         annotations.append(dict(
             text=f"<b>\U0001F4A5 COLLISION with {collision['vehicle']} at t={collision['time']:.0f}s "
-                 f"(range {collision['range_m']:.0f}m)</b>",
+                 f"(range {m_to_nm(collision['range_m']):.3f} NM)</b>",
             x=0.5, y=1.06, xref="paper", yref="paper", xanchor="center", yanchor="bottom",
             showarrow=False, font=dict(size=13, color="#ffffff"),
             bgcolor="#d32f2f", bordercolor="#7a0000", borderwidth=1, borderpad=6,
@@ -224,7 +225,7 @@ def animated_trajectory_figure(trajectory: list[dict], mission: Mission,
                        color=_color_for(name, targets_order),
                        line=dict(width=1, color="rgba(0,0,0,0.35)")),
             name=name,
-            hovertext=[f"{name}: heading {lhdg:.0f}\u00b0, speed {lspd:.2f} m/s"],
+            hovertext=[f"{name}: heading {lhdg:.0f}\u00b0, speed {mps_to_kn(lspd):.2f} kt"],
             hoverinfo="text",
         ))
     marker_idx = list(range(n_static, n_static + len(vehicles)))
@@ -240,7 +241,7 @@ def animated_trajectory_figure(trajectory: list[dict], mission: Mission,
     def _collision_annotation():
         return dict(
             text=f"<b>\U0001F4A5 COLLISION with {collision['vehicle']} at t={collision['time']:.0f}s "
-                 f"(range {collision['range_m']:.0f}m)</b>",
+                 f"(range {m_to_nm(collision['range_m']):.3f} NM)</b>",
             x=0.5, y=1.06, xref="paper", yref="paper", xanchor="center", yanchor="bottom",
             showarrow=False, font=dict(size=13, color="#ffffff"),
             bgcolor="#d32f2f", bordercolor="#7a0000", borderwidth=1, borderpad=6,
@@ -277,7 +278,7 @@ def animated_trajectory_figure(trajectory: list[dict], mission: Mission,
             _, lx, ly, lhdg, lspd = _pos_at(data[name], t)
             frame_data.append(go.Scatter(
                 x=[lx], y=[ly], marker=dict(size=_arrow_size(lspd), angle=lhdg),
-                hovertext=[f"{name}: heading {lhdg:.0f}\u00b0, speed {lspd:.2f} m/s"],
+                hovertext=[f"{name}: heading {lhdg:.0f}\u00b0, speed {mps_to_kn(lspd):.2f} kt"],
             ))
         anns = [_time_annotation(t)] + _extra_annotations(t)
         if collision is not None and t >= collision["time"]:

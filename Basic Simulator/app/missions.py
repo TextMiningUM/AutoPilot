@@ -1,8 +1,19 @@
-"""Mission loading: Data/missions/*.json -> in-memory Mission objects."""
+"""Mission loading: Data/missions/*.json -> in-memory Mission objects.
+
+Mission JSON is authored in nautical miles/knots (x_nm/y_nm/heading_deg/speed_kn -- see
+app/units.py and generate_imazu_missions.py), matching Sawada et al. (2021), the canonical
+Imazu-problem reference paper. Conversion to this project's INTERNAL physics/kinematics
+units (metres, m/s -- Simulation, VesselConstraints, narrate.cpa_tcpa/classify_encounter,
+...) happens ONCE, right here at load time, via app.units -- the physics core itself is
+never rewritten in NM/kt. Older mission files (pre-dating this convention) that still use
+bare x/y/heading/speed fields are accepted unchanged (already in metres/m-s, no double
+conversion) for backward compatibility during the migration."""
 from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from app.units import kn_to_mps, nm_to_m
 
 APP_DIR = Path(__file__).resolve().parent
 ROOT = APP_DIR.parent
@@ -46,8 +57,20 @@ class Mission:
 
 
 def _vessel(name: str, d: dict) -> Vessel:
+    """x_nm/y_nm/heading_deg/speed_kn (NM/kt, Sawada-convention missions) -> metres/m-s;
+    bare x/y/heading/speed (older missions, pre-dating this convention) are already in
+    metres/m-s and pass through unconverted."""
+    if "x_nm" in d:
+        return Vessel(name=name, x=nm_to_m(float(d["x_nm"])), y=nm_to_m(float(d["y_nm"])),
+                      heading=float(d["heading_deg"]), speed=kn_to_mps(float(d["speed_kn"])))
     return Vessel(name=name, x=float(d["x"]), y=float(d["y"]),
                    heading=float(d["heading"]), speed=float(d["speed"]))
+
+
+def _goal_xy(d: dict) -> tuple[float, float]:
+    if "x_nm" in d:
+        return nm_to_m(float(d["x_nm"])), nm_to_m(float(d["y_nm"]))
+    return float(d["x"]), float(d["y"])
 
 
 def mission_from_dict(d: dict) -> Mission:
@@ -61,7 +84,7 @@ def mission_from_dict(d: dict) -> Mission:
         own_ship_role=d["own_ship_role"], description=d["description"],
         pass_criteria=d["pass_criteria"],
         own_ship=_vessel("own_ship", d["own_ship"]),
-        goal=(float(d["goal"]["x"]), float(d["goal"]["y"])),
+        goal=_goal_xy(d["goal"]),
         targets=[_vessel(t["name"], t) for t in d["targets"]],
     )
 

@@ -1,11 +1,18 @@
 """Encounter classification + CPA/TCPA + situation narration, ported from
 Brain Storming/pilot_agents.ipynb (already includes the Rule-13 bugfix
 described in Design Ideas.docx: overtaking is defined by the bearing of
-OWN-SHIP as seen from the TARGET, not the other way around)."""
+OWN-SHIP as seen from the TARGET, not the other way around).
+
+All geometry/kinematics here (bearing_and_range, cpa_tcpa, classify_encounter,
+contact_line) stays in this project's INTERNAL units (metres, m/s) -- only narrate()'s
+final TEXT output converts to nautical miles/knots (via app.units) at the point of
+display, matching Sawada et al. (2021)'s own units. See app/units.py's docstring for why
+this project converts only at the edges, never in the physics core."""
 from __future__ import annotations
 import math
 
 from app.missions import Mission, Vessel
+from app.units import m_to_nm, mps_to_kn
 
 
 def bearing_and_range(ox: float, oy: float, tx: float, ty: float) -> tuple[float, float]:
@@ -168,11 +175,11 @@ def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_m
     goal_brg, goal_rng = bearing_and_range(own.x, own.y, gx, gy)
     off_course = relative_bearing(own.heading, goal_brg)
     nominal_speed = cruise_speed_mps if cruise_speed_mps is not None else mission.own_ship.speed
-    lines = [f"Own-ship at ({own.x:.1f}, {own.y:.1f}), heading {own.heading:.1f}, "
-             f"speed {own.speed:.2f} m/s (nominal/rated speed for this mission: "
-             f"{nominal_speed:.2f} m/s)."]
-    lines.append(f"Mission goal at ({gx:.1f}, {gy:.1f}), {goal_rng:.0f}m away, bearing "
-                f"{goal_brg:.1f} deg.")
+    lines = [f"Own-ship at ({m_to_nm(own.x):.3f}, {m_to_nm(own.y):.3f}) NM, heading "
+             f"{own.heading:.1f}, speed {mps_to_kn(own.speed):.2f} kt (nominal/rated speed "
+             f"for this mission: {mps_to_kn(nominal_speed):.2f} kt)."]
+    lines.append(f"Mission goal at ({m_to_nm(gx):.3f}, {m_to_nm(gy):.3f}) NM, "
+                f"{m_to_nm(goal_rng):.3f} NM away, bearing {goal_brg:.1f} deg.")
     # A separate, unmistakable line for the ONE number that drives the goal-correction
     # decision -- observed the model repeatedly grabbing a CONTACT's rel.bearing instead
     # (e.g. reasoning "the goal is 82 deg off" while quoting a target's rel.bearing of
@@ -204,8 +211,9 @@ def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_m
             c = contact_line(own, tgt)
             tcpa_note = "" if c["closing"] else " (already past closest point, ranges now increasing)"
             lines.append(
-                f'  - Ship named "{c["name"]}": range {c["range_m"]:.0f}m, rel.bearing '
-                f"{c['rel_bearing_deg']:.1f} deg, heading {c['heading']:.1f}, speed {c['speed']:.2f} m/s, "
-                f"CPA {c['cpa_m']:.0f}m, TCPA {c['tcpa_s']:.0f}s{tcpa_note}"
+                f'  - Ship named "{c["name"]}": range {m_to_nm(c["range_m"]):.3f} NM, rel.bearing '
+                f"{c['rel_bearing_deg']:.1f} deg, heading {c['heading']:.1f}, speed "
+                f"{mps_to_kn(c['speed']):.2f} kt, CPA {m_to_nm(c['cpa_m']):.3f} NM, "
+                f"TCPA {c['tcpa_s']:.0f}s{tcpa_note}"
             )
     return "\n".join(lines)

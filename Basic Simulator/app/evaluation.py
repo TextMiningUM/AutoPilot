@@ -181,6 +181,7 @@ def _ground_truth_at_checkpoint(trajectory_rows: list[dict], t: float,
     this FIXED fact means the LLM only ever has to judge whether the agent's citation/action
     matches it, not re-derive "was there risk of collision" itself each time."""
     from app.narrate import cpa_tcpa, classify_encounter, QUIET_CPA_M, QUIET_TCPA_S
+    from app.units import m_to_nm
 
     rows = _rows_at_time(trajectory_rows, t)
     own = rows.get(own_vehicle)
@@ -198,7 +199,8 @@ def _ground_truth_at_checkpoint(trajectory_rows: list[dict], t: float,
             verdict = "no rule applies (quiet -- CPA/TCPA too large for real risk of collision)"
         else:
             verdict = f"{'/'.join(rules)} applies ({enc})"
-        parts.append(f"{vname} rel_bearing={rel:.0f}deg cpa={cpa:.0f}m tcpa={tcpa:.0f}s -> {verdict}")
+        parts.append(f"{vname} rel_bearing={rel:.0f}deg cpa={m_to_nm(cpa):.3f}NM "
+                    f"tcpa={tcpa:.0f}s -> {verdict}")
     return "; ".join(parts) if parts else "(no other vessels)"
 
 
