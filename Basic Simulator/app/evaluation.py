@@ -60,10 +60,20 @@ stand-on role for each encounter type (head-on, crossing, overtaking), early and
 action by the give-way vessel (normally to starboard), never altering to port toward a vessel on \
 own-ship's own port side, and the stand-on vessel holding course/speed unless it became clearly \
 necessary to act. \
+For EVERY violation you find, explain it fully rather than just naming the rule -- a reader must \
+be able to understand exactly what went wrong without re-reading the raw trajectory themselves. \
+Each violation string must cover ALL of the following, in this order, as one or two sentences: \
+(1) WHEN it happened (approximate time in seconds, taken from the track), (2) WHAT own-ship \
+actually did at that moment (heading/course change or lack of one, relative to the target(s) \
+involved), (3) WHY that violates COLREG (name the rule number and the specific requirement it \
+breaches), and (4) WHAT the COLREG-compliant manoeuvre would have been instead (concrete: which \
+direction to turn, or to hold course/speed, and why that resolves the encounter correctly). \
 Reply with ONLY a JSON object, no other text -- no preamble, no analysis, no summary before or \
 after it:
-{"violations": ["<rule number + one-sentence description of what went wrong>", ...]}
+{"violations": ["t=<seconds>s: <what own-ship did> -- violates Rule <n> because <reason>; the \
+COLREG-compliant action would have been <concrete correct manoeuvre>.", ...]}
 If own-ship's manoeuvres were fully compliant, return an empty violations list."""
+
 
 
 def _extract_json_objects(text: str) -> list[str]:
@@ -119,7 +129,9 @@ def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_sh
     client = anthropic.Anthropic(api_key=key)
     user_msg = f"Trajectory (own_vehicle={own_vehicle}):\n\n{_format_trajectory_csv(trajectory_rows)}"
     resp = client.messages.create(
-        model=model, max_tokens=800, system=LLM_COMPLIANCE_SYSTEM,
+        # 2048 (not the old 800) -- each violation is now a full when/what/why/correct-action
+        # explanation instead of one short sentence, and a run can have several violations.
+        model=model, max_tokens=2048, system=LLM_COMPLIANCE_SYSTEM,
         messages=[{"role": "user", "content": user_msg}],
     )
     text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
