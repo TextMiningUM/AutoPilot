@@ -84,6 +84,7 @@ def score_one(mission, log: dict) -> dict:
         "safety": result["safety"], "compliance": result["compliance"],
         "temporal": result["temporal"], "spatial": result["spatial"],
         "manoeuvre": result["manoeuvre"], "latency_s": log.get("latency_s"),
+        "colreg_llm_check": log.get("colreg_llm_check"),
     }
 
 
@@ -125,7 +126,8 @@ def sweep(missions: list[str], configs: list[str], tag: str = "default", **run_k
             # the rest of the sweep down with it -- record the failure and keep going.
             row = {"config": config, "tag": tag, "composite_score": 0.0,
                   "verdict": f"ERROR: {exc}", "safety": None, "compliance": None,
-                  "temporal": None, "spatial": None, "manoeuvre": None}
+                  "temporal": None, "spatial": None, "manoeuvre": None,
+                  "latency_s": None, "colreg_llm_check": None}
             print(f"  ERROR ({time.time() - t0:.1f}s): {exc}")
         merged = _save_row(mission_id, row)
     _clear_status()
@@ -152,6 +154,10 @@ def main() -> None:
     ap.add_argument("--k", type=int, default=2)
     ap.add_argument("--no-rag", action="store_true")
     ap.add_argument("--force", action="store_true", help="recompute even if a log already exists")
+    ap.add_argument("--no-colreg-check", action="store_true",
+                    help="skip the end-of-mission Anthropic Claude COLREG compliance check for "
+                         "every job in this sweep (saves one network call + latency per job; "
+                         "needs ANTHROPIC_API_KEY in .env otherwise)")
     args = ap.parse_args()
 
     missions = args.missions or list_mission_ids()
@@ -163,6 +169,7 @@ def main() -> None:
         enable_thinking=args.enable_thinking, max_new_tokens=args.max_new_tokens,
         k=args.k, use_rag=not args.no_rag, force=args.force,
         decision_interval=args.decision_interval,
+        check_colreg_compliance=not args.no_colreg_check,
     )
     print(f"\nSaved incrementally to: {SUMMARY_FILE}")
 

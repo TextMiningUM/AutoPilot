@@ -125,6 +125,7 @@ def _score_log(mission_id: str, log: dict, tag: str, path: Path,
         "temporal": result["temporal"], "spatial": result["spatial"],
         "manoeuvre": result["manoeuvre"], "latency_s": latency_s,
         "latency_is_estimate": latency_is_estimate,
+        "colreg_llm_check": log.get("colreg_llm_check"),
     }
 
 
@@ -156,6 +157,20 @@ def _scan_mission_runs(mission_id: str, gen_at_index: list[tuple[datetime, Path]
 
 
 
+def _colreg_status(r: dict) -> str:
+    """Narrow-column status for the end-of-mission Anthropic Claude COLREG compliance
+    check (app.evaluation.llm_compliance_check, run automatically by run_llm_scenario.py's
+    run_one() -- see its colreg_llm_check field): compact enough for a dataframe cell, full
+    violations text lives in the "View details" popover instead (_describe_run) since it can
+    be long. "--" covers both older logs generated before this check existed at all, and
+    logs where it was explicitly skipped (--no-colreg-check)."""
+    check = r.get("colreg_llm_check")
+    if not check or not check.get("checked"):
+        return "\u2014"
+    violations = check.get("violations") or []
+    return "\u2705" if not violations else f"\u26A0\uFE0F {len(violations)}"
+
+
 def _axis_cols(r: dict) -> dict:
     """Flattens one scored row's per-axis breakdown into the handful of columns the
     leaderboard/per-mission tables both show next to the composite score -- safety/
@@ -163,7 +178,8 @@ def _axis_cols(r: dict) -> dict:
     whole run's wall-clock compute time: exact (from run_llm_scenario.py's own latency_s)
     for logs generated after that field was added, or a "~"-prefixed ESTIMATE (derived from
     the gap to the previous log's generated_at, see _estimate_latency) for older ones, or
-    None if no estimate was possible either (first log ever, or an implausible gap)."""
+    None if no estimate was possible either (first log ever, or an implausible gap). colreg
+    is the narrow Claude-compliance-check status -- see _colreg_status."""
     latency = r.get("latency_s")
     if latency is None:
         latency_str = None
@@ -175,6 +191,7 @@ def _axis_cols(r: dict) -> dict:
         "safety": r["safety"]["score"], "compliance": r["compliance"]["score"],
         "temporal": r["temporal"]["temporal_score"], "spatial": r["spatial"]["spatial_score"],
         "manoeuvre": r["manoeuvre"]["manoeuvre_score"], "latency": latency_str,
+        "colreg": _colreg_status(r),
     }
 
 
@@ -238,6 +255,21 @@ def _describe_run(r: dict) -> str:
                     f"{man['smoothness_score']:.2f} (avg heading rate "
                     f"{man['mean_abs_heading_rate']:.2f}\u00b0/s, avg speed rate "
                     f"{man['mean_abs_speed_rate']:.3f} m/s\u00b2).")
+
+    lines.append("")
+    lines.append("**Claude COLREG compliance check** (end-of-mission, Anthropic API)")
+    check = r.get("colreg_llm_check")
+    if not check or not check.get("checked"):
+        reason = (check or {}).get("error") or "not run for this log (older log, or --no-colreg-check)"
+        lines.append(f"- Not checked -- {reason}.")
+    else:
+        violations = check.get("violations") or []
+        if not violations:
+            lines.append("- Claude found no COLREG violations in this trajectory.")
+        else:
+            lines.append(f"- Claude flagged {len(violations)} violation(s):")
+            for v in violations:
+                lines.append(f"  - {v}")
     return "\n".join(lines)
 
 
@@ -273,6 +305,7 @@ def _render() -> None:
                 "mission": mission_id, "done": "0/8", "best_config": "\u2014",
                 "composite": None, "verdict": "\u2014", "safety": None, "compliance": None,
                 "temporal": None, "spatial": None, "manoeuvre": None, "latency": None,
+                "colreg": "\u2014",
             })
             continue
         best = max(rows.values(), key=lambda r: r["composite_score"])
@@ -308,7 +341,7 @@ def _render() -> None:
                         "config": config, "status": status, "composite": None,
                         "verdict": None, "safety": None, "compliance": None,
                         "temporal": None, "spatial": None, "manoeuvre": None,
-                        "latency": None,
+                        "latency": None, "colreg": "\u2014",
                     })
                 else:
                     table.append({
@@ -324,7 +357,7 @@ def _render() -> None:
                                       key=f"detail_pick_{mission_id}")
                 r = rows[picked]
                 with st.popover(f"\U0001F4C4 {picked} \u2014 details"):
-                    m_cols = st.columns(6)
+                    m_cols = st.columns(7)
                     m_cols[0].metric("Safety", r["safety"]["score"])
                     m_cols[1].metric("Compliance", r["compliance"]["score"])
                     m_cols[2].metric("Temporal", r["temporal"]["temporal_score"])
@@ -338,6 +371,7 @@ def _render() -> None:
                     else:
                         latency_str = f"{latency:.0f}s"
                     m_cols[5].metric("Latency", latency_str)
+                    m_cols[6].metric("COLREG (Claude)", _colreg_status(r))
                     st.markdown(_describe_run(r))
 
 

@@ -41,6 +41,7 @@ for p in (ROOT, REPO_ROOT):
 from app.missions import list_mission_ids, load_mission
 from app.simulation import Simulation, VesselConstraints, COLLISION_RADIUS_M
 from app.agents import ask_oow, MODEL_CONFIGS, SYSTEM_OOW_AGENT, effective_generation_params
+from app.evaluation import llm_compliance_check
 from app.llm_runs import RUNS_DIR, run_log_path
 from app.narrate import recommended_decision_interval
 
@@ -49,7 +50,7 @@ def run_one(mission_id: str, config: str, tag: str = "default",
            dt: float = 10.0, max_steps: int = 200, enable_thinking: bool = False,
            max_new_tokens: int = 256, k: int = 2, use_rag: bool = True,
            system_prompt: str | None = None, force: bool = False,
-           decision_interval: int | None = None) -> Path:
+           decision_interval: int | None = None, check_colreg_compliance: bool = True) -> Path:
     out_path = run_log_path(mission_id, config, tag)
     if out_path.exists() and not force:
         print(f"  [skip] {out_path.name} already exists (use --force to overwrite)")
@@ -111,10 +112,26 @@ def run_one(mission_id: str, config: str, tag: str = "default",
         sim.step(dt)
 
     latency_s = time.time() - _t_run_start
+
+    # One-shot Anthropic Claude judge of the WHOLE completed trajectory's COLREG compliance,
+    # run automatically at the end of every mission's calculation (not per-checkpoint -- a
+    # single network round-trip after the fact, same call app.evaluation.llm_compliance_check
+    # already offered as an on-demand button in the live UI). A failure here (missing API
+    # key, network error, ...) must not take the rest of a long sweep down -- recorded as
+    # "checked: false" with the error message instead of raising.
+    colreg_llm_check = {"checked": False, "violations": None, "error": None}
+    if check_colreg_compliance:
+        try:
+            colreg_llm_check["violations"] = llm_compliance_check(sim.trajectory)
+            colreg_llm_check["checked"] = True
+        except Exception as exc:
+            colreg_llm_check["error"] = str(exc)
+
     log = {
         "mission_id": mission_id, "config": config, "tag": tag,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "latency_s": latency_s,
+        "colreg_llm_check": colreg_llm_check,
         "params": {
             "decision_interval": effective_interval, "dt": dt, "max_steps": max_steps,
             "enable_thinking": effective_thinking, "max_new_tokens": effective_max_new_tokens,
@@ -128,8 +145,10 @@ def run_one(mission_id: str, config: str, tag: str = "default",
     }
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(log, ensure_ascii=False, indent=1), encoding="utf-8")
+    _cc = (f"{len(colreg_llm_check['violations'])} violation(s)" if colreg_llm_check["checked"]
+          else f"not checked ({colreg_llm_check['error']})")
     print(f"  [done] {out_path.name}  outcome={outcome}  steps={step}  "
-          f"checkpoints={len(checkpoints)}  latency={latency_s:.1f}s")
+          f"checkpoints={len(checkpoints)}  latency={latency_s:.1f}s  colreg_check={_cc}")
     return out_path
 
 
@@ -159,6 +178,10 @@ def main() -> None:
                     help="path to a text file with a custom system prompt override "
                          "(default: agents.SYSTEM_OOW_AGENT)")
     ap.add_argument("--force", action="store_true", help="overwrite existing logs")
+    ap.add_argument("--no-colreg-check", action="store_true",
+                    help="skip the end-of-mission Anthropic Claude COLREG compliance check "
+                         "(saves one network call + latency per run; needs ANTHROPIC_API_KEY "
+                         "in .env otherwise)")
     args = ap.parse_args()
 
     missions = args.missions or list_mission_ids()
@@ -177,6 +200,7 @@ def main() -> None:
             max_new_tokens=args.max_new_tokens, k=args.k, use_rag=not args.no_rag,
             system_prompt=system_prompt, force=args.force,
             decision_interval=args.decision_interval,
+            check_colreg_compliance=not args.no_colreg_check,
         )
         print(f"  took {time.time() - t0:.1f}s")
 

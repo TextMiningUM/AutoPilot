@@ -60,9 +60,33 @@ stand-on role for each encounter type (head-on, crossing, overtaking), early and
 action by the give-way vessel (normally to starboard), never altering to port toward a vessel on \
 own-ship's own port side, and the stand-on vessel holding course/speed unless it became clearly \
 necessary to act. \
-Reply with ONLY a JSON object, no other text:
+Reply with ONLY a JSON object, no other text -- no preamble, no analysis, no summary before or \
+after it:
 {"violations": ["<rule number + one-sentence description of what went wrong>", ...]}
 If own-ship's manoeuvres were fully compliant, return an empty violations list."""
+
+
+def _extract_json_objects(text: str) -> list[str]:
+    """Balanced-brace scan for every top-level {...} object in `text`, in order of
+    appearance -- Claude's reply, despite LLM_COMPLIANCE_SYSTEM's "ONLY a JSON object"
+    instruction, sometimes still prefixes it with a sentence or two of prose analysis
+    (e.g. "Looking at this trajectory, I need to analyze..."); a naive whole-text
+    json.loads() then fails outright even though a valid JSON object is sitting right
+    there. Mirrors app.agents._extract_json_objects (duplicated, not imported, since this
+    module must stay import-light -- app.agents pulls in torch/transformers)."""
+    objs, depth, start = [], 0, None
+    for i, ch in enumerate(text):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    objs.append(text[start:i + 1])
+                    start = None
+    return objs
 
 
 def _format_trajectory_csv(trajectory_rows: list[dict]) -> str:
@@ -100,8 +124,13 @@ def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_sh
     )
     text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
     text = re.sub(r"^```(json)?|```$", "", text, flags=re.MULTILINE).strip()
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
-        return [f"[LLM compliance check -- could not parse response] {text[:200]}"]
-    return [str(v) for v in parsed.get("violations", [])]
+    # Prefer the LAST complete {...} object that actually parses AND has a "violations" key
+    # (rather than requiring the ENTIRE reply to be pure JSON) -- see _extract_json_objects.
+    for candidate in reversed(_extract_json_objects(text)):
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict) and "violations" in parsed:
+            return [str(v) for v in parsed["violations"]]
+    return [f"[LLM compliance check -- could not parse response] {text[:200]}"]
