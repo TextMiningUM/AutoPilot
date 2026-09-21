@@ -35,7 +35,7 @@ KG_FILE     = CACHE / f"{_PFX}_kg.json"
 
 # ── Concept aliases: query phrase -> canonical concept ────────────────────
 # Lets queries like "how do I DSC alert" resolve to Channel 70 automatically.
-CONCEPT_ALIASES: dict[str, list[str]] = {
+_VHF_ALIASES: dict[str, list[str]] = {
     "distress channel":       ["Channel 16"],
     "calling channel":        ["Channel 16"],
     "international distress": ["Channel 16", "MAYDAY"],
@@ -91,6 +91,48 @@ CONCEPT_ALIASES: dict[str, list[str]] = {
     "ptt":      ["PTT"],
     "push to talk": ["PTT"],
 }
+
+# OOW-specific aliases. narrate()'s situation reports are almost entirely NUMERIC
+# (e.g. "CPA 0m, TCPA 206s", "rel.bearing 20.0 deg") and never use the qualitative
+# COLREG vocabulary (crossing/give-way/risk of collision) that CONCEPT_KEYWORDS tags
+# chunks with in build_oow_json.py -- confirmed query_concepts("CPA 0m, TCPA 206s")
+# returned [] with no OOW aliases defined, meaning the concept-graph boost was
+# completely inert for every situation report, leaving retrieval to dense-embedding-
+# only matching, which favours the numerically similar "Basic Navigation Maths"
+# bearing-drill chunks over the qualitatively relevant but numerically dissimilar
+# COLREG rule paragraphs (found via Basic Simulator S02 mission testing -- v3_rag_cot
+# retrieved ZERO COLREG rule chunks for a live crossing/collision-risk scenario).
+_OOW_ALIASES: dict[str, list[str]] = {
+    "cpa":                       ["cpa_tcpa"],
+    "tcpa":                      ["cpa_tcpa"],
+    "closest point of approach": ["cpa_tcpa"],
+    "give-way":                  ["give-way"],
+    "give way":                  ["give-way"],
+    "stand-on":                  ["stand-on"],
+    "stand on":                  ["stand-on"],
+    "crossing":                  ["crossing"],
+    "risk of collision":        ["risk of collision"],
+    "collision course":         ["risk of collision", "collision"],
+    "collision risk":           ["risk of collision"],
+    "safe passing distance":    ["risk of collision", "cpa_tcpa"],
+    "overtaking":                ["overtaking"],
+    "overtake":                  ["overtaking"],
+    "head-on":                   ["head-on"],
+    "head on":                   ["head-on"],
+    "not under command":        ["not under command"],
+    "restricted in her ability to manoeuvre": ["restricted in ability to manoeuvre"],
+    "constrained by draught":   ["constrained by draught"],
+    "fishing vessel":           ["fishing vessel"],
+    "sailing vessel":           ["sailing vessel"],
+    "narrow channel":           ["narrow channel"],
+    "traffic separation":       ["traffic separation scheme"],
+    "restricted visibility":    ["restricted visibility"],
+    "safe speed":               ["safe speed"],
+    "lookout":                   ["lookout"],
+    "collision":                 ["collision"],
+}
+
+CONCEPT_ALIASES: dict[str, list[str]] = _OOW_ALIASES if paths.domain == "OOW" else _VHF_ALIASES
 
 
 def load_chunks() -> list[dict]:

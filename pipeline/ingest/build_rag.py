@@ -34,7 +34,12 @@ CHUNK_MAX_TOKENS    = 500
 CHUNK_MIN_TOKENS    = 40
 TOPIC_JACCARD_MIN   = 0.5
 
-STANDALONE_TYPES = {"dialogue", "definition", "procedure"}
+# "rule" added so every individual COLREG rule (Rule 13, Rule 14, ...) is always its
+# own standalone chunk, never merged with a neighbouring rule -- found 3 accidental
+# multi-rule chunks (Rules 28-30, 32-33, 39-41) that slipped through the token-budget/
+# topic-Jaccard merge logic because they're short and share topics (or share no
+# topics at all, which also passes the low-token-count 0.2 threshold).
+STANDALONE_TYPES = {"dialogue", "definition", "procedure", "rule"}
 
 # Set by main() before any chunking/embedding happens.
 model: SentenceTransformer | None = None
@@ -309,7 +314,7 @@ def main() -> None:
         for rank, i in enumerate(top, 1):
             c = chunk_by_id[ids[i]]
             preview = c["text"].replace("\n", " ")[:130]
-            print(f"  {rank}. [{scores[i]:.3f}] {c['source_file']}  → {c['chapter_title'][:35]!r}")
+            print(f"  {rank}. [{scores[i]:.3f}] {c['source_file']}  -> {c['chapter_title'][:35]!r}")
             print(f"     types={c['types']} topics={c['topics']}")
             print(f"     text: {preview}...")
 
