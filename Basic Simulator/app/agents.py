@@ -281,9 +281,9 @@ def build_oow_prompt(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
     so a user can see WHY the agent decided what it decided.
     `constraints`, if given (the live simulator's VesselConstraints -- see
     app/simulation.py), tells the agent own-ship's ACTUAL physical envelope so it doesn't
-    recommend something the kinematics layer can't deliver: turn_rate_deg_s (the only turn
-    limit actually enforced -- max_rudder_angle_deg is informational only), max_speed_mps
-    (a hard ceiling -- speed_up has no effect once already there) and
+    recommend something the kinematics layer can't deliver: turn_rate_deg_s and
+    max_rudder_angle_deg (both hard-enforced -- a single turn command beyond the latter is
+    silently capped), max_speed_mps (a hard ceiling -- speed_up has no effect once already there) and
     max_acceleration_mps2/max_deceleration_mps2 (speed changes gradually, not instantly),
     and min_cpa_m (this mission's configured safe-passing distance -- without this the
     model has NO numeric anchor for what counts as a real collision risk; observed
@@ -302,7 +302,7 @@ def build_oow_prompt(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
                     {"role": "user", "content": user_msg}]
         debug = {"situation": situation, "config": config, "retrieved_chunk_ids": [],
                  "query_concepts": [], "expanded_concepts": [], "pg_guidance": None,
-                 "user_msg_chars": len(user_msg)}
+                 "user_msg_chars": len(user_msg), "user_msg": user_msg}
         return messages, debug
 
     embedder, embs, ids, kg, chunk_by_id, pg_graphs = _load_retrieval()
@@ -325,8 +325,10 @@ def build_oow_prompt(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
         per_step = constraints.turn_rate_deg_s * constraints.time_step_s
         user_parts.append(
             f"Own-ship's physical limits: heading changes at most {constraints.turn_rate_deg_s:.1f} "
-            f"deg/s (~{per_step:.0f} deg per {constraints.time_step_s:.0f}s step; max rudder angle "
-            f"{constraints.max_rudder_angle_deg:.0f} deg is informational only, not yet a hard limit). "
+            f"deg/s (~{per_step:.0f} deg per {constraints.time_step_s:.0f}s step). A single "
+            f"turn_left/turn_right command can request AT MOST {constraints.max_rudder_angle_deg:.0f} "
+            "degrees -- a larger request will be silently capped, so a course change bigger than that "
+            "needs several separate turn commands across multiple steps, not one big one. "
             f"Speed is capped at {constraints.max_speed_mps:.1f} m/s, changing gradually "
             f"({constraints.max_acceleration_mps2:.2f} m/s\u00b2 up / {constraints.max_deceleration_mps2:.2f} "
             "m/s\u00b2 down) -- speed_up/slow_down are not instant. This mission's safe passing distance is "
@@ -347,7 +349,7 @@ def build_oow_prompt(mission: Mission, own: Vessel, config: str = "v3_rag_cot",
         "situation": situation, "config": config,
         "retrieved_chunk_ids": [h["chunk_id"] for h in hits],
         "query_concepts": q_cons, "expanded_concepts": expanded,
-        "pg_guidance": pg_text, "user_msg_chars": len(user_msg),
+        "pg_guidance": pg_text, "user_msg_chars": len(user_msg), "user_msg": user_msg,
     }
     return messages, debug
 
@@ -384,9 +386,17 @@ def _generate(tok, mdl, messages: list[dict], max_new_tokens: int = 256,
     # fraction of that, which is most of them (CoT configs get 2048 tokens of headroom
     # for the rare long <think> block, but the median response is much shorter -- see
     # basic_simulator.md's raw_len_chars stats).
+    # repetition_penalty/no_repeat_ngram_size: greedy decoding (do_sample=False) has no
+    # built-in defense against looping -- found CoT/PG configs repeating the EXACT same
+    # "Rule 15 says..." sentence 20+ times verbatim (never self-correcting, never closing
+    # the JSON) until max_new_tokens ran out, causing most of the parse-error/hold_course
+    # fallbacks seen in the sweep. no_repeat_ngram_size=4 hard-blocks any 4-token sequence
+    # from repeating at all -- enough to break a whole-sentence loop like that one, too
+    # short to block legitimate short repeats (e.g. saying "Rule 15" twice in one reply).
     out = mdl.generate(**inp, max_new_tokens=max_new_tokens, do_sample=False,
                        temperature=1.0, top_p=1.0, pad_token_id=tok.eos_token_id,
-                       stop_strings="\"}", tokenizer=tok)
+                       stop_strings="\"}", tokenizer=tok,
+                       repetition_penalty=1.15, no_repeat_ngram_size=4)
     result = tok.decode(out[0][inp["input_ids"].shape[1]:], skip_special_tokens=True)
     # Free this call's KV-cache/activation buffers back to the free-VRAM pool immediately
     # instead of letting PyTorch's caching allocator hold them as "reserved". On an 8GB

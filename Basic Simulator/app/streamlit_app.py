@@ -4,6 +4,7 @@ Run from the Basic Simulator/ folder:
     streamlit run app/streamlit_app.py
 """
 from __future__ import annotations
+import json
 import math
 import os
 import sys
@@ -140,6 +141,42 @@ if not st.session_state.splash_dismissed:
 # on the very first run) -- re-importing here is a cheap sys.modules lookup, not a reload.
 from app.agents import MODEL_CONFIGS, SYSTEM_OOW_AGENT, ask_oow
 from app.llm_runs import list_runs_for_mission, load_run, checkpoint_at_or_before, list_run_sets, BASE_RUNS_DIR
+
+# ── UI preference persistence ─────────────────────────────────────────────
+# Ship-performance/Mission sidebar values persist across app restarts (new browser tab,
+# new `streamlit run`, ...) via a small local JSON file -- Streamlit's session_state only
+# lives for one browser session, so without this every value silently reset to its
+# hardcoded widget default on every restart despite looking "saved" while the app ran.
+_UI_PREFS_PATH = ROOT / "Data" / "_ui_prefs.json"
+_UI_PREFS_KEYS = [
+    "ship_max_speed", "ship_max_turn_rate_pct", "ship_max_accel", "ship_max_decel",
+    "ship_turn_rate_deg_s", "mission_cruise_speed", "mission_min_cpa", "dt_slider",
+]
+
+
+def _load_ui_prefs() -> dict:
+    if _UI_PREFS_PATH.exists():
+        try:
+            return json.loads(_UI_PREFS_PATH.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def _save_ui_prefs() -> None:
+    prefs = {k: st.session_state[k] for k in _UI_PREFS_KEYS if k in st.session_state}
+    _UI_PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _UI_PREFS_PATH.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+
+
+# Seed session_state from the persisted file BEFORE any widget with these keys renders --
+# Streamlit only honours a widget's `value=` default on the very first render of THIS
+# session for that key, so this must run once per (browser) session, ahead of the sidebar.
+if "_ui_prefs_loaded" not in st.session_state:
+    for _k, _v in _load_ui_prefs().items():
+        if _k in _UI_PREFS_KEYS:
+            st.session_state[_k] = _v
+    st.session_state._ui_prefs_loaded = True
 
 # ── Session state ─────────────────────────────────────────────────────────
 def build_vessel_constraints() -> VesselConstraints:
@@ -869,6 +906,10 @@ with side_panel:
                 if debug.get("pg_guidance"):
                     st.markdown("**Procedural-graph guidance**")
                     st.code(debug["pg_guidance"], language=None, wrap_lines=True)
+                if debug.get("user_msg"):
+                    st.markdown("**Full user turn sent to model** (constraints, situation, "
+                               "RAG/PG context -- everything except the system prompt above)")
+                    st.code(debug["user_msg"], language=None, wrap_lines=True)
                 st.markdown("**Raw model output**")
                 st.code(debug.get("raw_response", ""), language=None, wrap_lines=True)
         else:
@@ -984,5 +1025,10 @@ with plot_col:
                 c = contact_line(sim.own, tgt)
                 if c["quiet"]:
                     st.caption(f"{c['name']}: quiet (CPA {c['cpa_m']:.0f}m, TCPA {c['tcpa_s']:.0f}s)")
+
+# Persist the sidebar's current Ship performance/Mission values to disk on every rerun --
+# must run last (after the sidebar widgets above have written this run's values into
+# session_state) so a value just changed this run is captured immediately, not one rerun late.
+_save_ui_prefs()
 
 
