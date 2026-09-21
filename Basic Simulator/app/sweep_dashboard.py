@@ -1,13 +1,18 @@
-"""Dashboard for app/sweep_llm_params.py. Reads Data/missions/_llm_runs/_sweep_summary.json
-(updated after every completed job by the sweep script) and Data/missions/_llm_runs/
-_sweep_status.json (updated right before every job starts, cleared when the sweep finishes)
-for whichever (mission, config) is actually in flight right now -- redraws on demand via a
-manual "Refresh" button -- entirely decoupled from the sweep process itself (read-only, safe
-to run alongside it on a different port while the sweep keeps computing). Deliberately NOT an
-auto-refresh (neither a <meta http-equiv="refresh"> full page reload, which destroys the
-whole browser session and collapses every expander, nor a timed st.fragment(run_every=...),
-which was too noisy at a 5-10s cadence) -- the user just clicks Refresh when they want the
-latest state.
+"""Dashboard for app/sweep_llm_params.py. Builds its leaderboard/detail tables by scanning
+Data/missions/_llm_runs/ directly for every {mission_id}__{config}[__{tag}].json run log
+(the mission id is a fixed prefix, config/tag is the variable part at the end -- exactly
+app.llm_runs.run_log_path's own naming scheme) and scoring each on the spot with the same
+composite evaluate_run.py/sweep_llm_params.py use elsewhere, rather than trusting
+_sweep_summary.json's cache -- that cache only ever gains rows (sweep_llm_params.py's
+_save_row merges, never removes), so it kept showing long-deleted/moved run logs and could
+lag behind ones already sitting on disk. Also reads _sweep_status.json (updated right
+before every job starts, cleared when the sweep finishes) for whichever (mission, config) is
+actually in flight right now. Redraws on demand via a manual "Refresh" button -- entirely
+decoupled from the sweep process itself (read-only, safe to run alongside it on a different
+port while the sweep keeps computing). Deliberately NOT an auto-refresh (neither a
+<meta http-equiv="refresh"> full page reload, which destroys the whole browser session and
+collapses every expander, nor a timed st.fragment(run_every=...), which was too noisy at a
+5-10s cadence) -- the user just clicks Refresh when they want the latest state.
 
 Run (separate terminal/port from the main app):
     streamlit run app/sweep_dashboard.py --server.port 8510
@@ -26,7 +31,9 @@ for p in (ROOT, ROOT.parent):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
+from app.evaluation import score_trajectory
 from app.missions import list_mission_ids, load_mission
+from app.simulation import VesselConstraints
 
 # Kept as a plain literal (matching app.agents.MODEL_CONFIGS's keys) instead of importing
 # app.agents itself -- that module pulls in torch/transformers/sentence-transformers at
@@ -36,8 +43,9 @@ CONFIG_NAMES = [
     "v4_pg", "v5_pg_incident", "v6_pg_scenario",
 ]
 
-SUMMARY_FILE = ROOT / "Data" / "missions" / "_llm_runs" / "_sweep_summary.json"
-STATUS_FILE = ROOT / "Data" / "missions" / "_llm_runs" / "_sweep_status.json"
+RUNS_DIR = ROOT / "Data" / "missions" / "_llm_runs"
+STATUS_FILE = RUNS_DIR / "_sweep_status.json"
+_DEFAULT_MIN_CPA_M = VesselConstraints().min_cpa_m
 
 st.set_page_config(page_title="LLM sweep dashboard", layout="wide")
 title_cols = st.columns([5, 1])
@@ -50,6 +58,54 @@ MISSIONS = list_mission_ids()
 CONFIGS = CONFIG_NAMES
 TOTAL_JOBS = len(MISSIONS) * len(CONFIGS)
 MISSION_OBJS = {m: load_mission(m) for m in MISSIONS}  # cheap: just json + dataclasses
+
+
+def _score_log(mission_id: str, log: dict, tag: str) -> dict:
+    """Same composite scoring sweep_llm_params.py's score_one() applies to a freshly
+    computed run -- duplicated here (rather than imported) because sweep_llm_params.py
+    pulls in app.run_llm_scenario -> app.agents -> torch/transformers, which this
+    read-only, always-import-light dashboard must never load."""
+    mission = MISSION_OBJS[mission_id]
+    result = score_trajectory(
+        log["trajectory"], start_xy=(mission.own_ship.x, mission.own_ship.y),
+        goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
+        safe_distance_m=_DEFAULT_MIN_CPA_M,
+    )
+    return {
+        "config": log.get("config"), "tag": log.get("tag", tag),
+        "composite_score": result["composite_score"], "verdict": result["verdict"],
+        "safety": result["safety"], "compliance": result["compliance"],
+        "temporal": result["temporal"], "spatial": result["spatial"],
+        "manoeuvre": result["manoeuvre"],
+    }
+
+
+def _scan_mission_runs(mission_id: str) -> dict[str, dict]:
+    """Globs RUNS_DIR for every {mission_id}__*.json (mission id is a fixed prefix; the
+    remainder up to ".json" is "{config}" or "{config}__{tag}", split on the first "__"
+    since config names themselves only ever use single underscores) and scores each file
+    directly -- the single source of truth for what's actually on disk RIGHT NOW, instead of
+    _sweep_summary.json's append-only cache. When more than one tag produced a log for the
+    same config, the most recently modified file wins (whatever's actually current)."""
+    prefix = f"{mission_id}__"
+    latest_mtime: dict[str, float] = {}
+    rows: dict[str, dict] = {}
+    for path in RUNS_DIR.glob(f"{prefix}*.json"):
+        remainder = path.stem[len(prefix):]
+        config, _, tag = remainder.partition("__")
+        if config not in CONFIGS:
+            continue
+        mtime = path.stat().st_mtime
+        if config in latest_mtime and latest_mtime[config] >= mtime:
+            continue
+        try:
+            log = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        latest_mtime[config] = mtime
+        rows[config] = _score_log(mission_id, log, tag or "default")
+    return rows
+
 
 
 def _read_current_job() -> tuple[tuple[str, str] | None, str]:
@@ -116,10 +172,7 @@ def _describe_run(r: dict) -> str:
 
 
 def _render() -> None:
-    summary: dict[str, list[dict]] = (
-        json.loads(SUMMARY_FILE.read_text(encoding="utf-8")) if SUMMARY_FILE.exists() else {}
-    )
-    rows_by_mission = {m: {r["config"]: r for r in summary.get(m, [])} for m in MISSIONS}
+    rows_by_mission = {m: _scan_mission_runs(m) for m in MISSIONS}
     done = sum(len(rows) for rows in rows_by_mission.values())
 
     current_job, current_job_age = _read_current_job()
@@ -135,8 +188,9 @@ def _render() -> None:
         else:
             st.metric("In progress", "\u2014 (none running on this host)")
 
-    st.caption(f"Reads {SUMMARY_FILE.relative_to(ROOT)} \u2022 read-only \u2022 click "
-              "Refresh above for the latest state")
+    st.caption(f"Scans {RUNS_DIR.relative_to(ROOT)} directly for "
+              "{mission}__{config}[__{tag}].json \u2022 read-only \u2022 click Refresh "
+              "above for the latest state")
 
     st.divider()
     st.subheader("Leaderboard (best config per mission so far)")
