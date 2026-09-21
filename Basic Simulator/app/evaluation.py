@@ -77,16 +77,22 @@ and why that resolves the encounter correctly). \
 Each compliant-action string must cover, in this order, as one or two sentences: (1) WHEN it \
 happened, (2) WHAT own-ship did, (3) WHY that was the CORRECT thing to do under COLREG (name \
 the rule number and the specific requirement it satisfies). \
-If own-ship's own self-reported decisions (with each one's cited COLREG rule) are provided \
-below the trajectory, cross-check EVERY citation against the actual encounter geometry in \
-effect at that time -- a fabricated citation, the wrong rule number for that encounter type, or \
-claiming 'none' when a rule clearly applied, is ITSELF a violation, even when the resulting \
-manoeuvre happened to be independently safe: an accidentally-safe action reached through \
-incorrect COLREG reasoning is not true compliance. Word this kind of violation as: 't=<seconds>\
-s: own-ship cited Rule <n> (or "none") but the actual encounter required <correct rule or "no \
-rule"> because <reason>.' A single isolated wrong-but-safe citation is a minor/technical \
-shortcoming (anchor 0.75 below); citations that are wrong at MOST decision points are systemic \
-non-compliance (anchor 0.0) even if every resulting action happened to be safe. \
+If own-ship's own self-reported decisions are provided below the trajectory, each one is paired \
+with a FIXED, pre-computed ground-truth encounter classification (deterministic CPA/TCPA + \
+relative-bearing rule classification, including whether real risk of collision existed at all \
+-- NOT your own judgement call). Treat that ground truth as established fact: do NOT \
+re-derive or second-guess whether a rule applied or whether risk of collision existed -- only \
+judge whether the agent's OWN citation/action matches the given ground truth. A citation that \
+contradicts the ground truth (a fabricated citation, the wrong rule number, or claiming 'none' \
+when the ground truth says a rule applied -- or the reverse: citing a rule when the ground \
+truth says 'no rule applies (quiet)') is ITSELF a violation, even when the resulting manoeuvre \
+happened to be independently safe: an accidentally-safe action reached through incorrect \
+COLREG reasoning is not true compliance. Word this kind of violation as: 't=<seconds>s: \
+own-ship cited Rule <n> (or "none") but the ground truth says <correct rule or "no rule \
+applies"> because <reason from the ground truth>.' A single isolated wrong-but-safe citation is \
+a minor/technical shortcoming (anchor 0.75 below); citations that contradict the ground truth \
+at MOST decision points are systemic non-compliance (anchor 0.0) even if every resulting action \
+happened to be safe. \
 Finally, give ONE overall compliance_score for the whole trajectory, a float from 0.0 to 1.0, \
 using these anchors (pick the closest, or interpolate between two if the situation is a genuine \
 in-between case) -- judge by SEVERITY AND CONSEQUENCE, not just by counting violations: \
@@ -148,19 +154,77 @@ def _format_trajectory_csv(trajectory_rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _format_checkpoint_citations(checkpoints: list[dict] | None) -> str:
+def _rows_at_time(trajectory_rows: list[dict], t: float, tol: float = 0.5) -> dict[str, dict]:
+    """{vehicle: row} for whichever recorded trajectory instant is closest to `t` (simulation
+    records at whole dt steps via round(self.t, 2); checkpoints store the unrounded sim.t at
+    the same instant, so an exact-equality lookup can miss by float noise -- nearest-within-
+    tolerance is robust to that without needing both call sites to agree on rounding)."""
+    times = sorted({r["time"] for r in trajectory_rows}, key=lambda rt: abs(rt - t))
+    if not times or abs(times[0] - t) > tol:
+        return {}
+    nearest = times[0]
+    return {r["vehicle"]: r for r in trajectory_rows if r["time"] == nearest}
+
+
+def _ground_truth_at_checkpoint(trajectory_rows: list[dict], t: float,
+                                own_vehicle: str) -> str:
+    """Deterministic encounter classification (app.narrate's own CPA/TCPA + relative-bearing
+    rule classifier + its QUIET_CPA_M/QUIET_TCPA_S 'no real risk' gate -- the SAME machinery
+    the live agent's own situation report and recommended_decision_interval() already rely
+    on) computed independently of the LLM, at the exact instant a decision was made.
+
+    Without this, llm_compliance_check() only ever saw a raw trajectory CSV and had to
+    freehand-judge from scratch whether a rule applied -- a genuinely non-deterministic
+    judgement call for a borderline-distance encounter, confirmed to flip between identical
+    repeat calls on the exact same scenario (see repo memory / session notes: q01, 4 configs,
+    identical CPA=6322m, 3 of 4 calls disagreed on whether Rule 15 applied at all). Injecting
+    this FIXED fact means the LLM only ever has to judge whether the agent's citation/action
+    matches it, not re-derive "was there risk of collision" itself each time."""
+    from app.narrate import cpa_tcpa, classify_encounter, QUIET_CPA_M, QUIET_TCPA_S
+
+    rows = _rows_at_time(trajectory_rows, t)
+    own = rows.get(own_vehicle)
+    if not own:
+        return "(no ground truth available -- no trajectory sample at this time)"
+    parts = []
+    for vname, row in sorted(rows.items()):
+        if vname == own_vehicle:
+            continue
+        cpa, tcpa = cpa_tcpa(own["x"], own["y"], own["heading"], own["speed"],
+                             row["x"], row["y"], row["heading"], row["speed"])
+        enc, rules, rel = classify_encounter(own["x"], own["y"], own["heading"],
+                                             row["x"], row["y"], row["heading"])
+        if tcpa > QUIET_TCPA_S or cpa > QUIET_CPA_M:
+            verdict = "no rule applies (quiet -- CPA/TCPA too large for real risk of collision)"
+        else:
+            verdict = f"{'/'.join(rules)} applies ({enc})"
+        parts.append(f"{vname} rel_bearing={rel:.0f}deg cpa={cpa:.0f}m tcpa={tcpa:.0f}s -> {verdict}")
+    return "; ".join(parts) if parts else "(no other vessels)"
+
+
+def _format_checkpoint_citations(checkpoints: list[dict] | None,
+                                 trajectory_rows: list[dict] | None,
+                                 own_vehicle: str) -> str:
     """own-ship's own self-reported action + COLREG rule citation at each decision point
-    (app.agents.ask_oow's `rule_applied` field) -- without this, the audit only ever sees
-    raw positions/headings and can't tell a genuinely rule-based manoeuvre from an
-    accidentally-safe one reached via a fabricated/wrong rule citation."""
+    (app.agents.ask_oow's `rule_applied` field), each paired with a DETERMINISTIC ground-truth
+    encounter classification (see _ground_truth_at_checkpoint) computed the same way the rest
+    of this project already does -- without this, the audit only ever saw raw positions/
+    headings and had to freehand-judge from scratch whether a rule applied at all, which is
+    non-deterministic for a borderline-distance encounter (see that function's docstring)."""
     if not checkpoints:
         return ""
-    lines = ["\n\nOwn-ship's own self-reported decisions (verify each rule_applied citation "
-            "against the actual encounter geometry above):"]
+    lines = ["\n\nOwn-ship's own self-reported decisions, each paired with a FIXED, "
+            "pre-computed ground-truth encounter classification -- treat the ground truth "
+            "as established fact, do not re-derive or second-guess whether risk of collision "
+            "existed; only judge whether the agent's citation/action matches it:"]
     for cp in checkpoints:
         decision = cp.get("decision") or {}
-        lines.append(f"t={cp.get('time', 0):.0f}s: action={decision.get('action', '?')}, "
-                     f"rule_applied={decision.get('rule_applied', 'none')}")
+        t = cp.get("time", 0)
+        ground_truth = (_ground_truth_at_checkpoint(trajectory_rows, t, own_vehicle)
+                       if trajectory_rows else "(no trajectory provided)")
+        lines.append(f"t={t:.0f}s: action={decision.get('action', '?')}, "
+                     f"rule_applied={decision.get('rule_applied', 'none')} | "
+                     f"ground truth: {ground_truth}")
     return "\n".join(lines)
 
 
@@ -197,7 +261,7 @@ def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_sh
 
     client = anthropic.Anthropic(api_key=key)
     user_msg = (f"Trajectory (own_vehicle={own_vehicle}):\n\n{_format_trajectory_csv(trajectory_rows)}"
-               f"{_format_checkpoint_citations(checkpoints)}")
+               f"{_format_checkpoint_citations(checkpoints, trajectory_rows, own_vehicle)}")
     resp = client.messages.create(
         # 3072 (not the old 800) -- every manoeuvre now gets a full when/what/why explanation
         # (violation OR compliant), not just a short sentence per mistake.
