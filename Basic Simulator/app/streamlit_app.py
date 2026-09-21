@@ -981,9 +981,15 @@ with plot_col:
                              "no latency to the simulation itself. Result is kept in THIS "
                              "browser session only -- never written back to the run log file."):
                 from app.evaluation import llm_compliance_check
+                # Play Agent Mission has the run's own checkpoints on disk (own-ship's
+                # self-reported rule_applied citations) -- pass them so the audit can catch a
+                # fabricated/wrong-but-safe citation, not just judge the raw geometry. Agent
+                # Real-Time only tracks the single latest decision, so it's omitted there.
+                _eval_checkpoints = _eval_run_log.get("checkpoints") if _eval_run_log else None
                 with st.spinner("Asking Claude to audit COLREG compliance..."):
                     try:
-                        st.session_state.llm_compliance_audit = llm_compliance_check(eval_traj)
+                        st.session_state.llm_compliance_audit = llm_compliance_check(
+                            eval_traj, checkpoints=_eval_checkpoints)
                         st.session_state.llm_compliance_checked_key = (eval_cache_key, len(eval_traj))
                     except Exception as e:
                         st.error(f"Compliance check failed: {e}")

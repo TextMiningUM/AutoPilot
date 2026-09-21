@@ -361,6 +361,12 @@ def _render() -> None:
                 score_str = f"{score:.2f}" if isinstance(score, (int, float)) else "?"
                 with st.popover(f"{mission_id}  {score_str}"):
                     st.markdown(_colreg_audit_markdown(best))
+    elif best_row_by_mission:
+        # Otherwise this whole section just silently disappears with no explanation --
+        # looks like a broken/missing feature rather than "no logs have been audited yet".
+        st.caption("\U0001F4C4 No mission has a saved COLREG audit yet -- these logs predate "
+                  "the check, or were generated with --no-colreg-check. Re-run with the audit "
+                  "enabled (the default) to populate it.")
 
     st.divider()
     st.subheader("Per-mission detail (all variations)")

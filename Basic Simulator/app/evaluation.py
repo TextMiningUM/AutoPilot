@@ -77,6 +77,16 @@ and why that resolves the encounter correctly). \
 Each compliant-action string must cover, in this order, as one or two sentences: (1) WHEN it \
 happened, (2) WHAT own-ship did, (3) WHY that was the CORRECT thing to do under COLREG (name \
 the rule number and the specific requirement it satisfies). \
+If own-ship's own self-reported decisions (with each one's cited COLREG rule) are provided \
+below the trajectory, cross-check EVERY citation against the actual encounter geometry in \
+effect at that time -- a fabricated citation, the wrong rule number for that encounter type, or \
+claiming 'none' when a rule clearly applied, is ITSELF a violation, even when the resulting \
+manoeuvre happened to be independently safe: an accidentally-safe action reached through \
+incorrect COLREG reasoning is not true compliance. Word this kind of violation as: 't=<seconds>\
+s: own-ship cited Rule <n> (or "none") but the actual encounter required <correct rule or "no \
+rule"> because <reason>.' A single isolated wrong-but-safe citation is a minor/technical \
+shortcoming (anchor 0.75 below); citations that are wrong at MOST decision points are systemic \
+non-compliance (anchor 0.0) even if every resulting action happened to be safe. \
 Finally, give ONE overall compliance_score for the whole trajectory, a float from 0.0 to 1.0, \
 using these anchors (pick the closest, or interpolate between two if the situation is a genuine \
 in-between case) -- judge by SEVERITY AND CONSEQUENCE, not just by counting violations: \
@@ -138,8 +148,25 @@ def _format_trajectory_csv(trajectory_rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _format_checkpoint_citations(checkpoints: list[dict] | None) -> str:
+    """own-ship's own self-reported action + COLREG rule citation at each decision point
+    (app.agents.ask_oow's `rule_applied` field) -- without this, the audit only ever sees
+    raw positions/headings and can't tell a genuinely rule-based manoeuvre from an
+    accidentally-safe one reached via a fabricated/wrong rule citation."""
+    if not checkpoints:
+        return ""
+    lines = ["\n\nOwn-ship's own self-reported decisions (verify each rule_applied citation "
+            "against the actual encounter geometry above):"]
+    for cp in checkpoints:
+        decision = cp.get("decision") or {}
+        lines.append(f"t={cp.get('time', 0):.0f}s: action={decision.get('action', '?')}, "
+                     f"rule_applied={decision.get('rule_applied', 'none')}")
+    return "\n".join(lines)
+
+
 def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_ship",
-                         model: str = "claude-sonnet-4-5") -> dict:
+                         model: str = "claude-sonnet-4-5",
+                         checkpoints: list[dict] | None = None) -> dict:
     """One-shot LLM judge of full-trajectory COLREG compliance, using Anthropic Claude -- a
     full two-sided AUDIT (what was done wrong AND what was done right, each explained), not
     just a list of mistakes.
@@ -150,6 +177,12 @@ def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_sh
     scoring never calls this -- compliance defaults to 0.0 (unaudited, NOT
     innocent-until-proven) until this is explicitly run and its ["compliance_score"] is
     passed back in as `llm_compliance_score`.
+
+    `checkpoints`, if given (run_llm_scenario.py's/a precomputed run log's own checkpoint
+    list), lets the audit ALSO cross-check own-ship's SELF-REPORTED rule_applied citation at
+    each decision against the actual geometry -- catching a fabricated/wrong-but-safe
+    citation that pure trajectory geometry alone can't reveal. Optional: omitted for the
+    live "Agent Real-Time" mode, which only tracks the single most recent decision.
 
     Returns {"violations": [...], "compliant_actions": [...], "compliance_score": float}
     (compliance_score is Claude's own 0.0-1.0 severity-weighted judgement, see
@@ -163,7 +196,8 @@ def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_sh
         raise RuntimeError("ANTHROPIC_API_KEY not set in .env -- cannot run the LLM compliance check.")
 
     client = anthropic.Anthropic(api_key=key)
-    user_msg = f"Trajectory (own_vehicle={own_vehicle}):\n\n{_format_trajectory_csv(trajectory_rows)}"
+    user_msg = (f"Trajectory (own_vehicle={own_vehicle}):\n\n{_format_trajectory_csv(trajectory_rows)}"
+               f"{_format_checkpoint_citations(checkpoints)}")
     resp = client.messages.create(
         # 3072 (not the old 800) -- every manoeuvre now gets a full when/what/why explanation
         # (violation OR compliant), not just a short sentence per mistake.

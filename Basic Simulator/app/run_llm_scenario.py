@@ -123,7 +123,7 @@ def run_one(mission_id: str, config: str, tag: str = "default",
                         "compliance_score": None, "error": None}
     if check_colreg_compliance:
         try:
-            audit = llm_compliance_check(sim.trajectory)
+            audit = llm_compliance_check(sim.trajectory, checkpoints=checkpoints)
             colreg_llm_check["violations"] = audit["violations"]
             colreg_llm_check["compliant_actions"] = audit["compliant_actions"]
             colreg_llm_check["compliance_score"] = audit["compliance_score"]
