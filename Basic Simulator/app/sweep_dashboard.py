@@ -1,7 +1,9 @@
 """Dashboard for app/sweep_llm_params.py. Reads Data/missions/_llm_runs/_sweep_summary.json
-(updated after every completed job by the sweep script) and redraws on demand via a manual
-"Refresh" button -- entirely decoupled from the sweep process itself (read-only, safe to run
-alongside it on a different port while the sweep keeps computing). Deliberately NOT an
+(updated after every completed job by the sweep script) and Data/missions/_llm_runs/
+_sweep_status.json (updated right before every job starts, cleared when the sweep finishes)
+for whichever (mission, config) is actually in flight right now -- redraws on demand via a
+manual "Refresh" button -- entirely decoupled from the sweep process itself (read-only, safe
+to run alongside it on a different port while the sweep keeps computing). Deliberately NOT an
 auto-refresh (neither a <meta http-equiv="refresh"> full page reload, which destroys the
 whole browser session and collapses every expander, nor a timed st.fragment(run_every=...),
 which was too noisy at a 5-10s cadence) -- the user just clicks Refresh when they want the
@@ -13,6 +15,7 @@ Run (separate terminal/port from the main app):
 from __future__ import annotations
 import json
 import sys
+import time
 from pathlib import Path
 
 import streamlit as st
@@ -34,6 +37,7 @@ CONFIG_NAMES = [
 ]
 
 SUMMARY_FILE = ROOT / "Data" / "missions" / "_llm_runs" / "_sweep_summary.json"
+STATUS_FILE = ROOT / "Data" / "missions" / "_llm_runs" / "_sweep_status.json"
 
 st.set_page_config(page_title="LLM sweep dashboard", layout="wide")
 title_cols = st.columns([5, 1])
@@ -45,10 +49,30 @@ with title_cols[1]:
 MISSIONS = list_mission_ids()
 CONFIGS = CONFIG_NAMES
 TOTAL_JOBS = len(MISSIONS) * len(CONFIGS)
-# Same (mission-outer, config-inner) order sweep_llm_params.py's sweep() iterates in, so the
-# first (mission, config) pair missing from the summary IS the job currently in flight.
-JOB_ORDER = [(m, c) for m in MISSIONS for c in CONFIGS]
 MISSION_OBJS = {m: load_mission(m) for m in MISSIONS}  # cheap: just json + dataclasses
+
+
+def _read_current_job() -> tuple[tuple[str, str] | None, str]:
+    """Reads STATUS_FILE (written by sweep_llm_params.py's sweep() right before each job,
+    cleared when the whole sweep finishes) for whichever (mission, config) is ACTUALLY being
+    computed right now, plus a human-readable "Xs/Xm ago" age string -- replaces the old
+    approach of guessing the current job as the first (mission, config) gap in strict
+    q01-first order, which pointed at a long-finished mission (or one nobody on THIS host is
+    even running) as soon as jobs complete out of order, e.g. a local run covering only
+    s11/s12 while a separate cloud process works through q01, q02, ... in parallel, each
+    writing its own copy of SUMMARY_FILE/STATUS_FILE. Returns (None, "") if no sweep is
+    currently running on this host (file absent -- most recent sweep finished or none ever
+    ran here)."""
+    if not STATUS_FILE.exists():
+        return None, ""
+    try:
+        status = json.loads(STATUS_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None, ""
+    age_s = max(0.0, time.time() - STATUS_FILE.stat().st_mtime)
+    age = f"{age_s:.0f}s ago" if age_s < 60 else f"{age_s / 60:.0f}m ago"
+    return (status["mission"], status["config"]), age
+
 
 
 def _describe_run(r: dict) -> str:
@@ -98,9 +122,7 @@ def _render() -> None:
     rows_by_mission = {m: {r["config"]: r for r in summary.get(m, [])} for m in MISSIONS}
     done = sum(len(rows) for rows in rows_by_mission.values())
 
-    current_job = next(
-        ((m, c) for m, c in JOB_ORDER if c not in rows_by_mission.get(m, {})), None
-    )
+    current_job, current_job_age = _read_current_job()
 
     top_cols = st.columns([3, 1])
     with top_cols[0]:
@@ -108,9 +130,10 @@ def _render() -> None:
                    text=f"{done}/{TOTAL_JOBS} jobs complete")
     with top_cols[1]:
         if current_job:
-            st.metric("In progress", f"{current_job[0]} / {current_job[1]}")
+            st.metric("In progress", f"{current_job[0]} / {current_job[1]}",
+                      help=f"last updated {current_job_age}")
         else:
-            st.metric("In progress", "\u2014 (all done)")
+            st.metric("In progress", "\u2014 (none running on this host)")
 
     st.caption(f"Reads {SUMMARY_FILE.relative_to(ROOT)} \u2022 read-only \u2022 click "
               "Refresh above for the latest state")

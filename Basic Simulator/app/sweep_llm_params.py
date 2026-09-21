@@ -23,8 +23,10 @@ Run everything (14 missions x 8 configs = 112 runs -- long, sequential, one GPU)
 from __future__ import annotations
 import argparse
 import json
+import socket
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent
@@ -42,7 +44,27 @@ from app.evaluation import score_trajectory
 from app.simulation import VesselConstraints
 
 SUMMARY_FILE = RUNS_DIR / "_sweep_summary.json"
+# Live "what's actually running right now" marker -- sweep_dashboard.py reads this directly
+# instead of inferring a current job from the first (mission, config) gap in strict
+# q01-first job order, which silently pointed at a long-finished mission (or one nobody is
+# even running on THIS host) as soon as jobs complete out of order -- e.g. this same sweep
+# script running locally for just s11/s12 while a separate cloud process works through
+# q01, q02, ... in parallel, each writing to its own copy of SUMMARY_FILE.
+STATUS_FILE = RUNS_DIR / "_sweep_status.json"
 _DEFAULT_MIN_CPA_M = VesselConstraints().min_cpa_m
+
+
+def _write_status(mission_id: str, config: str, tag: str) -> None:
+    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    STATUS_FILE.write_text(json.dumps({
+        "mission": mission_id, "config": config, "tag": tag,
+        "host": socket.gethostname(),
+        "started_at": datetime.now(timezone.utc).isoformat(),
+    }), encoding="utf-8")
+
+
+def _clear_status() -> None:
+    STATUS_FILE.unlink(missing_ok=True)
 
 
 def score_one(mission, log: dict) -> dict:
@@ -89,6 +111,7 @@ def sweep(missions: list[str], configs: list[str], tag: str = "default", **run_k
     jobs = [(m, c) for m in missions for c in configs]
     for i, (mission_id, config) in enumerate(jobs, 1):
         print(f"[{i}/{len(jobs)}] {mission_id} / {config}")
+        _write_status(mission_id, config, tag)
         t0 = time.time()
         try:
             out_path = run_one(mission_id, config, tag=tag, **run_kwargs)
@@ -105,6 +128,7 @@ def sweep(missions: list[str], configs: list[str], tag: str = "default", **run_k
                   "temporal": None, "spatial": None, "manoeuvre": None}
             print(f"  ERROR ({time.time() - t0:.1f}s): {exc}")
         merged = _save_row(mission_id, row)
+    _clear_status()
     return merged
 
 
