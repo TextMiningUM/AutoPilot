@@ -223,6 +223,36 @@ def _read_current_job() -> tuple[tuple[str, str] | None, str]:
 
 
 
+def _colreg_audit_markdown(r: dict) -> str:
+    """Standalone COLREG-audit-only text (score + every violation/compliant-action
+    explanation) -- factored out of _describe_run() so the leaderboard can show it in its
+    own compact popover (r['colreg'] narrow-column status is the summary, this is the full
+    text) without dragging in the rest of the safety/temporal/spatial/manoeuvre readout."""
+    lines = ["**Claude COLREG compliance check** (end-of-mission, Anthropic API -- full audit)"]
+    check = r.get("colreg_llm_check")
+    if not check or not check.get("checked"):
+        reason = (check or {}).get("error") or "not run for this log (older log, or --no-colreg-check)"
+        lines.append(f"- Not checked -- {reason}.")
+        return "\n".join(lines)
+    violations = check.get("violations") or []
+    compliant_actions = check.get("compliant_actions") or []
+    score = check.get("compliance_score")
+    score_str = f"{score:.2f}" if isinstance(score, (int, float)) else "?"
+    if not violations:
+        lines.append(f"- Compliance score **{score_str}** -- Claude found no COLREG "
+                    f"violations ({len(compliant_actions)} manoeuvre(s) audited as correct).")
+    else:
+        lines.append(f"- Compliance score **{score_str}** -- Claude flagged "
+                    f"{len(violations)} violation(s):")
+        for v in violations:
+            lines.append(f"  - {v}")
+    if compliant_actions:
+        lines.append(f"- Correctly handled ({len(compliant_actions)}):")
+        for c in compliant_actions:
+            lines.append(f"  - {c}")
+    return "\n".join(lines)
+
+
 def _describe_run(r: dict) -> str:
     """Turns evaluate_run.py's full result dict into a short, plain-text readout of what
     actually happened -- verdict/safety/compliance/efficiency/manoeuvres -- for the details
@@ -262,28 +292,7 @@ def _describe_run(r: dict) -> str:
                     f"{man['mean_abs_speed_rate']:.3f} m/s\u00b2).")
 
     lines.append("")
-    lines.append("**Claude COLREG compliance check** (end-of-mission, Anthropic API -- full audit)")
-    check = r.get("colreg_llm_check")
-    if not check or not check.get("checked"):
-        reason = (check or {}).get("error") or "not run for this log (older log, or --no-colreg-check)"
-        lines.append(f"- Not checked -- {reason}.")
-    else:
-        violations = check.get("violations") or []
-        compliant_actions = check.get("compliant_actions") or []
-        score = check.get("compliance_score")
-        score_str = f"{score:.2f}" if isinstance(score, (int, float)) else "?"
-        if not violations:
-            lines.append(f"- Compliance score **{score_str}** -- Claude found no COLREG "
-                        f"violations ({len(compliant_actions)} manoeuvre(s) audited as correct).")
-        else:
-            lines.append(f"- Compliance score **{score_str}** -- Claude flagged "
-                        f"{len(violations)} violation(s):")
-            for v in violations:
-                lines.append(f"  - {v}")
-        if compliant_actions:
-            lines.append(f"- Correctly handled ({len(compliant_actions)}):")
-            for c in compliant_actions:
-                lines.append(f"  - {c}")
+    lines.append(_colreg_audit_markdown(r))
     return "\n".join(lines)
 
 
@@ -312,6 +321,7 @@ def _render() -> None:
     st.divider()
     st.subheader("Leaderboard (best config per mission so far)")
     leaderboard = []
+    best_row_by_mission: dict[str, dict] = {}
     for mission_id in MISSIONS:
         rows = rows_by_mission[mission_id]
         if not rows:
@@ -323,12 +333,30 @@ def _render() -> None:
             })
             continue
         best = max(rows.values(), key=lambda r: r["composite_score"])
+        best_row_by_mission[mission_id] = best
         leaderboard.append({
             "mission": mission_id, "done": f"{len(rows)}/{len(CONFIGS)}",
             "best_config": best["config"], "composite": best["composite_score"],
             "verdict": best["verdict"], **_axis_cols(best),
         })
     st.dataframe(leaderboard, width="stretch", hide_index=True)
+
+    # st.dataframe has no per-cell popover, so the "colreg" column's full audit text (can be
+    # long -- see _colreg_audit_markdown) lives in a compact strip of buttons right below the
+    # table instead, one per mission that actually has a checked audit -- clicking one pops
+    # up that mission's best-config score + every violation/compliant-action explanation.
+    checked_missions = [m for m in MISSIONS
+                       if ((best_row_by_mission.get(m) or {}).get("colreg_llm_check") or {}).get("checked")]
+    if checked_missions:
+        st.caption("\U0001F4C4 View full COLREG audit (best config per mission):")
+        audit_cols = st.columns(min(len(checked_missions), 7))
+        for i, mission_id in enumerate(checked_missions):
+            with audit_cols[i % len(audit_cols)]:
+                best = best_row_by_mission[mission_id]
+                score = (best.get("colreg_llm_check") or {}).get("compliance_score")
+                score_str = f"{score:.2f}" if isinstance(score, (int, float)) else "?"
+                with st.popover(f"{mission_id}  {score_str}"):
+                    st.markdown(_colreg_audit_markdown(best))
 
     st.divider()
     st.subheader("Per-mission detail (all variations)")
