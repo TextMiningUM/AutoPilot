@@ -96,7 +96,10 @@ STORY_START_RE = re.compile(
 OUTLINE_RE = re.compile(r"OUTLINE\s*:\s*(.+)", re.IGNORECASE)
 # Non-printable control characters PyMuPDF occasionally emits (font-encoding/ligature
 # artifacts) that add nothing and can break whitespace-sensitive regexes -- strip
-# everything below 0x20 except the newline that carries line structure.
+# everything below 0x20 EXCEPT \t (0x09) and \n (0x0a), which are legitimate whitespace
+# carrying real formatting/line structure, not corruption (verified: 284 tabs remain in
+# the cache after this strip, all used as a column separator in the running per-page
+# header, e.g. "CHIRP\t Issue No: 51" -- not stray byte noise).
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b-\x1f]")
 
 
