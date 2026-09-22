@@ -57,6 +57,8 @@ from openai import OpenAI
 from pipeline.eval.eval_finetuned import load_env, load_lm, _latency_stats
 from core import AgentPaths, EMBEDDER_MODEL
 from core.io import load_jsonl_keyed
+from pipeline.oow_agent_spec import SYSTEM_OOW_AGENT, validate_action_json
+from pipeline.track2.build_oow_scenarios import KNOWN_CONTAMINATED_V1_IDS
 
 paths = AgentPaths.oow()
 W = paths.workspace
@@ -64,7 +66,12 @@ CACHE = paths.cache_dir
 MODELS = paths.models_root
 os.environ.setdefault("HF_HOME", str(paths.hf_cache_dir))
 
-SCENARIOS_FILE = paths.eval_file("oow_colreg_scenarios.json")
+# v1: original free-prose task format (FROZEN, see tests/test_oow_scenarios_v1_frozen.py).
+# v2: SAME 325 geometries, unified JSON task format (Fase B2, RAG-rebuild-v2 plan) --
+# also frozen once written, see tests/test_oow_scenarios_v2_frozen.py.
+SCENARIOS_FILE_V1 = paths.eval_dir / "oow_colreg_scenarios_v1.json"
+SCENARIOS_FILE_V2 = paths.eval_dir / "oow_colreg_scenarios_v2.json"
+SCENARIOS_FILE = SCENARIOS_FILE_V1  # kept for any external import expecting the old name
 BASE_RULES = {"Rule 2", "Rule 5", "Rule 6", "Rule 7", "Rule 8"}  # always-applicable, not scenario-specific
 
 SYSTEM_OOW = (
@@ -87,10 +94,11 @@ _DEGREE_RE = re.compile(r"(\d{1,3})\s*deg", re.I)
 
 
 @torch.inference_mode()
-def generate_oow(tok, model, situation_report: str, question: str, max_new_tokens: int = 300) -> tuple[str, float]:
+def generate_oow(tok, model, situation_report: str, question: str, max_new_tokens: int = 300,
+                 system_prompt: str = SYSTEM_OOW) -> tuple[str, float]:
     """Greedy-decode one OOW Track 2 scenario answer; returns (answer_text, latency_seconds)."""
     messages = [
-        {"role": "system", "content": SYSTEM_OOW},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"{situation_report}\n\n{question}"},
     ]
     text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -108,12 +116,12 @@ def generate_oow(tok, model, situation_report: str, question: str, max_new_token
 
 @torch.inference_mode()
 def generate_oow_batch(tok, model, situation_reports: list[str], questions: list[str],
-                       max_new_tokens: int = 300) -> tuple[list[str], float]:
+                       max_new_tokens: int = 300, system_prompt: str = SYSTEM_OOW) -> tuple[list[str], float]:
     """Greedy-decode a BATCH of OOW Track 2 scenarios in one model.generate() call
     (left-padded); returns (answer_texts, total_batch_latency_seconds). See
     run_ablation.py's generate_batch / eval_finetuned.py's generate_batch."""
     texts = [tok.apply_chat_template(
-                [{"role": "system", "content": SYSTEM_OOW},
+                [{"role": "system", "content": system_prompt},
                  {"role": "user", "content": f"{sr}\n\n{q}"}],
                 tokenize=False, add_generation_prompt=True)
              for sr, q in zip(situation_reports, questions)]
@@ -174,8 +182,63 @@ def rule_cite_score(answer: str, colreg_rules: list[str]) -> float:
     return round(hits / len(situational), 3)
 
 
+# ══════════════════════════════════════════════════════════════════════════════════
+# v2 SCORING (Fase B2/RAG-rebuild-v2 plan point 4): deterministic only -- NO LLM judge,
+# NO RAGAS suite. v2's ground truth (rec["gold"]) is a schema-validated JSON object, so
+# scoring is exact-match/tolerance comparison against the model's own parsed JSON answer,
+# never a regex-over-free-text heuristic like v1's parse_action() above.
+# ══════════════════════════════════════════════════════════════════════════════════
+_JSON_OBJ_RE = re.compile(r"\{.*\}", re.S)
+
+
+def parse_action_json(answer: str) -> dict | None:
+    """Extracts the FIRST {...} block from the model's answer and validates it against
+    the shared schema (pipeline.oow_agent_spec.validate_action_json) -- returns None if
+    no JSON object is found, it doesn't parse, or it fails schema validation. This is
+    ALSO how json_parse_success is measured (a v2-only metric v1 has no equivalent of,
+    since v1 never asked for JSON in the first place)."""
+    m = _JSON_OBJ_RE.search(answer)
+    if not m:
+        return None
+    try:
+        obj = json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(obj, dict) or validate_action_json(obj):
+        return None
+    return obj
+
+
+def v2_action_correct_score(parsed: dict | None, gold: dict) -> float:
+    return 1.0 if parsed is not None and parsed.get("action") == gold["action"] else 0.0
+
+
+def v2_direction_correct_score(parsed: dict | None, gold: dict, tolerance: float | None) -> float | None:
+    """Vacuous None (not applicable) when the gold action has no degrees (hold_course/
+    stop/speed_up/slow_down). Otherwise: action must ALSO match (a degree figure attached
+    to the wrong action name is not 'direction correct'), and degrees must be within
+    `tolerance` of the gold value."""
+    if gold.get("degrees") is None:
+        return None
+    if parsed is None or parsed.get("action") != gold["action"] or parsed.get("degrees") is None:
+        return 0.0
+    tol = tolerance if tolerance is not None else 10.0
+    return 1.0 if abs(parsed["degrees"] - gold["degrees"]) <= tol else 0.0
+
+
+def v2_rule_correct_score(parsed: dict | None, gold: dict) -> float:
+    if parsed is None:
+        return 0.0
+    return 1.0 if parsed.get("rule_applied") == gold["rule_applied"] else 0.0
+
+
+
 def main() -> None:
-    """CLI entry point: generate + score answers to the held-out OOW Track 2 scenarios for one model."""
+    """CLI entry point: generate + score answers to the held-out OOW Track 2 scenarios for
+    one model. --schema v1 (default) evaluates the FROZEN free-prose scenarios with the
+    original rule-based + RAGAS-suite-v2 pipeline, unchanged. --schema v2 evaluates the
+    unified-task-format scenarios (same 325 geometries) with deterministic JSON-exact-match
+    scoring only -- no LLM judge, no RAGAS suite (see _run_v2's docstring)."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", type=str, default=str(MODELS / "OOW" / "OOW-QWEN"))
     ap.add_argument("--tag", type=str, default=None)
@@ -183,20 +246,31 @@ def main() -> None:
     ap.add_argument("--force-4bit", action="store_true",
                     help="skip the bf16 attempt and load directly in 4-bit NF4")
     ap.add_argument("--legacy", action="store_true",
-                    help="skip the RAGAS suite v2 -- rule-based metrics only (no judge/embedder needed)")
+                    help="(--schema v1 only) skip the RAGAS suite v2 -- rule-based metrics "
+                         "only (no judge/embedder needed)")
     ap.add_argument("--batch-size", type=int, default=8,
                     help="how many scenarios to generate per model.generate() call. Lower this if you hit OOM.")
+    ap.add_argument("--schema", choices=("v1", "v2"), default="v1",
+                    help="v1: original free-prose scenarios + rule-based/RAGAS scoring (default). "
+                         "v2: unified JSON-task-format scenarios + deterministic exact-match "
+                         "scoring only, no judge/RAGAS.")
     args = ap.parse_args()
+    if args.schema == "v2":
+        _run_v2(args)
+    else:
+        _run_v1(args)
 
+
+def _run_v1(args) -> None:
     tag = args.tag or Path(args.model).name.replace("/", "_")
     out_file    = CACHE / f"eval_{tag}_colreg.jsonl"
     gen_file    = CACHE / f"eval_{tag}_colreg_gen.jsonl"
     summary_out = CACHE / f"eval_{tag}_colreg_summary.json"
 
-    scenarios = json.loads(SCENARIOS_FILE.read_text(encoding="utf-8"))
+    scenarios = json.loads(SCENARIOS_FILE_V1.read_text(encoding="utf-8"))
     if args.n:
         scenarios = scenarios[:args.n]
-    print(f"Evaluating {len(scenarios)} OOW scenarios (Track 2: applied helm/engine-order decisions)")
+    print(f"Evaluating {len(scenarios)} OOW scenarios (Track 2: applied helm/engine-order decisions, schema=v1)")
 
     # --- 1) Generation phase (only LM in VRAM) -- resume-safe: rows already in gen_file
     # (from a prior crash/interrupt) are reused instead of re-generated.
@@ -245,9 +319,9 @@ def main() -> None:
         print("\nLoading embedder for metrics...")
         embedder = SentenceTransformer(EMBEDDER_MODEL)
         from pipeline.eval.ragas_metrics import RagasScorer, load_gold_claims, summary_stamp
-        claims_by_id = load_gold_claims(SCENARIOS_FILE)
+        claims_by_id = load_gold_claims(SCENARIOS_FILE_V1)
         if not claims_by_id:
-            raise SystemExit(f"No gold_claims next to {SCENARIOS_FILE} -- run "
+            raise SystemExit(f"No gold_claims next to {SCENARIOS_FILE_V1} -- run "
                              "pipeline.eval.enrich_gold_claims first, or pass --legacy.")
         # Scenario-scoped PG (build_pg.py --traces-file oow_scenario_reasoning_traces.jsonl)
         # for ProcOrder -- falls back to the merged PG if it hasn't been built yet.
@@ -303,13 +377,133 @@ def main() -> None:
     latencies = sorted(r["latency_s"] for r in gen_records if r.get("latency_s"))
     lat_stats = _latency_stats(latencies)
 
-    summary = {"model": args.model, "tag": tag, "n": len(gen_records),
+    summary = {"model": args.model, "tag": tag, "n": len(gen_records), "schema": "v1",
                "track": "applied_helm_engine_decisions", **suite_stamp,
                "means": means, "counts": cnts, "latency": lat_stats}
     summary_out.write_text(json.dumps(summary, indent=2))
 
     print("\n" + "=" * 60)
-    print(f"Track 2 (applied helm/engine-order decisions) summary — {tag} (n={len(gen_records)})")
+    print(f"Track 2 (applied helm/engine-order decisions) summary — {tag} (n={len(gen_records)}, schema=v1)")
+    print("=" * 60)
+    for k, v in means.items():
+        print(f"  {k:<18} {v if v is not None else 'n/a':>6}    (n={cnts[k]})")
+    print(f"\nDetails: {out_file}")
+    print(f"Summary: {summary_out}")
+
+
+def _run_v2(args) -> None:
+    """--schema v2: deterministic JSON-exact-match scoring ONLY -- no LLM judge, no RAGAS
+    suite (RAG-rebuild-v2 plan point 4: 'expliciet GEEN LLM-judge, GEEN RAGAS' for v2).
+    Metrics: JsonParseSuccess (own metric, v1 has no equivalent since v1 never asked for
+    JSON), ActionCorrect (exact action-name match), DirectionCorrect (action AND degrees
+    match within the record's own tolerance -- vacuous None for non-turn actions),
+    RuleCorrect (rule_applied exact-or-'none' match). Reported overall AND per category."""
+    tag = args.tag or Path(args.model).name.replace("/", "_")
+    out_file    = CACHE / f"eval_{tag}_colreg_v2.jsonl"
+    gen_file    = CACHE / f"eval_{tag}_colreg_v2_gen.jsonl"
+    summary_out = CACHE / f"eval_{tag}_colreg_v2_summary.json"
+
+    scenarios = json.loads(SCENARIOS_FILE_V2.read_text(encoding="utf-8"))
+    if args.n:
+        scenarios = scenarios[:args.n]
+    print(f"Evaluating {len(scenarios)} OOW scenarios (Track 2: applied helm/engine-order decisions, schema=v2)")
+
+    log_every = 1 if len(scenarios) <= 20 else 20
+    done_gen = load_jsonl_keyed(gen_file, "id")
+    if done_gen:
+        print(f"  [resume] {len(done_gen)}/{len(scenarios)} generation(s) already on disk ({gen_file.name})")
+    pending = [s for s in scenarios if str(s["id"]) not in done_gen]
+    if pending:
+        tok, model = load_lm(args.model, force_4bit=args.force_4bit)
+        bs = args.batch_size
+        with gen_file.open("a", encoding="utf-8") as gf:
+            for start in range(0, len(pending), bs):
+                batch = pending[start:start + bs]
+                print(f"  [gen {start+1}-{start+len(batch)}/{len(pending)}] batch of {len(batch)}...", flush=True)
+                try:
+                    answers, dt = generate_oow_batch(
+                        tok, model,
+                        [s["situation"] for s in batch],
+                        [s["question"] for s in batch],
+                        system_prompt=SYSTEM_OOW_AGENT,
+                    )
+                except Exception as e:
+                    answers, dt = [f"[ERROR:{e}]"] * len(batch), 0.0
+                for s, ans in zip(batch, answers):
+                    row = {**s, "answer": ans, "latency_s": round(dt / len(batch), 2)}
+                    done_gen[str(s["id"])] = row
+                    gf.write(json.dumps(row, ensure_ascii=False) + "\n")
+                gf.flush()
+                i = start + len(batch)
+                if i % log_every < bs or i == len(pending):
+                    print(f"  gen {i}/{len(pending)} done  batch took {dt:.1f}s", flush=True)
+        del model
+        torch.cuda.empty_cache()
+    else:
+        print("  [resume] all generations already on disk -- skipping model load")
+    gen_records = [done_gen[str(s["id"])] for s in scenarios]
+
+    print("Scoring (deterministic only, no judge)...")
+    keys = ["JsonParseSuccess", "ActionCorrect", "DirectionCorrect", "RuleCorrect"]
+    per_category: dict[str, dict[str, list[float]]] = {}
+    # RAG-rebuild-v2 plan point 3: oow_qwen_full (and any model trained before the
+    # held-out-contamination-avoidance fix) may have seen these 2 exact geometries during
+    # training -- report overtaking_give_way both with and without them so the archived
+    # score's known slight inflation is visible rather than silently baked into the mean.
+    excl_known_dupes_bucket: dict[str, list[float]] = {k: [] for k in keys}
+    with out_file.open("w", encoding="utf-8") as f:
+        for i, r in enumerate(gen_records, 1):
+            gold = r["gold"]
+            parsed = parse_action_json(r["answer"])
+            m = {
+                "JsonParseSuccess": 1.0 if parsed is not None else 0.0,
+                "ActionCorrect": v2_action_correct_score(parsed, gold),
+                "DirectionCorrect": v2_direction_correct_score(parsed, gold, r.get("degrees_tolerance")),
+                "RuleCorrect": v2_rule_correct_score(parsed, gold),
+            }
+            row = {**r, "parsed_answer": parsed, "metrics": m}
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            cat_bucket = per_category.setdefault(r["category"], {k: [] for k in keys})
+            for k in keys:
+                v = m.get(k)
+                if v is not None:
+                    cat_bucket[k].append(v)
+                    if r["category"] == "overtaking_give_way" and r.get("v1_id") not in KNOWN_CONTAMINATED_V1_IDS:
+                        excl_known_dupes_bucket[k].append(v)
+            if i % 20 == 0 or i == len(gen_records):
+                print(f"  scored {i}/{len(gen_records)}  ActionCorrect={m['ActionCorrect']}", flush=True)
+
+    sums, cnts = {k: 0.0 for k in keys}, {k: 0 for k in keys}
+    with out_file.open("r", encoding="utf-8") as f:
+        for line in f:
+            m = json.loads(line)["metrics"]
+            for k in keys:
+                v = m.get(k)
+                if v is None:
+                    continue
+                sums[k] += v
+                cnts[k] += 1
+    means = {k: round(sums[k] / cnts[k], 3) if cnts[k] else None for k in keys}
+    means_by_category = {
+        cat: {k: round(sum(vals) / len(vals), 3) if vals else None for k, vals in bucket.items()}
+        for cat, bucket in per_category.items()
+    }
+    if "overtaking_give_way" in means_by_category:
+        means_by_category["overtaking_give_way_excl_known_dupes"] = {
+            k: round(sum(vals) / len(vals), 3) if vals else None for k, vals in excl_known_dupes_bucket.items()
+        }
+
+    latencies = sorted(r["latency_s"] for r in gen_records if r.get("latency_s"))
+    lat_stats = _latency_stats(latencies)
+
+    summary = {"model": args.model, "tag": tag, "n": len(gen_records), "schema": "v2",
+               "track": "applied_helm_engine_decisions", "metric_suite": "v2_deterministic_only",
+               "means": means, "counts": cnts, "means_by_category": means_by_category,
+               "latency": lat_stats}
+    summary_out.write_text(json.dumps(summary, indent=2))
+
+    print("\n" + "=" * 60)
+    print(f"Track 2 (applied helm/engine-order decisions) summary — {tag} (n={len(gen_records)}, schema=v2)")
     print("=" * 60)
     for k, v in means.items():
         print(f"  {k:<18} {v if v is not None else 'n/a':>6}    (n={cnts[k]})")
@@ -319,3 +513,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
