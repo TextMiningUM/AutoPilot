@@ -47,7 +47,7 @@ LEO_FILE = paths.data_root / "OOW_Scenarios_Leo" / "moos_temporal_narratives_fin
 JSON_OUT_DIR = paths.json_dir
 OUT_FILE = JSON_OUT_DIR / "leo_moos_cases.json"
 MISSIONS_DIR = paths.workspace / "Basic Simulator" / "Data" / "missions"
-EVAL_SCENARIOS_FILE = paths.eval_dir / "oow_colreg_scenarios.json"
+EVAL_SCENARIOS_FILE = paths.eval_dir / "oow_colreg_scenarios_v1.json"
 NM_TO_M = 1852.0
 KN_TO_MPS = NM_TO_M / 3600.0
 

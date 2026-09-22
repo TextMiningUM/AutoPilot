@@ -57,22 +57,30 @@ BUILD vs VALIDATE (per project convention)
 
 OUTPUTS
 -------
-- Data/OOW/OOW_Eval/oow_colreg_scenarios.json
-      Held-out eval set (NEVER used for training).
+- Data/OOW/OOW_Eval/oow_colreg_scenarios_v1.json
+      FROZEN held-out eval set, original free-prose task format (NEVER used for
+      training, never regenerated -- see tests/test_oow_scenarios_v1_frozen.py).
+- Data/OOW/OOW_Eval/oow_colreg_scenarios_v2.json
+      SAME 325 v1 geometries (1:1 linked via `v1_id`), re-rendered in the UNIFIED
+      task format (Fase B2, RAG-rebuild-v2 plan) that training now uses -- see
+      `--build-v2` / `build_v2_eval_records()`. Also frozen once written (see
+      tests/test_oow_scenarios_v2_frozen.py).
 - Data/OOW/OOW_Agents_Training/oow_scenario_sft_direct.jsonl / _cot.jsonl
-      Training SFT rows, written DIRECTLY from the rendered situation_report/
-      gold_answer (NOT via build_sft.py -- see write_scenario_sft_files()'s
-      docstring for why that generic builder doesn't fit this fixed-question
-      data shape).
+      Training SFT rows in the UNIFIED format: system=SYSTEM_OOW_AGENT,
+      user=render_scenario_situation() (the SAME renderer v2's eval records use),
+      assistant=JSON {action, degrees, rule_applied, reasoning} (reasoning reuses
+      the already-approved Claude-authored gold_answer text). Written DIRECTLY,
+      NOT via build_sft.py -- see write_scenario_sft_files()'s docstring for why
+      that generic builder doesn't fit this fixed-question data shape.
 - Data/OOW/OOW_Agents_Training/oow_scenario_dpo_pairs.jsonl
-      DPO pairs; the rejected side is a second Claude pass over a
-      deliberately-wrong action (see wrong_action_variant()).
+      DPO pairs; the rejected side is a DETERMINISTIC field swap on the unified
+      JSON action (see wrong_action_variant()) -- no second Claude pass.
 - Data/OOW/OOW_Agents_Training/oow_scenario_reflection.jsonl
       Draft/Critique/Refined triples (draft = vague action, no parameters/rule).
 - Data/OOW/OOW_Agents_Training/oow_scenario_reasoning_traces.jsonl
-      Reasoning-trace-schema copy of the training scenarios, kept for
-      build_pg.py (Procedural Graph) and build_multihop.py (cross-track
-      pairing) ONLY -- not used for SFT/DPO/reflection (see above).
+      Reasoning-trace-schema copy of the training scenarios (still OLD prose
+      situation_report -- this is a separate downstream artifact consumed by
+      build_pg.py and build_reranker_pairs.py, not by SFT/DPO/reflection).
 
 Train/eval scenarios are geometrically disjoint by construction (first
 N_EVAL_PER_CATEGORY instances of every category are reserved for eval,
@@ -112,18 +120,30 @@ import json
 import math
 import os
 import random
+import re
 import sys
 import time
 from pathlib import Path
 
 import numpy as np
 
-from core import AgentPaths, load_env, EMBEDDER_MODEL, CONTAM_THRESH
+from core import AgentPaths, load_env, review_path, safe_write_jsonl, EMBEDDER_MODEL, CONTAM_THRESH
+from pipeline.oow_agent_spec import (
+    SYSTEM_OOW_AGENT, ACTIONS, validate_action_json,
+    bearing_and_range, relative_bearing, goal_course_action, goal_course_check_line,
+)
 
 paths = AgentPaths.oow()
 W = paths.workspace
 CACHE = paths.cache_dir
-EVAL_OUT = paths.eval_dir / "oow_colreg_scenarios.json"
+# FROZEN (2026-09-22, RAG-rebuild-v2 plan point 1) -- this is the ORIGINAL prose/free-
+# text-answer task format's held-out eval set (325 scenarios, "Applicable COLREG rules"/
+# encounter-type/role text IN the prompt). Byte-for-byte pinned by
+# tests/test_oow_scenarios_v1_frozen.py's sha256 check -- NEVER regenerate this file.
+# See EVAL_OUT_V2 below for the same 325 geometries re-rendered in the unified task
+# format (pipeline/oow_agent_spec.py) that training now uses.
+EVAL_OUT = paths.eval_dir / "oow_colreg_scenarios_v1.json"
+EVAL_OUT_V2 = paths.eval_dir / "oow_colreg_scenarios_v2.json"
 TRACES_OUT = CACHE / "oow_scenario_reasoning_traces.jsonl"
 
 MODEL_DEFAULT = "claude-sonnet-4-5"
@@ -235,9 +255,8 @@ def cpa_tcpa_m(v_os_kn: float, target: dict) -> tuple[float, float]:
     return math.hypot(cx, cy), t_cpa / 60.0
 
 
-def relative_bearing(own_heading: float, true_bearing: float) -> float:
-    """Bearing of a contact relative to own-ship's bow, -180..+180, positive = starboard."""
-    return (true_bearing - own_heading + 540) % 360 - 180
+# relative_bearing() is imported from pipeline.oow_agent_spec (see imports above) -- the
+# SAME function narrate.py and build_oow_scenarios_leo.py use, not a local re-definition.
 
 
 def advance_past_cpa(target: dict, v_os: float, extra_frac: float = 0.6) -> dict:
@@ -335,7 +354,12 @@ def role_sentence(role: str) -> str:
 def choose_action(contact_roles: list[str], worst_tcpa_min: float) -> tuple[str, dict, str]:
     """Deterministic mapping from the aggregated encounter (all contacts' roles + the
     most urgent TCPA) to ONE of the 5 allowed MOOS actions this cycle. Simple, documented
-    heuristic (see module docstring) -- NOT a full COLREG-compliant manoeuvre planner."""
+    heuristic (see module docstring) -- NOT a full COLREG-compliant manoeuvre planner.
+    NOTE: this is the ORIGINAL (v1-era) action taxonomy/heuristic, kept byte-for-byte
+    unchanged so oow_colreg_scenarios_v1.json stays reproducible from the same code that
+    built it. See to_unified_action() below for the Fase B2 unified-task-format mapping
+    used by training rows and oow_colreg_scenarios_v2.json -- NEVER change this function
+    to "fix" or "improve" it; add to the unified path instead."""
     give_way_present = any(r in ("mutual", "give_way", "overtaking_give_way") for r in contact_roles)
     if not give_way_present:
         return "maintain_course", {}, "maintain_course"
@@ -344,6 +368,157 @@ def choose_action(contact_roles: list[str], worst_tcpa_min: float) -> tuple[str,
     degrees, lookahead_m = 30, 200
     return ("alter_course", {"degrees": degrees, "lookahead_distance_m": lookahead_m},
             f"alter_course (+{degrees} degrees to starboard, lookahead distance {lookahead_m} m)")
+
+
+# ══════════════════════════════════════════════════════════════════════════════════
+# UNIFIED TASK FORMAT (Fase B2, RAG-rebuild-v2 plan, 2026-09-22)
+# ══════════════════════════════════════════════════════════════════════════════════
+# Everything below derives NEW fields (action/degrees/rule_applied in
+# pipeline.oow_agent_spec.ACTIONS' vocabulary, plus a unified situation-report renderer)
+# from the SAME geometry/CATEGORIES/generate_*_instance() machinery above -- none of that
+# machinery is touched, so oow_colreg_scenarios_v1.json stays exactly reproducible.
+# Training rows (SFT/DPO/reflection/traces) and oow_colreg_scenarios_v2.json both use
+# ONLY the functions in this section, sharing the SAME render_scenario_situation() (see
+# tests/test_oow_scenarios_shared_renderer.py's identity test).
+
+SAFE_CPA_M = 500.0        # matches Basic Simulator VesselConstraints' default min_cpa_m
+CRITICAL_RANGE_M = 200.0  # Rule 17(b): manoeuvre alone no longer suffices -- range/closing
+                          # criterion, never a TCPA cutoff (same as build_oow_scenarios_leo.py)
+MIN_TURN_DEG = 15.0       # Rule 16's "early and substantial" rules out a token gesture
+MAX_TURN_DEG = 30.0       # matches Basic Simulator VesselConstraints' max_rudder_angle_deg
+
+_PRIMARY_RULE_BY_ROLE = {"mutual": "Rule 14", "give_way": "Rule 15", "overtaking_give_way": "Rule 13"}
+
+
+def _turn_degrees(cpa_m: float) -> float:
+    shortfall = min(1.0, max(0.0, (SAFE_CPA_M - cpa_m) / SAFE_CPA_M))
+    return round(MIN_TURN_DEG + shortfall * (MAX_TURN_DEG - MIN_TURN_DEG), 1)
+
+
+def _diverging_turn(rel_bearing_deg: float) -> str:
+    return "turn_left" if rel_bearing_deg >= 0 else "turn_right"
+
+
+def _should_stop(cpa_m: float, range_m: float, closing_speed: float) -> bool:
+    return cpa_m < CRITICAL_RANGE_M and range_m < CRITICAL_RANGE_M and closing_speed > 0
+
+
+def to_unified_action(rec: dict) -> dict:
+    """Maps this generator's OLD action taxonomy (maintain_course/alter_course/stop/
+    resume_cruising_speed, always a fixed +/-30 degrees) onto the unified simulator
+    vocabulary with geometry-scaled degrees -- for training rows / v2 eval only, never
+    touches rec["action"]/rec["action_params"] (v1's own fields)."""
+    old_action = rec["action"]
+    roles = rec["role"].split("+")
+    if old_action == "resume_cruising_speed":
+        return {"action": "speed_up", "degrees": None, "rule_applied": "none"}
+    if old_action == "maintain_course":
+        # A genuine stand-on situation (real risk, Rule 17 correctly says hold course) is
+        # NOT the same as no encounter at all (rule_applied "none") -- never conflate them.
+        if any(r in ("stand_on", "overtaking_stand_on") for r in roles):
+            return {"action": "hold_course", "degrees": None, "rule_applied": "Rule 17"}
+        return {"action": "hold_course", "degrees": None, "rule_applied": "none"}
+    # Every remaining old_action (alter_course/stop) is driven by the give-way contact(s)
+    # specifically, not necessarily whichever target has the smallest CPA overall (a
+    # multi-target instance can mix give-way and stand-on contacts).
+    give_way_targets = [t for t in rec["targets"] if t["_role"] in ("mutual", "give_way", "overtaking_give_way")]
+    worst = min(give_way_targets or rec["targets"], key=lambda t: t["_cpa_m"])
+    range_m = math.hypot(*worst["start_xy_m"])
+    closing = closing_rate(rec["own_speed"], worst)
+    if old_action == "stop" or _should_stop(worst["_cpa_m"], range_m, closing):
+        return {"action": "stop", "degrees": None, "rule_applied": "Rule 17"}
+    degrees = _turn_degrees(worst["_cpa_m"])
+    role = worst["_role"]
+    if role == "overtaking_give_way":
+        action = _diverging_turn(relative_bearing(0.0, worst["bearing_from_os_deg"]))
+    else:
+        action = "turn_right"  # Rule 14 (mutual/head-on) / Rule 15+16 (give_way, crossing)
+    return {"action": action, "degrees": degrees, "rule_applied": _PRIMARY_RULE_BY_ROLE.get(role, "none")}
+
+
+def render_scenario_situation(rec: dict) -> str:
+    """Unified house-style narrative -- shared byte-for-byte between training rows and
+    oow_colreg_scenarios_v2.json (see the identity test). Deliberately parallel to
+    build_oow_scenarios_leo.py's render_leo_narrative() and Basic Simulator's narrate():
+    no own_role/encounter-classification/rule-number mentions (exactly what the model
+    must derive itself), GOAL COURSE CHECK + a safe-passing-distance fact always
+    included. Own-ship is always at the origin, heading 0 (north); the mission waypoint
+    sits straight ahead by construction (see generate_single_target_instance()), so GOAL
+    COURSE CHECK always reports "already on bearing" here -- still rendered (never hand-
+    waved away) so this matches the other two callers' structure exactly."""
+    own_speed = rec["own_speed"]
+    cruise = own_speed + 7.0
+    wx, wy = 0.0, 2000.0
+    n = len(rec["targets"])
+    lines = [
+        f"Own-ship is underway at (0.0, 0.0), heading 0.0 degrees, speed {own_speed:.2f}. "
+        f"Target cruise speed is {cruise:.1f}.",
+        f"Mission waypoint is at ({wx:.1f}, {wy:.1f}).",
+        goal_course_check_line(0.0, 0.0, 0.0, wx, wy),
+        f"This mission's safe passing distance is {SAFE_CPA_M:.0f}m: CPA below that is a real "
+        "collision risk, CPA well above it is safe regardless of how small it looks.",
+        f"{n} other ship{'s' if n != 1 else ''}:" if n else "No other ships tracked.",
+    ]
+    for i, t in enumerate(rec["targets"]):
+        name = CONTACT_NAME_POOL[i] if i < len(CONTACT_NAME_POOL) else f"RANDOM_TS{i + 1}"
+        rel_brg = relative_bearing(0.0, t["bearing_from_os_deg"])
+        range_m = math.hypot(*t["start_xy_m"])
+        closing = closing_rate(own_speed, t)
+        if closing > 0:
+            cpa_txt = f", CPA {t['_cpa_m']:.0f} m, TCPA {t['_tcpa_min']:.1f} min"
+        elif "_orig_cpa_m" in t:
+            cpa_txt = (f" (already past closest point, ranges now increasing; closest "
+                      f"approach was {t['_orig_cpa_m']:.0f} m, {t['_orig_tcpa_min']:.1f} min ago)")
+        else:
+            cpa_txt = f", CPA {t['_cpa_m']:.0f} m (already past closest point, ranges now increasing)"
+        lines.append(
+            f'  - Ship named "{name}": range {range_m:.0f} m, rel.bearing {rel_brg:.1f} deg, '
+            f"heading {t['heading_deg']:.1f}, speed {t['speed']:.2f}, closing speed {closing:.2f}"
+            f"{cpa_txt}."
+        )
+    lines.append("Conditions: visibility is clear, assessed visibility range is 10000 m, "
+                 "narrow-channel context is not indicated, traffic-separation context is not indicated.")
+    return "\n".join(lines)
+
+
+FIXED_QUESTION_UNIFIED = "Recommend exactly ONE manoeuvre as the specified JSON object."
+
+
+def build_v2_eval_records() -> list[dict]:
+    """RAG-rebuild-v2 plan point 2: regenerates the SAME 325 held-out geometries as v1
+    (generate_population(seed=0) + split_eval_train with the SAME defaults v1 was built
+    with -- verified byte-for-byte identical, see tests/test_oow_scenarios_v2_eval.py)
+    and re-renders them in the unified task format instead of v1's free-prose format.
+    NEVER regenerates v1 itself, and NEVER runs as part of training-data regeneration --
+    only from main()'s explicit --build-v2 flag. `gold_reasoning` reuses v1's own already-
+    LLM-authored gold_answer text as a non-scored reference -- no new [LLM] call needed,
+    since that text already exists and was never the field any scoring reads for v2."""
+    if not EVAL_OUT.exists():
+        raise FileNotFoundError(f"{EVAL_OUT} (v1) not found -- v2 is built FROM v1's exact "
+                                "geometries, it cannot be built standalone")
+    v1_records = json.loads(EVAL_OUT.read_text(encoding="utf-8"))
+    pop = generate_population(N_EVAL_PER_CATEGORY_DEFAULT + N_TRAIN_PER_CATEGORY_DEFAULT, seed=0)
+    eval_recs, _ = split_eval_train(pop, N_EVAL_PER_CATEGORY_DEFAULT)
+    if len(eval_recs) != len(v1_records):
+        raise RuntimeError(f"regenerated eval pool ({len(eval_recs)}) != v1 record count "
+                          f"({len(v1_records)}) -- generation code has drifted from v1, "
+                          "refusing to build v2 with a broken v1_id linkage")
+    out = []
+    for i, (rec, v1_rec) in enumerate(zip(eval_recs, v1_records)):
+        if rec["category"] != v1_rec["category"]:
+            raise RuntimeError(f"record {i}: category mismatch ({rec['category']!r} vs "
+                              f"v1's {v1_rec['category']!r}) -- geometry has drifted from v1")
+        unified = to_unified_action(rec)
+        out.append({
+            "id": f"oowcol_v2_{i + 1:05d}", "v1_id": v1_rec["id"], "category": rec["category"],
+            "situation": render_scenario_situation(rec),
+            "question": FIXED_QUESTION_UNIFIED,
+            "gold": unified,
+            "degrees_tolerance": 10.0 if unified["degrees"] is not None else None,
+            "gold_reasoning": v1_rec.get("gold_answer", ""),
+            "expected_points": rec["pass_criteria"],
+        })
+    return out
 
 
 # ── Category taxonomy (bearing/range/speed families; role/rules are re-derived from
@@ -530,12 +705,16 @@ def generate_multi_target_instance(tpl: dict, rnd: random.Random, v_os: float = 
     }
 
 
-def generate_population(n_per_category: int, seed: int = 0, only_category: str | None = None) -> list[dict]:
+def generate_population(n_per_category: int, seed: int = 0, only_category: str | None = None,
+                        return_rng: bool = False):
     """Deterministic (seeded) population of scenario-fact dicts, no prose yet.
     Same seed -> same population every time (reproducibility for train/eval split).
     `only_category` restricts generation to a single named category -- used to add ONE
     new category's data on top of already-committed files without touching/regenerating
-    the other (already reviewed) categories."""
+    the other (already reviewed) categories. `return_rng=True` additionally returns the
+    still-live random.Random so a caller can keep drawing MORE instances continuing the
+    exact same stream (used by resample_train_away_from_held_out()) -- default False
+    keeps every existing caller's return shape unchanged."""
     rnd = _rng_for(seed)
     pop: list[dict] = []
     for cat in CATEGORIES:
@@ -548,6 +727,8 @@ def generate_population(n_per_category: int, seed: int = 0, only_category: str |
             continue
         for _ in range(n_per_category):
             pop.append(generate_multi_target_instance(tpl, rnd))
+    if return_rng:
+        return pop, rnd
     return pop
 
 
@@ -566,6 +747,112 @@ def split_eval_train(pop: list[dict], n_eval_per_category: int) -> tuple[list[di
         eval_recs += recs[:n_eval_per_category]
         train_recs += recs[n_eval_per_category:]
     return eval_recs, train_recs
+
+
+# ══════════════════════════════════════════════════════════════════════════════════
+# HELD-OUT CONTAMINATION AVOIDANCE (generation-time invariant, per user decision
+# 2026-09-22 on the 2 overtaking_give_way geometry duplicates found by
+# tests/test_oow_scenarios_v2_contamination.py): v1/v2 stay byte-for-byte frozen --
+# instead, any TRAINING geometry that lands within tolerance of a held-out (v1/v2)
+# geometry is rejected and redrawn at generation time, never a post-hoc filter/dedupe.
+# ══════════════════════════════════════════════════════════════════════════════════
+
+# The 2 v1/v2 overtaking_give_way eval records (found once, BEFORE this fix landed) whose
+# geometry is byte-for-byte identical to a v1-era training record -- v1/v2 stay frozen (a
+# model already trained on the old, unfixed training set may have seen these exact
+# geometries), so archived/new evaluation results for oow_qwen_full (trained before this
+# fix) should be reported for overtaking_give_way BOTH with and without these 2 ids (see
+# eval_oow_scenarios.py's --schema v2 "means_by_category_excl_known_dupes"). A model
+# trained AFTER this fix landed has no such overlap and this exclusion is a no-op for it.
+KNOWN_CONTAMINATED_V1_IDS = {"oowcol_00160", "oowcol_00168"}
+
+BEARING_COLLISION_TOL_DEG = 0.5
+SPEED_COLLISION_TOL_KN = 0.1
+HEADING_COLLISION_TOL_DEG = 0.5
+TCPA_COLLISION_TOL_MIN = 0.5
+MAX_REDRAW_ATTEMPTS = 200
+
+_V2_CONTACT_RE = re.compile(
+    r'range (?P<range>[\d.]+) m, rel\.bearing (?P<bearing>-?[\d.]+) deg, '
+    r'heading (?P<heading>[\d.]+), speed (?P<speed>[\d.]+), closing speed (?P<closing>-?[\d.]+), '
+    r'CPA (?P<cpa>[\d.]+) m, TCPA (?P<tcpa>[\d.]+) min'
+)
+
+
+def load_held_out_signatures() -> list[tuple[float, float, float, float]]:
+    """(bearing_from_os_deg, speed, heading_deg, tcpa_min) for every contact in the
+    FROZEN oow_colreg_scenarios_v1.json and v2.json files on disk -- the ground truth
+    held-out set, loaded fresh every call rather than re-derived from
+    generate_population(), so this stays correct even if the generator code/seed/
+    defaults ever change. tcpa_min stands in for the raw start_xy_m/range the user asked
+    for: v1's frozen schema stores bearing/speed/heading/cpa_m/tcpa_min per contact but
+    NOT the raw range/start_xy_m, so bearing+speed+heading+tcpa_min (tcpa_min is itself a
+    function of range and closing speed) is the closest available proxy for "same
+    physical geometry" without reopening v1's frozen schema. v2 is parsed from its
+    rendered `situation` text (it stores no raw contacts field) since it currently
+    reuses v1's exact geometries 1:1 via `v1_id` -- reading both is still done (rather
+    than assuming v2 adds nothing new) so a future v2 revision with its own new
+    geometries would still be covered without this function needing to change."""
+    sigs: list[tuple[float, float, float, float]] = []
+    if EVAL_OUT.exists():
+        for rec in json.loads(EVAL_OUT.read_text(encoding="utf-8")):
+            for c in rec["contacts"]:
+                sigs.append((c["bearing_from_os_deg"], c["speed"], c["heading_deg"], c["tcpa_min"]))
+    if EVAL_OUT_V2.exists():
+        for rec in json.loads(EVAL_OUT_V2.read_text(encoding="utf-8")):
+            for m in _V2_CONTACT_RE.finditer(rec["situation"]):
+                sigs.append((float(m["bearing"]), float(m["speed"]), float(m["heading"]), float(m["tcpa"])))
+    return sigs
+
+
+def _target_collides(target: dict, held_out: list[tuple[float, float, float, float]]) -> bool:
+    b, s, h = target["bearing_from_os_deg"], target["speed"], target["heading_deg"]
+    tcpa = target["_tcpa_min"]
+    for hb, hs, hh, htcpa in held_out:
+        if (abs(b - hb) <= BEARING_COLLISION_TOL_DEG and abs(s - hs) <= SPEED_COLLISION_TOL_KN
+                and abs(h - hh) <= HEADING_COLLISION_TOL_DEG and abs(tcpa - htcpa) <= TCPA_COLLISION_TOL_MIN):
+            return True
+    return False
+
+
+def _rec_collides(rec: dict, held_out: list[tuple[float, float, float, float]]) -> bool:
+    return any(_target_collides(t, held_out) for t in rec["targets"])
+
+
+def resample_train_away_from_held_out(train_recs: list[dict], rnd: random.Random,
+                                      held_out: list[tuple[float, float, float, float]],
+                                      max_attempts: int = MAX_REDRAW_ATTEMPTS) -> list[dict]:
+    """Generation-time invariant: every TRAINING record must be geometrically disjoint
+    (within tolerance) from the held-out v1/v2 set. A colliding record is replaced by a
+    freshly-drawn instance of the SAME category, continuing the SAME rnd stream (never
+    reset), up to `max_attempts` tries. Never touches eval records -- those must stay
+    byte-for-byte reproducible as v1/v2. If max_attempts is exhausted, fails LOUDLY
+    (the draw space for that category is too narrow -- see the Fase-B4 distinct-geometry
+    report) rather than silently letting a duplicate through."""
+    cat_by_name = {c["name"]: c for c in CATEGORIES}
+    tpl_by_name = {t["name"]: t for t in MULTI_TARGET_TEMPLATES}
+    out = []
+    for rec in train_recs:
+        candidate = rec
+        attempts = 0
+        while _rec_collides(candidate, held_out):
+            attempts += 1
+            if attempts > max_attempts:
+                raise RuntimeError(
+                    f"category {rec['category']!r}: could not draw a training geometry "
+                    f"disjoint from the held-out v1/v2 set after {max_attempts} attempts -- "
+                    "the random draw space for this category is too narrow (see the "
+                    "distinct-geometry report); widen its training-side ranges before "
+                    "regenerating, do not raise max_attempts to paper over it."
+                )
+            if rec["category"] in cat_by_name:
+                candidate = generate_single_target_instance(cat_by_name[rec["category"]], rnd)
+            elif rec["category"] in tpl_by_name:
+                candidate = generate_multi_target_instance(tpl_by_name[rec["category"]], rnd)
+            else:
+                raise RuntimeError(f"unknown category {rec['category']!r}, cannot redraw")
+        out.append(candidate)
+    return out
 
 
 FIXED_QUESTION = "Given the situation above, what action do you take this cycle, and why?"
@@ -695,73 +982,50 @@ def render_all(client, model: str, recs: list[dict], batch_size: int, max_tokens
               f"({time.time() - t0:.1f}s, total {start + len(batch)}/{len(todo)})", flush=True)
 
 
-def wrong_action_variant(action: str, params: dict) -> tuple[str, dict, str]:
-    """A plausible but COLREG-INCORRECT alternative action+params, for DPO 'rejected'
-    answers -- e.g. turning the wrong way, or not acting as give-way vessel."""
-    if action == "alter_course":
-        degrees = params.get("degrees", 30)
-        lookahead = params.get("lookahead_distance_m", 200)
-        return ("alter_course", {"degrees": -degrees, "lookahead_distance_m": lookahead},
-                f"alter_course ({degrees} degrees to port, lookahead distance {lookahead} m)")
-    if action == "maintain_course":
-        return ("alter_course", {"degrees": 30, "lookahead_distance_m": 200},
-                "alter_course (+30 degrees to starboard, lookahead distance 200 m)")
-    return "maintain_course", {}, "maintain_course"  # wrong response to a stop-worthy emergency
 
-
-def render_wrong_all(client, model: str, recs: list[dict], batch_size: int, max_tokens: int) -> None:
-    """Second pass: renders a 'wrong_answer' onto each rec by asking Claude to phrase the
-    SAME facts but with `wrong_action_variant()`'s incorrect action -- Claude doesn't know
-    it's wrong, it just phrases whatever action/params it's given, exactly like the real
-    system prompt. This is the DPO 'rejected' side, built the same way as the 'chosen' side
-    (never a string-edit of already-rendered prose)."""
-    todo = recs
-    for start in range(0, len(todo), batch_size):
-        batch = todo[start:start + batch_size]
-        payload = []
-        for r in batch:
-            _, _, wrong_text = wrong_action_variant(r["action"], r["action_params"])
-            payload.append({"id": r["_id"], "action": wrong_action_variant(r["action"], r["action_params"])[0],
-                           "action_params_text": wrong_text, "role": r["role"], "rules": r["rules"]})
-        t0 = time.time()
-        resp = client.messages.create(
-            model=model, max_tokens=max_tokens, system=RENDER_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False, indent=1)}],
-        )
-        got = parse_jsonl_response(resp.content[0].text)
-        n_ok = 0
-        for r in batch:
-            rendered = got.get(r["_id"])
-            if rendered:
-                r["wrong_answer"] = rendered.get("gold_answer", "")
-                n_ok += 1
-        print(f"  [dpo-rejected] batch {start // batch_size + 1}: {n_ok}/{len(batch)} rendered "
-              f"({time.time() - t0:.1f}s, total {start + len(batch)}/{len(todo)})", flush=True)
+def wrong_action_variant(decision: dict) -> dict:
+    """A plausible but COLREG-INCORRECT alternative decision, for DPO 'rejected' answers
+    -- deterministic field swap on the already-computed unified action (same principle,
+    same code shape, as build_oow_scenarios_leo.py's own wrong_action_variant()). Replaces
+    the old second-Claude-call render_wrong_all() prose-perturbation approach: there is no
+    continuous prose to reformat here, the DPO 'rejected' side is a structured JSON action,
+    so a deterministic field swap is the correct (not a shortcut) way to build it."""
+    action, degrees = decision["action"], decision["degrees"]
+    if action in ("turn_left", "turn_right"):
+        wrong_action = "turn_left" if action == "turn_right" else "turn_right"
+        return {"action": wrong_action, "degrees": degrees, "rule_applied": decision["rule_applied"]}
+    if action == "hold_course":
+        # Wrong: manoeuvring when no real risk exists.
+        return {"action": "turn_right", "degrees": MIN_TURN_DEG, "rule_applied": "none"}
+    # Wrong response to a stop/speed-up-worthy situation: holding course instead.
+    return {"action": "hold_course", "degrees": None, "rule_applied": "none"}
 
 
 def write_scenario_sft_files(recs: list[dict], cache_dir: Path, mode: str = "w") -> None:
-    """Writes oow_scenario_sft_direct.jsonl / _cot.jsonl directly from the already-rendered
-    situation_report/gold_answer -- NOT via build_sft.py, which (a) assumes per-record
-    question DIVERSITY for its dedup filter (ours is one fixed question, so it would drop
-    ~all rows as 'duplicates'), and (b) reconstructs its own generic answer text from the
-    trace's structured fields instead of using the Claude-authored gold_answer. direct/cot
-    share the same content: the gold_answer already fuses the decision with its reasoning
-    in one paragraph, so there's no separate 'terse' vs 'step-by-step' version to write.
-    No _rag.jsonl: there's no Track 2 retrieval corpus for this data to ground against.
-    `mode="a"` appends new-category rows onto already-committed files instead of
-    overwriting the other, already-reviewed categories."""
+    """Writes oow_scenario_sft_direct.jsonl / _cot.jsonl in the UNIFIED task format (Fase
+    B2, RAG-rebuild-v2 plan): system=SYSTEM_OOW_AGENT, user=render_scenario_situation(r)
+    (the SAME renderer oow_colreg_scenarios_v2.json's eval records use -- see
+    tests/test_oow_scenarios_v2_shared_renderer_identity.py), assistant=the schema-validated
+    JSON object {action, degrees, rule_applied, reasoning}. `reasoning` reuses the
+    already-existing, already-approved Claude-authored gold_answer text (no NEW [LLM] call
+    -- only its wrapping changes from bare prose to a JSON field). direct/cot share the
+    same content, matching the old writer's own rationale (one fixed question, one fused
+    decision+reasoning paragraph, no separate terse/step-by-step version to write).
+    `mode="a"` appends new-category rows onto already-committed files."""
     direct_path = cache_dir / "oow_scenario_sft_direct.jsonl"
     cot_path = cache_dir / "oow_scenario_sft_cot.jsonl"
     with direct_path.open(mode, encoding="utf-8") as fd, cot_path.open(mode, encoding="utf-8") as fc:
         for r in recs:
             if not r.get("gold_answer"):
                 continue
+            unified = to_unified_action(r)
+            assistant = {**unified, "reasoning": r["gold_answer"]}
             row = {
                 "category": r["category"], "action": r["action"],
                 "messages": [
-                    {"role": "system", "content": SYSTEM_OOW},
-                    {"role": "user", "content": f"{r['situation_report']}\n\n{FIXED_QUESTION}"},
-                    {"role": "assistant", "content": r["gold_answer"]},
+                    {"role": "system", "content": SYSTEM_OOW_AGENT},
+                    {"role": "user", "content": f"Situation:\n{render_scenario_situation(r)}\n\n{FIXED_QUESTION_UNIFIED}"},
+                    {"role": "assistant", "content": json.dumps(assistant, ensure_ascii=False)},
                 ],
             }
             line = json.dumps(row, ensure_ascii=False) + "\n"
@@ -775,14 +1039,18 @@ def write_scenario_dpo_file(recs: list[dict], cache_dir: Path, mode: str = "w") 
     n = 0
     with out_path.open(mode, encoding="utf-8") as f:
         for r in recs:
-            if not r.get("gold_answer") or not r.get("wrong_answer"):
+            if not r.get("gold_answer"):
                 continue
-            user_msg = f"{r['situation_report']}\n\n{FIXED_QUESTION}"
+            unified = to_unified_action(r)
+            chosen = {**unified, "reasoning": r["gold_answer"]}
+            rejected_action = wrong_action_variant(unified)
+            rejected = {**rejected_action, "reasoning": r["gold_answer"]}
+            user_msg = f"Situation:\n{render_scenario_situation(r)}\n\n{FIXED_QUESTION_UNIFIED}"
             row = {
                 "category": r["category"], "action": r["action"],
-                "prompt": [{"role": "system", "content": SYSTEM_OOW}, {"role": "user", "content": user_msg}],
-                "chosen": [{"role": "assistant", "content": r["gold_answer"]}],
-                "rejected": [{"role": "assistant", "content": r["wrong_answer"]}],
+                "prompt": [{"role": "system", "content": SYSTEM_OOW_AGENT}, {"role": "user", "content": user_msg}],
+                "chosen": [{"role": "assistant", "content": json.dumps(chosen, ensure_ascii=False)}],
+                "rejected": [{"role": "assistant", "content": json.dumps(rejected, ensure_ascii=False)}],
             }
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
             n += 1
@@ -793,23 +1061,25 @@ def write_scenario_reflection_file(recs: list[dict], cache_dir: Path, mode: str 
     """Draft/Critique/Refined triples, same convention as build_reflection.py's output
     (see oow_reflection.jsonl): draft = the bare action name with no parameters or rule
     citation (deliberately vague, not wrong), critique = fixed text pointing out exactly
-    that gap, refined = the gold_answer verbatim."""
+    that gap, refined = the unified JSON object with the full gold_answer reasoning."""
     out_path = cache_dir / "oow_scenario_reflection.jsonl"
     n = 0
     with out_path.open(mode, encoding="utf-8") as f:
         for r in recs:
             if not r.get("gold_answer"):
                 continue
+            unified = to_unified_action(r)
+            refined = json.dumps({**unified, "reasoning": r["gold_answer"]}, ensure_ascii=False)
             draft = f"I will {r['action'].replace('_', ' ')}."
             critique = ("This response is too vague -- it must state the exact action parameters "
                        "and cite the specific COLREG rule(s) that justify the decision.")
             row = {
                 "category": r["category"],
                 "messages": [
-                    {"role": "system", "content": SYSTEM_OOW},
-                    {"role": "user", "content": f"{r['situation_report']}\n\n{FIXED_QUESTION}"},
+                    {"role": "system", "content": SYSTEM_OOW_AGENT},
+                    {"role": "user", "content": f"Situation:\n{render_scenario_situation(r)}\n\n{FIXED_QUESTION_UNIFIED}"},
                     {"role": "assistant", "content": f"Draft: {draft}\n\nCritique: {critique}\n\n"
-                                                      f"Refined: {r['gold_answer']}"},
+                                                      f"Refined: {refined}"},
                 ],
             }
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -919,15 +1189,45 @@ def main() -> None:
                          "mode; eval JSON is loaded, extended with continuing ids, and rewritten) "
                          "instead of overwriting them -- for adding one new category's data without "
                          "touching/regenerating already-reviewed categories.")
+    ap.add_argument("--build-v2", action="store_true",
+                    help="RAG-rebuild-v2 plan point 2: build oow_colreg_scenarios_v2.json (the "
+                         "SAME 325 v1 geometries, re-rendered in the unified task format) and exit "
+                         "-- an explicit, standalone step that NEVER runs alongside training-data "
+                         "regeneration, so the eval set can never silently drift when training is "
+                         "rebuilt. Writes via safe_write_jsonl-style no-overwrite protection "
+                         "(pass --overwrite to allow replacing an existing v2 file).")
+    ap.add_argument("--overwrite", action="store_true",
+                    help="allow --build-v2 to overwrite an existing oow_colreg_scenarios_v2.json")
     args = ap.parse_args()
+
+    if args.build_v2:
+        v2_records = build_v2_eval_records()
+        out_path = EVAL_OUT_V2 if args.overwrite else review_path(EVAL_OUT_V2)
+        if out_path.exists() and not args.overwrite:
+            raise FileExistsError(f"{out_path} already exists -- pass --overwrite for production")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(v2_records, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"Wrote {out_path} ({len(v2_records)} v2 scenarios)"
+             + ("" if args.overwrite else "  [dry-run/review path -- pass --overwrite for production]"))
+        from collections import Counter
+        print("category distribution:", Counter(r["category"] for r in v2_records))
+        return
 
     n_eval = 2 if args.smoke else args.n_eval_per_category
     n_train = 2 if args.smoke else args.n_train_per_category
 
     categories_n = 1 if args.only_category else len(CATEGORIES) + len(MULTI_TARGET_TEMPLATES)
     print(f"Generating population: {n_eval + n_train} per category ({categories_n} categories)...")
-    pop = generate_population(n_eval + n_train, seed=args.seed, only_category=args.only_category)
+    pop, rnd = generate_population(n_eval + n_train, seed=args.seed, only_category=args.only_category,
+                                   return_rng=True)
     eval_recs, train_recs = split_eval_train(pop, n_eval)
+
+    held_out = load_held_out_signatures()
+    if held_out:
+        n_before = len(train_recs)
+        train_recs = resample_train_away_from_held_out(train_recs, rnd, held_out)
+        print(f"Held-out contamination avoidance: checked {n_before} training records "
+             f"against {len(held_out)} held-out (v1/v2) contact geometries.")
     print(f"eval pool: {len(eval_recs)}  train pool: {len(train_recs)}  "
           f"(geometrically disjoint by construction)")
 
@@ -960,6 +1260,15 @@ def main() -> None:
         existing_eval = json.loads(EVAL_OUT.read_text(encoding="utf-8"))
     id_offset = len(existing_eval)
     eval_out = existing_eval + [to_eval_record(r, id_offset + i + 1) for i, r in enumerate(eval_recs)]
+    # v1 is FROZEN (RAG-rebuild-v2 plan point 1) -- refuse to silently rewrite it. --append
+    # (adding one new category on top) is still allowed since that's an intentional,
+    # explicit extension, not an accidental full regeneration.
+    if EVAL_OUT.exists() and not args.append:
+        raise FileExistsError(
+            f"{EVAL_OUT} is FROZEN (v1) and must never be silently regenerated -- pass "
+            f"--append to add new categories on top, or delete it yourself if a full "
+            f"regeneration is really intended (this will fail the v1 sha256 pin test)."
+        )
     EVAL_OUT.parent.mkdir(parents=True, exist_ok=True)
     EVAL_OUT.write_text(json.dumps(eval_out, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Wrote {EVAL_OUT} ({len(eval_out)} held-out scenarios, {len(eval_recs)} new)")
@@ -978,10 +1287,10 @@ def main() -> None:
             f.write(json.dumps(t, ensure_ascii=False) + "\n")
     print(f"Wrote {TRACES_OUT} ({len(trace_out)} {'new' if args.append else ''} training traces)")
 
-    if not args.skip_llm:
-        # Second Claude pass: a plausible-but-wrong action, phrased the same way, for
-        # DPO's rejected side (see render_wrong_all()'s docstring).
-        render_wrong_all(client, args.model, train_recs, args.batch_size, args.max_tokens)
+    # NOTE (Fase B2 unification): the old second Claude pass (render_wrong_all(), building
+    # a "wrong_answer" prose text for DPO's rejected side) is gone -- write_scenario_dpo_file
+    # now builds the rejected side deterministically via wrong_action_variant() on the
+    # unified JSON action, same principle as build_oow_scenarios_leo.py. One fewer LLM call.
 
     write_scenario_sft_files(train_recs, CACHE, mode=trace_mode)
     write_scenario_dpo_file(train_recs, CACHE, mode=trace_mode)

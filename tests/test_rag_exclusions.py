@@ -17,12 +17,13 @@ from pipeline.ingest.rag_exclusions import ExcludedSourceError, is_excluded_chun
 paths = AgentPaths.oow()
 CHUNKS_FILE = paths.cache_dir / "oow_rag_chunks.json"
 INCIDENT_SCREENING_FILE = paths.cache_dir / "incident_screening.json"
-EVAL_SCENARIOS_FILE = paths.eval_dir / "oow_colreg_scenarios.json"
+EVAL_SCENARIOS_FILE = paths.eval_dir / "oow_colreg_scenarios_v1.json"
+EVAL_SCENARIOS_V2_FILE = paths.eval_dir / "oow_colreg_scenarios_v2.json"
 
 
 # ── Unit tests for the exclusion logic itself (synthetic paths, no corpus needed) ──
 def test_excludes_eval_dir() -> None:
-    assert is_excluded_path("Data/OOW/OOW_Eval/oow_colreg_scenarios.json")
+    assert is_excluded_path("Data/OOW/OOW_Eval/oow_colreg_scenarios_v1.json")
 
 
 def test_excludes_llm_runs_dir() -> None:
@@ -55,7 +56,7 @@ def test_does_not_exclude_legitimate_sources() -> None:
 
 def test_raise_if_excluded_source_raises() -> None:
     with pytest.raises(ExcludedSourceError):
-        raise_if_excluded_source("Data/OOW/OOW_Eval/oow_colreg_scenarios.json")
+        raise_if_excluded_source("Data/OOW/OOW_Eval/oow_colreg_scenarios_v1.json")
 
 
 def test_is_excluded_chunk_checks_both_fields() -> None:
@@ -162,10 +163,23 @@ def _boilerplate_ngrams(scenarios: list[dict], min_scenarios: int = 2) -> set[st
     return {g for g, n in counts.items() if n >= min_scenarios}
 
 
+def _load_eval_scenarios() -> list[dict]:
+    """Both v1 and v2 are held-out (RAG-rebuild-v2 plan point 3: 'De lekkage-tests uit
+    fase A moeten hun n-grammen uit ZOWEL v1 als v2 trekken (beide zijn held-out).'),
+    so leakage checks must scan text from both files, not just v1."""
+    scenarios: list[dict] = []
+    if EVAL_SCENARIOS_FILE.exists():
+        scenarios += json.loads(EVAL_SCENARIOS_FILE.read_text(encoding="utf-8"))
+    if EVAL_SCENARIOS_V2_FILE.exists():
+        scenarios += json.loads(EVAL_SCENARIOS_V2_FILE.read_text(encoding="utf-8"))
+    return scenarios
+
+
 def _eval_texts(scenarios: list[dict]) -> list[str]:
     texts = []
     for s in scenarios:
-        for key in ("question", "gold_answer", "situation", "narrative"):
+        for key in ("question", "gold_answer", "situation", "situation_report",
+                    "gold_reasoning", "narrative"):
             if isinstance(s.get(key), str):
                 texts.append(s[key])
     return texts
@@ -197,7 +211,7 @@ def test_no_chunk_leaks_eval_scenario_text() -> None:
     this doesn't just stop catching real leaks."""
     if not CHUNKS_FILE.exists() or not EVAL_SCENARIOS_FILE.exists():
         return
-    scenarios = json.loads(EVAL_SCENARIOS_FILE.read_text(encoding="utf-8"))
+    scenarios = _load_eval_scenarios()
     eval_ngrams: set[str] = set()
     for t in _eval_texts(scenarios):
         eval_ngrams |= _ngrams(_words(t))
@@ -219,7 +233,7 @@ def test_leakage_test_still_catches_a_real_scenario_leak() -> None:
     of either kind) must still be flagged."""
     if not CHUNKS_FILE.exists() or not EVAL_SCENARIOS_FILE.exists():
         return
-    scenarios = json.loads(EVAL_SCENARIOS_FILE.read_text(encoding="utf-8"))
+    scenarios = _load_eval_scenarios()
     chunks = _load_chunks()
     reg_ngrams = _regulation_ngrams(chunks)
     boilerplate_ngrams = _boilerplate_ngrams(scenarios)
