@@ -16,6 +16,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from core import AgentPaths, EMBEDDER_MODEL
+from pipeline.ingest.rag_exclusions import raise_if_excluded_source
 
 paths = AgentPaths.from_env()
 WORKSPACE    = paths.workspace
@@ -39,7 +40,12 @@ TOPIC_JACCARD_MIN   = 0.5
 # multi-rule chunks (Rules 28-30, 32-33, 39-41) that slipped through the token-budget/
 # topic-Jaccard merge logic because they're short and share topics (or share no
 # topics at all, which also passes the low-token-count 0.2 threshold).
-STANDALONE_TYPES = {"dialogue", "definition", "procedure", "rule"}
+# "chirp_report"/"chirp_comment" added (Phase 2, RAG rebuild 2026-09-22): each CHIRP
+# newsletter article is its own independent near-miss case -- merging one article's
+# tail into the next unrelated article would corrupt both as retrieval units.
+# "moos_case" added (Phase 3, same rebuild): each canonicalized Leo MOOS situation is
+# its own independent case, never merged with a neighbouring unrelated case.
+STANDALONE_TYPES = {"dialogue", "definition", "procedure", "rule", "chirp_report", "chirp_comment", "moos_case"}
 
 # Set by main() before any chunking/embedding happens.
 model: SentenceTransformer | None = None
@@ -257,6 +263,11 @@ def main() -> None:
         doc = json.loads(path.read_text(encoding="utf-8"))
         if not doc.get("chapters"):
             continue
+        # Defense-in-depth: this is the single choke point every source document flows
+        # through before becoming a chunk -- see pipeline/ingest/rag_exclusions.py for
+        # the full exclusion list/rationale (eval data, model-output artifacts, derived
+        # training JSONL, meta-literature never belong in the RAG corpus).
+        raise_if_excluded_source(doc["source_file"])
         n_sections = sum(len(ch.get("sections", [])) for ch in doc["chapters"])
         chunks = build_chunks_for_document(doc)
         all_chunks.extend(chunks)

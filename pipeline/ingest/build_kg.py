@@ -285,6 +285,25 @@ def kg_retrieve(query: str, model, embs: np.ndarray, ids: list[str], kg: dict,
     return out, q_cons, sorted(expanded_cons - set(q_cons))
 
 
+def rerank_hits(query: str, hits: list[dict], chunk_by_id: dict, cross_encoder,
+                k: int) -> list[dict]:
+    """Re-score `hits` (from a WIDER `kg_retrieve(..., k=pool_size)` call, pool_size > k)
+    with a fine-tuned cross-encoder (see pipeline/train/train_reranker.py) and keep the
+    top `k`. Adds a `rerank_score` field to each returned hit dict; does not mutate the
+    dense/KG `score` field so callers can still see both signals. Never called on the
+    result of a `k`-sized `kg_retrieve` call -- rerank only sorts what's already in the
+    pool, so the pool must be wider than `k` for reranking to have any candidates to
+    promote/demote in the first place."""
+    if not hits:
+        return hits
+    pairs = [(query, chunk_by_id[h["chunk_id"]]["text"]) for h in hits]
+    scores = cross_encoder.predict(pairs)
+    for h, s in zip(hits, scores):
+        h["rerank_score"] = float(s)
+    ranked = sorted(hits, key=lambda h: -h["rerank_score"])
+    return ranked[:k]
+
+
 # ── Main ──────────────────────────────────────────────────────────────────
 def main() -> None:
     """CLI entry point: build the KG from cached chunks/embeddings and print a retrieval smoke test."""

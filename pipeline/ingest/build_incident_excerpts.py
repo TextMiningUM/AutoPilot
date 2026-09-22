@@ -78,7 +78,18 @@ def best_density_window(pages: list[str]) -> tuple[int, int] | None:
     return best_i, min(best_i + DENSITY_WINDOW, len(pages))
 
 
-def build_document(entry: dict) -> dict | None:
+def filter_collision_relevant_paragraphs(text: str) -> str:
+    """Phase 4 (marginal incidents, RAG rebuild 2026-09-22): a 0<=net_score<15 report's
+    Analysis/Conclusions excerpt is kept only where it's ACTUALLY collision-relevant, not
+    as a whole excerpt -- splits on blank lines and keeps a paragraph only if
+    build_oow_json.tag_text() finds at least one concept in it, same tagging already
+    used for full incidents (no new keyword list)."""
+    paras = [p for p in re.split(r"\n\s*\n", text) if p.strip()]
+    kept = [p for p in paras if tag_text(p)[0]]
+    return "\n\n".join(kept)
+
+
+def build_document(entry: dict, marginal: bool = False) -> dict | None:
     pages = load_pages(entry["path"])
     if not pages or pages[0].startswith("__EXTRACT_ERROR__"):
         return None
@@ -93,15 +104,20 @@ def build_document(entry: dict) -> dict | None:
     start, end = span
 
     excerpt_text = "\n\n".join(p for p in pages[start:end] if p).strip()
+    if marginal:
+        excerpt_text = filter_collision_relevant_paragraphs(excerpt_text)
     if len(excerpt_text) < MIN_EXCERPT_CHARS:
         return None
 
     slug = slugify(entry["path"])
-    doc_id = f"incident_{slug}_{stable_id(entry['path'])}"
+    doc_id = f"incident_marginal_{slug}_{stable_id(entry['path'])}" if marginal else f"incident_{slug}_{stable_id(entry['path'])}"
 
     sections = []
     summary_text = (pages[0] or "").strip()[:1000]
-    if summary_text:
+    if summary_text and not marginal:
+        # Marginal incidents skip the opening-paragraph summary entirely -- it's
+        # vessel-particulars boilerplate, not itself filtered for relevance, and Phase 4
+        # is specifically "collision-relevant sections only", not "a slightly larger excerpt".
         concepts, topics = tag_text(summary_text)
         sections.append({
             "section_id": f"{doc_id}_summary",
@@ -127,7 +143,7 @@ def build_document(entry: dict) -> dict | None:
     return {
         "document_id": doc_id,
         "source_file": entry["path"],
-        "source_type": "incident_report",
+        "source_type": "incident_marginal" if marginal else "incident_report",
         "screening_net_score": entry["net_score"],
         "chapters": [{"title": "Incident Report Excerpt", "sections": sections}],
     }
@@ -138,27 +154,40 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--min-score", type=int, default=15,
                      help="Only build excerpts for reports with screening net_score >= this.")
+    ap.add_argument("--marginal", action="store_true",
+                     help="Phase 4 (RAG rebuild 2026-09-22): instead of --min-score, build "
+                          "collision-relevant-SECTIONS-only excerpts for the 0<=net_score<15 "
+                          "'marginal' reports -- a separate, measurable step, never mixed "
+                          "into the default --min-score run.")
     args = ap.parse_args()
 
     if not SCREENING_FILE.exists():
         raise SystemExit(f"Missing {SCREENING_FILE} -- run screen_incidents.py first.")
     entries = json.loads(SCREENING_FILE.read_text(encoding="utf-8"))
-    shortlisted = [e for e in entries if e["net_score"] >= args.min_score]
-    print(f"{len(shortlisted)}/{len(entries)} reports score net_score >= {args.min_score}")
+    if args.marginal:
+        shortlisted = [e for e in entries if 0 <= e["net_score"] < 15]
+        print(f"{len(shortlisted)}/{len(entries)} reports are 'marginal' (0 <= net_score < 15)")
+    else:
+        shortlisted = [e for e in entries if e["net_score"] >= args.min_score]
+        print(f"{len(shortlisted)}/{len(entries)} reports score net_score >= {args.min_score}")
 
     written, skipped = 0, 0
+    n_sections_total = 0
     for entry in shortlisted:
-        doc = build_document(entry)
+        doc = build_document(entry, marginal=args.marginal)
         if doc is None:
             skipped += 1
             continue
         out_path = JSON_OUT_DIR / f"{doc['document_id']}.json"
         out_path.write_text(json.dumps(doc, indent=2, ensure_ascii=False), encoding="utf-8")
         written += 1
+        n_sections_total += sum(len(c["sections"]) for c in doc["chapters"])
 
-    print(f"Wrote {written} incident excerpt JSONs to {JSON_OUT_DIR}")
+    kind = "marginal-incident" if args.marginal else "incident excerpt"
+    print(f"Wrote {written} {kind} JSONs ({n_sections_total} sections total) to {JSON_OUT_DIR}")
     if skipped:
-        print(f"Skipped {skipped} (no usable excerpt found or extraction error)")
+        reason = "no collision-relevant section survived filtering" if args.marginal else "no usable excerpt found or extraction error"
+        print(f"Skipped {skipped} ({reason})")
 
 
 if __name__ == "__main__":

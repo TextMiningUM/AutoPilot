@@ -477,6 +477,13 @@ def _render_agent_detail(ph, mission) -> None:
         st.code(cp.get("situation_report", ""), language=None, wrap_lines=True)
         st.markdown("**Agent decision**")
         st.markdown(_describe_decision(cp.get("decision", {})))
+        # Older archived runs (before "reasoning_raw" was promoted to its own top-level
+        # checkpoint field) only ever had this text nested under debug.raw_response --
+        # fall back there so playback of those logs still shows the full reasoning too.
+        reasoning_raw = cp.get("reasoning_raw") or cp.get("debug", {}).get("raw_response")
+        if reasoning_raw:
+            with st.expander("Full reasoning (every 'Wait, ...' step, not just the final answer)"):
+                st.code(reasoning_raw, language=None, wrap_lines=True)
 
 
 # Plot header/mode-radio/placeholder created here (before the sidebar) so the sidebar's

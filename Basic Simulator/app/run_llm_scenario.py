@@ -43,7 +43,8 @@ from app.simulation import Simulation, VesselConstraints, find_collision
 from app.agents import ask_oow, MODEL_CONFIGS, SYSTEM_OOW_AGENT, effective_generation_params
 from app.evaluation import llm_compliance_check, score_trajectory
 from app.llm_runs import RUNS_DIR, run_log_path
-from app.narrate import recommended_decision_interval, recommended_max_steps
+from app.measurement import measure_decision_quality
+from app.narrate import contact_line, recommended_decision_interval, recommended_max_steps
 
 
 def run_one(mission_id: str, config: str, tag: str = "default",
@@ -98,13 +99,24 @@ def run_one(mission_id: str, config: str, tag: str = "default",
             # from a hung process for the whole run's duration.
             print(f"    checkpoint {len(checkpoints) + 1} (step {step}/{max_steps}): "
                   f"{decision.get('action')} -- {cp_latency_s:.1f}s", flush=True)
+            # Deterministic, read-only measurement (Checks A/B/C -- see app/measurement.py)
+            # against the SAME live contacts the agent was actually shown this step. Never
+            # changes `decision`/`sim.apply_action()` below -- purely counted and logged.
+            contacts_now = [contact_line(sim.own, t) for t in sim.targets]
             checkpoints.append({
                 "step": step, "time": sim.t,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "latency_s": cp_latency_s,
                 "situation_report": debug.get("situation"),
                 "decision": decision,
-                "debug": {kk: vv for kk, vv in debug.items() if kk != "situation"},
+                # The FULL raw model output -- every "Wait, ..." / self-correction inside
+                # Qwen3's <think> block, not just the final action -- as its OWN top-level
+                # field (a sibling of "decision", never buried inside "debug"'s grab-bag of
+                # retrieval internals) so it can never silently disappear if debug's shape
+                # changes later (e.g. once a different/fine-tuned model gets wired in).
+                "reasoning_raw": debug.get("raw_response"),
+                "measurement": measure_decision_quality(decision, contacts_now, constraints),
+                "debug": {kk: vv for kk, vv in debug.items() if kk not in ("situation", "raw_response")},
             })
             sim.apply_action(decision)
         sim.step(dt)

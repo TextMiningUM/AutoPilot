@@ -1,0 +1,490 @@
+{
+ "mission_id": "UM09",
+ "config": "bare_qwen",
+ "tag": "units_v1",
+ "generated_at": "2026-09-22T07:50:34.409315+00:00",
+ "latency_s": 15.190296173095703,
+ "mission": {
+  "id": "UM09",
+  "name": "Overtaking - own-ship is overtaken (stand-on)",
+  "rule_refs": [
+   "Rule 13",
+   "Rule 17"
+  ],
+  "own_ship_role": "stand-on (being overtaken)",
+  "description": "A faster target approaches from astern of own-ship and must keep clear as the overtaking vessel.\n\nAdditional, beyond the 22 Imazu problems: no Imazu case has own-ship being overtaken -- every Imazu overtaking case has own-ship as the (faster) overtaking vessel. This mission fills that gap, measuring Rule 13/17 stand-on behaviour when own-ship is the one being overtaken from astern.",
+  "pass_criteria": [
+   "Own-ship holds course and speed while being overtaken, absent evidence the target is not keeping clear.",
+   "Minimum CPA stays above the safe-distance threshold."
+  ],
+  "own_ship": {
+   "x": 0.0,
+   "y": 0.0,
+   "heading": 0.0,
+   "speed": 2.5
+  },
+  "goal": {
+   "x": 0.0,
+   "y": 2400.0
+  },
+  "targets": [
+   {
+    "name": "ts1",
+    "x": 0.0,
+    "y": -600.0,
+    "heading": 0.0,
+    "speed": 3.5
+   }
+  ]
+ },
+ "evaluation": {
+  "verdict": "FAIL -- collision occurred",
+  "composite_score": 0.0,
+  "safety": {
+   "passed": false,
+   "min_cpa_m": 1.5,
+   "score": 0.0
+  },
+  "compliance": {
+   "violations": [
+    "t=0s: own-ship cited Rule 17 but the ground truth says Rule 13 applies because ts1 is overtaking own-ship from astern (relative bearing -180deg, on the same track, closing from behind with higher speed); this is a citation error indicating incorrect identification of the encounter type.",
+    "t=0s: own-ship slowed down from 2.50 m/s to 0.50 m/s in response to being overtaken -- violates Rule 13 because the vessel being overtaken (own-ship) shall not hamper the safe passage of the overtaking vessel (ts1), and drastically reducing speed in the overtaking vessel's path may obstruct its manoeuvre; the COLREG-compliant action would have been to hold course and speed, allowing ts1 to overtake unimpeded.",
+    "t=190s: own-ship cited Rule 12 but the ground truth says Rule 13 applies because ts1 continues to be overtaking own-ship from astern (relative bearing -180deg, still closing from behind); this is a citation error indicating continued misidentification of the encounter type.",
+    "t=190s: own-ship slowed down further to 0.00 m/s (full stop) when ts1 was only 10 seconds from CPA -- violates Rule 13 because the vessel being overtaken shall not hamper the overtaking vessel's safe passage, and stopping completely in its path significantly obstructs the overtaking manoeuvre; the COLREG-compliant action would have been to maintain course and speed, allowing ts1 to complete the overtake safely."
+   ],
+   "score": 0.5
+  },
+  "temporal": {
+   "arrived": false,
+   "time_actual_s": null,
+   "time_ratio": null,
+   "temporal_score": 0.0
+  },
+  "spatial": {
+   "path_length_m": 95.0,
+   "path_ratio": null,
+   "spatial_score": 0.0
+  },
+  "manoeuvre": {
+   "manoeuvre_count": 0,
+   "manoeuvre_score": 1.0,
+   "mean_abs_heading_rate": 0.0,
+   "mean_abs_speed_rate": 0.013,
+   "smoothness_score": 0.994
+  }
+ },
+ "colreg_llm_check": {
+  "checked": true,
+  "violations": [
+   "t=0s: own-ship cited Rule 17 but the ground truth says Rule 13 applies because ts1 is overtaking own-ship from astern (relative bearing -180deg, on the same track, closing from behind with higher speed); this is a citation error indicating incorrect identification of the encounter type.",
+   "t=0s: own-ship slowed down from 2.50 m/s to 0.50 m/s in response to being overtaken -- violates Rule 13 because the vessel being overtaken (own-ship) shall not hamper the safe passage of the overtaking vessel (ts1), and drastically reducing speed in the overtaking vessel's path may obstruct its manoeuvre; the COLREG-compliant action would have been to hold course and speed, allowing ts1 to overtake unimpeded.",
+   "t=190s: own-ship cited Rule 12 but the ground truth says Rule 13 applies because ts1 continues to be overtaking own-ship from astern (relative bearing -180deg, still closing from behind); this is a citation error indicating continued misidentification of the encounter type.",
+   "t=190s: own-ship slowed down further to 0.00 m/s (full stop) when ts1 was only 10 seconds from CPA -- violates Rule 13 because the vessel being overtaken shall not hamper the overtaking vessel's safe passage, and stopping completely in its path significantly obstructs the overtaking manoeuvre; the COLREG-compliant action would have been to maintain course and speed, allowing ts1 to complete the overtake safely."
+  ],
+  "compliant_actions": [],
+  "compliance_score": 0.5,
+  "error": null
+ },
+ "params": {
+  "decision_interval": 19,
+  "dt": 10.0,
+  "max_steps": 154,
+  "enable_thinking": false,
+  "max_new_tokens": 256,
+  "k": 2,
+  "use_rag": true,
+  "system_prompt": "You are the navigator on a large commercial vessel. Decide the next helm order.\n\nMISSION REQUIREMENTS -- this mission is only completed successfully if ALL of these hold, not just\nthe first one you happen to satisfy:\n1. Every contact's CPA stays at or above this mission's safe passing distance (given further below)\n   at all times -- exactly as mandatory as actually reaching the goal. There is no automatic safety\n   net correcting your choice if you get this wrong: your own action each step is what the ship\n   actually does.\n2. Every manoeuvre you take while a real collision risk exists complies with COLREG.\n3. You reach the mission goal.\n\nPRIORITY ORDER when these pull in different directions -- always in this order, never reversed:\n1. Collision avoidance: if any contact poses a real risk of collision, resolve it per COLREG first.\n2. Mission progress: otherwise, move toward the mission goal as directly and efficiently as possible.\n\nFACTS GIVEN TO YOU -- treat all of these as already correct; never recompute, re-derive, or\nsecond-guess them:\n- Positions/bearings/headings are in metres/degrees, heading 0=north, clockwise (compass convention).\n- rel.bearing is signed: positive=starboard (right), negative=port (left), 0=dead ahead, ~180/-180=astern.\n- CPA = the closest distance a contact will EVER come to you at current headings/speeds. TCPA = seconds\n  until that closest point.\n- TCPA=0 does NOT always mean an imminent collision -- it also happens once the closest point has\n  already passed (the situation report says so explicitly when that's the case). Judge real risk from\n  CPA alone, never from TCPA alone.\n- The situation report's \"GOAL COURSE CHECK:\" line has ALREADY computed the goal-correction action and\n  degrees for you. Never substitute a contact's rel.bearing for it -- that number describes the\n  CONTACT, not the goal, even when the numbers look similar.\n\nDECISION PROCEDURE -- follow in order:\n1. Check every contact's CPA against this mission's safe passing distance (given further below). If\n   none are below it, there is no real collision risk right now -- go to step 3.\n2. If any contact's CPA is below the safe passing distance, pick the ONE action that satisfies the\n   applicable COLREG rule for that contact. This step overrides everything below it.\n3. Otherwise, follow \"GOAL COURSE CHECK\" exactly: hold_course if it says you're already on the goal\n   bearing, or copy its exact action and degrees if it names a turn -- do not recompute or replace\n   those values.\n4. Never zigzag: do not answer turn_right then turn_left (or vice versa) on consecutive decisions to\n   chase a small residual mismatch -- \"GOAL COURSE CHECK\" already has a deadband built in for this.\n5. If you are already on the goal bearing and your speed is below this mission's nominal/rated speed,\n   speed_up instead of hold_course -- reaching the goal sooner (when safe) is also progress.\n\nGround your reasoning in the COLREG excerpts/procedure guidance provided, where given. Reply with\nONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"rule_applied\": \"<e.g. Rule 15, or 'none' if no rule applies>\",\n \"reasoning\": \"<one or two sentences>\"}",
+  "system_prompt_is_custom": false
+ },
+ "outcome": {
+  "verdict": "collision",
+  "final_step": 19,
+  "final_time_s": 200.0
+ },
+ "trajectory": [
+  {
+   "time": 0.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 0.0,
+   "heading": 0.0,
+   "speed": 2.5
+  },
+  {
+   "time": 0.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -600.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 10.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 5.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 10.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -565.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 20.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 10.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 20.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -530.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 30.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 15.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 30.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -495.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 40.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 20.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 40.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -460.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 50.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 25.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 50.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -425.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 60.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 30.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 60.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -390.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 70.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 35.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 70.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -355.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 80.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 40.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 80.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -320.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 90.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 45.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 90.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -285.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 100.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 50.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 100.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -250.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 110.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 55.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 110.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -215.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 120.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 60.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 120.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -180.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 130.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 65.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 130.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -145.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 140.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 70.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 140.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -110.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 150.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 75.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 150.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -75.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 160.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 80.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 160.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -40.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 170.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 85.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 170.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": -5.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 180.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 90.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 180.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": 30.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 190.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 95.0,
+   "heading": 0.0,
+   "speed": 0.5
+  },
+  {
+   "time": 190.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": 65.0,
+   "heading": 0.0,
+   "speed": 3.5
+  },
+  {
+   "time": 200.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 95.0,
+   "heading": 0.0,
+   "speed": 0.0
+  },
+  {
+   "time": 200.0,
+   "vehicle": "ts1",
+   "x": 0.0,
+   "y": 100.0,
+   "heading": 0.0,
+   "speed": 3.5
+  }
+ ],
+ "checkpoints": [
+  {
+   "step": 0,
+   "time": 0.0,
+   "timestamp": "2026-09-22T07:50:18.599020+00:00",
+   "latency_s": 7.759610652923584,
+   "situation_report": "Own-ship at (0.000, 0.000) NM, heading 0.0, speed 4.86 kt (nominal/rated speed for this mission: 4.86 kt).\nMission goal at (0.000, 1.296) NM, 1.296 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 960s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 0.324 NM, rel.bearing -180.0 deg, heading 0.0, speed 6.80 kt, CPA 0.000 NM, TCPA 600s",
+   "decision": {
+    "action": "slow_down",
+    "degrees": 0,
+    "rule_applied": "Rule 17",
+    "reasoning": "The own-ship is approaching the target area while another vessel (ts1) is closing in rapidly. Slowing down will increase the time-to-collision and reduce risk."
+   },
+   "debug": {
+    "config": "bare_qwen",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 545,
+    "user_msg": "Situation:\nOwn-ship at (0.000, 0.000) NM, heading 0.0, speed 4.86 kt (nominal/rated speed for this mission: 4.86 kt).\nMission goal at (0.000, 1.296) NM, 1.296 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 960s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 0.324 NM, rel.bearing -180.0 deg, heading 0.0, speed 6.80 kt, CPA 0.000 NM, TCPA 600s\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "raw_response": "{\n  \"action\": \"slow_down\",\n  \"degrees\": 0,\n  \"rule_applied\": \"Rule 17\",\n  \"reasoning\": \"The own-ship is approaching the target area while another vessel (ts1) is closing in rapidly. Slowing down will increase the time-to-collision and reduce risk.\"\n}"
+   }
+  },
+  {
+   "step": 19,
+   "time": 190.0,
+   "timestamp": "2026-09-22T07:50:26.029519+00:00",
+   "latency_s": 7.429325103759766,
+   "situation_report": "Own-ship at (0.000, 0.051) NM, heading 0.0, speed 0.97 kt (nominal/rated speed for this mission: 4.86 kt).\nMission goal at (0.000, 1.296) NM, 1.245 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 4610s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 0.016 NM, rel.bearing -180.0 deg, heading 0.0, speed 6.80 kt, CPA 0.000 NM, TCPA 10s",
+   "decision": {
+    "action": "slow_down",
+    "degrees": 0,
+    "rule_applied": "Rule 12",
+    "reasoning": "The own-ship is approaching the target but needs to reduce speed to avoid collision with ts1, which has a close proximity and will reach the CPA in 10 seconds."
+   },
+   "debug": {
+    "config": "bare_qwen",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 545,
+    "user_msg": "Situation:\nOwn-ship at (0.000, 0.051) NM, heading 0.0, speed 0.97 kt (nominal/rated speed for this mission: 4.86 kt).\nMission goal at (0.000, 1.296) NM, 1.245 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 4610s if heading straight there.\n1 other ship:\n  - Ship named \"ts1\": range 0.016 NM, rel.bearing -180.0 deg, heading 0.0, speed 6.80 kt, CPA 0.000 NM, TCPA 10s\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "raw_response": "{\n  \"action\": \"slow_down\",\n  \"degrees\": 0,\n  \"rule_applied\": \"Rule 12\",\n  \"reasoning\": \"The own-ship is approaching the target but needs to reduce speed to avoid collision with ts1, which has a close proximity and will reach the CPA in 10 seconds.\"\n}"
+   }
+  }
+ ]
+}
