@@ -181,3 +181,32 @@ def test_no_moos_case_chunk_overlaps_simulator_missions_or_eval() -> None:
         return
     from pipeline.ingest.build_moos_case_rag import check_no_mission_overlap  # Phase 3
     check_no_mission_overlap(moos_chunks)
+
+
+KG_FILE = paths.cache_dir / "oow_kg.json"
+
+
+def test_kg_covers_the_full_corpus() -> None:
+    """A-nawerk-2 (RAG-rebuild plan, 2026-09-22): oow_kg.json used to be built once
+    against the OLD 678-chunk corpus and never rebuilt, so kg_retrieve()'s concept-boost
+    was blind to every chunk added since (chirp_newsletter/moos_case/incident_marginal --
+    82% of the corpus at the time). Must stay in sync after every corpus rebuild."""
+    if not CHUNKS_FILE.exists() or not KG_FILE.exists():
+        return
+    chunks = _load_chunks()
+    kg = json.loads(KG_FILE.read_text(encoding="utf-8"))
+    corpus_ids = {c["chunk_id"] for c in chunks}
+    assert set(kg["chunk_meta"]) == corpus_ids, (
+        "oow_kg.json's chunk_meta is out of sync with oow_rag_chunks.json -- rerun "
+        "pipeline.ingest.build_kg after any corpus rebuild"
+    )
+    concept_chunk_ids = {cid for cids in kg["concept_chunks"].values() for cid in cids}
+    by_type: dict[str, list[str]] = {}
+    for c in chunks:
+        by_type.setdefault(c.get("source_type"), []).append(c["chunk_id"])
+    uncovered_types = [t for t, cids in by_type.items() if not (set(cids) & concept_chunk_ids)]
+    assert not uncovered_types, (
+        f"source_type(s) with ZERO chunks in any KG concept bucket (never boostable): "
+        f"{uncovered_types}"
+    )
+
