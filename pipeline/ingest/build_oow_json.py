@@ -114,6 +114,12 @@ CONCEPT_KEYWORDS = {
     "radar_arpa":            ["radar", "arpa", "plotting"],
     "ais":                   ["ais", "automatic identification system"],
     "bridge_resource_management": ["bridge resource management", "brm", "bridge team"],
+    # Added after inspecting concept-tag coverage on the new CHIRP/MOOS/marginal-incident
+    # sections (RAG rebuild Phase A2, 2026-09-22): already validated as COLREG-relevant
+    # in screen_incidents.py's own COLREG_KEYWORDS but missing here, the one clear gap
+    # found -- everything else untagged was low-value boilerplate (masthead/submission-
+    # form text), not missed real content.
+    "vessel_traffic_service": ["vessel traffic service", " vts "],
     # Bare "grounded" dropped: false-positives on "grounded in <source>" (a citation
     # phrase, not the nautical sense) once nav_maths_drills.json's explanation fields
     # (which all start "Grounded in the tdgil.com ...") were added -- "grounding"/"ran

@@ -130,6 +130,10 @@ _OOW_ALIASES: dict[str, list[str]] = {
     "safe speed":               ["safe speed"],
     "lookout":                   ["lookout"],
     "collision":                 ["collision"],
+    # Added alongside CONCEPT_KEYWORDS's same addition (RAG rebuild Phase A2): the one
+    # data-justified gap found inspecting the new CHIRP/MOOS/marginal-incident content.
+    "vts":                       ["vessel_traffic_service"],
+    "vessel traffic service":   ["vessel_traffic_service"],
 }
 
 CONCEPT_ALIASES: dict[str, list[str]] = _OOW_ALIASES if paths.domain == "OOW" else _VHF_ALIASES

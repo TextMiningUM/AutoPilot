@@ -6,18 +6,27 @@ independent reports (a mariner's own account, "Report Text:"/"CHIRP Narrative:")
 CHIRP's expert commentary ("CHIRP Comment:") -- the commentary IS the lesson, so it's
 kept as its own labelled section, not merged into the report.
 
-SPLIT HEURISTIC (found by manually inspecting MFB-3/2004, MFB-16/2007, MFB-33/2013 --
-early/mid/recent issues, per the RAG-rebuild plan's explicit instruction to look before
-coding): every ALL-CAPS line of 2-8 words with no digits/colon is treated as an article
-(or section-header) boundary -- consistent across all three issues regardless of era.
-Section headers like "COMMERCIAL SECTOR REPORTS" match the same pattern but have no body
-text before the NEXT such line, so they naturally become empty/near-empty segments and
-are dropped by the minimum-body-length filter -- no separate stoplist needed.
+SPLIT HEURISTIC: CHIRP's format drifted through 5 distinct eras over ~20 years (found
+by manually inspecting one issue per era after the initial 3-issue sample, MFB-3/2004,
+MFB-16/2007, MFB-33/2013, stopped generalizing to newer issues -- see STORY_START_RE's
+comment for the full era breakdown). Two splitters cover all of them:
+  - split_articles(): pre-2018 (ALL-CAPS titles, era 1) -- every ALL-CAPS line of 2-8
+    words with no digits/colon is an article (or section-header) boundary. Headers like
+    "COMMERCIAL SECTOR REPORTS" match the same pattern but have no body text before the
+    next such line, so they naturally become empty/near-empty segments and are dropped
+    by the minimum-body-length filter -- no separate stoplist needed.
+  - split_articles_modern(): 2018-2022 (eras 2-5, Title Case titles) -- anchored on
+    whichever "here is the reporter's own account" opening phrase that era uses
+    (STORY_START_RE), since none of them use ALL-CAPS titles.
 
 Within one article's body, "CHIRP Comment:" (case-insensitive) splits the mariner's own
 report from CHIRP's commentary; everything before it is type="chirp_report", everything
 from it onward is type="chirp_comment". Articles with no such marker are entirely
-type="chirp_report".
+type="chirp_report" -- but comment-less articles need a HIGHER minimum length
+(MIN_BODY_CHARS_NO_COMMENT) than articles with one, since PyMuPDF's block-level
+extraction otherwise lets page headers/tables-of-contents/copyright notices through as
+spurious "articles" (confirmed: 465/778 kept articles had no comment section, and
+samples up to ~470 chars were ALL such noise, not genuine comment-less reports).
 
 Scoring reuses screen_incidents.py's EXACT keyword weights/score_pages() (no new list,
 per the RAG-rebuild plan) -- an article is kept only if net_score >= 0.
@@ -36,6 +45,7 @@ from pathlib import Path
 import pymupdf
 
 from core import AgentPaths
+from pipeline.ingest.build_oow_json import tag_text
 from pipeline.ingest.rag_exclusions import raise_if_excluded_source
 from pipeline.ingest.screen_incidents import score_pages
 
@@ -50,17 +60,44 @@ TEXT_CACHE_DIR = paths.cache_dir / "chirp_text_cache"
 # "STEVEDORE'S STOVE", "COMMERCIAL SECTOR REPORTS", ...).
 HEADING_RE = re.compile(r"^[A-Z][A-Z' \-&,]{3,58}[A-Z]$")
 MIN_BODY_CHARS = 100  # drops section-header-only segments (e.g. "COMMERCIAL SECTOR REPORTS")
+# Chapters with NO chirp_comment section need a HIGHER bar -- confirmed by sampling:
+# genuine comment-less reports/follow-ups run 500+ chars, while page headers, tables
+# of contents, copyright notices, and a recurring BLANK report-submission-form
+# template ("NAME: / ADDRESS: / POST CODE: ...") that gets reprinted in multiple
+# issues all cluster under it (samples up to ~470 chars were all noise; residual
+# blank-form duplicates above this bar are a known, accepted gap -- a length filter
+# alone can't catch a template that happens to be long).
+MIN_BODY_CHARS_NO_COMMENT = 500
 CHIRP_COMMENT_RE = re.compile(r"chirp\s+comment\b\s*:?", re.IGNORECASE)
 ISSUE_RE = re.compile(r"(?:Issue\s+No|No)\s*:?\s*(\d+)", re.IGNORECASE)
 FILENAME_ISSUE_RE = re.compile(r"MFB[-_]?(\d+)", re.IGNORECASE)
-# Post-~2018 redesign (CHIRP-MFB-5x/6x): titles are Title Case, not ALL-CAPS, so
-# HEADING_RE never matches -- but every article still ends with a literal "Report
-# Ends" marker (found by inspecting CHIRP-MFB-52, which HEADING_RE produced zero
-# candidates for), used here as a fallback splitter when the primary heuristic finds
-# nothing. "OUTLINE:" (present in this era, absent in the ALL-CAPS era) supplies a
-# usable synthetic title.
-REPORT_ENDS_RE = re.compile(r"report\s+ends", re.IGNORECASE)
+# CHIRP's newsletter format drifted through (at least) 5 distinct eras over ~20 years,
+# each with its own "here is the reporter's own account" phrasing -- found by directly
+# inspecting one issue per era (MFB-44, -52, -56, -64) after the ALL-CAPS heuristic
+# stopped finding good candidates on them:
+#   era 1 (pre-2018, ALL-CAPS titles):      "Report Text:" / "Report text:"
+#   era 2 (2018, MFB44-45):                 "What did the reporters tell us?"
+#   era 3 (2018 redesign, MFB46-55):        "What the Reporter told us (N):" + a
+#                                            closing "Report Ends" marker + "OUTLINE:"
+#   era 4 (2019-2021, MFB56-63):            "What the reporter told us:" (no closing
+#                                            marker, "OUTLINE:" only on some issues)
+#   era 5 (2021-2022, MFB64-67):            "Initial Report" + a reference ID ("M1761")
+# Eras 2-5 share no single marker, but each of eras 2/3/4 always uses SOME variant of
+# "what (did the reporter(s) tell|the reporter(s) told) us", and era 5 always uses
+# "Initial Report" -- combined here as one anchor set. Era 1's "Report Text:" is
+# deliberately NOT included: it also appears inside era-1 articles the ALL-CAPS
+# splitter already handles correctly, so including it here would double-trigger.
+STORY_START_RE = re.compile(
+    r"what\s+(?:did\s+the\s+reporters?\s+tell\s+us|the\s+reporters?\s+told\s+us)|initial\s+report",
+    re.IGNORECASE,
+)
+# Kept only as an internal synthetic-title source within split_articles_modern (still
+# present on eras 3/4) -- no longer used as the split trigger itself (see build_document).
 OUTLINE_RE = re.compile(r"OUTLINE\s*:\s*(.+)", re.IGNORECASE)
+# Non-printable control characters PyMuPDF occasionally emits (font-encoding/ligature
+# artifacts) that add nothing and can break whitespace-sensitive regexes -- strip
+# everything below 0x20 except the newline that carries line structure.
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b-\x1f]")
 
 
 def stable_id(prefix: str, *parts: str) -> str:
@@ -87,7 +124,7 @@ def extract_pages_cached(pdf_path: Path) -> list[str]:
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     try:
         with pymupdf.open(pdf_path) as doc:
-            pages = [page.get_text("text") or "" for page in doc]
+            pages = [_CONTROL_CHAR_RE.sub("", page.get_text("text") or "") for page in doc]
     except Exception as e:  # corrupt/scanned/encrypted PDF
         pages = [f"__EXTRACT_ERROR__: {e}"]
     cache_file.write_text(json.dumps(pages), encoding="utf-8")
@@ -127,14 +164,17 @@ def split_articles(full_text: str) -> list[tuple[str, str]]:
 
 
 def split_articles_modern(full_text: str) -> list[tuple[str, str]]:
-    """Fallback for the post-~2018 redesign (see REPORT_ENDS_RE's comment) -- one
-    article per "Report Ends"-delimited segment; the text after the FINAL "Report
-    Ends" is trailing boilerplate (contact details, disclaimer, ...), never a report,
-    so it's dropped."""
-    parts = REPORT_ENDS_RE.split(full_text)
+    """Fallback for post-2018 issues (eras 2-5, see STORY_START_RE's comment) -- one
+    article per STORY_START_RE match: body runs from that match to the next match (or
+    end of document); the text before the FIRST match (masthead/editorial lead-in) is
+    discarded, same reasoning as split_articles(). Anchoring on the OPENING marker
+    (not "Report Ends", which era 4/5 issues don't even have) is what makes this work
+    uniformly across all four modern eras."""
+    starts = [m.start() for m in STORY_START_RE.finditer(full_text)]
     articles = []
-    for seg in parts[:-1]:
-        seg = seg.strip()
+    for j, start in enumerate(starts):
+        end = starts[j + 1] if j + 1 < len(starts) else len(full_text)
+        seg = full_text[start:end].strip()
         if not seg:
             continue
         m = OUTLINE_RE.search(seg)
@@ -172,15 +212,14 @@ def build_document(pdf_path: Path) -> tuple[dict, dict]:
     doc_id = f"chirp_mfb_{issue_no.zfill(3)}"
     full_text = "\n".join(pages)
 
-    # Trigger on the MARKER's presence, not on the ALL-CAPS splitter's own output
-    # quality -- with PyMuPDF's cleaner column order, the ALL-CAPS heuristic no longer
-    # reliably returns EMPTY on modern-format issues, it just matches the wrong things
-    # (sidebar/footer captions like "ONLINE" instead of real articles, confirmed on
-    # CHIRP-MFB-52), so "zero good candidates" is no longer a reliable modern-format
-    # signal. >=2 "Report Ends" occurrences is: this newsletter uses that convention.
-    if len(REPORT_ENDS_RE.findall(full_text)) >= 2:
+    # Trigger on STORY_START_RE's presence (an opening-marker signal every modern era
+    # shares in some form), not on the ALL-CAPS splitter's own output quality -- with
+    # PyMuPDF's cleaner column order, ALL-CAPS no longer reliably returns EMPTY on
+    # modern-format issues, it just matches the wrong things (sidebar/footer captions
+    # like "ONLINE" instead of real articles, confirmed on CHIRP-MFB-52).
+    if len(STORY_START_RE.findall(full_text)) >= 2:
         candidates = split_articles_modern(full_text)
-        split_mode = "report_ends"
+        split_mode = "story_start"
     else:
         candidates = split_articles(full_text)
         split_mode = "allcaps"
@@ -195,15 +234,21 @@ def build_document(pdf_path: Path) -> tuple[dict, dict]:
         if net_score < 0:
             stats["n_dropped_score"] += 1
             continue
+        sections_raw = split_report_and_comment(body)
+        has_comment = any(t == "chirp_comment" for t, _ in sections_raw)
+        if not has_comment and len(body) < MIN_BODY_CHARS_NO_COMMENT:
+            stats["n_dropped_short"] += 1
+            continue
         stats["n_kept"] += 1
         sections = []
-        for sec_type, text in split_report_and_comment(body):
+        for sec_type, text in sections_raw:
+            concepts, topics = tag_text(text)
             sections.append({
                 "section_id": stable_id("oow", doc_id, title, sec_type),
                 "title": f"{title} ({'CHIRP comment' if sec_type == 'chirp_comment' else 'report'})",
                 "type": sec_type,
                 "text": text,
-                "concepts": [], "topics": [], "pages": [],
+                "concepts": concepts, "topics": topics, "pages": [],
             })
         chapters.append({"title": title, "sections": sections})
 

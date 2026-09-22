@@ -38,6 +38,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from core import AgentPaths
+from pipeline.ingest.build_oow_json import tag_text
 from pipeline.ingest.build_reranker_pairs import RULE_PRIORITY
 from pipeline.ingest.rag_exclusions import raise_if_excluded_source
 
@@ -249,6 +250,7 @@ def build_document(representatives: list[dict]) -> dict:
         annotation = f"Applicable rules in this situation: {rules_text} (own-ship {role})."
         text = f"{frame['narrative']}\n\n{annotation}"
         title = f"MOOS case: {run_id} @ t={t}"
+        concepts, topics = tag_text(text)
         chapters.append({
             "title": title,
             "sections": [{
@@ -256,7 +258,7 @@ def build_document(representatives: list[dict]) -> dict:
                 "title": title,
                 "type": "moos_case",
                 "text": text,
-                "concepts": [], "topics": [], "pages": [],
+                "concepts": concepts, "topics": topics, "pages": [],
             }],
         })
     # Exclude any case whose starting geometry matches a simulator mission or eval
