@@ -6,8 +6,10 @@ is unambiguous."""
 from pipeline.track2.build_oow_scenarios_leo import leo_choose_action, SAFE_CPA_M, CRITICAL_RANGE_M
 
 
-def _own(speed=10.0, target_speed=10.0, paused=False, stopped=False):
-    return {"speed": speed, "target_speed": target_speed, "paused": paused, "stopped": stopped}
+def _own(speed=10.0, target_speed=10.0, paused=False, stopped=False,
+        x=0.0, y=0.0, heading=0.0):
+    return {"speed": speed, "target_speed": target_speed, "paused": paused, "stopped": stopped,
+           "x": x, "y": y, "heading": heading}
 
 
 def _contact(own_role="give_way", encounter_type="crossing", risk="high",
@@ -24,8 +26,14 @@ def _contact(own_role="give_way", encounter_type="crossing", risk="high",
     }
 
 
-def _state(contacts, own=None):
-    return {"own_ship": own or _own(), "contacts": contacts}
+def _state(contacts, own=None, mission=None):
+    # Default mission waypoint sits dead ahead of own-ship's default heading (0 deg,
+    # due north from the origin) so tests that don't care about goal-course-following
+    # get the "already on bearing" branch (hold_course/speed_up) exactly like before
+    # goal-course-following was added to the no-real-risk branch.
+    return {"own_ship": own or _own(), "contacts": contacts,
+           "mission": mission or {"x": 0.0, "y": 1000.0}}
+
 
 
 def test_low_risk_give_way_holds_course() -> None:
@@ -129,6 +137,19 @@ def test_no_contacts_holds_course_or_speeds_up() -> None:
     d_below_target = leo_choose_action(_state([], own=_own(speed=5.0, target_speed=10.0)))
     assert d_below_target["action"] == "speed_up"
     assert d_below_target["rule_applied"] == "none"
+
+
+def test_no_real_risk_follows_goal_course_check_when_off_bearing() -> None:
+    """Fase B2 consistency requirement: when no contact poses real risk, the label must
+    match what GOAL COURSE CHECK itself recommends (SYSTEM_OOW_AGENT's decision procedure
+    step 3), never a fixed hold_course default -- own-ship heading 0 (north), mission
+    waypoint due east means a 90 deg-off-course turn is required."""
+    own = _own(heading=0.0, x=0.0, y=0.0)
+    mission = {"x": 1000.0, "y": 0.0}  # due east -> bearing 90
+    d = leo_choose_action(_state([], own=own, mission=mission))
+    assert d["action"] == "turn_right"
+    assert d["degrees"] == 90.0
+    assert d["rule_applied"] == "none"
 
 
 def test_paused_own_ship_gets_no_manoeuvre_label() -> None:

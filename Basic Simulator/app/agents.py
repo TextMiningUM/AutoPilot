@@ -71,6 +71,7 @@ from core import AgentPaths, EMBEDDER_MODEL
 from pipeline.ingest.build_kg import kg_retrieve, rerank_hits
 from pipeline.ingest.pg_guidance import ProceduralGraph, render_guidance, load_merged_pg
 from pipeline.eval.prep_ablation import format_context
+from pipeline.oow_agent_spec import SYSTEM_OOW_AGENT, ACTIONS, validate_action_json
 
 from app.missions import Mission, Vessel
 from app.narrate import contact_line, narrate
@@ -122,58 +123,12 @@ change. Reply with ONLY a JSON object, no other text:
  "rule_applied": "<e.g. Rule 15, or 'none' if no rule applies>",
  "reasoning": "<one or two sentences>"}"""
 
-# Fixed response-format contract for v0-v6, byte-identical across all of them -- only the
-# USER turn varies (CoT instruction / RAG context / PG guidance), same pattern as
-# prep_ablation.py's build_prompts_track2(). Editable at runtime from the sidebar's
-# "System prompt" popover (streamlit_app.py) -- the override is passed in as build_oow_prompt's
-# `system_prompt` arg and replaces this default for every config EXCEPT bare_qwen.
-SYSTEM_OOW_AGENT = """You are the navigator on a large commercial vessel. Decide the next helm order.
-
-MISSION REQUIREMENTS -- this mission is only completed successfully if ALL of these hold, not just
-the first one you happen to satisfy:
-1. Every contact's CPA stays at or above this mission's safe passing distance (given further below)
-   at all times -- exactly as mandatory as actually reaching the goal. There is no automatic safety
-   net correcting your choice if you get this wrong: your own action each step is what the ship
-   actually does.
-2. Every manoeuvre you take while a real collision risk exists complies with COLREG.
-3. You reach the mission goal.
-
-PRIORITY ORDER when these pull in different directions -- always in this order, never reversed:
-1. Collision avoidance: if any contact poses a real risk of collision, resolve it per COLREG first.
-2. Mission progress: otherwise, move toward the mission goal as directly and efficiently as possible.
-
-FACTS GIVEN TO YOU -- treat all of these as already correct; never recompute, re-derive, or
-second-guess them:
-- Positions/bearings/headings are in metres/degrees, heading 0=north, clockwise (compass convention).
-- rel.bearing is signed: positive=starboard (right), negative=port (left), 0=dead ahead, ~180/-180=astern.
-- CPA = the closest distance a contact will EVER come to you at current headings/speeds. TCPA = seconds
-  until that closest point.
-- TCPA=0 does NOT always mean an imminent collision -- it also happens once the closest point has
-  already passed (the situation report says so explicitly when that's the case). Judge real risk from
-  CPA alone, never from TCPA alone.
-- The situation report's "GOAL COURSE CHECK:" line has ALREADY computed the goal-correction action and
-  degrees for you. Never substitute a contact's rel.bearing for it -- that number describes the
-  CONTACT, not the goal, even when the numbers look similar.
-
-DECISION PROCEDURE -- follow in order:
-1. Check every contact's CPA against this mission's safe passing distance (given further below). If
-   none are below it, there is no real collision risk right now -- go to step 3.
-2. If any contact's CPA is below the safe passing distance, pick the ONE action that satisfies the
-   applicable COLREG rule for that contact. This step overrides everything below it.
-3. Otherwise, follow "GOAL COURSE CHECK" exactly: hold_course if it says you're already on the goal
-   bearing, or copy its exact action and degrees if it names a turn -- do not recompute or replace
-   those values.
-4. Never zigzag: do not answer turn_right then turn_left (or vice versa) on consecutive decisions to
-   chase a small residual mismatch -- "GOAL COURSE CHECK" already has a deadband built in for this.
-5. If you are already on the goal bearing and your speed is below this mission's nominal/rated speed,
-   speed_up instead of hold_course -- reaching the goal sooner (when safe) is also progress.
-
-Ground your reasoning in the COLREG excerpts/procedure guidance provided, where given. Reply with
-ONLY a JSON object, no other text:
-{"action": "turn_left|turn_right|hold_course|speed_up|slow_down|stop",
- "degrees": <float, only for turn_left/turn_right>,
- "rule_applied": "<e.g. Rule 15, or 'none' if no rule applies>",
- "reasoning": "<one or two sentences>"}"""
+# SYSTEM_OOW_AGENT (the v0-v9 system prompt) lives in pipeline/oow_agent_spec.py -- the
+# single source of truth shared with the Track-2 training-data generators (Fase B2, RAG-
+# rebuild-v2 plan), so train and eval can never silently drift onto different task
+# formats. Editable at runtime from the sidebar's "System prompt" popover
+# (streamlit_app.py) -- the override is passed in as build_oow_prompt's `system_prompt`
+# arg and replaces this default for every config EXCEPT bare_qwen.
 
 COT_INSTR = (
     "Before answering, write your reasoning as EXACTLY these 4 steps, one short sentence each -- "
@@ -289,12 +244,17 @@ def _parse_json_action(text: str) -> dict:
     # sometimes echoes the JSON once before </think> closes and once again after (a
     # duplicate-answer pattern seen in the sweep logs), which the previous single greedy
     # first-{-to-last-} match stitched into one invalid blob spanning both copies.
+    # validate_action_json() (pipeline/oow_agent_spec.py) is the SAME schema check the
+    # Track-2 training-data generators run their own written assistant answers against --
+    # an action name outside ACTIONS (or a degrees/turn mismatch) is now rejected here
+    # exactly like a malformed generator row would be, instead of being silently accepted
+    # and handed to Simulation.apply_action() with an action it doesn't recognize.
     for candidate in reversed(_extract_json_objects(text)):
         try:
             parsed = json.loads(candidate)
         except json.JSONDecodeError:
             continue
-        if isinstance(parsed, dict) and "action" in parsed:
+        if isinstance(parsed, dict) and "action" in parsed and not validate_action_json(parsed):
             return parsed
     return {"action": "hold_course", "rule_applied": "none",
             "reasoning": f"[parse error -- raw model output] {text[:300]}", "_parse_error": True}

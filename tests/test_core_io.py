@@ -8,7 +8,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from core.io import load_env, load_jsonl, load_messages_jsonl
+from core.io import load_env, load_jsonl, load_messages_jsonl, review_path, safe_write_jsonl
 
 
 def test_load_jsonl_skips_blank_and_malformed_lines() -> None:
@@ -60,6 +60,39 @@ def test_load_env_sets_vars_without_overwriting_existing() -> None:
 
 def test_load_env_missing_file_is_a_noop() -> None:
     load_env(Path("this/file/does/not/exist.env"))  # must not raise
+
+
+def test_review_path_redirects_into_a_review_subfolder() -> None:
+    p = Path("/some/dir/oow_scenario_sft_direct.jsonl")
+    assert review_path(p) == Path("/some/dir/_review/oow_scenario_sft_direct.jsonl")
+
+
+def test_safe_write_jsonl_refuses_to_overwrite_an_existing_file() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "prod.jsonl"
+        p.write_text('{"a": 1}\n', encoding="utf-8")
+        try:
+            safe_write_jsonl([{"a": 2}], p)
+            assert False, "expected FileExistsError"
+        except FileExistsError:
+            pass
+        # Untouched -- the guard must fail BEFORE writing anything.
+        assert p.read_text(encoding="utf-8") == '{"a": 1}\n'
+
+
+def test_safe_write_jsonl_overwrites_when_explicitly_told_to() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "prod.jsonl"
+        p.write_text('{"a": 1}\n', encoding="utf-8")
+        safe_write_jsonl([{"a": 2}], p, overwrite=True)
+        assert list(load_jsonl(p)) == [{"a": 2}]
+
+
+def test_safe_write_jsonl_writes_freely_to_a_new_path() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "_review" / "new.jsonl"
+        safe_write_jsonl([{"a": 1}], p)
+        assert list(load_jsonl(p)) == [{"a": 1}]
 
 
 if __name__ == "__main__":

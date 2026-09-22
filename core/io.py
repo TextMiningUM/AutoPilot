@@ -61,3 +61,34 @@ def load_messages_jsonl(path: Path) -> list[dict]:
     script that consumes chat-formatted SFT/reflection JSONL."""
     return [{"messages": r["messages"]} for r in load_jsonl(path)]
 
+
+def review_path(path: Path) -> Path:
+    """Redirects a production output path into a sibling `_review/` folder -- every
+    dry-run and [LLM] "25-first" review-gate pass MUST write here, never to the real
+    production path, so a review sample can never be mistaken for (or accidentally
+    clobber) the real committed dataset."""
+    return path.parent / "_review" / path.name
+
+
+def safe_write_jsonl(rows: list[dict], path: Path, *, overwrite: bool = False) -> None:
+    """Writes `rows` as JSONL to `path`, refusing to silently clobber an existing file
+    unless `overwrite=True`. Raises FileExistsError instead of writing otherwise.
+
+    Added after a real incident (2026-09-22): running build_oow_scenarios_leo.py
+    --skip-llm as a quick smoke test overwrote 5 TRACKED production .jsonl files with
+    near-empty content (0 rows, since --skip-llm never sets gold_answer) -- caught via
+    `git status` and restored via `git checkout --` only because the previous version
+    happened to be committed. This guard makes that class of mistake impossible instead
+    of relying on noticing it afterward."""
+    if path.exists() and not overwrite:
+        raise FileExistsError(
+            f"{path} already exists -- refusing to overwrite without overwrite=True "
+            f"(pass --overwrite on the CLI if this is really intended, or write to "
+            f"review_path({path.name}) instead for a dry-run/review pass)"
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+

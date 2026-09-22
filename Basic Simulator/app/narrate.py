@@ -10,18 +10,19 @@ display, matching Sawada et al. (2021)'s own units. See app/units.py's docstring
 this project converts only at the edges, never in the physics core."""
 from __future__ import annotations
 import math
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # Auto Pilot/
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from app.missions import Mission, Vessel
 from app.units import m_to_nm, mps_to_kn
-
-
-def bearing_and_range(ox: float, oy: float, tx: float, ty: float) -> tuple[float, float]:
-    dx, dy = tx - ox, ty - oy
-    return math.degrees(math.atan2(dx, dy)) % 360.0, math.hypot(dx, dy)
-
-
-def relative_bearing(own_heading: float, true_bearing: float) -> float:
-    return (true_bearing - own_heading + 540) % 360 - 180
+# bearing_and_range/relative_bearing/goal_course_check_line live in pipeline/oow_agent_spec.py
+# (dependency-free, shared with the Track-2 training-data generators) so this calculation is
+# never re-implemented a second time and silently drifts -- see that module's docstring.
+from pipeline.oow_agent_spec import bearing_and_range, relative_bearing, goal_course_check_line
 
 
 def cpa_tcpa(ox: float, oy: float, ohdg: float, ospd: float,
@@ -193,7 +194,6 @@ def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_m
     act on to steer back once clear."""
     gx, gy = mission.goal
     goal_brg, goal_rng = bearing_and_range(own.x, own.y, gx, gy)
-    off_course = relative_bearing(own.heading, goal_brg)
     nominal_speed = cruise_speed_mps if cruise_speed_mps is not None else mission.own_ship.speed
     lines = [f"Own-ship at ({m_to_nm(own.x):.3f}, {m_to_nm(own.y):.3f}) NM, heading "
              f"{own.heading:.1f}, speed {mps_to_kn(own.speed):.2f} kt (nominal/rated speed "
@@ -207,16 +207,9 @@ def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_m
     # sentence in the goal line above ("42 deg to starboard of current heading" reads too
     # much like a contact's rel.bearing phrasing). This line is ONLY ever about the goal,
     # never about a contact, and spells out the exact action to copy when off course.
-    if abs(off_course) <= 10:
-        lines.append("GOAL COURSE CHECK: heading is ALREADY on the goal bearing (within "
-                     "10 deg) -- no turn needed for the goal.")
-    else:
-        side = "starboard" if off_course > 0 else "port"
-        turn_action = "turn_right" if off_course > 0 else "turn_left"
-        lines.append(f"GOAL COURSE CHECK: heading is {abs(off_course):.0f} deg off the goal "
-                    f"bearing, to {side} -- to correct, use action \"{turn_action}\" with "
-                    f"degrees={abs(off_course):.0f} (unless a target poses a real collision "
-                    f"risk, which takes precedence).")
+    # goal_course_check_line() (pipeline/oow_agent_spec.py) is the SAME function the
+    # Track-2 training-data generators call -- never a second, independently-drifting copy.
+    lines.append(goal_course_check_line(own.x, own.y, own.heading, gx, gy))
     if own.speed > 0:
         eta = goal_rng / own.speed
         lines.append(f"At current speed, ETA to goal \u2248 {eta:.0f}s if heading straight there.")
