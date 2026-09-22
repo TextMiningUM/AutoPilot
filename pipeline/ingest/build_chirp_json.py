@@ -33,7 +33,7 @@ import json
 import re
 from pathlib import Path
 
-import pdfplumber
+import pymupdf
 
 from core import AgentPaths
 from pipeline.ingest.rag_exclusions import raise_if_excluded_source
@@ -70,14 +70,24 @@ def stable_id(prefix: str, *parts: str) -> str:
 
 def extract_pages_cached(pdf_path: Path) -> list[str]:
     """Same cache-to-disk pattern as screen_incidents.py's extract_pages_cached --
-    independent cache dir since this isn't under OOW_Incidents."""
+    independent cache dir since this isn't under OOW_Incidents.
+
+    Uses PyMuPDF, NOT pdfplumber (unlike every other ingest script in this project) --
+    these newsletters are 2-column, and pdfplumber's extract_text() sorts words
+    primarily by vertical position across the FULL page width, interleaving the left
+    and right columns line-by-line (confirmed directly: on CHIRP-MFB-52 page 3,
+    pdfplumber's very first line reads "...Co-ordination Centre. RNLI - Yacht sailing
+    and motor boats" -- two unrelated columns stitched into one sentence). PyMuPDF's
+    default get_text("text") (no sort=True -- that mode was WORSE here, interleaving
+    even more aggressively) follows the PDF's own content-stream block order, which for
+    every newsletter tested reads the left column fully before the right column."""
     cache_file = TEXT_CACHE_DIR / f"{pdf_path.stem}.json"
     if cache_file.exists():
         return json.loads(cache_file.read_text(encoding="utf-8"))
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with pdfplumber.open(pdf_path) as pdf:
-            pages = [page.extract_text() or "" for page in pdf.pages]
+        with pymupdf.open(pdf_path) as doc:
+            pages = [page.get_text("text") or "" for page in doc]
     except Exception as e:  # corrupt/scanned/encrypted PDF
         pages = [f"__EXTRACT_ERROR__: {e}"]
     cache_file.write_text(json.dumps(pages), encoding="utf-8")
@@ -162,11 +172,18 @@ def build_document(pdf_path: Path) -> tuple[dict, dict]:
     doc_id = f"chirp_mfb_{issue_no.zfill(3)}"
     full_text = "\n".join(pages)
 
-    candidates = split_articles(full_text)
-    split_mode = "allcaps"
-    if sum(1 for _, body in candidates if len(body) >= MIN_BODY_CHARS) == 0:
+    # Trigger on the MARKER's presence, not on the ALL-CAPS splitter's own output
+    # quality -- with PyMuPDF's cleaner column order, the ALL-CAPS heuristic no longer
+    # reliably returns EMPTY on modern-format issues, it just matches the wrong things
+    # (sidebar/footer captions like "ONLINE" instead of real articles, confirmed on
+    # CHIRP-MFB-52), so "zero good candidates" is no longer a reliable modern-format
+    # signal. >=2 "Report Ends" occurrences is: this newsletter uses that convention.
+    if len(REPORT_ENDS_RE.findall(full_text)) >= 2:
         candidates = split_articles_modern(full_text)
         split_mode = "report_ends"
+    else:
+        candidates = split_articles(full_text)
+        split_mode = "allcaps"
     stats = {"issue": issue_no, "file": pdf_path.name, "n_candidates": len(candidates),
              "split_mode": split_mode, "n_kept": 0, "n_dropped_short": 0, "n_dropped_score": 0}
     chapters = []
