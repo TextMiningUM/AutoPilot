@@ -91,6 +91,30 @@ def test_no_chunk_from_a_negative_net_score_incident() -> None:
     )
 
 
+def test_chunk_ids_are_unique_and_match_their_own_text() -> None:
+    """A-nawerk-1 (RAG-rebuild plan, 2026-09-22): chunk_id used to be derived from
+    section_ids/titles, which repeat across different articles that happen to share a
+    title (e.g. CHIRP's per-issue "Initial Report"/"CHIRP Comment" section titles) --
+    64 ids silently collided across 196 entries, each carrying DIFFERENT text under the
+    SAME id, so chunk_by_id[id]["text"] (used by rerank_hits()/format_context()) could
+    silently return a different chunk's text than the one retrieval actually matched.
+    chunk_id is now derived from document_id + structural chapter/chunk position + a
+    text hash (see build_rag.py's _finalise_chunk()), which is unique by construction --
+    this test must stay green after every future corpus rebuild."""
+    if not CHUNKS_FILE.exists():
+        return
+    chunks = _load_chunks()
+    ids = [c["chunk_id"] for c in chunks]
+    assert len(set(ids)) == len(ids), (
+        f"{len(ids) - len(set(ids))} duplicate chunk_id(s) in oow_rag_chunks.json"
+    )
+    chunk_by_id = {c["chunk_id"]: c for c in chunks}
+    for c in chunks:
+        assert chunk_by_id[c["chunk_id"]]["text"] == c["text"], (
+            f"chunk_by_id[{c['chunk_id']!r}] text mismatch -- id collision"
+        )
+
+
 def _words(text: str) -> list[str]:
     return re.findall(r"[a-z0-9']+", text.lower())
 

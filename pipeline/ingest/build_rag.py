@@ -90,7 +90,7 @@ def _can_extend(cur_types, cur_topics, cur_tokens,
     return True
 
 
-def _finalise_chunk(sections, chapter, doc, tokens) -> dict:
+def _finalise_chunk(sections, chapter, doc, tokens, chapter_index, chunk_index) -> dict:
     doc_id      = doc["document_id"]
     section_ids = [s["section_id"] for s in sections]
     section_texts_with_headers = [
@@ -106,7 +106,16 @@ def _finalise_chunk(sections, chapter, doc, tokens) -> dict:
     concepts = sorted({c for s in sections for c in s.get("concepts", [])})
     topics   = sorted({t for s in sections for t in s.get("topics", [])})
     return {
-        "chunk_id":          stable_id("chunk", doc_id, *section_ids),
+        # Structural id (document_id + chapter/chunk POSITION + a text hash), never derived
+        # from section_ids/titles -- those repeat across different articles that happen to
+        # share a title (e.g. CHIRP's per-issue "Initial Report"/"CHIRP Comment" section
+        # titles), which silently collided 64 ids across 196 entries under the old
+        # title-based stable_id(doc_id, *section_ids) scheme (RAG rebuild A-nawerk-1,
+        # 2026-09-22) -- each entry still carried its own correct text, but chunk_by_id
+        # lookups (rerank_hits/format_context) would then return a DIFFERENT entry's text
+        # than the one the embedding/retrieval actually matched. Position + text hash makes
+        # a collision structurally impossible regardless of upstream title reuse.
+        "chunk_id":          stable_id("chunk", doc_id, chapter_index, chunk_index, text),
         "document_id":       doc_id,
         "source_file":       doc["source_file"],
         "source_type":       doc["source_type"],
@@ -167,7 +176,7 @@ def _split_oversized_section(section: dict, max_tokens: int) -> list[dict]:
     return out
 
 
-def chunk_chapter(chapter: dict, doc: dict) -> list[dict]:
+def chunk_chapter(chapter: dict, doc: dict, chapter_index: int) -> list[dict]:
     """Merge a chapter's sections into token-budgeted, topic-coherent chunks."""
     raw_sections = chapter.get("sections", [])
     if not raw_sections:
@@ -180,6 +189,7 @@ def chunk_chapter(chapter: dict, doc: dict) -> list[dict]:
             sections.append(s)
     out = []
     i = 0
+    chunk_index = 0
     while i < len(sections):
         seed = sections[i]
         seed_tokens = token_count(seed["text"])
@@ -202,7 +212,8 @@ def chunk_chapter(chapter: dict, doc: dict) -> list[dict]:
             cur_types.append(nxt["type"])
             cur_topics |= nxt_topics
             j += 1
-        out.append(_finalise_chunk(current, chapter, doc, cur_tokens))
+        out.append(_finalise_chunk(current, chapter, doc, cur_tokens, chapter_index, chunk_index))
+        chunk_index += 1
         i = j
     return out
 
@@ -210,8 +221,8 @@ def chunk_chapter(chapter: dict, doc: dict) -> list[dict]:
 def build_chunks_for_document(doc: dict) -> list[dict]:
     """Chunk every chapter of one parsed document."""
     chunks = []
-    for chapter in doc.get("chapters", []):
-        chunks.extend(chunk_chapter(chapter, doc))
+    for chapter_index, chapter in enumerate(doc.get("chapters", [])):
+        chunks.extend(chunk_chapter(chapter, doc, chapter_index))
     return chunks
 
 
