@@ -120,6 +120,17 @@ CONCEPT_KEYWORDS = {
     # found -- everything else untagged was low-value boilerplate (masthead/submission-
     # form text), not missed real content.
     "vessel_traffic_service": ["vessel traffic service", " vts "],
+    # Added after inspecting concept-tag coverage on the RAG-rebuild-v2 CHIRP corpus
+    # (A-nawerk-3, 2026-09-22): scanned all 367 then-untagged chirp_newsletter chunks
+    # for candidate terms -- "near miss"/"near-miss" (13 hits) and "close quarters" (a
+    # direct Rule 19(e) term, 1 hit but unambiguous) were the only genuinely COLREG-
+    # collision-avoidance-relevant gaps; frequent but off-topic terms in the same scan
+    # (pilot 58, tug 22, mooring 11, bare "starboard"/"port side") were deliberately
+    # NOT added -- those describe pilotage/berthing seamanship, not rule-of-the-road
+    # collision avoidance, and "starboard"/"port" alone are too generic (false-positive
+    # on any passing mention) to make a useful concept tag.
+    "near_miss":              ["near miss", "near-miss"],
+    "close_quarters":         ["close-quarters", "close quarters situation", "close quarters"],
     # Bare "grounded" dropped: false-positives on "grounded in <source>" (a citation
     # phrase, not the nautical sense) once nav_maths_drills.json's explanation fields
     # (which all start "Grounded in the tdgil.com ...") were added -- "grounding"/"ran
