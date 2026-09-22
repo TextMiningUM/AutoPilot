@@ -73,15 +73,21 @@ ROLE_PHRASE = {
 }
 
 PASS_CRITERIA = {
-    "stop": ["Own-ship stops or takes way off given the critical/imminent collision risk.",
+    "stop": ["Own-ship stops given a genuinely close-range, still-closing, critical-risk "
+             "contact that manoeuvre alone can no longer clear (Rule 17(b)).",
              "Own-ship does not simply hold course when a give-way contact is at critical risk."],
-    "alter_course": ["Own-ship takes early, substantial action to keep clear as the give-way vessel.",
-                     "Own-ship does not simply hold course while she holds a give-way obligation."],
+    "alter_course": ["Own-ship takes early, substantial action to keep clear as the give-way vessel, "
+                     "scaled to how far CPA falls under the safe passing distance.",
+                     "Own-ship does not simply hold course while she holds a give-way obligation.",
+                     "Own-ship does not manoeuvre against a contact that poses no real CPA-based risk."],
     "stand_on": ["Own-ship holds course and speed while she is the stand-on vessel.",
                 "Own-ship does not needlessly alter away from a stand-on obligation."],
+    "stand_on_17b": ["Own-ship (stand-on) takes her own action once it is apparent the give-way "
+                     "vessel isn't -- CPA under the safe distance AND the encounter is imminent."],
     "resume": ["Own-ship resumes cruise speed now that no contact requires give-way action.",
               "Own-ship does not needlessly remain at reduced speed with no active encounter."],
-    "clear": ["Own-ship maintains course and speed; no contact currently requires action."],
+    "clear": ["Own-ship maintains course and speed; no contact currently requires action.",
+             "Own-ship does not manoeuvre against a contact whose CPA is not below the safe distance."],
 }
 
 # Full natural-sentence phrasing per (encounter_type, own_role) combination, matching
@@ -174,57 +180,145 @@ def render_leo_narrative(state: dict) -> str:
     return "\n".join(lines)
 
 
+SAFE_CPA_M = 500.0        # matches Basic Simulator VesselConstraints' default min_cpa_m
+CRITICAL_RANGE_M = 200.0  # "so close that collision cannot be avoided by the give-way
+                          # vessel's action alone" (Rule 17(b)) -- a genuine GEOMETRY/range
+                          # criterion for stop, never a TCPA cutoff.
+STAND_ON_TCPA_S = 180.0   # Rule 17(a)(ii)/(b): stand-on may/must act once it becomes
+                          # apparent the give-way vessel isn't -- "apparent" needs BOTH a
+                          # real CPA shortfall AND the encounter being imminent (short
+                          # TCPA), never TCPA alone.
+MIN_TURN_DEG = 15.0       # Rule 16's "early and substantial" rules out a token gesture.
+MAX_TURN_DEG = 30.0       # matches Basic Simulator VesselConstraints' max_rudder_angle_deg
+                          # (a single turn command beyond this is silently capped there).
+RESUME_SPEED_MARGIN = 0.5  # own speed must be at least this far under target before
+                           # "speed_up" is worth issuing (avoids churn on noise-level gaps)
+
+# Primary rule cited per real-risk encounter type -- the ONE rule that actually drives
+# the required action, not every standing/background rule (those stay in "rules" for
+# metadata/PG tagging).
+_PRIMARY_RULE_BY_ENCOUNTER = {"head_on": "Rule 14", "crossing": "Rule 15",
+                             "we_are_overtaking_contact": "Rule 13"}
+
+
+def _real_risk(c: dict) -> bool:
+    """Rule 7 gate: real collision risk is determined EXCLUSIVELY from CPA against the
+    safe passing distance (paired with Leo's own risk label as a corroborating check),
+    NEVER from TCPA alone -- TCPA=0 can just as easily mean the closest point has already
+    passed as mean an imminent collision."""
+    cpa = c.get("cpa_distance_m")
+    return cpa is not None and cpa < SAFE_CPA_M and c.get("risk") in ("medium", "high", "critical")
+
+
+def _turn_degrees(cpa_m: float) -> float:
+    """Substantial, geometry-scaled turn -- bigger the further CPA falls below the safe
+    distance, always at least MIN_TURN_DEG, capped at the physical per-command limit
+    (MAX_TURN_DEG). A fixed +30 regardless of shortfall was the original bug's fixed-
+    degree half; this scales with how much clearance is actually missing."""
+    shortfall = min(1.0, max(0.0, (SAFE_CPA_M - cpa_m) / SAFE_CPA_M))
+    return round(MIN_TURN_DEG + shortfall * (MAX_TURN_DEG - MIN_TURN_DEG), 1)
+
+
+def _diverging_turn(c: dict) -> str:
+    """Turn direction when EITHER side is COLREG-permitted (Rule 13 overtaking): turn
+    AWAY from whichever side the contact currently sits on, so the manoeuvre increases
+    separation instead of cutting across the contact's bow."""
+    return "turn_left" if c["relative_bearing_deg"] >= 0 else "turn_right"
+
+
+def _should_stop(c: dict) -> bool:
+    """Rule 17(b)'s own criterion for when manoeuvre alone no longer suffices: genuinely
+    close range AND still closing AND risk already critical -- a geometry/range trigger,
+    never a TCPA cutoff. This is deliberately rare (the original bug defaulted to "stop"
+    on 875/7928 frames from a TCPA<1.5min OR risk=="critical" check alone)."""
+    return (c.get("risk") == "critical" and c.get("range_m") is not None
+            and c["range_m"] < CRITICAL_RANGE_M and (c.get("closing_speed") or 0) > 0)
+
+
+def _rule_list(c: dict) -> list[str]:
+    nums = sorted(set(c.get("active_encounter_rules") or []) | set(c.get("standing_rules") or []))
+    return [f"Rule {n}" for n in nums]
+
+
 def leo_choose_action(state: dict) -> dict:
-    """Deterministic action from the record's OWN own_role/risk labels (trusted, since
-    Leo's own encounter/risk computation already accounts for track quality etc. this
-    script does not re-derive) -- mirrors build_oow_scenarios.py's choose_action() spirit
-    but grounded in Leo's richer, variable-count contact picture instead of one synthetic
-    contact."""
+    """Deterministic action from the record's OWN own_role/encounter/CPA/TCPA/risk labels
+    (trusted, since Leo's own encounter/risk computation already accounts for track
+    quality etc. this script does not re-derive). Rule 7 gates everything: a contact only
+    drives the action if it poses REAL risk (_real_risk -- CPA vs the safe distance, never
+    TCPA alone). No stop-default, no fixed +30-degree turn, no manoeuvre label for a
+    stopped/paused own-ship -- see this repo's RAG-rebuild-v2 plan Fase B1 for the full
+    diagnosis of what the previous role-only version got wrong (857 manoeuvres on
+    low-risk-only contacts, 526 on opening-range contacts, 875 stop-labels, 883 paused
+    frames mislabeled as manoeuvres).
+
+    Returns simulator-format fields (action/degrees/rule_applied) directly, matching
+    Basic Simulator/app/agents.py's SYSTEM_OOW_AGENT JSON contract -- see Fase B2."""
     own = state["own_ship"]
     contacts = state["contacts"]
-    give_way = [c for c in contacts if c["own_role"] in ("give_way", "both_give_way")]
-    stand_on = [c for c in contacts if c["own_role"] == "stand_on"]
+
+    # Never a manoeuvre label for a ship that isn't moving -- there is no manoeuvre to take.
+    if own.get("paused") or own.get("stopped"):
+        return {"action": None, "degrees": None, "rule_applied": None, "role": "paused",
+                "rules": [], "category": "leo_paused", "bucket": "paused"}
+
+    give_way = [c for c in contacts if c["own_role"] in ("give_way", "both_give_way") and _real_risk(c)]
+    stand_on = [c for c in contacts if c["own_role"] == "stand_on" and _real_risk(c)]
 
     if give_way:
-        worst = min(give_way, key=lambda c: c.get("tcpa_s") if c.get("tcpa_s") is not None else 1e9)
-        tcpa_min = (worst.get("tcpa_s") or 1e9) / 60.0
-        critical = any(c["risk"] == "critical" for c in give_way)
-        if critical or tcpa_min < 1.5:
-            action, params, params_text, bucket = "stop", {}, "stop", "stop"
+        worst = min(give_way, key=lambda c: c["cpa_distance_m"])
+        if _should_stop(worst):
+            return {"action": "stop", "degrees": None, "rule_applied": "Rule 17",
+                    "role": worst["own_role"], "rules": _rule_list(worst),
+                    "category": f"leo_{worst['encounter_type']}", "bucket": "stop"}
+        degrees = _turn_degrees(worst["cpa_distance_m"])
+        if worst["encounter_type"] in ("head_on", "crossing"):
+            action = "turn_right"  # Rule 14/15+16: give-way alters to starboard
         else:
-            action, params, params_text, bucket = (
-                "alter_course", {"degrees": 30, "lookahead_distance_m": 200},
-                "alter_course (+30 degrees to starboard, lookahead distance 200 m)", "alter_course")
-        rule_nums = sorted(set(worst.get("active_encounter_rules") or []) | set(worst.get("standing_rules") or []))
-        return {"action": action, "action_params": params, "action_params_text": params_text,
-                "role": worst["own_role"], "rules": [f"Rule {n}" for n in rule_nums],
-                "category": f"leo_{worst['encounter_type']}", "bucket": bucket}
+            action = _diverging_turn(worst)  # Rule 13: either side permitted
+        rule_applied = _PRIMARY_RULE_BY_ENCOUNTER.get(worst["encounter_type"], "none")
+        return {"action": action, "degrees": degrees, "rule_applied": rule_applied,
+                "role": worst["own_role"], "rules": _rule_list(worst),
+                "category": f"leo_{worst['encounter_type']}", "bucket": "alter_course"}
 
     if stand_on:
+        # Rule 17(a)(ii)/(b): own-ship (stand-on) may/must act once it's apparent the
+        # give-way vessel isn't -- requires BOTH a real CPA shortfall AND an imminent
+        # encounter (short TCPA), never TCPA alone.
+        triggered = [c for c in stand_on if (c.get("tcpa_s") or 1e9) < STAND_ON_TCPA_S]
+        if triggered:
+            worst = min(triggered, key=lambda c: c["cpa_distance_m"])
+            degrees = _turn_degrees(worst["cpa_distance_m"])
+            return {"action": _diverging_turn(worst), "degrees": degrees, "rule_applied": "Rule 17",
+                    "role": "stand_on", "rules": _rule_list(worst),
+                    "category": f"leo_stand_on_{worst['encounter_type']}_17b", "bucket": "stand_on_17b"}
         ref = stand_on[0]
-        rule_nums = sorted(set(ref.get("active_encounter_rules") or []) | set(ref.get("standing_rules") or []))
-        return {"action": "maintain_course", "action_params": {}, "action_params_text": "maintain_course",
-                "role": "stand_on", "rules": [f"Rule {n}" for n in rule_nums],
+        return {"action": "hold_course", "degrees": None, "rule_applied": "Rule 17",
+                "role": "stand_on", "rules": _rule_list(ref),
                 "category": f"leo_stand_on_{ref['encounter_type']}", "bucket": "stand_on"}
 
+    # No contact poses real risk -- only standing rules (2/5/6/7/11) apply, never a
+    # specific action-driving rule.
     rule_nums = sorted({n for c in contacts for n in (c.get("standing_rules") or [])}) or [2, 5, 6, 7]
     rules = [f"Rule {n}" for n in rule_nums]
-    if own["speed"] < own["target_speed"] - 0.5:
-        return {"action": "resume_cruising_speed", "action_params": {},
-                "action_params_text": "resume_cruising_speed (return to cruising speed)",
+    if own["speed"] < own["target_speed"] - RESUME_SPEED_MARGIN:
+        return {"action": "speed_up", "degrees": None, "rule_applied": "none",
                 "role": "cleared", "rules": rules, "category": "leo_clear_resume", "bucket": "resume"}
-    return {"action": "maintain_course", "action_params": {}, "action_params_text": "maintain_course",
+    return {"action": "hold_course", "degrees": None, "rule_applied": "none",
             "role": "cleared", "rules": rules, "category": "leo_clear_maintain", "bucket": "clear"}
 
 
 def stratified_sample(recs: list[dict], n: int, seed: int = 0) -> list[dict]:
-    """Round-robins across the 5 action-outcome buckets so even a small sample covers
-    stop/alter_course/stand_on/resume/clear -- pure random risks missing rare buckets
-    (e.g. 'stop' is a small minority of records) in a first-look sample."""
+    """Round-robins across the action-outcome buckets so even a small sample covers
+    stop/alter_course/stand_on/stand_on_17b/resume/clear -- pure random risks missing rare
+    buckets (e.g. 'stop' is a small minority of records) in a first-look sample. "paused"
+    frames (own-ship not underway) are excluded entirely -- there is no manoeuvre decision
+    to make for a stopped ship, so they never become a training instance."""
     rnd = random.Random(seed)
     buckets: dict[str, list[dict]] = {}
     for r in recs:
         decision = leo_choose_action(r["state"])
+        if decision["bucket"] == "paused":
+            continue
         buckets.setdefault(decision["bucket"], []).append(r)
     for b in buckets.values():
         rnd.shuffle(b)
@@ -310,7 +404,7 @@ def main() -> None:
         recs.append({
             "_id": f"leo{i:05d}", "leo_id": r["id"], "leo_source_file": r["source_file"],
             "category": decision["category"], "action": decision["action"],
-            "action_params": decision["action_params"], "action_params_text": decision["action_params_text"],
+            "degrees": decision["degrees"], "rule_applied": decision["rule_applied"],
             "role": decision["role"], "rules": decision["rules"],
             "pass_criteria": PASS_CRITERIA[decision["bucket"]],
             "situation_report": render_leo_narrative(r["state"]),
@@ -320,7 +414,19 @@ def main() -> None:
         print("--skip-llm: situation_report/action are set; gold_answer left empty.")
         final_recs = recs
     else:
-        done = load_checkpoint()
+        # Fase B1 (leo_choose_action rewrite) landed; Fase B2 (unify the task format onto
+        # Basic Simulator's SYSTEM_OOW_AGENT JSON contract -- system prompt/user framing/
+        # render_batch()'s Claude-prompt payload/wrong_action_variant()) has NOT yet -- the
+        # LLM rendering path below still expects the OLD action_params/action_params_text
+        # schema this file no longer produces. Fail loudly here rather than silently
+        # writing prose gold_answers against action/degrees/rule_applied fields the
+        # renderer was never updated to consume.
+        raise NotImplementedError(
+            "build_oow_scenarios_leo.py's LLM rendering path (render_batch/render_wrong_all, "
+            "imported from build_oow_scenarios.py) has not been updated for Fase B1's new "
+            "action/degrees/rule_applied schema yet -- that is Fase B2/B3 of the RAG-rebuild "
+            "plan. Use --skip-llm for now (geometry+narrative+action only, no gold_answer)."
+        )
         print(f"[resume] {len(done)} record(s) already checkpointed in {CHECKPOINT_FILE.name}")
         todo = [r for r in recs if r["leo_id"] not in done]
         print(f"[resume] {len(todo)} record(s) remaining to process")
