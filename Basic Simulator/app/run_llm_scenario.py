@@ -47,12 +47,12 @@ from app.measurement import measure_decision_quality
 from app.narrate import contact_line, recommended_decision_interval, recommended_max_steps
 
 
-def run_one(mission_id: str, config: str, tag: str = "default",
+def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "default",
            dt: float = 10.0, max_steps: int | None = None, enable_thinking: bool = False,
            max_new_tokens: int = 256, k: int = 2, use_rag: bool = True,
            system_prompt: str | None = None, force: bool = False,
            decision_interval: int | None = None, check_colreg_compliance: bool = True) -> Path:
-    out_path = run_log_path(mission_id, config, tag)
+    out_path = run_log_path(mission_id, config, weights, tag)
     if out_path.exists() and not force:
         print(f"  [skip] {out_path.name} already exists (use --force to overwrite)")
         return out_path
@@ -154,7 +154,7 @@ def run_one(mission_id: str, config: str, tag: str = "default",
             colreg_llm_check["error"] = str(exc)
 
     log = {
-        "mission_id": mission_id, "config": config, "tag": tag,
+        "mission_id": mission_id, "config": config, "weights": weights, "tag": tag,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "latency_s": latency_s,
         # Both embedded in full (not just mission_id, a lookup key into a SEPARATE file)
@@ -198,12 +198,21 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--missions", nargs="+", default=None,
                     help="mission ids to run (default: all missions)")
-    ap.add_argument("--configs", nargs="+", default=["v3_rag_cot"], choices=list(MODEL_CONFIGS),
-                    help="one or more of the 8 model configs (see app.agents.MODEL_CONFIGS)")
+    ap.add_argument("--configs", nargs="+",
+                    default=["bare_qwen", "v0_base", "v7_super_rag", "v8_super_cot_pg", "v9_super_all"],
+                    choices=list(MODEL_CONFIGS),
+                    help="one or more model configs (see app.agents.MODEL_CONFIGS); default: "
+                         "the 5 standard-sweep configs. v1_rag..v6_pg_scenario are an archived "
+                         "ablation arm, pass them explicitly if you need to reproduce/extend "
+                         "that old sweep")
     ap.add_argument("--tag", default="default",
                     help="distinguishes variations of the same mission+config -- e.g. run the "
                          "same config twice with --tag thinking_on --enable-thinking vs the "
                          "default, then compare both logs for the same mission")
+    ap.add_argument("--weights", default="W0_base",
+                    help="which checkpoint answered (a SEPARATE axis from --configs, which "
+                         "selects the PROMPT) -- always W0_base (base Qwen3-8B) for now; "
+                         "no fine-tuned-checkpoint loading path exists yet, see main plan phase F4")
     ap.add_argument("--dt", type=float, default=10.0, help="simulation time step (s)")
     ap.add_argument("--max-steps", type=int, default=None,
                     help="total step budget -- default: a per-mission recommendation sized "
@@ -241,7 +250,7 @@ def main() -> None:
         print(f"[{i}/{len(jobs)}] {mission_id} / {config}")
         t0 = time.time()
         run_one(
-            mission_id, config, tag=args.tag,
+            mission_id, config, weights=args.weights, tag=args.tag,
             dt=args.dt, max_steps=args.max_steps, enable_thinking=args.enable_thinking,
             max_new_tokens=args.max_new_tokens, k=args.k, use_rag=not args.no_rag,
             system_prompt=system_prompt, force=args.force,

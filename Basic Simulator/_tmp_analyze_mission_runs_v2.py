@@ -8,10 +8,16 @@ project venv from repo root: .venv\\Scripts\\python.exe "Basic Simulator/_tmp_an
 import json
 import re
 import statistics
+import sys
 from pathlib import Path
 from collections import defaultdict, Counter
 
-RUNS_DIR = Path(__file__).parent / "Data" / "missions"  # search the whole missions tree, not just
+APP_DIR = Path(__file__).parent  # Basic Simulator/
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
+from app.llm_runs import parse_run_filename  # noqa: E402 -- needs sys.path set first
+
+RUNS_DIR = APP_DIR / "Data" / "missions"  # search the whole missions tree, not just
 # _llm_runs/ -- run logs get archived into dated/named subfolders (e.g. "Missions data v2
 # 20260922/") that move around; rglob + the tag filter below finds them wherever they are.
 TAG = "units_v1"
@@ -67,8 +73,9 @@ for p in files:
         d = json.loads(p.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         continue
-    mission_id = d.get("mission_id", "?")
-    config = d.get("config", "?")
+    mission_id = d.get("mission_id") or parse_run_filename(p)["mission_id"]
+    config = d.get("config") or parse_run_filename(p)["config"]
+    weights = d.get("weights") or parse_run_filename(p)["weights"]  # always "W0_base" so far
     is_um = mission_id.startswith("UM")
     a = agg[config]
     a["n"] += 1

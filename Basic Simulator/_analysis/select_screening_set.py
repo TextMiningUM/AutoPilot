@@ -48,8 +48,13 @@ import json
 import statistics
 from collections import Counter, defaultdict
 from pathlib import Path
+import sys
 
 APP_DIR = Path(__file__).resolve().parent.parent  # Basic Simulator/
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
+from app.llm_runs import parse_run_filename  # noqa: E402 -- needs sys.path set first
+
 MISSIONS_DIR = APP_DIR / "Data" / "missions"
 TAG = "units_v1"
 CONFIGS_ALL = ["bare_qwen", "v0_base", "v1_rag", "v2_cot", "v3_rag_cot",
@@ -101,12 +106,17 @@ def classify_encounter_type(mission_def: dict) -> str:
 
 
 def collect_mission_stats() -> dict[str, dict]:
-    """{mission_id: {config: {composite, compliance, verdict, min_cpa_m}}}"""
+    """{mission_id: {config: {composite, compliance, verdict, min_cpa_m, weights}}}. Config/
+    weights are read from the filename via parse_run_filename() (understands both the current
+    4-segment {mission}__{config}__{weights}__{tag}.json form and the older 2/3-segment forms
+    the units_v1 archive used, which have no weights segment -- all implicitly "W0_base", the
+    only checkpoint any run has ever used so far) rather than the JSON body, since older logs
+    never had a "weights" field at all."""
     by_mission: dict[str, dict] = defaultdict(dict)
     for f in find_run_files():
         doc = json.loads(f.read_text(encoding="utf-8"))
-        mission_id = doc.get("mission_id")
-        config = doc.get("config")
+        parsed = parse_run_filename(f)
+        mission_id, config = parsed["mission_id"], parsed["config"]
         if not mission_id or not config:
             continue
         ev = doc.get("evaluation", {})
@@ -115,6 +125,7 @@ def collect_mission_stats() -> dict[str, dict]:
             "compliance": ev.get("compliance", {}).get("score"),
             "verdict": ev.get("verdict"),
             "min_cpa_m": ev.get("safety", {}).get("min_cpa_m"),
+            "weights": doc.get("weights") or parsed["weights"],
         }
     return by_mission
 

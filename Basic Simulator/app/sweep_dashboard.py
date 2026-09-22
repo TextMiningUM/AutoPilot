@@ -33,6 +33,7 @@ for p in (ROOT, ROOT.parent):
         sys.path.insert(0, str(p))
 
 from app.evaluation import score_trajectory
+from app.llm_runs import parse_run_filename
 from app.missions import list_mission_ids, load_mission
 from app.simulation import VesselConstraints
 
@@ -103,7 +104,7 @@ def _estimate_latency(path: Path, index: list[tuple[datetime, Path]]) -> float |
 
 
 def _score_log(mission_id: str, log: dict, tag: str, path: Path,
-               gen_at_index: list[tuple[datetime, Path]]) -> dict:
+               gen_at_index: list[tuple[datetime, Path]], weights: str = "W0_base") -> dict:
     """Same composite scoring sweep_llm_params.py's score_one() applies to a freshly
     computed run -- duplicated here (rather than imported) because sweep_llm_params.py
     pulls in app.run_llm_scenario -> app.agents -> torch/transformers, which this
@@ -125,7 +126,8 @@ def _score_log(mission_id: str, log: dict, tag: str, path: Path,
     if latency_is_estimate:
         latency_s = _estimate_latency(path, gen_at_index)
     return {
-        "config": log.get("config"), "tag": log.get("tag", tag),
+        "config": log.get("config"), "weights": log.get("weights") or weights,
+        "tag": log.get("tag", tag),
         "composite_score": result["composite_score"], "verdict": result["verdict"],
         "safety": result["safety"], "compliance": result["compliance"],
         "temporal": result["temporal"], "spatial": result["spatial"],
@@ -136,18 +138,19 @@ def _score_log(mission_id: str, log: dict, tag: str, path: Path,
 
 
 def _scan_mission_runs(mission_id: str, gen_at_index: list[tuple[datetime, Path]]) -> dict[str, dict]:
-    """Globs RUNS_DIR for every {mission_id}__*.json (mission id is a fixed prefix; the
-    remainder up to ".json" is "{config}" or "{config}__{tag}", split on the first "__"
-    since config names themselves only ever use single underscores) and scores each file
-    directly -- the single source of truth for what's actually on disk RIGHT NOW, instead of
-    _sweep_summary.json's append-only cache. When more than one tag produced a log for the
+    """Globs RUNS_DIR for every {mission_id}__*.json and scores each file directly -- the
+    single source of truth for what's actually on disk RIGHT NOW, instead of
+    _sweep_summary.json's append-only cache. Filenames are parsed via
+    app.llm_runs.parse_run_filename(), which understands both the current
+    {mission}__{config}__{weights}__{tag}.json form and the older 2/3-segment forms
+    written before the weights axis existed. When more than one tag produced a log for the
     same config, the most recently modified file wins (whatever's actually current)."""
     prefix = f"{mission_id}__"
     latest_mtime: dict[str, float] = {}
     rows: dict[str, dict] = {}
     for path in RUNS_DIR.glob(f"{prefix}*.json"):
-        remainder = path.stem[len(prefix):]
-        config, _, tag = remainder.partition("__")
+        parsed = parse_run_filename(path)
+        config, weights, tag = parsed["config"], parsed["weights"], parsed["tag"]
         if config not in CONFIGS:
             continue
         mtime = path.stat().st_mtime
@@ -158,7 +161,7 @@ def _scan_mission_runs(mission_id: str, gen_at_index: list[tuple[datetime, Path]
         except (json.JSONDecodeError, OSError):
             continue
         latest_mtime[config] = mtime
-        rows[config] = _score_log(mission_id, log, tag or "default", path, gen_at_index)
+        rows[config] = _score_log(mission_id, log, tag, path, gen_at_index, weights)
     return rows
 
 

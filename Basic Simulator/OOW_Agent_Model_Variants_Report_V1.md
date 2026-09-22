@@ -1,12 +1,12 @@
 # OOW-agent: modelvarianten in de missie-simulator — technisch referentierapport
 
-Doel van dit document: **precies** vastleggen wat er vandaag (2026-09-22) in `Basic Simulator/app/agents.py` en de bijbehorende pipeline-modules gebeurt voor elke config die in de missie-sweeps wordt gebruikt (`bare_qwen` t/m `v6_pg_scenario`), plus wat er al **in code staat maar nog nooit gedraaid is** (`v7_rerank` t/m `v11_reflect`, en de echte SFT/DPO/Reflectie-fine-tune). Alles hieronder is direct uit de broncode en de data-bestanden zelf gehaald (geen aannames) — bestandspaden en regelnummers staan erbij zodat dit reproduceerbaar is.
+Doel van dit document: **precies** vastleggen wat er vandaag (2026-09-22) in `Basic Simulator/app/agents.py` en de bijbehorende pipeline-modules gebeurt voor elke config die in de missie-sweeps wordt gebruikt (`bare_qwen` t/m `v6_pg_scenario`), plus de 3 "super"-configs die de daadwerkelijke experimentmatrix-promptkolommen vormen (`v7_super_rag`/`v8_super_cot_pg`/`v9_super_all`, die later op 2026-09-22 de nooit-gedraaide `v7_rerank`/`v8_rerank_cot`/`v9_fewshot`/`v10_dpo_contrast`/`v11_reflect`-prototypeslots vervingen), en de echte SFT/DPO/Reflectie-fine-tune. Alles hieronder is direct uit de broncode en de data-bestanden zelf gehaald (geen aannames) — bestandspaden en regelnummers staan erbij zodat dit reproduceerbaar is.
 
-**Belangrijkste feit vooraf, dat de rest van dit rapport kadert:** er is maar **één** taalmodel-gewichtenset in de hele missie-simulator: de kale, niet-gefinetunede `Qwen/Qwen3-8B` (4-bit NF4), geladen door `_load_qwen()` in [Basic Simulator/app/agents.py](Basic%20Simulator/app/agents.py#L292). Er wordt **nergens** in `agents.py` een LoRA-adapter of gefinetuned checkpoint geladen (geen `PeftModel`-import, geen `.from_pretrained(..., adapter)` aanroep). Elke config — ook de "geavanceerde" PG- configs — is dus uitsluitend een **prompt-variant** op exact dezelfde onderliggende gewichten. Dat is expliciet zo ontworpen (zie de docstring bovenaan `agents.py`): eerst goedkoop testen via prompting of een ingrediënt (RAG/CoT/PG/rerank/few-shot/DPO-contrast/reflectie) iets oplevert, vóórdat er cloud-GPU-uren in een echte fine-tune gaan.
+**Belangrijkste feit vooraf, dat de rest van dit rapport kadert:** er is maar **één** taalmodel-gewichtenset in de hele missie-simulator: de kale, niet-gefinetunede `Qwen/Qwen3-8B` (4-bit NF4), geladen door `_load_qwen()` in [Basic Simulator/app/agents.py](Basic%20Simulator/app/agents.py#L292). Er wordt **nergens** in `agents.py` een LoRA-adapter of gefinetuned checkpoint geladen (geen `PeftModel`-import, geen `.from_pretrained(..., adapter)` aanroep). Elke config — ook de "super"-configs — is dus uitsluitend een **prompt-variant** op exact dezelfde onderliggende gewichten ("gewichten" wordt een aparte as zodra fase F4 het checkpoint-laadpad bouwt; zie sectie 3). Dat is expliciet zo ontworpen (zie de docstring bovenaan `agents.py`): eerst goedkoop testen via prompting of retrieval/CoT/PG iets oplevert, vóórdat er cloud-GPU-uren in een echte fine-tune gaan.
 
 ***
 
-## 1 — Gedeelde technische basis (geldt voor ALLE 13 configs)
+## 1 — Gedeelde technische basis (geldt voor ALLE 11 configs)
 
 | Onderdeel                | Waarde                                                                                                                                                                   | Bron                                                                              |
 |--------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|
@@ -25,7 +25,7 @@ Doel van dit document: **precies** vastleggen wat er vandaag (2026-09-22) in `Ba
 
 ## 2 — De 8 configs die daadwerkelijk in de huidige sweep draaien (`bare_qwen` … `v6_pg_scenario`)
 
-Alle 8 worden gedefinieerd in `_CONFIG_SPECS` in [Basic Simulator/app/agents.py L95-118](Basic%20Simulator/app/agents.py#L95-L118) als een simpele dict van booleans/strings (`bare`, `rag`, `rerank`, `cot`, `pg`, `fewshot`, `dpo_contrast`, `reflect`) — `build_oow_prompt()` bouwt de uiteindelijke prompt puur door deze vlaggen af te lopen, dus onderstaande tabel is letterlijk wat er per config aan- of uitstaat:
+Alle 8 worden gedefinieerd in `_CONFIG_SPECS` in [Basic Simulator/app/agents.py](Basic%20Simulator/app/agents.py) als een simpele dict van booleans/strings (`bare`, `rag`, `rerank`, `cot`, `pg`) — `build_oow_prompt()` bouwt de uiteindelijke prompt puur door deze vlaggen af te lopen, dus onderstaande tabel is letterlijk wat er per config aan- of uitstaat. **Sinds 2026-09-22 zijn dit een gearchiveerde ablatie-arm** (147 runs hangen eraan; blijven reproduceerbaar, maar staan niet meer in de standaard-sweep se `--configs`-default — zie sectie 3):
 
 | Config           | `rag` | `cot` | `pg`         | `enable_thinking` (effectief) | `max_new_tokens` (effectief) |
 |------------------|-------|-------|--------------|-------------------------------|------------------------------|
@@ -224,68 +224,69 @@ Follow this order where applicable, but adapt to the specific situation.
 
 ***
 
-## 3 — Wat al in code staat maar nog NOOIT gedraaid is: `v7_rerank` … `v11_reflect`
+## 3 — De experimentmatrix-promptkolommen: `v7_super_rag` / `v8_super_cot_pg` / `v9_super_all`
 
-**Hard bewijs dat dit nog niet gedraaid is:**
+**Belangrijke correctie t.o.v. de eerdere versie van dit rapport (2026-09-22, zelfde dag):**
+de oorspronkelijke `v7_rerank`/`v8_rerank_cot`/`v9_fewshot`/`v10_dpo_contrast`/`v11_reflect`
+prototypeslots die hier eerder beschreven stonden **zijn nooit gedraaid** — een grep over
+`Basic Simulator/Data/missions/**llm_runs/**` (inclusief alle archieven/tags) leverde **0**
+resultaatbestanden met een van die 5 namen op, dus er ging geen data verloren door ze
+opnieuw te definiëren. Ze zijn vervangen door de 3 configs hieronder, die de daadwerkelijke
+promptkolommen (P1/P2/P3) van de experimentmatrix zijn. De handgeschreven regelkennis-
+voorbeelden die de oude `v9_fewshot`/`v10_dpo_contrast` gebruikten (bv. *"Rule 14 requires
+BOTH vessels to alter to STARBOARD, never port"*) zijn volledig uit de code verwijderd —
+dat soort in-prompt regelkennis is precies wat het projectprincipe verbiedt (regelkennis
+komt uit data, niet uit prompts).
 
-1.  `agents.py` zelf noemt ze `"Prototype configs (2026-09-22)"` — vandaag toegevoegd ([agents.py L109-118](Basic%20Simulator/app/agents.py#L109-L118)).
-2.  Geen enkel bestand in `Basic Simulator/Data/missions/_llm_runs/` bevat een van deze 5 configs in de bestandsnaam (geverifieerd met een grep over de hele map — 0 treffers).
-3.  De terminal-geschiedenis van vandaag toont alleen een **CPU-only prompt-constructie- smoketest** (`build_oow_prompt(..., config=cfg)` voor elke v7-v11, printen van `user_msg_chars`, expliciet commentaar *"ALL OK -- CPU only, no GPU touched, safe alongside a running sweep"*) — dus de prompt wordt correct opgebouwd, maar er is nog **geen enkele keer** `mdl.generate()` voor een van deze 5 configs aangeroepen.
-4.  `sweep_llm_params.py`'s `--configs`-default is `list(MODEL_CONFIGS)` (dus inclusief v7-v11 sinds vandaag) — de sweep die nu (`_sweep_status.json`) op UM10 draait, is gestart vóórdat v7-v11 aan `MODEL_CONFIGS` werden toegevoegd, of met een expliciete `--configs`-lijst; in beide gevallen zijn v7-v11 niet in de output te vinden.
+| Config             | `rag` | `rerank` | `cot` | `pg`                  | `enable_thinking` (effectief) | `max_new_tokens` (effectief) |
+|--------------------|-------|----------|-------|-----------------------|-------------------------------|-------------------------------|
+| `v7_super_rag`     | ✓     | ✓        | –     | –                     | false (blijft snel)           | 256 (caller-default)          |
+| `v8_super_cot_pg`  | –     | –        | ✓     | `"scenario+incident"` | **true** (geforceerd)          | **3072** (geforceerd)          |
+| `v9_super_all`     | ✓     | ✓        | ✓     | `"scenario+incident"` | **true**                       | **3072**                       |
 
-### 3.1 — `v7_rerank` / `v8_rerank_cot`: reranker IS al getraind, maar nog nooit gebruikt in een sweep
+### 3.1 — `v7_super_rag`: de volledige retrieval-stack op corpus v2, geen CoT/PG
 
--   **Techniek:** i.p.v. `kg_retrieve(..., k=k)` direct te gebruiken, haalt deze config eerst een BREDERE pool op (`pool_k = dense_n = 40` i.p.v. `k`), en herscoort die pool met een **fine-tuned cross-encoder** via `rerank_hits()` ([build_kg.py L288-303](pipeline/ingest/build_kg.py#L288-L303)):
+-   Dense RAG (`kg_retrieve()`) op de herbouwde corpus v2 (bge-large-en-v1.5, 1024d, CHIRP +
+    Leo MOOS-cases + marginale incidenten toegevoegd) + herscoring door de fine-tuned
+    cross-encoder (`rerank_hits()`, [build_kg.py](pipeline/ingest/build_kg.py)) + KG-concept-boost.
+    Géén CoT-instructie, géén PG-blok — bewust gehouden op v0_base-achtige latency
+    (`enable_thinking` blijft `False` tenzij de aanroeper het expliciet aanzet).
+-   De reranker (`_models/OOW/oow_reranker/`, `cross-encoder/ms-marco-MiniLM-L6-v2` basis,
+    ~22M parameters, CPU-only) is opnieuw getraind op corpus v2 op 2026-09-22:
+    `dev_accuracy_at_1` 0.768 → 1.000 (n=138 evaluatie-queries) — zelfde eindscore als de
+    eerdere training op de oude corpus, dus de herscoring blijft even sterk na de
+    corpus-uitbreiding.
 
-```python
-pairs = [(query, chunk_by_id[h["chunk_id"]]["text"]) for h in hits]
-scores = cross_encoder.predict(pairs)
-# sorteer op rerank_score, behoud top-k
-```
+### 3.2 — `v8_super_cot_pg`: CoT + procedure-guidance uit BEIDE grafen, geen retrieval
 
--   **Het cross-encoder-model is al getraind en staat lokaal op schijf:** `_models/OOW/oow_reranker/` (bevat `model.safetensors`, echte gewichten — geen lege map). Basismodel: `cross-encoder/ms-marco-MiniLM-L6-v2` (\~22M parameters), CPU-only, fine-getuned door `pipeline/train/train_reranker.py` (`CrossEncoderTrainer`, `BinaryCrossEntropyLoss`, 3 epochs, batch=16, lr=2e-5). **Getrainde resultaten** (`_models/OOW/oow_reranker/TRAIN_INFO.json`):
+-   `COT_INSTR` (4-stappen redeneertemplate) + procedure-guidance uit de herbouwde
+    `oow_pg_scenario.json` **én** `oow_pg_incident.json` **samen** — géén dense/reranked
+    RAG-excerpten. `oow_pg_rule.json` zit hier expliciet NIET in (blijft een losse,
+    optionele test-arm).
+-   Nieuw laadpad: `pipeline/ingest/pg_guidance.py`'s `load_merged_pg()` laadt beide
+    PG-bestanden en merget ze tot één `ProceduralGraph` — beide bronbestanden gebruiken
+    onafhankelijk hetzelfde `"pg_0000", "pg_0001", ...`-idschema, dus elke node-id wordt
+    genamespaced per bronindex (`"0:pg_0000"` voor scenario, `"1:pg_0000"` voor incident)
+    vóór het mergen, anders zouden nodes uit de twee bronnen elkaar overschrijven.
+    Geverifieerd (`tests/test_pg_guidance_merge.py`): het gemergede object heeft precies
+    `len(scenario.nodes) + len(incident.nodes)` = 7 + 126 = 133 nodes, geen enkele
+    node-id-botsing, en een query op elke bron z'n eigen labeltekst matcht terug naar een
+    node in de juiste namespace (score 0.89-0.95).
 
-```json
-{
-  "base_model": "cross-encoder/ms-marco-MiniLM-L6-v2",
-  "epochs": 3, "n_train": 3975, "n_dev": 695, "n_eval_queries": 138,
-  "dev_accuracy_at_1_before": 0.768, "dev_accuracy_at_1_after": 1.0
-}
-```
+### 3.3 — `v9_super_all`: v7_super_rag + v8_super_cot_pg gecombineerd
 
-(dev accuracy@1 = "staat de écht juiste regel-chunk bovenaan de herscoorde lijst" — van 76.8% naar 100% op 138 evaluatie-queries.)
-
--   **Trainingsdata (de paren zelf):** gemined door `pipeline/ingest/build_reranker_pairs.py` uit twéé bronnen met **deterministische** (niet door een LLM verzonnen) COLREG-regelnummers: Leo's ruwe MOOS-trajectstates (`Data/OOW/OOW_Scenarios_Leo/moos_temporal_narratives_final.jsonl`, `active_encounter_rules` per contact) en de Track-2 SFT-synthetische scenario's (`oow_scenario_reasoning_traces.jsonl`, `trace.channels`). Uitgesloten: alles uit het held-out evaluatiebestand `oow_colreg_scenarios.json`.
--   **Wat nog ontbreekt:** de reranker is dus klaar en laadbaar (`agents.py`'s `_load_retrieval()` laadt hem al automatisch als de map bestaat), maar `v7_rerank`/ `v8_rerank_cot` zijn nog nooit met een échte `ask_oow()`-aanroep (GPU, Qwen3-8B) getest — alleen de retrieval-kant is apart gevalideerd (`dev_accuracy_at_1`).
-
-### 3.2 — `v9_fewshot`: 3 met de hand geschreven voorbeelden, GEEN echte trainingsdata
-
--   Voegt 3 hard-coded (situatie → correct besluit) demonstraties toe aan het user-bericht (`FEWSHOT_EXAMPLES`, [agents.py L211-241](Basic%20Simulator/app/agents.py#L211-L241)), één per encounter-type (head-on/crossing/overtaking). Letterlijk voorbeeld (head-on):
-
-```
-Own-ship at (0.000, -6.000) NM, heading 0.0, speed 10.00 kt. ... ts1: range 3.000 NM,
-rel.bearing 0.0 deg, heading 180.0, speed 10.00 kt, CPA 0.000 NM, TCPA 540s
-→ {"action": "turn_right", "degrees": 20, "rule_applied": "Rule 14",
-   "reasoning": "ts1 is dead ahead on a reciprocal course (CPA 0.000NM) -- a head-on
-   situation under Rule 14, which requires BOTH vessels to alter course to STARBOARD,
-   never port. Turning right by 20 degrees begins a safe port-to-port passage."}
-```
-
--   **Dit zijn met de hand geschreven voorbeelden, NIET afkomstig uit de echte SFT-data** (`Data/OOW/OOW_Agents_Training/oow_sft_direct.jsonl` etc.) — de code-comment zegt dit zelf expliciet: *"Tests whether in-context examples alone reproduce what an SFT pass on similar examples would teach, before spending cloud GPU hours actually fine-tuning."*
-
-### 3.3 — `v10_dpo_contrast`: één met de hand geschreven fout-vs-correct paar
-
--   Voegt `DPO_CONTRAST_TEXT` toe ([agents.py L244-256](Basic%20Simulator/app/agents.py#L244-L256)) — een ÉÉN keer waargenomen fout uit een eerdere Imazu01-sweep (het model verwarde Rule 13 met Rule 14 bij een head-on-situatie en vroeg 90°) naast de correcte redenering. Ook dit is handgeschreven, niet de echte `oow_dpo_pairs.jsonl`/`oow_incident_dpo_pairs.jsonl`. **Interessant gegeven uit het missie-analyserapport:** exact dezelfde fout (Rule 15/14 geciteerd maar naar bakboord gedraaid) komt nog steeds voor in `v2_cot`, `v5_pg_incident` en `v6_pg_scenario` — dit ene handgeschreven contrastvoorbeeld lost het dus kennelijk niet op zolang het niet in déze configs zelf verwerkt zit.
-
-### 3.4 — `v11_reflect`: zuivere zelfcontrole-instructie, geen trainingsdata
-
--   `REFLECT_INSTR` ([agents.py L258-267](Basic%20Simulator/app/agents.py#L258-L267)): vraagt het model, vóór het definitieve antwoord, zichzelf 2 vragen te stellen (klopt het geciteerde regelnummer bij het encounter-type; valt de gevraagde `degrees` binnen de fysieke limiet). Operationaliseert hetzelfde draft→critique→refine-patroon als de échte `oow_reflection.jsonl`-trainingsdata, maar volledig in-context, zonder enige training.
+-   Precies de optelsom van beide hierboven: volledige retrieval-stack (RAG+rerank+KG) ÉN
+    CoT + scenario+incident PG-guidance in dezelfde prompt. Zowel `cot` als `pg` staan aan,
+    dus `effective_generation_params()` forceert hier ook `enable_thinking=True` +
+    `max_new_tokens>=3072`.
 
 ***
 
 ## 4 — De ECHTE SFT/DPO/Reflectie fine-tune: apart traject, ook nog niet in de simulator
 
-Dit is een **volledig ander stuk code** dan v7-v11 hierboven (die zijn allemaal in-context/prompting-only) — dit traject traint daadwerkelijk LoRA-gewichten:
+Dit is een **volledig ander stuk code** dan v7-v9 hierboven (die zijn allemaal in-context/prompting-only) — dit traject traint daadwerkelijk LoRA-gewichten. **Belangrijk: gewichten zijn geen configs** — welk checkpoint antwoordt (W0 base / W1 SFT / W2 SFT+DPO / W3 SFT+DPO+Reflectie) is een aparte as van welke prompt gebruikt wordt (`v0_base`...`v9_super_all`), geselecteerd via het (nog te bouwen, fase F4) checkpoint-laadpad. De run-bestandsnaam draagt beide assen apart: `{mission}__{config}__{weights}__{tag}.json` (bv. `Imazu04__v8_super_cot_pg__W0_base__units_v2.json`); voor nu is `weights` altijd `"W0_base"`, aangezien dit laadpad nog niet bestaat.
+
+
 
 | Stage     | Script                               | Basismodel + quantisatie              | LoRA                                                                    | Belangrijkste hyperparameters                                                                                                        | Trainingsdata (voorbeeld)                                                                                                                                                                                                |
 |-----------|--------------------------------------|---------------------------------------|-------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -333,19 +334,24 @@ Volgens `full report evaluations V1.md` (§3) bestaat de samengevoegde SFT+DPO+R
 ## 5 — Reproductie: hoe elke stap opnieuw te draaien
 
 ```powershell
-# 1) Bestaande 8-config sweep (bare_qwen..v6_pg_scenario) opnieuw/verder draaien:
+# 1) Bestaande 8-config sweep (bare_qwen..v6_pg_scenario) opnieuw/verder draaien (archief, reproductie):
 cd "Basic Simulator"
-..\.venv\Scripts\python.exe -m app.sweep_llm_params --tag units_v1
+..\.venv\Scripts\python.exe -m app.sweep_llm_params --tag units_v1 --configs bare_qwen v0_base v1_rag v2_cot v3_rag_cot v4_pg v5_pg_incident v6_pg_scenario
 
-# 2) Eén nieuwe v7-v11 config los uittesten (nu GPU-echt, i.p.v. de CPU-only smoketest van vandaag):
-..\.venv\Scripts\python.exe -m app.run_llm_scenario --missions Imazu01 --configs v7_rerank --tag units_v1
+# 2) Standaard-sweep (de 5 --configs-default): baselines + de 3 super-configs:
+..\.venv\Scripts\python.exe -m app.sweep_llm_params --tag units_v2
 
-# 3) Reranker opnieuw trainen (CPU, lokaal, ~minuten):
+# 3) Eén super-config los uittesten:
+..\.venv\Scripts\python.exe -m app.run_llm_scenario --missions Imazu01 --configs v8_super_cot_pg --tag units_v2
+
+# 4) Reranker opnieuw trainen (CPU, lokaal, ~minuten):
+..\.venv\Scripts\python.exe -m pipeline.ingest.build_reranker_pairs
 ..\.venv\Scripts\python.exe -m pipeline.train.train_reranker --epochs 3
 
-# 4) Echte SFT/DPO/Reflectie-fine-tune (CLOUD ONLY, NOOIT lokaal starten):
+# 5) Echte SFT/DPO/Reflectie-fine-tune (CLOUD ONLY, NOOIT lokaal starten):
 #    zie cloud/run_all_oow.sh stages voor de exacte volgorde train_sft -> train_dpo ->
-#    train_reflection -> merge_adapter.
+#    train_reflection -> merge_adapter (main-plan fase F4 sluit dit checkpoint dan aan
+#    op de "weights"-as van de run-bestandsnaam).
 ```
 
 ***
@@ -354,7 +360,6 @@ cd "Basic Simulator"
 
 |                                                                               | Config(s)                                                                                             | Gewichten                                                                                      | Prompt-techniek                                                                                         | Status                                                                                                              |
 |-------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------|
-| **In gebruik in de huidige sweep**                                            | `bare_qwen`, `v0_base`, `v1_rag`, `v2_cot`, `v3_rag_cot`, `v4_pg`, `v5_pg_incident`, `v6_pg_scenario` | Kale `Qwen/Qwen3-8B` (identiek voor alle 8)                                                    | Systeemprompt-varianten + RAG (dense+KG) + CoT + PG (procedure-graaf) — losse en gecombineerde ablaties | ✅ Volledig gedraaid (147/152 runs)                                                                                 |
-| **Code klaar, retrieval-component al apart getraind, nog nooit in een sweep** | `v7_rerank`, `v8_rerank_cot`                                                                          | Kale `Qwen/Qwen3-8B` + los `oow_reranker` cross-encoder (WEL al getraind, dev-acc@1 0.768→1.0) | RAG met bredere pool + cross-encoder herscoring                                                         | ⏳ Prompt-smoketest gedaan (CPU), nog geen echte generatie                                                          |
-| **Code klaar, alleen handgeschreven voorbeelden, nog nooit in een sweep**     | `v9_fewshot`, `v10_dpo_contrast`, `v11_reflect`                                                       | Kale `Qwen/Qwen3-8B`                                                                           | In-context few-shot / contrastvoorbeeld / zelfcontrole-instructie (géén echte trainingsdata gebruikt)   | ⏳ Prompt-smoketest gedaan (CPU), nog geen echte generatie                                                          |
-| **Losstaand traject: echte fine-tune**                                        | (geen aparte config-naam in `agents.py`)                                                              | LoRA SFT(r16)+DPO(r8,β0.05)+Reflectie(r8) bovenop `Qwen/Qwen3-8B`                              | Traint op alle 21 SFT/DPO/Reflectie-bestanden hierboven                                                 | ✅ Getraind + geëvalueerd op Track 1/2 Q&A (cloud) — ❌ nog NOOIT geladen/getest in de Basic Simulator missie-sweep |
+| **Gearchiveerde ablatie-arm (niet meer in de standaard-sweep; herdefinieer nooit)** | `bare_qwen`, `v0_base`, `v1_rag`, `v2_cot`, `v3_rag_cot`, `v4_pg`, `v5_pg_incident`, `v6_pg_scenario` | Kale `Qwen/Qwen3-8B` (W0_base, identiek voor alle 8) | Systeemprompt-varianten + RAG (dense+KG) + CoT + PG (procedure-graaf) — losse en gecombineerde ablaties | ✅ Volledig gedraaid (147/152 runs, tag=units_v1) |
+| **Standaard-sweep sinds 2026-09-22: de 3 experimentmatrix-promptkolommen** | `v7_super_rag` (P1), `v8_super_cot_pg` (P2), `v9_super_all` (P3) | Kale `Qwen/Qwen3-8B` (W0_base) + `oow_reranker` cross-encoder (herget., dev-acc@1 0.768→1.000 op corpus v2) | Volledige RAG+rerank+KG-stack / CoT+scenario+incident-PG / beide gecombineerd | ⏳ Code + tests klaar (`test_agents_configs.py`, `test_pg_guidance_merge.py`), nog geen echte generatie/sweep gedraaid |
+| **Losstaand traject: echte fine-tune**                                        | (geen aparte config-naam in `agents.py`; wordt de "weights"-as W1/W2/W3 in de run-bestandsnaam, fase F4) | LoRA SFT(r16)+DPO(r8,β0.05)+Reflectie(r8) bovenop `Qwen/Qwen3-8B`                              | Traint op alle 21 SFT/DPO/Reflectie-bestanden hierboven                                                 | ✅ Getraind + geëvalueerd op Track 1/2 Q&A (cloud) — ❌ nog NOOIT geladen/getest in de Basic Simulator missie-sweep |

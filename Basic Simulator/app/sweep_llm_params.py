@@ -144,8 +144,12 @@ def sweep(missions: list[str], configs: list[str], tag: str = "default", **run_k
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--missions", nargs="+", default=None, help="default: all missions")
-    ap.add_argument("--configs", nargs="+", default=list(MODEL_CONFIGS), choices=list(MODEL_CONFIGS),
-                    help="default: all 8 model configs")
+    ap.add_argument("--configs", nargs="+",
+                    default=["bare_qwen", "v0_base", "v7_super_rag", "v8_super_cot_pg", "v9_super_all"],
+                    choices=list(MODEL_CONFIGS),
+                    help="default: the 5 standard-sweep configs (baselines + the 3 super "
+                         "configs); v1_rag..v6_pg_scenario are an archived ablation arm, pass "
+                         "them explicitly if you need to reproduce/extend that old sweep")
     ap.add_argument("--tag", default="default",
                     help="reused from run_llm_scenario.py -- lets a refinement pass (e.g. "
                          "--enable-thinking) coexist with the coarse sweep's logs instead of "

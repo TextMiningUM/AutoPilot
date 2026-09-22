@@ -30,6 +30,28 @@ from core import QUERY_PREFIX, MATCH_THRESH, ANCHOR_THRESH
 MAX_HOPS = 3          # reachability horizon for ordering checks / neighborhoods
 
 
+def load_merged_pg(files: list[Path], embedder) -> "ProceduralGraph":
+    """Load and merge multiple already-built PG JSON files into ONE ProceduralGraph --
+    e.g. app/agents.py's v8_super_cot_pg/v9_super_all configs, which want guidance drawn
+    from BOTH oow_pg_scenario.json and oow_pg_incident.json together. Every per-source PG
+    file is built independently with the same "pg_0000", "pg_0001", ... id scheme, so
+    node ids WOULD collide on a naive concatenation -- each source's node ids are
+    namespaced by its index in `files` (f"{i}:{orig_id}") and every edge's u/v is remapped
+    to match, before nodes/edges are merged into one dict. Uses the dict-source
+    constructor path (no on-disk embedding cache) -- these per-source graphs are small
+    enough that recomputing embeddings each load is cheap."""
+    merged_nodes: dict = {}
+    merged_edges: list = []
+    for i, p in enumerate(files):
+        g = json.loads(p.read_text(encoding="utf-8"))
+        remap = {nid: f"{i}:{nid}" for nid in g["nodes"]}
+        for nid, node in g["nodes"].items():
+            merged_nodes[remap[nid]] = node
+        for e in g["edges"]:
+            merged_edges.append({**e, "u": remap.get(e["u"], e["u"]), "v": remap.get(e["v"], e["v"])})
+    return ProceduralGraph({"nodes": merged_nodes, "edges": merged_edges}, embedder)
+
+
 class ProceduralGraph:
     """In-memory PG with embedding node-matching and hop-limited reachability.
 

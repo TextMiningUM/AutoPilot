@@ -5,9 +5,8 @@ evaluated -- see eval_oow_qwen_full_summary.json -- but currently scores WORSE t
 Track 1 gold Q&A, Composite 0.375 vs 0.551; not yet wired into this app pending that
 regression being understood, see repo memory notes) under one of the selectable prompt
 configurations that mirror the notebook's §11 prompt ablation study (prep_ablation.py's
-V0-V6), plus an extra 'bare' baseline and a set of v7+ prototype configs testing whether a
-training ingredient (reranking/few-shot/DPO-contrast/reflection) helps at all via in-context
-prompt content, before spending cloud GPU hours actually fine-tuning on it:
+V0-V6), plus an extra 'bare' baseline and 3 "super" configs (v7-v9) that combine the full
+retrieval stack and CoT+PG guidance into the experiment matrix's actual prompt columns:
 
   bare_qwen      -- minimal system prompt, no COLREG framing, no RAG/CoT/PG
   v0_base        -- OOW framing (rules-of-thumb + JSON contract), no extras
@@ -17,14 +16,21 @@ prompt content, before spending cloud GPU hours actually fine-tuning on it:
   v4_pg          -- + procedural-graph guidance (merged, all sources)
   v5_pg_incident -- + procedural-graph guidance (real incidents only)
   v6_pg_scenario -- + procedural-graph guidance (Track 2 scenarios only)
-  v7_rerank      -- RAG excerpts reranked by the fine-tuned cross-encoder
-  v8_rerank_cot  -- v7_rerank + CoT combined
-  v9_fewshot     -- + 3 hand-verified correct decision examples
-  v10_dpo_contrast -- + a real observed mistake vs. the correct reasoning
-  v11_reflect    -- + self-check instruction before finalizing the answer
+  v1_rag..v6_pg_scenario are an archived ablation arm (147 runs depend on them staying
+  reproducible) -- no longer in the default sweep, never redefine.
+
+  v7_super_rag     -- the full retrieval stack on corpus v2: dense RAG + reranker + KG,
+                      no CoT, no PG (kept fast, v0_base-like latency)
+  v8_super_cot_pg  -- chain-of-thought + procedure guidance from BOTH the rebuilt
+                      scenario and incident procedural graphs, no retrieval
+  v9_super_all     -- v7_super_rag + v8_super_cot_pg combined
+These three are the actual experiment-matrix prompt columns (P1/P2/P3); the earlier
+v7_rerank/v8_rerank_cot/v9_fewshot/v10_dpo_contrast/v11_reflect prototype slots were
+never run (no result files ever used those names) and were redefined in place
+2026-09-22 rather than left as dead placeholders.
 
 As in prep_ablation.py's Track 2 design, the response-format JSON contract
-never changes across v0-v6 -- only the USER turn gains CoT/RAG/PG content --
+never changes across v0-v9 -- only the USER turn gains CoT/RAG/PG content --
 so every config stays directly comparable and always produces a parseable
 decision. 'bare_qwen' is the one exception: a genuinely different, minimal
 system prompt, to measure how much the OOW framing itself is worth.
@@ -63,7 +69,7 @@ from sentence_transformers import CrossEncoder
 
 from core import AgentPaths, EMBEDDER_MODEL
 from pipeline.ingest.build_kg import kg_retrieve, rerank_hits
-from pipeline.ingest.pg_guidance import ProceduralGraph, render_guidance
+from pipeline.ingest.pg_guidance import ProceduralGraph, render_guidance, load_merged_pg
 from pipeline.eval.prep_ablation import format_context
 
 from app.missions import Mission, Vessel
@@ -82,45 +88,30 @@ MODEL_CONFIGS: dict[str, str] = {
     "v4_pg":          "v4 PG (merged) -- + procedure guidance, all sources",
     "v5_pg_incident": "v5 PG (incidents) -- + guidance from real incidents only",
     "v6_pg_scenario": "v6 PG (scenarios) -- + guidance from Track 2 scenarios only",
-    "v7_rerank":      "v7 rerank -- RAG excerpts reranked by the fine-tuned cross-encoder",
-    "v8_rerank_cot":  "v8 rerank+CoT -- RAG (reranked) + CoT combined",
-    "v9_fewshot":     "v9 few-shot -- + 3 hand-verified correct decision examples",
-    "v10_dpo_contrast":"v10 DPO-style contrast -- + a real observed mistake vs. the correct reasoning",
-    "v11_reflect":    "v11 reflect -- + self-check instruction before finalizing the answer",
+    "v7_super_rag":    "v7 super RAG -- full retrieval stack on corpus v2 (dense + reranker + KG), no CoT/PG",
+    "v8_super_cot_pg": "v8 super CoT+PG -- CoT + procedure guidance from scenario+incident graphs, no retrieval",
+    "v9_super_all":    "v9 super all -- v7_super_rag + v8_super_cot_pg combined",
 }
 
 # Every entry carries the SAME keys so build_oow_prompt() never has to .get() with a
 # default -- a missing key would silently no-op that ingredient instead of raising.
 _CONFIG_SPECS = {
-    "bare_qwen":      dict(bare=True,  rag=False, rerank=False, cot=False, pg=None,
-                          fewshot=False, dpo_contrast=False, reflect=False),
-    "v0_base":        dict(bare=False, rag=False, rerank=False, cot=False, pg=None,
-                          fewshot=False, dpo_contrast=False, reflect=False),
-    "v1_rag":         dict(bare=False, rag=True,  rerank=False, cot=False, pg=None,
-                          fewshot=False, dpo_contrast=False, reflect=False),
-    "v2_cot":         dict(bare=False, rag=False, rerank=False, cot=True,  pg=None,
-                          fewshot=False, dpo_contrast=False, reflect=False),
-    "v3_rag_cot":     dict(bare=False, rag=True,  rerank=False, cot=True,  pg=None,
-                          fewshot=False, dpo_contrast=False, reflect=False),
-    "v4_pg":          dict(bare=False, rag=False, rerank=False, cot=False, pg="merged",
-                          fewshot=False, dpo_contrast=False, reflect=False),
-    "v5_pg_incident": dict(bare=False, rag=False, rerank=False, cot=False, pg="incident",
-                          fewshot=False, dpo_contrast=False, reflect=False),
-    "v6_pg_scenario": dict(bare=False, rag=False, rerank=False, cot=False, pg="scenario",
-                          fewshot=False, dpo_contrast=False, reflect=False),
-    # Prototype configs (2026-09-22) -- test whether a training INGREDIENT helps at all
-    # via in-context prompt content, before spending cloud GPU hours actually fine-tuning
-    # on it. Mirrors how v4-v6_pg already inject mined guidance instead of training on it.
-    "v7_rerank":      dict(bare=False, rag=True,  rerank=True,  cot=False, pg=None,
-                          fewshot=False, dpo_contrast=False, reflect=False),
-    "v8_rerank_cot":  dict(bare=False, rag=True,  rerank=True,  cot=True,  pg=None,
-                          fewshot=False, dpo_contrast=False, reflect=False),
-    "v9_fewshot":     dict(bare=False, rag=False, rerank=False, cot=False, pg=None,
-                          fewshot=True,  dpo_contrast=False, reflect=False),
-    "v10_dpo_contrast":dict(bare=False, rag=False, rerank=False, cot=False, pg=None,
-                          fewshot=False, dpo_contrast=True,  reflect=False),
-    "v11_reflect":    dict(bare=False, rag=False, rerank=False, cot=False, pg=None,
-                          fewshot=False, dpo_contrast=False, reflect=True),
+    "bare_qwen":      dict(bare=True,  rag=False, rerank=False, cot=False, pg=None),
+    "v0_base":        dict(bare=False, rag=False, rerank=False, cot=False, pg=None),
+    # v1_rag..v6_pg_scenario: archived ablation arm, no longer in the standard sweep;
+    # 147 archived runs depend on these exact definitions -- never redefine.
+    "v1_rag":         dict(bare=False, rag=True,  rerank=False, cot=False, pg=None),
+    "v2_cot":         dict(bare=False, rag=False, rerank=False, cot=True,  pg=None),
+    "v3_rag_cot":     dict(bare=False, rag=True,  rerank=False, cot=True,  pg=None),
+    "v4_pg":          dict(bare=False, rag=False, rerank=False, cot=False, pg="merged"),
+    "v5_pg_incident": dict(bare=False, rag=False, rerank=False, cot=False, pg="incident"),
+    "v6_pg_scenario": dict(bare=False, rag=False, rerank=False, cot=False, pg="scenario"),
+    # The actual experiment-matrix prompt columns (2026-09-22, redefined in place over the
+    # never-run v7_rerank/v8_rerank_cot/v9_fewshot/v10_dpo_contrast/v11_reflect prototype
+    # slots -- confirmed via grep that zero result files ever used those 5 names).
+    "v7_super_rag":    dict(bare=False, rag=True,  rerank=True,  cot=False, pg=None),
+    "v8_super_cot_pg": dict(bare=False, rag=False, rerank=False, cot=True,  pg="scenario+incident"),
+    "v9_super_all":    dict(bare=False, rag=True,  rerank=True,  cot=True,  pg="scenario+incident"),
 }
 
 # Truly bare -- no COLREG rules-of-thumb, just told to answer in the required JSON shape.
@@ -195,78 +186,6 @@ COT_INSTR = (
     "Then give the final JSON answer."
 )
 
-# v9_fewshot -- 3 hand-verified (situation -> correct decision) demonstrations, one per
-# encounter type this project's sweep found the model confusing (head-on/crossing/
-# overtaking). Tests whether in-context examples alone reproduce what an SFT pass on
-# similar examples would teach, before spending cloud GPU hours actually fine-tuning.
-FEWSHOT_EXAMPLES = [
-    (
-        "Own-ship at (0.000, -6.000) NM, heading 0.0, speed 10.00 kt.\nMission goal at "
-        "(0.000, 6.000) NM, 12.000 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is "
-        "ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\n"
-        "1 other ship:\n  - Ship named \"ts1\": range 3.000 NM, rel.bearing 0.0 deg, heading "
-        "180.0, speed 10.00 kt, CPA 0.000 NM, TCPA 540s",
-        {"action": "turn_right", "degrees": 20, "rule_applied": "Rule 14",
-         "reasoning": "ts1 is dead ahead on a reciprocal course (CPA 0.000NM) -- a head-on "
-                      "situation under Rule 14, which requires BOTH vessels to alter course to "
-                      "STARBOARD, never port. Turning right by 20 degrees begins a safe "
-                      "port-to-port passage."},
-    ),
-    (
-        "Own-ship at (0.000, 0.000) NM, heading 0.0, speed 10.00 kt.\nMission goal at "
-        "(0.000, 12.000) NM, 12.000 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is "
-        "ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\n"
-        "1 other ship:\n  - Ship named \"ts1\": range 4.000 NM, rel.bearing 40.0 deg, heading "
-        "270.0, speed 8.00 kt, CPA 0.200 NM, TCPA 900s",
-        {"action": "turn_right", "degrees": 25, "rule_applied": "Rule 15",
-         "reasoning": "ts1 is crossing from our starboard bow with CPA 0.200NM below the safe "
-                      "distance -- Rule 15 makes own-ship the give-way vessel, which must keep "
-                      "clear, normally by turning to starboard and avoiding crossing ahead of ts1."},
-    ),
-    (
-        "Own-ship at (0.000, 0.000) NM, heading 0.0, speed 12.00 kt.\nMission goal at "
-        "(0.000, 12.000) NM, 12.000 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is "
-        "ALREADY on the goal bearing (within 10 deg) -- no turn needed for the goal.\n"
-        "1 other ship:\n  - Ship named \"ts1\": range 0.500 NM, rel.bearing 5.0 deg, heading "
-        "0.0, speed 6.00 kt, CPA 0.050 NM, TCPA 300s",
-        {"action": "turn_right", "degrees": 15, "rule_applied": "Rule 13",
-         "reasoning": "Own-ship is overtaking ts1 from nearly astern at a higher speed -- Rule 13 "
-                      "makes the overtaking vessel keep clear until finally past and clear, "
-                      "regardless of relative bearing; turning right opens a safe passing distance "
-                      "without cutting across ts1's bow."},
-    ),
-]
-
-# v10_dpo_contrast -- a REAL mistake observed in this project's own Imazu01 sweep (t=0s,
-# v0_base/v3_rag_cot configs), paired with the deterministically-correct reasoning for the
-# exact same situation. Tests whether showing "here is a genuine past mistake, here is the
-# fix" in-context reproduces what a DPO pass on real-failure-mined pairs would teach.
-DPO_CONTRAST_TEXT = (
-    "Example of a reasoning mistake to avoid (observed in a previous run on this exact kind of "
-    "situation -- a target dead ahead on a reciprocal course, CPA effectively 0): the model wrote "
-    "'Rule 13 requires head-on vessels to turn right (starboard) to pass port-to-port' and "
-    "requested a 90-degree turn. This was WRONG on two counts: (1) Rule 13 is the OVERTAKING rule, "
-    "not head-on -- head-on is Rule 14; (2) a single turn command may never exceed the stated "
-    "physical degree limit, however large the needed course change is.\n"
-    "The CORRECT reasoning for that situation: 'ts1 is dead ahead on a reciprocal course -- this is "
-    "a head-on situation under Rule 14, requiring both vessels to alter course to starboard. Turn "
-    "right by at most the stated limit, and issue further turn commands on subsequent steps if more "
-    "course change is still needed.'"
-)
-
-# v11_reflect -- a pure self-check instruction (no training data at all), operationalizing the
-# same draft->critique->refine pattern build_reflection.py trains on, but entirely in-context.
-REFLECT_INSTR = (
-    "Before finalizing your answer, check your own reasoning against these two questions:\n"
-    "1. Does the COLREG rule you cited actually match the encounter you described (e.g. Rule 14 "
-    "for head-on, Rule 15 for crossing, Rule 13 for overtaking) -- not just whichever rule number "
-    "came to mind first?\n"
-    "2. Is your requested 'degrees' value within the stated physical limit, and if a bigger course "
-    "change is truly needed, have you planned to request it as several separate turn commands "
-    "rather than one oversized request?\n"
-    "If either check fails, revise your action before writing the final JSON."
-)
-
 
 @st.cache_resource(show_spinner="Loading OOW retrieval index (RAG + Procedural Graphs)...")
 def _load_retrieval():
@@ -284,7 +203,14 @@ def _load_retrieval():
     for key, suffix in (("merged", ""), ("incident", "_incident"), ("scenario", "_scenario")):
         pg_file = cache / f"{pfx}_pg{suffix}.json"
         pg_graphs[key] = ProceduralGraph(pg_file, embedder) if pg_file.exists() else None
-    # v7_rerank/v8_rerank_cot only -- see pipeline/train/train_reranker.py. Also tiny (~22M
+    # v8_super_cot_pg/v9_super_all's pg="scenario+incident" -- guidance from BOTH graphs
+    # together, deliberately excluding oow_pg_rule.json (a separate, optional test arm).
+    scenario_file, incident_file = cache / f"{pfx}_pg_scenario.json", cache / f"{pfx}_pg_incident.json"
+    pg_graphs["scenario+incident"] = (
+        load_merged_pg([scenario_file, incident_file], embedder)
+        if scenario_file.exists() and incident_file.exists() else None
+    )
+    # v7_super_rag/v9_super_all only -- see pipeline/train/train_reranker.py. Also tiny (~22M
     # params), CPU-only, same rationale as `embedder` above. None if not yet trained, so
     # every OTHER config keeps working even before this prototype exists on a given machine.
     reranker_dir = paths.domain_models_dir / "oow_reranker"
@@ -469,16 +395,6 @@ def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], confi
         # reasoning structure at all before this -- same unstructured-rambling risk as CoT, so they
         # get the same step template.
         user_parts.append(COT_INSTR)
-    if spec["fewshot"]:
-        examples_text = "\n\n".join(
-            f"Example situation:\n{sit}\nCorrect answer: {json.dumps(ans)}"
-            for sit, ans in FEWSHOT_EXAMPLES
-        )
-        user_parts.append(f"Worked examples of correct decisions (not this mission's own situation):\n\n{examples_text}")
-    if spec["dpo_contrast"]:
-        user_parts.append(DPO_CONTRAST_TEXT)
-    if spec["reflect"]:
-        user_parts.append(REFLECT_INSTR)
     if constraints is not None:
         per_step = constraints.turn_rate_deg_s * constraints.time_step_s
         user_parts.append(
