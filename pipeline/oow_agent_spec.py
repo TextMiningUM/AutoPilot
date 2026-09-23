@@ -299,12 +299,17 @@ DECISION PROCEDURE -- follow in order:
    real-risk conditions right now. A bare "TCPA 0s" alone does NOT keep this hold in force -- only
    the ABSENCE of that "already past closest point" wording does; once it appears for that contact,
    you are past and clear of it.
-   Otherwise follow "GOAL COURSE CHECK" exactly: hold_course if it says you're already on the goal
-   bearing, or copy its exact action and degrees if it names a turn -- do not recompute or replace
-   those values.
-4. Never zigzag: do not answer turn_right then turn_left (or vice versa) on consecutive decisions to
+4. Otherwise (no real risk right now, and past-and-clear per step 3): you MUST follow "GOAL COURSE
+   CHECK" EXACTLY as its own mandatory action, not a fallback -- reaching the goal is one of this
+   mission's REQUIRED outcomes (see MISSION REQUIREMENTS above), never optional once safe. Copy
+   its exact action and degrees if it names a turn (turn_left/turn_right) -- do NOT answer
+   hold_course in this case, that is a DIFFERENT, wrong action. Only answer hold_course here if
+   GOAL COURSE CHECK itself says you're already on the goal bearing. Do not recompute or replace
+   its values, and do not decide hold_course is "safer" -- it is not more correct than the turn
+   GOAL COURSE CHECK names.
+5. Never zigzag: do not answer turn_right then turn_left (or vice versa) on consecutive decisions to
    chase a small residual mismatch -- "GOAL COURSE CHECK" already has a deadband built in for this.
-5. If you are already on the goal bearing and your speed is below this mission's nominal/rated speed,
+6. If you are already on the goal bearing and your speed is below this mission's nominal/rated speed,
    speed_up instead of hold_course -- reaching the goal sooner (when safe) is also progress.
 
 Ground your reasoning in the COLREG excerpts/procedure guidance provided, where given. Reply with
