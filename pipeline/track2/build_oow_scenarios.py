@@ -1512,6 +1512,10 @@ def main() -> None:
             train_recs = resample_train_away_from_held_out(train_recs, rnd, held_out)
         for i, r in enumerate(train_recs):
             r["_id"] = f"t{i:05d}"
+        # to_trace_record() needs situation_report -- 100% deterministic, no API call,
+        # same line the OLD render_all()-based flow uses right after split_eval_train().
+        for r in train_recs:
+            r["situation_report"] = render_situation_narrative(r)
         print(f"Fase B3 full population: {len(train_recs)} training records...")
         result = render_reasoning_full_population(client, args.model, train_recs,
                                                    max_attempts=3, max_tokens=args.max_tokens)
