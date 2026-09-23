@@ -18,10 +18,12 @@ from app.simulation import VesselConstraints  # noqa: E402
 CONSTRAINTS = VesselConstraints()  # min_cpa_m=500, turn_rate_deg_s=3.0, time_step_s=10.0
 
 
-def contact(cpa_m: float) -> dict:
+def contact(cpa_m: float, tcpa_s: float = 100.0) -> dict:
     """Minimal stand-in for narrate.contact_line()'s return dict -- measure_decision_quality
-    only ever reads "cpa_m" off each entry."""
-    return {"cpa_m": cpa_m}
+    reads "cpa_m" and "tcpa_s" off each entry (quality-review STAP 1: Check A's real_risk()
+    needs both). Default tcpa_s=100.0 sits well within RISK_HORIZON_S, so every existing
+    test that only varies cpa_m keeps its original CPA-only behaviour."""
+    return {"cpa_m": cpa_m, "tcpa_s": tcpa_s}
 
 
 # ── Check A: fabricated risk ──────────────────────────────────────────────
@@ -75,8 +77,33 @@ def test_a_does_not_fire_on_tcpa_zero_already_passed_case() -> None:
     # CPA alone, matching the system prompt's own definition of real risk.
     decision = {"action": "hold_course", "degrees": None, "encounter_rule": "none",
                "conduct_rule": "none", "reasoning": "..."}
-    result = measure_decision_quality(decision, [contact(11818.0)], CONSTRAINTS)
+    result = measure_decision_quality(decision, [contact(11818.0, tcpa_s=0.0)], CONSTRAINTS)
     assert result["checks_fired"] == []
+
+
+# ── Quality-review STAP 1 (2026-09-23): Check A now needs BOTH cpa_m and tcpa_s ───────
+def test_a_fires_on_low_cpa_and_tcpa_within_horizon() -> None:
+    decision = {"action": "turn_right", "degrees": 10.0, "encounter_rule": "none",
+               "conduct_rule": "none", "reasoning": "..."}
+    result = measure_decision_quality(decision, [contact(300.0, tcpa_s=100.0)], CONSTRAINTS)
+    assert result["checks_fired"] == []  # no rule cited, so Check A correctly doesn't fire
+
+
+def test_a_fires_when_rule_cited_but_tcpa_beyond_horizon_even_with_low_cpa() -> None:
+    """Before this fix, Check A was CPA-only: a low CPA far off in time (TCPA beyond the
+    real-risk horizon) would NOT have fired Check A even though it should have -- a rule
+    cited against a contact that isn't yet a real risk IS a fabrication."""
+    decision = {"action": "turn_right", "degrees": 10.0, "encounter_rule": "Rule 15",
+               "conduct_rule": "Rule 16", "reasoning": "..."}
+    result = measure_decision_quality(decision, [contact(300.0, tcpa_s=301.0)], CONSTRAINTS)
+    assert "A_fabricated_risk" in result["checks_fired"]
+
+
+def test_a_fires_when_rule_cited_but_tcpa_already_negative() -> None:
+    decision = {"action": "turn_right", "degrees": 10.0, "encounter_rule": "Rule 15",
+               "conduct_rule": "Rule 16", "reasoning": "..."}
+    result = measure_decision_quality(decision, [contact(300.0, tcpa_s=-5.0)], CONSTRAINTS)
+    assert "A_fabricated_risk" in result["checks_fired"]
 
 
 def test_a_does_not_fire_when_no_rule_cited() -> None:

@@ -31,6 +31,46 @@ import math
 ACTIONS = ("turn_left", "turn_right", "hold_course", "speed_up", "slow_down", "stop")
 _DEGREES_ONLY_FOR = ("turn_left", "turn_right")
 
+# Quality-review STAP 1 (blocking bug, 2026-09-23): the ONE definition of "real collision
+# risk", shared by BOTH Track-2 generators' labelers (leo_choose_action/_real_risk,
+# build_oow_scenarios.py's to_unified_action) and Basic Simulator/app/measurement.py's
+# Check A -- previously build_oow_scenarios_leo.py's _real_risk() ALSO required Leo's own
+# "risk" label (medium/high/critical), but that label is a TCPA-urgency judgement from the
+# SOURCE data, not a CPA-based risk-of-collision judgement -- e.g. a real source record
+# with give_way role, CPA 187m (<500m), TCPA 709s carried risk="low" purely because TCPA
+# was distant, so gating on it too silently dropped ~840 genuinely-close-CPA frames to
+# hold_course/speed_up with no rule cited. Leo's risk label is METADATA from here on,
+# never a gate.
+#
+# RISK_HORIZON_S matches colreg_llm_bridge.py's own risk_horizon default (300s) -- the
+# live MOOS bridge already uses this exact number to decide when a contact is worth
+# actively deciding about at all, so training/eval reuses it rather than inventing a
+# second number. STAND_ON_TCPA_S (Rule 17(a)(ii)/(b): a stand-on vessel may/must act once
+# it becomes "apparent" the give-way vessel isn't) is DERIVED as a shorter sub-horizon of
+# RISK_HORIZON_S, not an independent constant: a contact can be a REAL risk (within
+# RISK_HORIZON_S) while it is still too early to judge the give-way vessel as failing to
+# act -- that stronger judgement only applies once the encounter is more imminent.
+RISK_HORIZON_S = 300.0
+STAND_ON_TCPA_S = RISK_HORIZON_S * 0.6  # == 180.0, matches the prior hardcoded value
+
+
+def real_risk(cpa_m: float | None, tcpa_s: float | None, safe_distance_m: float) -> bool:
+    """The ONE gate for "does this contact pose a real risk of collision right now" --
+    CPA below `safe_distance_m` (a per-row/per-mission PARAMETER, never a hardcoded
+    constant, so training data never learns a shortcut against one fixed number) AND TCPA
+    within [0, RISK_HORIZON_S). Both conditions are required:
+      - CPA alone is not enough: a contact can have a tiny CPA that is still hours away
+        (not yet actionable) or -- more commonly -- already resolved.
+      - TCPA alone is not enough: TCPA==0 is genuinely ambiguous on its own (it occurs
+        BOTH for "collision right now" and "closest point already passed, now diverging"
+        -- never disambiguate using TCPA alone).
+      - TCPA < 0 (already past the closest point) is explicitly EXCLUDED (`0 <= tcpa_s`),
+        never treated as a risk regardless of how small CPA was.
+      - TCPA >= RISK_HORIZON_S is a contact to monitor, not yet one to act on.
+    """
+    return (cpa_m is not None and cpa_m < safe_distance_m
+            and tcpa_s is not None and 0 <= tcpa_s < RISK_HORIZON_S)
+
 # Fixed response-format contract, byte-identical to what Basic Simulator/app/agents.py's
 # build_oow_prompt() has always sent for v0-v9 (only the USER turn varies across
 # configs). 'bare_qwen' is the one deliberate exception (its own separate, minimal
@@ -56,18 +96,24 @@ second-guess them:
 - rel.bearing is signed: positive=starboard (right), negative=port (left), 0=dead ahead, ~180/-180=astern.
 - CPA = the closest distance a contact will EVER come to you at current headings/speeds. TCPA = seconds
   until that closest point.
-- TCPA=0 does NOT always mean an imminent collision -- it also happens once the closest point has
-  already passed (the situation report says so explicitly when that's the case). Judge real risk from
-  CPA alone, never from TCPA alone.
+- A contact poses REAL collision risk only when BOTH hold: its CPA is below this mission's safe
+  passing distance, AND its TCPA is within the real-risk time horizon (both given further below) --
+  neither alone is enough. TCPA=0 does NOT always mean an imminent collision -- it also happens once
+  the closest point has already passed (the situation report says so explicitly when that's the
+  case, e.g. "already past closest point, ranges now increasing"); such a contact poses no real risk
+  regardless of how small its CPA was. A contact whose TCPA is beyond the horizon is one to monitor,
+  not yet one to act on.
 - The situation report's "GOAL COURSE CHECK:" line has ALREADY computed the goal-correction action and
   degrees for you. Never substitute a contact's rel.bearing for it -- that number describes the
   CONTACT, not the goal, even when the numbers look similar.
 
 DECISION PROCEDURE -- follow in order:
-1. Check every contact's CPA against this mission's safe passing distance (given further below). If
-   none are below it, there is no real collision risk right now -- go to step 3.
-2. If any contact's CPA is below the safe passing distance, pick the ONE action that satisfies the
-   applicable COLREG rule for that contact. This step overrides everything below it.
+1. Check every contact against this mission's safe passing distance AND real-risk time horizon
+   (given further below): a real risk exists only when a contact's CPA is below the safe distance
+   AND its TCPA is within the horizon. If no contact meets both, there is no real collision risk
+   right now -- go to step 3.
+2. If any contact meets both conditions, pick the ONE action that satisfies the applicable COLREG
+   rule for that contact. This step overrides everything below it.
 3. Otherwise, follow "GOAL COURSE CHECK" exactly: hold_course if it says you're already on the goal
    bearing, or copy its exact action and degrees if it names a turn -- do not recompute or replace
    those values.

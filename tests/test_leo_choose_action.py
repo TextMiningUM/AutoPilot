@@ -13,7 +13,7 @@ def _own(speed=10.0, target_speed=10.0, paused=False, stopped=False,
 
 
 def _contact(own_role="give_way", encounter_type="crossing", risk="high",
-            cpa_distance_m=200.0, tcpa_s=300.0, relative_bearing_deg=45.0,
+            cpa_distance_m=200.0, tcpa_s=100.0, relative_bearing_deg=45.0,
             range_m=800.0, closing_speed=5.0, name="RANDOM_TS1",
             active_encounter_rules=(15, 16), standing_rules=(2, 5, 6, 7)):
     return {
@@ -96,8 +96,10 @@ def test_rule13_overtaking_permits_either_turn_direction_by_geometry() -> None:
 
 
 def test_stand_on_holds_course_without_17b_trigger() -> None:
+    # tcpa_s=200 is within RISK_HORIZON_S (300, so still a real risk) but above
+    # STAND_ON_TCPA_S (180, so not yet "imminent" enough to trigger 17(a)(ii)/(b)).
     c = _contact(own_role="stand_on", encounter_type="crossing", risk="high",
-                cpa_distance_m=100.0, tcpa_s=600.0)  # real risk, but NOT imminent
+                cpa_distance_m=100.0, tcpa_s=200.0)  # real risk, but NOT imminent
     d = leo_choose_action(_state([c]))
     assert d["action"] == "hold_course"
     assert d["encounter_rule"] == "Rule 15" and d["conduct_rule"] == "Rule 17"

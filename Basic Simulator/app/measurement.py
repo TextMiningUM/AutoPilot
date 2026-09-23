@@ -27,6 +27,7 @@ from __future__ import annotations
 import copy
 
 from app.simulation import VesselConstraints
+from pipeline.oow_agent_spec import real_risk as _real_risk_fn
 
 _GIVE_WAY_TURN_CONDUCT_RULES = ("Rule 14", "Rule 16")
 _GIVE_WAY_TURN_ENCOUNTER_RULES = ("Rule 14", "Rule 15")
@@ -40,8 +41,8 @@ def measure_decision_quality(decision: dict, situation: list[dict],
         "encounter_rule", "conduct_rule", "reasoning", ...}. Never mutated (deep-copied
         before inspection; see test_measurement.py's test_never_mutates_decision).
     situation: list of per-contact dicts as returned by narrate.contact_line() for every
-        live contact this decision was made against -- each must carry at least "cpa_m".
-        Pass [] for a contact-free situation (no targets at all).
+        live contact this decision was made against -- each must carry at least "cpa_m"
+        and "tcpa_s". Pass [] for a contact-free situation (no targets at all).
     constraints: the live VesselConstraints used for this mission/step -- supplies the
         safe-passing-distance threshold (min_cpa_m) and the physical per-step turn limit
         (turn_rate_deg_s * time_step_s).
@@ -66,14 +67,17 @@ def measure_decision_quality(decision: dict, situation: list[dict],
     action = decision.get("action")
 
     # Check A -- fabricated risk: a rule was cited even though NO contact has a real
-    # collision risk (CPA below this mission's safe passing distance). CPA ONLY, never
-    # TCPA -- TCPA=0 also fires once the closest point has already passed, which is not a
-    # live risk (see narrate.contact_line()'s "closing" field / SYSTEM_OOW_AGENT's own
-    # definition of real risk -- this measurement must use the same definition the model
-    # was asked to use, or it measures something else).
+    # collision risk (quality-review STAP 1, 2026-09-23: the ONE shared real_risk() --
+    # CPA below this mission's safe passing distance AND TCPA within the real-risk time
+    # horizon, pipeline.oow_agent_spec -- same function build_oow_scenarios_leo.py's
+    # leo_choose_action and build_oow_scenarios.py's to_unified_action use, so this
+    # measurement can never silently drift from what the training-data labelers treat as
+    # real risk. TCPA alone is never enough either -- TCPA=0 also fires once the closest
+    # point has already passed, which is not a live risk; see narrate.contact_line()'s
+    # "closing" field / SYSTEM_OOW_AGENT's own definition of real risk).
+    any_real_risk = any(_real_risk_fn(c["cpa_m"], c["tcpa_s"], constraints.min_cpa_m) for c in situation)
     min_cpa_m = min((c["cpa_m"] for c in situation), default=float("inf"))
-    real_risk = min_cpa_m < constraints.min_cpa_m
-    a_fired = (not real_risk) and (encounter_rule != "none" or conduct_rule != "none")
+    a_fired = (not any_real_risk) and (encounter_rule != "none" or conduct_rule != "none")
     if a_fired:
         checks_fired.append("A_fabricated_risk")
         details["A"] = {

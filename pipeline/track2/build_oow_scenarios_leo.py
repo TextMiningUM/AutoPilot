@@ -64,7 +64,7 @@ import numpy as np
 from core import AgentPaths, load_env, review_path, safe_write_jsonl, CONTAM_THRESH, EMBEDDER_MODEL
 from pipeline.oow_agent_spec import (
     SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, goal_course_check_line, goal_course_action,
-    classify_rules, render_previous_decisions,
+    classify_rules, render_previous_decisions, real_risk, STAND_ON_TCPA_S,
 )
 
 paths = AgentPaths.oow()
@@ -103,10 +103,12 @@ SAFE_CPA_M = 500.0        # matches Basic Simulator VesselConstraints' default m
 CRITICAL_RANGE_M = 200.0  # "so close that collision cannot be avoided by the give-way
                           # vessel's action alone" (Rule 17(b)) -- a genuine GEOMETRY/range
                           # criterion for stop, never a TCPA cutoff.
-STAND_ON_TCPA_S = 180.0   # Rule 17(a)(ii)/(b): stand-on may/must act once it becomes
-                          # apparent the give-way vessel isn't -- "apparent" needs BOTH a
-                          # real CPA shortfall AND the encounter being imminent (short
-                          # TCPA), never TCPA alone.
+# STAND_ON_TCPA_S imported from pipeline.oow_agent_spec (quality-review STAP 1) -- it is
+# DERIVED from the same RISK_HORIZON_S real_risk() itself uses, never a second
+# independent number: Rule 17(a)(ii)/(b)'s stand-on-may/must-act trigger needs BOTH a
+# real CPA shortfall AND the encounter being imminent (a SHORTER TCPA than the general
+# real_risk() horizon -- a contact can be a real risk while still too early to judge the
+# give-way vessel as failing to act).
 MIN_TURN_DEG = 15.0       # Rule 16's "early and substantial" rules out a token gesture.
 MAX_TURN_DEG = 30.0       # matches Basic Simulator VesselConstraints' max_rudder_angle_deg
                           # (a single turn command beyond this is silently capped there).
@@ -198,12 +200,14 @@ def _leo_role_for_classify(own_role: str, encounter_type: str) -> str:
 
 
 def _real_risk(c: dict) -> bool:
-    """Rule 7 gate: real collision risk is determined EXCLUSIVELY from CPA against the
-    safe passing distance (paired with Leo's own risk label as a corroborating check),
-    NEVER from TCPA alone -- TCPA=0 can just as easily mean the closest point has already
-    passed as mean an imminent collision."""
-    cpa = c.get("cpa_distance_m")
-    return cpa is not None and cpa < SAFE_CPA_M and c.get("risk") in ("medium", "high", "critical")
+    """Rule 7 gate: real collision risk, via the ONE shared real_risk() (pipeline.
+    oow_agent_spec) -- CPA below SAFE_CPA_M AND TCPA within RISK_HORIZON_S, NEVER gated
+    on Leo's own "risk" label (medium/high/critical): that label is a TCPA-urgency
+    judgement from the source data, not a CPA-based risk-of-collision judgement -- see
+    quality-review STAP 1 (2026-09-23) for the concrete real-data example this fixes.
+    Leo's risk label stays available as METADATA (c["risk"] itself, still surfaced in the
+    rendered narrative for uncertain-track contacts) but is never a gate here again."""
+    return real_risk(c.get("cpa_distance_m"), c.get("tcpa_s"), SAFE_CPA_M)
 
 
 def _turn_degrees(cpa_m: float) -> float:

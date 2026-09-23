@@ -132,7 +132,7 @@ from core import AgentPaths, load_env, review_path, safe_write_jsonl, EMBEDDER_M
 from pipeline.oow_agent_spec import (
     SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, classify_rules,
     bearing_and_range, relative_bearing, goal_course_action, goal_course_check_line,
-    render_previous_decisions,
+    render_previous_decisions, real_risk,
 )
 
 paths = AgentPaths.oow()
@@ -424,7 +424,12 @@ def to_unified_action(rec: dict) -> dict:
     if old_action == "maintain_course":
         # A genuine stand-on situation (real risk, Rule 17 correctly says hold course) is
         # NOT the same as no encounter at all ("none"/"none") -- never conflate them.
-        stand_on_targets = [t for t in rec["targets"] if t["_role"] in ("stand_on", "overtaking_stand_on")]
+        # Gated by the ONE shared real_risk() (quality-review STAP 1) -- same function
+        # leo_choose_action() and measurement.py's Check A use, so a role label alone
+        # (assigned upstream from bearing geometry only) can never stand in for an actual
+        # CPA/TCPA risk judgement here either.
+        stand_on_targets = [t for t in rec["targets"] if t["_role"] in ("stand_on", "overtaking_stand_on")
+                           and real_risk(t["_cpa_m"], t["_tcpa_min"] * 60.0, SAFE_CPA_M)]
         if stand_on_targets:
             worst = min(stand_on_targets, key=lambda t: t["_cpa_m"])
             encounter_rule, conduct_rule = classify_rules(worst["_role"], "hold_course")
