@@ -6,6 +6,7 @@ from __future__ import annotations
 import csv
 import importlib.util
 import json
+import math
 import os
 import re
 import tempfile
@@ -169,17 +170,120 @@ def _rows_at_time(trajectory_rows: list[dict], t: float, tol: float = 0.5) -> di
     return {r["vehicle"]: r for r in trajectory_rows if r["time"] == nearest}
 
 
+# Compliance-rebuild STAP 2 (2026-09-23): classify_encounter()'s raw return string ->
+# (this dict's `encounter` name, own_role, pipeline.oow_agent_spec.classify_rules()'s role
+# key) -- "stationary" is NOT one of classify_encounter()'s own return values (it has no
+# notion of speed, only geometry), detected separately below from the contact's own
+# recorded speed.
+_ENCOUNTER_MAP = {
+    "head_on": ("head_on", "both_give_way", "mutual"),
+    "crossing_target_on_starboard": ("crossing_stbd", "give_way", "give_way"),
+    "crossing_target_on_port": ("crossing_port", "stand_on", "stand_on"),
+    "we_are_overtaking_target": ("we_overtake", "give_way", "overtaking_give_way"),
+    "target_is_overtaking_us": ("overtaken", "stand_on", "overtaking_stand_on"),
+}
+_STATIONARY_SPEED_EPS = 0.05  # m/s -- matches classify_rules()'s "stationary" role
+
+# Expected manoeuvre direction + forbidden actions per `encounter` name (STAP 3 checks these
+# against the agent's actual action; STAP 2 only populates them). "speed_up" is forbidden in
+# EVERY early/acute encounter regardless of type -- appended separately below, not listed here.
+_ENCOUNTER_EXPECTATIONS = {
+    "head_on":       {"expected_direction": "starboard", "forbidden": ["port_toward_contact"]},
+    "crossing_stbd": {"expected_direction": "starboard", "forbidden": ["port_toward_contact", "cross_ahead"]},
+    "crossing_port": {"expected_direction": "hold", "forbidden": ["port_toward_contact"]},
+    "we_overtake":   {"expected_direction": "either", "forbidden": ["cross_ahead_close"]},
+    "overtaken":     {"expected_direction": "hold", "forbidden": []},
+    "stationary":    {"expected_direction": "away_from_contact", "forbidden": []},
+}
+
+
+def _contact_ground_truth(own: dict, vname: str, row: dict, safe_distance_m: float,
+                          risk_horizon_s: float) -> dict:
+    """One contact's structured ground truth (see _ground_truth_at_checkpoint's docstring
+    for the band/expectation rules this implements)."""
+    from app.narrate import cpa_tcpa
+    from pipeline.oow_agent_spec import classify_encounter, classify_rules
+
+    cpa, _ = cpa_tcpa(own["x"], own["y"], own["heading"], own["speed"],
+                      row["x"], row["y"], row["heading"], row["speed"])
+    # Signed/unclamped TCPA -- cpa_tcpa() itself always clamps to t>=0, so "already past
+    # the closest point" can never be seen through its return value alone. Same dot-
+    # product sign check narrate.contact_line() already duplicates for its own "closing"
+    # flag, reused here so a genuinely diverging encounter can be banded "passed" instead
+    # of being forced into "acute"/"early" forever.
+    oh, th = math.radians(own["heading"]), math.radians(row["heading"])
+    vox, voy = own["speed"] * math.sin(oh), own["speed"] * math.cos(oh)
+    vtx, vty = row["speed"] * math.sin(th), row["speed"] * math.cos(th)
+    dx, dy = row["x"] - own["x"], row["y"] - own["y"]
+    dvx, dvy = vtx - vox, vty - voy
+    rel_sq = dvx ** 2 + dvy ** 2
+    tcpa = 0.0 if rel_sq < 1e-6 else -(dx * dvx + dy * dvy) / rel_sq
+    enc_raw, _, rel = classify_encounter(own["x"], own["y"], own["heading"],
+                                         row["x"], row["y"], row["heading"])
+
+    if tcpa < 0:
+        band = "passed"
+    elif cpa >= safe_distance_m:
+        band = "safe"
+    elif tcpa >= risk_horizon_s:
+        band = "early"
+    else:
+        band = "acute"
+
+    if band in ("safe", "passed"):
+        encounter, own_role = "none", "none"
+        expected_encounter_rule, expected_conduct_rule = "none", "none"
+        expected_direction, forbidden = "none", []
+    else:
+        if row["speed"] < _STATIONARY_SPEED_EPS:
+            encounter, own_role, role_key = "stationary", "none", "stationary"
+        else:
+            encounter, own_role, role_key = _ENCOUNTER_MAP.get(enc_raw, ("none", "none", "none"))
+        # "hold_course" (never "stop") -- the CANONICAL expected rule pair for this role,
+        # independent of whatever action the agent actually took; classify_rules()'s own
+        # action=="stop" special case (Rule 8) is a scoring LENIENCY, not a ground-truth fact.
+        expected_encounter_rule, expected_conduct_rule = classify_rules(role_key, "hold_course")
+        exp = _ENCOUNTER_EXPECTATIONS.get(encounter, {"expected_direction": "none", "forbidden": []})
+        expected_direction = exp["expected_direction"]
+        forbidden = [*exp["forbidden"], "speed_up"]
+
+    return {
+        "contact": vname, "cpa_m": cpa, "tcpa_s": tcpa, "rel_bearing_deg": rel,
+        "band": band, "encounter": encounter, "own_role": own_role,
+        "expected_encounter_rule": expected_encounter_rule,
+        "expected_conduct_rule": expected_conduct_rule,
+        "expected_direction": expected_direction, "forbidden": forbidden,
+    }
+
+
 def _ground_truth_at_checkpoint(trajectory_rows: list[dict], t: float, own_vehicle: str,
-                                safe_distance_m: float, max_turn_deg: float) -> str:
+                                safe_distance_m: float, max_turn_deg: float) -> dict:
     """Deterministic encounter classification (app.narrate's own CPA/TCPA + relative-bearing
-    rule classifier + pipeline.oow_agent_spec.real_risk()'s mission-parameterised 'no real
-    risk' gate -- the SAME machinery the live agent's own situation report/constraint line
-    already rely on) computed independently of the LLM, at the exact instant a decision was
-    made. `safe_distance_m`/`max_turn_deg` MUST be the run's own VesselConstraints values
-    (min_cpa_m/max_rudder_angle_deg) -- compliance-rebuild STAP 1 (2026-09-23): this used to
-    gate on two hardcoded module constants (600s TCPA / 300m CPA cutoffs), a THIRD,
-    independently-drifting risk definition alongside real_risk()'s mission-parameterised gate
-    and the constraint line the agent itself reads.
+    rule classifier + pipeline.oow_agent_spec's real_risk()/derive_risk_horizon_s() -- the
+    SAME machinery the live agent's own situation report/constraint line already rely on)
+    computed independently of the LLM, at the exact instant a decision was made.
+    `safe_distance_m`/`max_turn_deg` MUST be the run's own VesselConstraints values
+    (min_cpa_m/max_rudder_angle_deg).
+
+    Compliance-rebuild STAP 2 (2026-09-23): returns a STRUCTURED dict, not a string --
+    STAP 1's plain real_risk() boolean (used as a single "quiet" gate) could not
+    distinguish a certain-but-distant collision course (e.g. Imazu01 t=0: CPA 0, TCPA
+    1800s -- a real head-on encounter, just not yet urgent) from genuinely no risk at all,
+    since a fixed geometry-derived horizon (~567s for that mission) will always be smaller
+    than a large enough TCPA. Splitting into THREE bands (safe/early/acute, plus "passed"
+    for an already-closed encounter) fixes this: "early" still cites the geometrically
+    correct encounter/rule (classify_encounter() works independently of timing) even when
+    not yet "acute" -- only "safe" (CPA already outside safe_distance_m) and "passed" (TCPA
+    already negative) report no rule at all. Each contact dict:
+      {"contact", "cpa_m", "tcpa_s", "rel_bearing_deg", "band",
+       "encounter" (head_on/crossing_stbd/crossing_port/we_overtake/overtaken/stationary/none),
+       "own_role" (give_way/stand_on/both_give_way/none),
+       "expected_encounter_rule", "expected_conduct_rule" (from oow_agent_spec.classify_rules,
+       the SAME table the Track-2 labelers use), "expected_direction"
+       (starboard/hold/either/away_from_contact/none), "forbidden" (list of action-name
+       strings STAP 3 checks the agent's actual action against)}.
+    The returned dict also carries "decisive_contact": the acute contact with the smallest
+    CPA, or (if none acute) the early contact with the smallest CPA, or None.
 
     Without this, llm_compliance_check() only ever saw a raw trajectory CSV and had to
     freehand-judge from scratch whether a rule applied -- a genuinely non-deterministic
@@ -188,29 +292,42 @@ def _ground_truth_at_checkpoint(trajectory_rows: list[dict], t: float, own_vehic
     identical CPA=6322m, 3 of 4 calls disagreed on whether Rule 15 applied at all). Injecting
     this FIXED fact means the LLM only ever has to judge whether the agent's citation/action
     matches it, not re-derive "was there risk of collision" itself each time."""
-    from app.narrate import cpa_tcpa
-    from app.units import m_to_nm
-    from pipeline.oow_agent_spec import classify_encounter, real_risk, derive_risk_horizon_s
+    from pipeline.oow_agent_spec import derive_risk_horizon_s
 
     rows = _rows_at_time(trajectory_rows, t)
     own = rows.get(own_vehicle)
     if not own:
-        return "(no ground truth available -- no trajectory sample at this time)"
+        return {"contacts": [], "decisive_contact": None}
     risk_horizon_s = derive_risk_horizon_s(safe_distance_m, max_turn_deg, own["speed"])
+    contacts = [_contact_ground_truth(own, vname, row, safe_distance_m, risk_horizon_s)
+               for vname, row in sorted(rows.items()) if vname != own_vehicle]
+    acute = [c for c in contacts if c["band"] == "acute"]
+    early = [c for c in contacts if c["band"] == "early"]
+    decisive = min(acute, key=lambda c: c["cpa_m"]) if acute else (
+        min(early, key=lambda c: c["cpa_m"]) if early else None)
+    return {"contacts": contacts, "decisive_contact": decisive["contact"] if decisive else None}
+
+
+def _render_ground_truth_text(gt: dict) -> str:
+    """Human-readable rendering of _ground_truth_at_checkpoint()'s dict, for the LLM audit
+    prompt (llm_compliance_check() still needs TEXT until STAP 4 removes the LLM's scoring
+    role) -- kept as a thin, separate rendering step so the dict itself stays the one
+    structured source of truth STAP 3's deterministic scoring will consume directly."""
+    from app.units import m_to_nm
+
+    if not gt["contacts"]:
+        return "(no ground truth available -- no trajectory sample at this time)"
     parts = []
-    for vname, row in sorted(rows.items()):
-        if vname == own_vehicle:
-            continue
-        cpa, tcpa = cpa_tcpa(own["x"], own["y"], own["heading"], own["speed"],
-                             row["x"], row["y"], row["heading"], row["speed"])
-        enc, rules, rel = classify_encounter(own["x"], own["y"], own["heading"],
-                                             row["x"], row["y"], row["heading"])
-        if not real_risk(cpa, tcpa, safe_distance_m, risk_horizon_s):
-            verdict = "no rule applies (quiet -- CPA/TCPA too large for real risk of collision)"
+    for c in gt["contacts"]:
+        if c["band"] == "safe":
+            verdict = "no rule applies (safe -- CPA already outside the safe-passing distance)"
+        elif c["band"] == "passed":
+            verdict = "no rule applies (passed -- already past closest point of approach)"
         else:
-            verdict = f"{'/'.join(rules)} applies ({enc})"
-        parts.append(f"{vname} rel_bearing={rel:.0f}deg cpa={m_to_nm(cpa):.3f}NM "
-                    f"tcpa={tcpa:.0f}s -> {verdict}")
+            verdict = (f"{c['expected_encounter_rule']}/{c['expected_conduct_rule']} applies "
+                      f"({c['encounter']}, band={c['band']}, expected direction={c['expected_direction']})")
+        parts.append(f"{c['contact']} rel_bearing={c['rel_bearing_deg']:.0f}deg "
+                    f"cpa={m_to_nm(c['cpa_m']):.3f}NM tcpa={c['tcpa_s']:.0f}s -> {verdict}")
     return "; ".join(parts) if parts else "(no other vessels)"
 
 
@@ -234,8 +351,8 @@ def _format_checkpoint_citations(checkpoints: list[dict] | None,
     for cp in checkpoints:
         decision = cp.get("decision") or {}
         t = cp.get("time", 0)
-        ground_truth = (_ground_truth_at_checkpoint(trajectory_rows, t, own_vehicle,
-                                                    safe_distance_m, max_turn_deg)
+        ground_truth = (_render_ground_truth_text(_ground_truth_at_checkpoint(
+                            trajectory_rows, t, own_vehicle, safe_distance_m, max_turn_deg))
                        if trajectory_rows else "(no trajectory provided)")
         lines.append(f"t={t:.0f}s: action={decision.get('action', '?')}, "
                      f"encounter_rule={decision.get('encounter_rule', 'none')}, "
