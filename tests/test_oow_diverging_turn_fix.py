@@ -107,3 +107,32 @@ def test_leo_choose_action_full_dataset_diverging_turns_are_not_all_turn_left() 
         assert counts["turn_left"] > 0 and counts["turn_right"] > 0, (
             f"bucket {bucket!r} is still 100% one direction after the STAP 3b fix: {dict(counts)}"
         )
+
+
+def test_full_dataset_stand_on_17b_turn_left_never_violates_rule_17c() -> None:
+    """Permanent acceptance test (post-3b/3c review): across all 7928 real Leo frames,
+    EVERY stand_on_17b turn_left decision's decisive contact must have signed relative
+    bearing > 0 (starboard side) -- ZERO with bearing < 0 (own port side). Pre-fix, this
+    was violated by 329/379 (87%) such frames -- the pre-STAP-3b bug always returned
+    turn_left regardless of the contact's actual side, silently teaching the model to
+    alter to port for a contact on her OWN port side, a real Rule 17(c) violation in the
+    training labels themselves."""
+    import json
+    from pipeline.track2.build_oow_scenarios_leo import LEO_FILE, limits_for_leo_record
+
+    all_recs = [json.loads(l) for l in LEO_FILE.read_text(encoding="utf-8").splitlines()]
+    n_turn_left = 0
+    violations = []
+    for r in all_recs:
+        limits = limits_for_leo_record(r)
+        d = leo_choose_action(r["state"], limits)
+        if d["bucket"] == "stand_on_17b" and d["action"] == "turn_left":
+            n_turn_left += 1
+            name = d["decisive_contact_name"]
+            c = next(c for c in r["state"]["contacts"] if c["name"] == name)
+            signed_bearing = ((c["relative_bearing_deg"] + 180) % 360) - 180
+            if signed_bearing < 0:
+                violations.append((r["id"], signed_bearing))
+    assert n_turn_left == 48, f"expected 48 stand_on_17b turn_left frames, got {n_turn_left}"
+    assert violations == [], f"Rule 17(c) violated in {len(violations)}/{n_turn_left} frames: {violations[:5]}"
+

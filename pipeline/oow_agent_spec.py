@@ -165,14 +165,24 @@ def constraint_line(safe_distance_m: float, max_turn_deg: float, risk_horizon_s:
     """Single-source rendering of the three STAP-2 per-row training-variable limits --
     used by BOTH Track-2 generators' situation-text renderers AND Basic Simulator/app/
     agents.py's live prompt, so a training row and a live simulator step given the SAME
-    settings render byte-identical constraint text (see the parity test)."""
+    settings render byte-identical constraint text (see the parity test).
+
+    Quality-review STOP-1/2-verification (2026-09-23): the wording states the SAME
+    conjunction real_risk() actually computes (CPA below the safe distance AND TCPA
+    within the horizon) -- an earlier version's first sentence read "CPA below that is a
+    real collision risk" as an unconditional, CPA-alone statement, which is the OLD,
+    already-fixed STAP-1 bug's definition, not what the labeler/live agent are actually
+    gated on. Never state "CPA below X is a risk" without the TCPA-within-horizon
+    qualifier in the same sentence."""
     return (
-        f"This mission's safe passing distance is {safe_distance_m:.0f}m: CPA below that "
-        "is a real collision risk, CPA well above it is safe regardless of how small it "
+        f"This mission's safe passing distance is {safe_distance_m:.0f}m and its risk "
+        f"horizon is {risk_horizon_s:.0f}s: a contact is a real collision risk only when "
+        f"BOTH its CPA is below {safe_distance_m:.0f}m AND its time-to-closest-point-of-"
+        f"approach (TCPA) is within that horizon (0 <= TCPA < {risk_horizon_s:.0f}s) -- a "
+        "contact that has already passed its closest point (negative TCPA) or is still "
+        "beyond the horizon poses no risk right now, regardless of how small its CPA "
         f"looks. A single turn_left/turn_right command may request at most "
-        f"{max_turn_deg:.0f} degrees. A contact only drives a decision if its time-to-"
-        f"closest-point-of-approach is under {risk_horizon_s:.0f}s (0 <= TCPA < horizon; "
-        "an already-past or far-future contact is monitored only, not acted on)."
+        f"{max_turn_deg:.0f} degrees."
     )
 
 # Fixed response-format contract, byte-identical to what Basic Simulator/app/agents.py's

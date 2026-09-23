@@ -19,18 +19,19 @@ PROBE_300_FILE = paths.eval_dir / "oow_colreg_scenarios_v2_probe_300.json"
 PROBE_926_FILE = paths.eval_dir / "oow_colreg_scenarios_v2_probe_926.json"
 
 # Computed 2026-09-23 immediately after `build_oow_scenarios.py --build-v2 --overwrite`
-# (RE-computed after quality-review STAP 2 [constraint_line() gains max_turn_deg/
-# risk_horizon_s] AND STAP 3b [the _diverging_turn sign-bug fix] -- an intentional,
-# approved re-generation per the user's own BLOK II direction, not a drift; the 325
-# geometries/v1_id linkage are unchanged, only the rendered situation text and a handful
-# of Rule-13/17(b) gold turn DIRECTIONS changed).
-V2_SHA256 = "1bf1ed51d3f3c64a5da1bb496ee2ea17d8db9a996f2208e67633f13aec7bd2d6"
+# (RE-computed AGAIN the same day after fixing constraint_line()'s wording -- STOP-1/2
+# verification found the text still stated the ALREADY-FIXED STAP-1 CPA-alone bug's own
+# definition, "CPA below that is a real collision risk", unconditionally; corrected to
+# state the CPA-AND-TCPA conjunction real_risk() actually computes -- an intentional,
+# approved re-generation per the user's own verification request, not a drift; the 325
+# geometries/v1_id linkage are unchanged, only the rendered constraint-line wording).
+V2_SHA256 = "2441a29697f46ff34bca6055be928578e882e3ec03839750289b7a74d1cf1e69"
 
 # STAP 4 (2026-09-23): the two safe_distance_m probes (ONLY safe_distance_m changed vs
 # v2 -- max_turn_deg stays 30, risk horizon stays each scenario's own derived default),
-# first-time-frozen the same way v1/v2 are.
-PROBE_300_SHA256 = "d25ea39c5b540a45b75d0feab7469d2a5d7782794e8dd616ac140c876d79ae69"
-PROBE_926_SHA256 = "e35ee657bf3e05bda1293e8d0ee43519ff7fa76e59d62e0316d2daf94d98042e"
+# first-time-frozen the same way v1/v2 are (recomputed alongside the same wording fix).
+PROBE_300_SHA256 = "3d056dbd2ca1f4c3588d6d8f456c0bdd736c9a54439fa05aa3e8f6852c247190"
+PROBE_926_SHA256 = "1436424313db8811847e15e686c723a426e3eae16cc83d698d472f082bb8b86c"
 
 
 def test_v2_scenarios_file_is_byte_for_byte_frozen() -> None:

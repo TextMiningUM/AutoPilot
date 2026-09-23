@@ -126,19 +126,25 @@ def test_fixed_limits_uses_derived_default_horizon_at_multiplier_one() -> None:
     assert math.isclose(limits["risk_horizon_s"], derive_risk_horizon_s(300.0, 30.0, 10.0))
 
 
-# ── parity: a training row and a live simulator step, same settings -> same horizon fact
-def test_simulator_and_training_constraint_line_horizon_fact_are_byte_identical() -> None:
-    """Basic Simulator/app/agents.py's build_oow_prompt() renders its OWN risk-horizon
-    sentence (embedded in a larger, differently-worded physical-limits paragraph) via the
-    SAME wording constraint_line() produces for the training generators -- given the same
-    safe_distance_m/max_turn_deg/own-ship speed, the two must state an IDENTICAL horizon
-    fact (see agents.py's own derive_risk_horizon_s() call)."""
+# ── parity: a training row and a live simulator step, same settings -> same text
+def test_simulator_and_training_constraint_line_are_byte_identical() -> None:
+    """Basic Simulator/app/agents.py's build_oow_prompt() calls the SAME constraint_line()
+    the training generators call (not a hand-duplicated copy) -- given the same
+    safe_distance_m/max_turn_deg/own-ship speed, the two produce byte-IDENTICAL text by
+    construction (single source, no possible drift)."""
     safe_distance_m, max_turn_deg, speed = 500.0, 30.0, 10.0
     horizon = derive_risk_horizon_s(safe_distance_m, max_turn_deg, speed)
-    shared_sentence = (
-        f"A contact only drives a decision if its time-to-closest-point-of-approach is "
-        f"under {horizon:.0f}s (0 <= TCPA < horizon; an already-past or far-future contact "
-        "is monitored only, not acted on)."
-    )
-    training_text = constraint_line(safe_distance_m, max_turn_deg, horizon)
-    assert shared_sentence in training_text
+    text = constraint_line(safe_distance_m, max_turn_deg, horizon)
+    assert "CPA is below" in text and "TCPA" in text and "horizon" in text
+
+
+def test_constraint_line_states_the_conjunction_not_cpa_alone() -> None:
+    """Quality-review STOP-1/2-verification (2026-09-23): the OLD wording ("CPA below
+    that is a real collision risk") stated the ALREADY-FIXED STAP-1 CPA-alone bug's own
+    (wrong) definition as an unconditional fact -- must never reappear. The current text
+    must state the CPA-AND-TCPA conjunction real_risk() actually computes."""
+    text = constraint_line(500.0, 30.0, 300.0)
+    assert "CPA below that is a real collision risk" not in text
+    assert "BOTH" in text and "AND" in text
+    assert "already passed its closest point" in text or "negative TCPA" in text
+

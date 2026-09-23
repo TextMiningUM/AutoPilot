@@ -71,7 +71,9 @@ from core import AgentPaths, EMBEDDER_MODEL
 from pipeline.ingest.build_kg import kg_retrieve, rerank_hits
 from pipeline.ingest.pg_guidance import ProceduralGraph, render_guidance, load_merged_pg
 from pipeline.eval.prep_ablation import format_context
-from pipeline.oow_agent_spec import SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, derive_risk_horizon_s
+from pipeline.oow_agent_spec import (
+    SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, derive_risk_horizon_s, constraint_line,
+)
 
 from app.missions import Mission, Vessel
 from app.narrate import contact_line, narrate
@@ -362,24 +364,24 @@ def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], confi
         # mission's own safe distance/max turn/own-ship speed via the SAME
         # derive_risk_horizon_s() the training generators sample around -- the live
         # simulator always uses the derived default (no random multiplier, that variation
-        # is a training-only device), so the sentence text matches a training row's own
-        # constraint_line() byte-for-byte whenever the settings coincide (see the parity
-        # test). Never a second, independently-hardcoded horizon number.
+        # is a training-only device). The safe-distance/max-turn/horizon sentence itself
+        # is rendered via the SAME constraint_line() the training generators call (not a
+        # hand-duplicated copy), so it is guaranteed byte-identical whenever settings
+        # coincide (see the parity test) -- fixes a real bug found at STOP-1/2-
+        # verification: the old hand-duplicated text said "CPA below that is a real
+        # collision risk" unconditionally, which is the ALREADY-FIXED STAP-1 CPA-alone
+        # bug's own definition, not the CPA-AND-TCPA conjunction real_risk() actually uses.
         risk_horizon_s = derive_risk_horizon_s(constraints.min_cpa_m, constraints.max_rudder_angle_deg,
                                                own.speed)
         user_parts.append(
             f"Own-ship's physical limits: heading changes at most {constraints.turn_rate_deg_s:.1f} "
-            f"deg/s (~{per_step:.0f} deg per {constraints.time_step_s:.0f}s step). A single "
-            f"turn_left/turn_right command can request AT MOST {constraints.max_rudder_angle_deg:.0f} "
-            "degrees -- a larger request will be silently capped, so a course change bigger than that "
+            f"deg/s (~{per_step:.0f} deg per {constraints.time_step_s:.0f}s step) -- a larger turn "
+            "request will be silently capped, so a course change bigger than the per-command max "
             "needs several separate turn commands across multiple steps, not one big one. "
             f"Speed is capped at {constraints.max_speed_mps:.1f} m/s, changing gradually "
             f"({constraints.max_acceleration_mps2:.2f} m/s\u00b2 up / {constraints.max_deceleration_mps2:.2f} "
-            "m/s\u00b2 down) -- speed_up/slow_down are not instant. This mission's safe passing distance is "
-            f"{constraints.min_cpa_m:.0f}m: CPA below that is a real collision risk, CPA well above it is "
-            "safe regardless of how small it looks. A contact only drives a decision if its time-to-"
-            f"closest-point-of-approach is under {risk_horizon_s:.0f}s (0 <= TCPA < horizon; an "
-            "already-past or far-future contact is monitored only, not acted on)."
+            "m/s\u00b2 down) -- speed_up/slow_down are not instant. "
+            + constraint_line(constraints.min_cpa_m, constraints.max_rudder_angle_deg, risk_horizon_s)
         )
     if pg_text:
         user_parts.append(f"Procedure guidance:\n{pg_text}")
