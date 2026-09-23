@@ -19,18 +19,22 @@ PROBE_300_FILE = paths.eval_dir / "oow_colreg_scenarios_v2_probe_300.json"
 PROBE_926_FILE = paths.eval_dir / "oow_colreg_scenarios_v2_probe_926.json"
 
 # Computed 2026-09-23 immediately after `build_oow_scenarios.py --build-v2 --overwrite`
-# (RE-computed AGAIN the same day after a MAJOR bug fix: to_unified_action()'s give-way
-# branch never re-checked real_risk() against the row's own sampled safe_distance_m/
-# risk_horizon_s -- 41/325 v2 gold labels changed as a direct result. An intentional,
-# approved re-generation per the user's own explicit direction, not a drift; the 325
-# geometries/v1_id linkage are unchanged.)
-V2_SHA256 = "e8729824a96b674f0d27abaead1da45c026bc8cec1654e91686912dcbf5dbb89"
+# (RE-computed AGAIN the same day, TWICE more: once after the give-way real_risk fix
+# (41/325 changed), then again after the STOP-1 blocking-bug fix -- risk_band()'s
+# early/acute split means a target whose CPA is below the safe distance but whose TCPA
+# sits beyond the horizon is a real encounter, not "no risk" -- 52/325 v2 gold labels
+# changed as a direct result (all encounter_rule 'none'->a real rule, 0 speed_up cases
+# in this eval set). An intentional, approved re-generation per the user's own explicit
+# direction, not a drift; the 325 geometries/v1_id linkage are unchanged.)
+V2_SHA256 = "d671efac6fbae584ca841fa078210d78f5d0d4636e20bab6bf36a727b98daa2b"
 
 # STAP 4 (2026-09-23): the two safe_distance_m probes (ONLY safe_distance_m changed vs
 # v2 -- max_turn_deg stays 30, risk horizon stays each scenario's own derived default),
-# first-time-frozen the same way v1/v2 are (recomputed alongside the same give-way fix).
-PROBE_300_SHA256 = "c382c4716d554c1a824ed082266f087e5860655157f7b0119abe11a4b229c16e"
-PROBE_926_SHA256 = "3eb3aecf49d407312ded237b9b38a9ed30690fb9106ce093d98abf5e930d46c1"
+# first-time-frozen the same way v1/v2 are (recomputed alongside the same STOP-1 fix --
+# probe_300 106/325 changed, probe_926 18/325 changed; smaller safe_distance_m ->
+# proportionally MORE early-band cases relative to a given risk horizon).
+PROBE_300_SHA256 = "ed4d095a93dca859da4a8abbc9fbe0cada4a6a170867a4837b57a0058dfd8a59"
+PROBE_926_SHA256 = "14c447de06cdd8c51df5ff3d0e38d56c81980b16d2e12dfb5600c6c814851bf2"
 
 
 def test_v2_scenarios_file_is_byte_for_byte_frozen() -> None:
