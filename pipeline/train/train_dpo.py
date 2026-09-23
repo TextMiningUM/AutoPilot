@@ -119,6 +119,14 @@ DPO_FILES   = {
         # CHIRP collision-relevant newsletter article pairs (Fase C1 -- extract_chirp_
         # reasoning.py -> build_rlhf.py).
         CACHE / "oow_chirp_dpo_pairs.jsonl",
+        # Fase C2 "C1 pairs, higher weight": REAL investigator-authored chosen/rejected
+        # pairs (chosen=procedures the report says was correct, rejected=actual_
+        # actions_taken -- the REAL mistake, not a synthetic text perturbation) --
+        # build_incident_dpo_real.py against both C1 trace files. Listed TWICE (2x
+        # duplication) for the "higher weight" the plan calls for vs. the generic
+        # perturbation-based pairs above.
+        CACHE / "oow_incident_dpo_pairs_real.jsonl",
+        CACHE / "oow_incident_dpo_pairs_real.jsonl",
         # Track 2 -- applied helm/engine-order decisions (build_rlhf.py run against
         # the deterministic MOOS-scenario reasoning traces, notebook § 6.5).
         CACHE / "oow_scenario_dpo_pairs.jsonl",
