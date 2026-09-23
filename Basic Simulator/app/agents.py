@@ -73,6 +73,7 @@ from pipeline.ingest.pg_guidance import ProceduralGraph, render_guidance, load_m
 from pipeline.eval.prep_ablation import format_context
 from pipeline.oow_agent_spec import (
     SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, derive_risk_horizon_s, constraint_line,
+    render_previous_decisions,
 )
 
 from app.missions import Mission, Vessel
@@ -298,7 +299,8 @@ def _pg_match_query(own: Vessel, targets: list[Vessel]) -> str:
 def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], config: str = "v3_rag_cot",
                      system_prompt: str | None = None,
                      k: int = 6, dense_n: int = 40,
-                     constraints: VesselConstraints | None = None) -> tuple[list[dict], dict]:
+                     constraints: VesselConstraints | None = None,
+                     previous_decisions: list[dict] | None = None) -> tuple[list[dict], dict]:
     """Returns (messages, debug_info) for the selected MODEL_CONFIGS key.
     `targets` MUST be the simulation's live, currently-moving contact list (Simulation.
     targets), passed straight through to narrate()/_pg_match_query() -- see their
@@ -387,7 +389,16 @@ def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], confi
         user_parts.append(f"Procedure guidance:\n{pg_text}")
     if ctx is not None:
         user_parts.append(f"COLREG reference excerpts:\n\n{ctx}")
-    user_parts.append(f"Situation:\n{situation}")
+    # Fase B4 (quality-review, 2026-09-23): SAME render_previous_decisions() the training
+    # generators use, prepended INSIDE the "Situation:" block exactly like
+    # build_oow_scenarios.py's user_message_for() -- guarantees byte-identical text for
+    # the same history, given the same settings. `previous_decisions` is None by default
+    # here (Simulation.agent_log is currently declared but never populated -- wiring a
+    # real per-step history source into the live simulator is a separate, not-yet-done
+    # follow-up; this parameter exists so the prompt CAN render one the moment a caller
+    # supplies it, without any further changes to this function).
+    history_prefix = render_previous_decisions(previous_decisions)
+    user_parts.append(f"Situation:\n{history_prefix}{situation}")
     user_parts.append("Recommend exactly ONE manoeuvre as the specified JSON object.")
     user_msg = "\n\n".join(user_parts)
 

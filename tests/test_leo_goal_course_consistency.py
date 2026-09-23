@@ -14,22 +14,32 @@ import json
 
 from pipeline.oow_agent_spec import goal_course_action
 from pipeline.track2.build_oow_scenarios_leo import (
-    leo_choose_action, stratified_sample, LEO_FILE, RESUME_SPEED_MARGIN,
+    leo_choose_action, stratified_sample, compute_all_decisions, LEO_FILE, RESUME_SPEED_MARGIN,
 )
 
 NO_RISK_BUCKETS = {"resume", "clear"}
+# Fase B4 "past and clear" (Rule 8(d)/13(d), 2026-09-23, ADOPTED): the ONE permitted
+# deviation from GOAL COURSE CHECK for a no-real-risk record -- a contact that had real
+# risk at the previous decision and hasn't genuinely cleared yet forces hold_course even
+# when GOAL COURSE CHECK would otherwise recommend resuming/turning.
+PAST_AND_CLEAR_CATEGORY = "leo_clear_not_yet_past_and_clear"
 
 
 def test_no_risk_labels_match_goal_course_check_on_a_sample() -> None:
     all_recs = [json.loads(l) for l in LEO_FILE.read_text(encoding="utf-8").splitlines()]
-    sample = stratified_sample(all_recs, 200, seed=7)
+    decisions_by_id = compute_all_decisions(all_recs)
+    sample = stratified_sample(all_recs, 200, seed=7, decisions_by_id=decisions_by_id)
     checked = 0
     for r in sample:
         state = r["state"]
-        decision = leo_choose_action(state)
+        decision = decisions_by_id[r["id"]]
         if decision["bucket"] not in NO_RISK_BUCKETS:
             continue
         checked += 1
+        if decision["category"] == PAST_AND_CLEAR_CATEGORY:
+            assert decision["action"] == "hold_course", r["id"]
+            assert decision["encounter_rule"] == "none" and decision["conduct_rule"] == "none", r["id"]
+            continue
         own, mission = state["own_ship"], state["mission"]
         goal_action, goal_degrees = goal_course_action(own["x"], own["y"], own["heading"],
                                                        mission["x"], mission["y"])
@@ -51,11 +61,16 @@ def test_full_leo_dataset_no_risk_labels_match_goal_course_check() -> None:
     one above so CI can skip/mark it separately if the full 7928-state pass is ever too
     slow to run on every commit."""
     all_recs = [json.loads(l) for l in LEO_FILE.read_text(encoding="utf-8").splitlines()]
+    decisions_by_id = compute_all_decisions(all_recs)
     mismatches = []
     for r in all_recs:
         state = r["state"]
-        decision = leo_choose_action(state)
+        decision = decisions_by_id[r["id"]]
         if decision["bucket"] not in NO_RISK_BUCKETS:
+            continue
+        if decision["category"] == PAST_AND_CLEAR_CATEGORY:
+            if decision["action"] != "hold_course":
+                mismatches.append(r["id"])
             continue
         own, mission = state["own_ship"], state["mission"]
         goal_action, goal_degrees = goal_course_action(own["x"], own["y"], own["heading"],

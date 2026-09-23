@@ -228,7 +228,11 @@ DECISION PROCEDURE -- follow in order:
    right now -- go to step 3.
 2. If any contact meets both conditions, pick the ONE action that satisfies the applicable COLREG
    rule for that contact. This step overrides everything below it.
-3. Otherwise, follow "GOAL COURSE CHECK" exactly: hold_course if it says you're already on the goal
+3. Otherwise, before resuming: if your last helm decision (given further below, when present) names
+   a contact that posed real risk THEN, and that SAME contact still has a closing speed above zero
+   AND a TCPA of zero or more RIGHT NOW, you are not yet "finally past and clear" of it (Rule
+   8(d)/13(d)) -- hold_course, even though no contact meets both real-risk conditions right now.
+   Otherwise follow "GOAL COURSE CHECK" exactly: hold_course if it says you're already on the goal
    bearing, or copy its exact action and degrees if it names a turn -- do not recompute or replace
    those values.
 4. Never zigzag: do not answer turn_right then turn_left (or vice versa) on consecutive decisions to
@@ -432,13 +436,28 @@ def goal_course_check_line(own_x: float, own_y: float, own_heading: float,
 def render_previous_decisions(decisions: list[dict]) -> str:
     """`decisions` is an ordered list (oldest first) of dicts with at least {"action",
     "degrees"} -- the helm orders actually given on the immediately preceding step(s) of
-    THIS mission. Returns "" for an empty/None list (no history preamble to add)."""
+    THIS mission. Returns "" for an empty/None list (no history preamble to add).
+
+    Quality-review B4 (2026-09-23): each dict MAY also carry "conduct_rule" (mentioned
+    inline when not None/"none") and "real_risk_contact_names" (the contacts that posed a
+    real risk AT THAT DECISION -- named explicitly so a reader, human or model, can check
+    "is THIS SAME contact finally past and clear yet" without re-deriving it). Both are
+    OPTIONAL and backward compatible -- a plain {"action", "degrees"} dict (e.g. the
+    synthetic generator's self-consistency history, which has no per-contact real-risk
+    data) renders exactly as before."""
     if not decisions:
         return ""
     labels = []
     for d in decisions:
         action, degrees = d["action"], d.get("degrees")
-        labels.append(f"{action} ({degrees:.0f} deg)" if degrees is not None else action)
+        label = f"{action} ({degrees:.0f} deg)" if degrees is not None else action
+        conduct_rule = d.get("conduct_rule")
+        if conduct_rule and conduct_rule != "none":
+            label += f" [{conduct_rule}]"
+        real_risk_names = d.get("real_risk_contact_names")
+        if real_risk_names:
+            label += f" -- real-risk contact(s) then: {', '.join(real_risk_names)}"
+        labels.append(label)
     return (f"Your last {len(decisions)} helm decision(s), oldest first: {'; '.join(labels)}. "
            "Stay consistent with this unless the CURRENT situation below has genuinely "
            "changed enough to justify a different action -- do not reverse or re-derive an "

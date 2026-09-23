@@ -51,6 +51,7 @@ USAGE
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -118,6 +119,20 @@ RESUME_SPEED_MARGIN = 0.5  # own speed must be at least this far under target be
 MOVING_SPEED_THRESHOLD = 0.5  # quality-review STAP 2 (2026-09-23): a contact below this
                               # speed is treated as effectively stationary/noise, never
                               # fed into the geometric not_applicable-role fallback below.
+
+# Fase B4 (2026-09-23): only this FRACTION of rows that actually HAVE 2-decision history
+# available show it in their prompt TEXT (fixed seed per row id) -- the model must keep
+# working on rows with no history too (a mission's real first/second decision never has
+# any), so history-in-the-prompt itself must not become a learned shortcut. The label
+# (including any 'past and clear' override) is ALWAYS computed with the full internal
+# history regardless of whether the text shows it -- this fraction only controls prompt
+# visibility, documented as metadata ("history_shown") on every row.
+HISTORY_TEXT_FRACTION = 0.6
+
+
+def _row_gets_history_text(leo_id: str, fraction: float = HISTORY_TEXT_FRACTION) -> bool:
+    seed = int(hashlib.sha256(f"history::{leo_id}".encode("utf-8")).hexdigest()[:16], 16)
+    return random.Random(seed).random() < fraction
 
 # Quality-review STAP 2 (2026-09-23): fallback limits for any caller that doesn't pass an
 # explicit per-row `limits` dict (existing tests, ad-hoc scripts) -- the historical fixed
@@ -565,6 +580,33 @@ def leo_choose_action(state: dict, limits: dict | None = None) -> dict:
     rule_nums = sorted({n for c in contacts for n in (c.get("standing_rules") or [])}) or [2, 5, 6, 7]
     rules = [f"Rule {n}" for n in rule_nums]
     mission = state["mission"]
+
+    # Fase B4 "past and clear" (Rule 8(d)/13(d), 2026-09-23, ADOPTED per user decision):
+    # a contact whose CPA has merely edged back above the safe distance is NOT yet
+    # "finally past and clear" while it is still closing (closing_speed > 0) and its TCPA
+    # is still >= 0 -- resuming the goal course/speed here is exactly the zigzag bug found
+    # live (v0_base's R-L-L-R on Imazu01; the 401m Rule-8(c) shortfall in s01 from turning
+    # back too early). Only the MOST RECENT previous decision's real-risk contacts are
+    # checked (not both of the last two) -- matches the decision procedure text.
+    prev_decisions = state.get("previous_decisions")
+    if prev_decisions:
+        last = prev_decisions[-1]
+        prev_names = set(last.get("real_risk_contact_names") or [])
+        if prev_names:
+            cur_by_name = {c["name"]: c for c in contacts}
+            not_yet_clear = any(
+                (cur_by_name.get(name) is not None
+                 and (cur_by_name[name].get("closing_speed") or 0) > 0
+                 and (cur_by_name[name].get("tcpa_s") if cur_by_name[name].get("tcpa_s") is not None else -1) >= 0)
+                for name in prev_names
+            )
+            if not_yet_clear:
+                return {"action": "hold_course", "degrees": None, "encounter_rule": "none",
+                        "conduct_rule": "none", "role": "cleared", "rules": rules,
+                        "category": "leo_clear_not_yet_past_and_clear", "bucket": "clear",
+                        "decisive_contact_name": None, "training_limits": limits,
+                        "reason": "not yet past and clear"}
+
     goal_action, goal_degrees = goal_course_action(own["x"], own["y"], own["heading"], mission["x"], mission["y"])
     if goal_action != "hold_course":
         return {"action": goal_action, "degrees": goal_degrees, "encounter_rule": "none",
@@ -744,16 +786,23 @@ def write_outputs(outputs: dict[str, list[dict]], cache_dir: Path, overwrite: bo
              + ("" if overwrite else "  [dry-run/review path -- pass --overwrite for production]"))
 
 
-def stratified_sample(recs: list[dict], n: int, seed: int = 0) -> list[dict]:
+def stratified_sample(recs: list[dict], n: int, seed: int = 0, decisions_by_id: dict[str, dict] | None = None) -> list[dict]:
     """Round-robins across the action-outcome buckets so even a small sample covers
     stop/alter_course/stand_on/stand_on_17b/resume/clear -- pure random risks missing rare
     buckets (e.g. 'stop' is a small minority of records) in a first-look sample. "paused"
     frames (own-ship not underway) are excluded entirely -- there is no manoeuvre decision
-    to make for a stopped ship, so they never become a training instance."""
+    to make for a stopped ship, so they never become a training instance.
+
+    `decisions_by_id` (Fase B4, 2026-09-23): the precomputed, correctly-history-threaded
+    decisions from compute_all_decisions() -- REQUIRED so bucketing reflects the ACTUAL
+    final decision (including any 'past and clear' override), not a naive independent
+    leo_choose_action() call without history. Falls back to a bare (no-history) call only
+    when omitted, for backward compatibility with any caller/test not yet passing it."""
     rnd = random.Random(seed)
     buckets: dict[str, list[dict]] = {}
     for r in recs:
-        decision = leo_choose_action(r["state"], limits_for_leo_record(r))
+        decision = (decisions_by_id[r["id"]] if decisions_by_id is not None
+                   else leo_choose_action(r["state"], limits_for_leo_record(r)))
         if decision["bucket"] == "paused":
             continue
         buckets.setdefault(decision["bucket"], []).append(r)
@@ -780,25 +829,49 @@ def build_trajectory_index(all_recs: list[dict]) -> dict[str, list[dict]]:
     return trajectories
 
 
-def real_previous_decisions(trajectories: dict[str, list[dict]], source_file: str, leo_id: str,
-                            n: int = 2) -> list[dict] | None:
-    """The real previous `n` helm decisions for the state `leo_id`, derived from its own
-    trajectory's REAL preceding states (never synthesized) via leo_choose_action() --
-    Fase B4's "previous decisions" history variant. Returns None (no history to add) if
-    the state isn't found, doesn't have `n` predecessors in its own trajectory, or any
-    predecessor was a paused frame (no manoeuvre decision to report for it)."""
-    traj = trajectories.get(source_file)
-    if traj is None:
-        return None
-    idx = next((i for i, r in enumerate(traj) if r["id"] == leo_id), None)
-    if idx is None or idx < n:
-        return None
-    decisions = []
-    for r in traj[idx - n:idx]:
-        d = leo_choose_action(r["state"], limits_for_leo_record(r))
-        if d["action"] is None:
-            return None  # a paused predecessor breaks the history chain
-        decisions.append({"action": d["action"], "degrees": d["degrees"]})
+def compute_all_decisions(all_recs: list[dict]) -> dict[str, dict]:
+    """Fase B4 (2026-09-23): ONE forward pass per trajectory (grouped by source_file,
+    preserving each file's real chronological cycle_id order) computing EVERY Leo state's
+    FINAL decision via leo_choose_action() -- correctly threading each frame's own rolling
+    2-decision history (state['previous_decisions']) so the 'past and clear' check (see
+    leo_choose_action()) resolves against the REAL, correctly-history-aware decision of
+    its own predecessors, not a naive independent re-derivation (which would get a
+    predecessor's OWN past-and-clear override wrong, since history is itself recursive).
+    Replaces the old real_previous_decisions() (re-derived predecessors one-off, without
+    threading THEIR OWN history, and without the past-and-clear/richer-fields support).
+    A paused/excluded predecessor resets the rolling history to empty -- no manoeuvre
+    decision to report for it, matching the historical real_previous_decisions() semantics.
+    Returns {leo_id: decision} for every one of `all_recs` (`decision` also carries the
+    'previous_decisions' list actually used, under decision['_previous_decisions'], for
+    the caller to render/attach without re-deriving it)."""
+    trajectories = build_trajectory_index(all_recs)
+    decisions: dict[str, dict] = {}
+    for traj in trajectories.values():
+        history: list[dict] = []
+        for r in traj:
+            limits = limits_for_leo_record(r)
+            state_with_history = dict(r["state"])
+            state_with_history["previous_decisions"] = list(history) if history else None
+            decision = dict(leo_choose_action(state_with_history, limits))
+            decision["_previous_decisions"] = state_with_history["previous_decisions"]
+            decisions[r["id"]] = decision
+            if decision["action"] is None:
+                history = []  # paused/excluded predecessor breaks the chain
+                continue
+            if decision["category"] == "leo_clear_not_yet_past_and_clear" and history:
+                # Still not finally past and clear -- PROPAGATE the pending contact
+                # name(s) forward (never re-derive from the strict real_risk() gate,
+                # which is empty here by construction) so a MULTI-step not-yet-clear
+                # stretch keeps checking the SAME contact until it genuinely clears,
+                # rather than losing track after a single hold_course step.
+                real_risk_names = history[-1].get("real_risk_contact_names") or []
+            else:
+                real_risk_names = [c["name"] for c in r["state"]["contacts"] if _real_risk(c, limits)]
+            history.append({"action": decision["action"], "degrees": decision["degrees"],
+                            "encounter_rule": decision["encounter_rule"],
+                            "conduct_rule": decision["conduct_rule"],
+                            "real_risk_contact_names": real_risk_names})
+            history = history[-2:]
     return decisions
 
 
@@ -868,13 +941,15 @@ def main() -> None:
 
     all_recs = [json.loads(l) for l in LEO_FILE.read_text(encoding="utf-8").splitlines()]
     print(f"Loaded {len(all_recs)} Leo states; sampling {args.n} (stratified by action bucket)...")
-    sample = stratified_sample(all_recs, args.n, seed=args.seed)
-    trajectories = build_trajectory_index(all_recs)
+    decisions_by_id = compute_all_decisions(all_recs)
+    sample = stratified_sample(all_recs, args.n, seed=args.seed, decisions_by_id=decisions_by_id)
 
     recs: list[dict] = []
     for i, r in enumerate(sample):
         limits = limits_for_leo_record(r)
-        decision = leo_choose_action(r["state"], limits)
+        decision = decisions_by_id[r["id"]]
+        prev_decisions = decision["_previous_decisions"]
+        show_history = prev_decisions is not None and _row_gets_history_text(r["id"])
         recs.append({
             "_id": f"leo{i:05d}", "leo_id": r["id"], "leo_source_file": r["source_file"],
             "category": decision["category"], "action": decision["action"],
@@ -883,10 +958,13 @@ def main() -> None:
             "role": decision["role"], "rules": decision["rules"], "training_limits": limits,
             "pass_criteria": PASS_CRITERIA[decision["bucket"]],
             "situation_report": render_leo_narrative(r["state"], limits), "state": r["state"],
-            # Fase B4: real previous decisions from this state's own trajectory, when
-            # it has 2 real (non-paused) predecessors -- None for the rest (no history
-            # preamble added for those rows).
-            "prev_decisions": real_previous_decisions(trajectories, r["source_file"], r["id"]),
+            # Fase B4: real, correctly-history-threaded previous decisions (see
+            # compute_all_decisions()) -- None when this row has no 2-decision history
+            # available (e.g. the first frames of a trajectory). Even when available, only
+            # HISTORY_TEXT_FRACTION of ELIGIBLE rows actually show it in the prompt text
+            # (fixed seed per row id) -- "history_shown" records which, as metadata.
+            "prev_decisions": prev_decisions if show_history else None,
+            "history_available": prev_decisions is not None, "history_shown": show_history,
             "reasoning": None, "wrong_decision": None, "wrong_reasoning": None,
         })
 
@@ -899,17 +977,20 @@ def main() -> None:
         ws = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
         headers = {"anthropic-workspace-id": ws} if ws else None
         client = anthropic.Anthropic(api_key=key, default_headers=headers)
-        review_sample = stratified_sample(all_recs, args.b3_review_sample, seed=args.seed)
+        review_sample = stratified_sample(all_recs, args.b3_review_sample, seed=args.seed, decisions_by_id=decisions_by_id)
         review_recs: list[dict] = []
         for i, r in enumerate(review_sample):
             limits = limits_for_leo_record(r)
-            decision = leo_choose_action(r["state"], limits)
+            decision = decisions_by_id[r["id"]]
+            prev_decisions = decision["_previous_decisions"]
+            show_history = prev_decisions is not None and _row_gets_history_text(r["id"])
             review_recs.append({
                 "_id": f"leo{i:05d}", "leo_id": r["id"], "category": decision["category"],
                 "action": decision["action"], "degrees": decision["degrees"],
                 "encounter_rule": decision["encounter_rule"], "conduct_rule": decision["conduct_rule"],
                 "decisive_contact_name": decision["decisive_contact_name"], "training_limits": limits,
                 "situation_report": render_leo_narrative(r["state"], limits), "state": r["state"],
+                "prev_decisions": prev_decisions if show_history else None,
             })
         result = render_reasoning_review_sample(client, args.model, review_recs,
                                                 max_attempts=3, max_tokens=args.max_tokens)
