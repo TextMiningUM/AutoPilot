@@ -293,9 +293,12 @@ DECISION PROCEDURE -- follow in order:
 2. If any contact meets both conditions, pick the ONE action that satisfies the applicable COLREG
    rule for that contact. This step overrides everything below it.
 3. Otherwise, before resuming: if your last helm decision (given further below, when present) names
-   a contact that posed real risk THEN, and that SAME contact still has a closing speed above zero
-   AND a TCPA of zero or more RIGHT NOW, you are not yet "finally past and clear" of it --
-   hold_course, even though no contact meets both real-risk conditions right now.
+   a contact that posed real risk THEN, and that SAME contact's line in THIS situation report does
+   NOT say "(already past closest point, ranges now increasing)" -- i.e. it is still closing -- you
+   are not yet "finally past and clear" of it: hold_course, even though no contact meets both
+   real-risk conditions right now. A bare "TCPA 0s" alone does NOT keep this hold in force -- only
+   the ABSENCE of that "already past closest point" wording does; once it appears for that contact,
+   you are past and clear of it.
    Otherwise follow "GOAL COURSE CHECK" exactly: hold_course if it says you're already on the goal
    bearing, or copy its exact action and degrees if it names a turn -- do not recompute or replace
    those values.
