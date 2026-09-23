@@ -142,3 +142,40 @@ def test_validate_action_json_rejects_missing_conduct_rule() -> None:
     errors = oow_agent_spec.validate_action_json(obj)
     assert any("conduct_rule" in e for e in errors)
 
+
+# ── Quality-review STAP 2 (2026-09-23): classify_encounter() single-source move ───────
+def test_narrate_shares_the_same_classify_encounter_object() -> None:
+    """Identity check -- narrate.py must IMPORT classify_encounter, not keep its own
+    second copy (the exact class of drift bug already found/fixed for the system prompt
+    and goal_course_check_line)."""
+    from app import narrate
+    assert narrate.classify_encounter is oow_agent_spec.classify_encounter
+
+
+def test_classify_encounter_head_on() -> None:
+    enc, rules, rel = oow_agent_spec.classify_encounter(0.0, 0.0, 0.0, 0.0, 1000.0, 180.0)
+    assert enc == "head_on" and rules == ["Rule 14"]
+
+
+def test_classify_encounter_crossing_target_on_starboard() -> None:
+    enc, rules, _ = oow_agent_spec.classify_encounter(0.0, 0.0, 0.0, 500.0, 500.0, 270.0)
+    assert enc == "crossing_target_on_starboard" and rules == ["Rule 15", "Rule 16"]
+
+
+def test_classify_encounter_crossing_target_on_port() -> None:
+    enc, rules, _ = oow_agent_spec.classify_encounter(0.0, 0.0, 0.0, -500.0, 500.0, 90.0)
+    assert enc == "crossing_target_on_port" and rules == ["Rule 15", "Rule 17"]
+
+
+def test_classify_encounter_we_are_overtaking_target() -> None:
+    """Own-ship dead astern of a slower target on the SAME course -- the two-perspective
+    check (bearing of own-ship AS SEEN FROM the target) must resolve this as overtaking,
+    not crossing, even though the closing angle (rel_from_own) is fine, not near-180."""
+    enc, rules, _ = oow_agent_spec.classify_encounter(0.0, 0.0, 0.0, 20.0, 300.0, 0.0)
+    assert enc == "we_are_overtaking_target" and rules == ["Rule 13"]
+
+
+def test_classify_encounter_target_is_overtaking_us() -> None:
+    enc, rules, _ = oow_agent_spec.classify_encounter(0.0, 300.0, 0.0, -20.0, 0.0, 0.0)
+    assert enc == "target_is_overtaking_us" and rules == ["Rule 13"]
+

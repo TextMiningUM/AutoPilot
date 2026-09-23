@@ -183,8 +183,9 @@ def _ground_truth_at_checkpoint(trajectory_rows: list[dict], t: float,
     identical CPA=6322m, 3 of 4 calls disagreed on whether Rule 15 applied at all). Injecting
     this FIXED fact means the LLM only ever has to judge whether the agent's citation/action
     matches it, not re-derive "was there risk of collision" itself each time."""
-    from app.narrate import cpa_tcpa, classify_encounter, QUIET_CPA_M, QUIET_TCPA_S
+    from app.narrate import cpa_tcpa, QUIET_CPA_M, QUIET_TCPA_S
     from app.units import m_to_nm
+    from pipeline.oow_agent_spec import classify_encounter
 
     rows = _rows_at_time(trajectory_rows, t)
     own = rows.get(own_vehicle)

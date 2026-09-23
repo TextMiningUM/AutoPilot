@@ -19,10 +19,13 @@ if str(REPO_ROOT) not in sys.path:
 
 from app.missions import Mission, Vessel
 from app.units import m_to_nm, mps_to_kn
-# bearing_and_range/relative_bearing/goal_course_check_line live in pipeline/oow_agent_spec.py
-# (dependency-free, shared with the Track-2 training-data generators) so this calculation is
-# never re-implemented a second time and silently drifts -- see that module's docstring.
-from pipeline.oow_agent_spec import bearing_and_range, relative_bearing, goal_course_check_line
+# bearing_and_range/relative_bearing/classify_encounter/goal_course_check_line live in
+# pipeline/oow_agent_spec.py (dependency-free, shared with the Track-2 training-data
+# generators) so this calculation is never re-implemented a second time and silently
+# drifts -- see that module's docstring.
+from pipeline.oow_agent_spec import (
+    bearing_and_range, relative_bearing, classify_encounter, goal_course_check_line,
+)
 
 
 def cpa_tcpa(ox: float, oy: float, ohdg: float, ospd: float,
@@ -105,31 +108,6 @@ def recommended_max_steps(mission: Mission, dt: float = 10.0) -> int:
     est_speed = max(own.speed, 0.1)
     needed_steps = int((straight_dist / est_speed * 1.5) / dt) + 10
     return min(1200, max(20, needed_steps))
-
-
-def classify_encounter(own_x: float, own_y: float, own_hdg: float,
-                        tgt_x: float, tgt_y: float, tgt_hdg: float) -> tuple[str, list[str], float]:
-    """Correct Rule 13 check: overtaking is defined by the bearing of OWN-SHIP
-    as seen from the TARGET (>112.5 deg abaft the target's beam), not by the
-    bearing of the target as seen from own-ship -- using only the latter
-    misclassifies real overtaking cases as ordinary crossing whenever the
-    closing angle is fine/moderate rather than near-dead-astern."""
-    brg_own_to_tgt, _ = bearing_and_range(own_x, own_y, tgt_x, tgt_y)
-    rel_from_own = relative_bearing(own_hdg, brg_own_to_tgt)
-
-    brg_tgt_to_own, _ = bearing_and_range(tgt_x, tgt_y, own_x, own_y)
-    rel_from_tgt = relative_bearing(tgt_hdg, brg_tgt_to_own)
-
-    course_diff = (tgt_hdg - own_hdg + 540) % 360 - 180
-    if abs(rel_from_own) <= 6 and abs(abs(course_diff) - 180) <= 20:
-        return "head_on", ["Rule 14"], rel_from_own
-    if abs(rel_from_tgt) > 112.5:
-        return "we_are_overtaking_target", ["Rule 13"], rel_from_own
-    if abs(rel_from_own) > 112.5:
-        return "target_is_overtaking_us", ["Rule 13"], rel_from_own
-    if rel_from_own > 0:
-        return "crossing_target_on_starboard", ["Rule 15", "Rule 16"], rel_from_own
-    return "crossing_target_on_port", ["Rule 15", "Rule 17"], rel_from_own
 
 
 # Below these thresholds a target isn't a live collision-avoidance concern

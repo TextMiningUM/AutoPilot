@@ -64,7 +64,7 @@ import numpy as np
 from core import AgentPaths, load_env, review_path, safe_write_jsonl, CONTAM_THRESH, EMBEDDER_MODEL
 from pipeline.oow_agent_spec import (
     SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, goal_course_check_line, goal_course_action,
-    classify_rules, render_previous_decisions, real_risk, STAND_ON_TCPA_S,
+    classify_rules, render_previous_decisions, real_risk, STAND_ON_TCPA_S, classify_encounter,
 )
 
 paths = AgentPaths.oow()
@@ -114,6 +114,9 @@ MAX_TURN_DEG = 30.0       # matches Basic Simulator VesselConstraints' max_rudde
                           # (a single turn command beyond this is silently capped there).
 RESUME_SPEED_MARGIN = 0.5  # own speed must be at least this far under target before
                            # "speed_up" is worth issuing (avoids churn on noise-level gaps)
+MOVING_SPEED_THRESHOLD = 0.5  # quality-review STAP 2 (2026-09-23): a contact below this
+                              # speed is treated as effectively stationary/noise, never
+                              # fed into the geometric not_applicable-role fallback below.
 
 
 def render_leo_narrative(state: dict) -> str:
@@ -199,6 +202,37 @@ def _leo_role_for_classify(own_role: str, encounter_type: str) -> str:
     return "none"
 
 
+# Quality-review STAP 2 (2026-09-23), decision "nu fixen, geometrisch, gescoped": Leo's
+# own own_role=="not_applicable" on a MOVING contact (encounter_type != stationary) is a
+# gap in the SOURCE data's own role classifier, not a "no risk" case -- 220/7928 frames
+# had a genuine CPA/TCPA real_risk contact silently fall through to hold_course/speed_up
+# because this generator only ever trusted Leo's own_role. Maps the shared, two-
+# perspective classify_encounter() (pipeline.oow_agent_spec) onto Leo's own_role/
+# encounter_type vocabulary -- the SAME translation _leo_role_for_classify() then applies
+# identically to a "real" Leo-labelled contact, so this fallback can never diverge from
+# how a normal frame is handled.
+_GEOMETRIC_ENCOUNTER_MAP = {
+    "head_on": ("both_give_way", "head_on"),
+    "we_are_overtaking_target": ("give_way", "we_are_overtaking_contact"),
+    "target_is_overtaking_us": ("stand_on", "contact_overtaking_us"),
+    "crossing_target_on_starboard": ("give_way", "crossing"),
+    "crossing_target_on_port": ("stand_on", "crossing"),
+}
+
+
+def _geometric_role_and_type(own: dict, c: dict) -> tuple[str, str] | None:
+    """(own_role, encounter_type) in Leo's own vocabulary, geometrically derived via the
+    shared classify_encounter() -- or None if the contact isn't actually CONVERGING
+    (closing_speed<=0) despite passing the CPA/TCPA real_risk() gate, in which case the
+    record should be EXCLUDED from training (see leo_choose_action()) rather than forced
+    into a give-way/stand-on role that wouldn't make physical/COLREG sense."""
+    if (c.get("closing_speed") or 0) <= 0:
+        return None
+    tx, ty = _contact_absolute_xy(own, c)
+    enc, _rules, _rel = classify_encounter(own["x"], own["y"], own["heading"], tx, ty, c["heading"])
+    return _GEOMETRIC_ENCOUNTER_MAP[enc]
+
+
 def _real_risk(c: dict) -> bool:
     """Rule 7 gate: real collision risk, via the ONE shared real_risk() (pipeline.
     oow_agent_spec) -- CPA below SAFE_CPA_M AND TCPA within RISK_HORIZON_S, NEVER gated
@@ -235,18 +269,23 @@ def _should_stop(c: dict) -> bool:
             and c["range_m"] < CRITICAL_RANGE_M and (c.get("closing_speed") or 0) > 0)
 
 
+def _contact_absolute_xy(own: dict, c: dict) -> tuple[float, float]:
+    """Contact `c`'s absolute (x, y), derived from own-ship's CURRENT heading + `c`'s
+    relative_bearing_deg/range_m -- Leo contacts don't carry absolute x/y themselves.
+    Shared by _cpa_with_own_heading() and _geometric_role_and_type()."""
+    brg_true = math.radians((own["heading"] + c["relative_bearing_deg"]) % 360.0)
+    return own["x"] + c["range_m"] * math.sin(brg_true), own["y"] + c["range_m"] * math.cos(brg_true)
+
+
 def _cpa_with_own_heading(own: dict, c: dict, own_heading_deg: float) -> float:
     """Recomputes contact `c`'s CPA (metres) assuming own-ship turns to
-    `own_heading_deg` and both vessels then hold course/speed -- `c`'s absolute position
-    is derived from own-ship's CURRENT heading + `c`'s relative_bearing_deg/range_m
-    (Leo contacts don't carry absolute x/y). Same dot-product CPA formula as narrate.py's
-    cpa_tcpa()/build_oow_scenarios.py's cpa_tcpa_m() -- reimplemented here rather than
-    imported (Basic Simulator's path contains a space the pipeline package can't import
-    across; see oow_agent_spec.py's own docstring) -- deliberate small duplication, same
-    pattern as REASONING_SYSTEM_PROMPT below."""
-    brg_true = math.radians((own["heading"] + c["relative_bearing_deg"]) % 360.0)
-    dx = c["range_m"] * math.sin(brg_true)
-    dy = c["range_m"] * math.cos(brg_true)
+    `own_heading_deg` and both vessels then hold course/speed. Same dot-product CPA
+    formula as narrate.py's cpa_tcpa()/build_oow_scenarios.py's cpa_tcpa_m() --
+    reimplemented here rather than imported (Basic Simulator's path contains a space the
+    pipeline package can't import across; see oow_agent_spec.py's own docstring) --
+    deliberate small duplication, same pattern as REASONING_SYSTEM_PROMPT below."""
+    tx, ty = _contact_absolute_xy(own, c)
+    dx, dy = tx - own["x"], ty - own["y"]
     oh, th = math.radians(own_heading_deg), math.radians(c["heading"])
     vox, voy = own["speed"] * math.sin(oh), own["speed"] * math.cos(oh)
     vtx, vty = c["speed"] * math.sin(th), c["speed"] * math.cos(th)
@@ -301,6 +340,14 @@ def leo_choose_action(state: dict) -> dict:
     (_turn_shrinks_other_cpa) -- if the winning turn would shrink it, the action falls
     back to slow_down (never stop, never a direction flip) rather than being taken anyway.
 
+    NOT_APPLICABLE MOVING CONTACTS (quality-review STAP 2, 2026-09-23): own_role==
+    "not_applicable" on a MOVING, real-risk contact (not stationary) is a gap in Leo's own
+    role classifier, not a "no risk" case -- its role/encounter_type are geometrically
+    re-derived via the shared classify_encounter() and it is then treated exactly like a
+    normal give_way/stand_on contact. A contact whose geometry shows it isn't actually
+    converging is too ambiguous to label at all -- the WHOLE frame is excluded (action=
+    None, role="excluded"), never silently defaulted to hold_course.
+
     Returns simulator-format fields (action/degrees/encounter_rule/conduct_rule) directly,
     matching Basic Simulator/app/agents.py's SYSTEM_OOW_AGENT JSON contract -- see Fase B2.
     encounter_rule/conduct_rule come from pipeline.oow_agent_spec.classify_rules() (Fase
@@ -318,6 +365,27 @@ def leo_choose_action(state: dict) -> dict:
         return {"action": None, "degrees": None, "encounter_rule": None, "conduct_rule": None,
                 "role": "paused", "rules": [], "category": "leo_paused", "bucket": "paused",
                 "decisive_contact_name": None}
+
+    # Quality-review STAP 2 (2026-09-23): own_role=="not_applicable" on a MOVING,
+    # real-risk contact is a gap in the SOURCE data's own role classifier (220/7928
+    # frames), not a "no risk" case -- geometrically derive its role via the shared
+    # classify_encounter() and treat it exactly like a normal Leo-labelled contact from
+    # here on. If the geometry says it isn't actually converging (closing_speed<=0)
+    # despite passing real_risk(), the record is too ambiguous to trust -- EXCLUDE the
+    # whole frame from training rather than force a role/action that wouldn't make
+    # physical/COLREG sense (never silently label it hold_course).
+    contacts = [dict(c) for c in contacts]  # never mutate the caller's state
+    for c in contacts:
+        if (c["own_role"] == "not_applicable" and c.get("encounter_type") != "stationary_contact"
+                and (c.get("speed") or 0) > MOVING_SPEED_THRESHOLD and _real_risk(c)):
+            geo = _geometric_role_and_type(own, c)
+            if geo is None:
+                return {"action": None, "degrees": None, "encounter_rule": None, "conduct_rule": None,
+                        "role": "excluded", "rules": [], "category": "leo_excluded_ambiguous_geometry",
+                        "bucket": "excluded", "decisive_contact_name": c["name"],
+                        "exclude_reason": "not_applicable moving contact not actually converging "
+                                          "(closing_speed<=0) despite CPA/TCPA real_risk"}
+            c["own_role"], c["encounter_type"] = geo
 
     stationary = [c for c in contacts if c.get("encounter_type") == "stationary_contact" and _real_risk(c)]
     give_way = [c for c in contacts if c["own_role"] in ("give_way", "both_give_way") and _real_risk(c)]

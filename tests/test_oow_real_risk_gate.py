@@ -140,11 +140,12 @@ def test_stationary_real_risk_frames_now_get_a_turn_or_slow_down_full_dataset() 
     assert not violations, f"{len(violations)} frame(s) still not handled: {violations[:10]}"
 
 
-def test_never_speed_up_when_any_give_way_or_stand_on_contact_has_real_risk_full_dataset() -> None:
-    """Runs leo_choose_action() over ALL 7928 real Leo frames -- whenever ANY contact
-    leo_choose_action() actually recognises as give-way/stand-on (own_role in give_way/
-    both_give_way/stand_on) has real_risk()==True, the decision must never be speed_up (a
-    give-way or stand-on obligation always overrides mission-progress speed changes)."""
+def test_never_speed_up_when_any_contact_has_real_risk_full_dataset() -> None:
+    """Quality-review STAP 2 (2026-09-23), point 4: NO role/type qualification -- runs
+    leo_choose_action() over ALL 7928 real Leo frames, and whenever ANY contact
+    (regardless of own_role/encounter_type) has real_risk()==True, the decision must
+    never be speed_up. The not_applicable-moving-contact fix (geometric fallback or
+    frame exclusion) is what makes this fully unqualified check pass green."""
     violations = []
     with LEO_FILE.open("r", encoding="utf-8") as f:
         for line in f:
@@ -155,25 +156,17 @@ def test_never_speed_up_when_any_give_way_or_stand_on_contact_has_real_risk_full
             state = rec["state"]
             if state["own_ship"].get("paused") or state["own_ship"].get("stopped"):
                 continue
-            any_real_risk = any(_real_risk(c) for c in state["contacts"]
-                                if c["own_role"] in ("give_way", "both_give_way", "stand_on"))
-            if not any_real_risk:
+            if not any(_real_risk(c) for c in state["contacts"]):
                 continue
             decision = leo_choose_action(state)
             if decision["action"] == "speed_up":
                 violations.append(rec["id"])
-    assert not violations, f"{len(violations)} frame(s) chose speed_up despite a real-risk give-way/stand-on contact: {violations[:10]}"
+    assert not violations, f"{len(violations)} frame(s) chose speed_up despite a real-risk contact: {violations[:10]}"
 
 
 def test_never_hold_course_when_real_risk_exists_unless_stand_on_full_dataset() -> None:
-    """Extends the full-dataset scan (per the 2026-09-23 stationary-branch decision):
-    whenever a give-way/stand-on/stationary contact leo_choose_action() actually
-    recognises has real_risk()==True, hold_course is only ever a valid label if
-    conduct_rule=="Rule 17" (a genuine stand-on situation) -- catches any FUTURE
-    fall-through branch of this same class. Scoped to the roles this generator currently
-    handles -- see test_not_applicable_moving_contact_real_risk_not_yet_handled() below
-    for a SEPARATE, newly-surfaced gap this same scan found (own_role=="not_applicable"
-    on a MOVING crossing/parallel contact, not a stationary object)."""
+    """Quality-review STAP 2, point 4: NO role/type qualification -- whenever ANY contact
+    has real_risk()==True, hold_course is only ever valid if conduct_rule=="Rule 17"."""
     violations = []
     with LEO_FILE.open("r", encoding="utf-8") as f:
         for line in f:
@@ -184,10 +177,7 @@ def test_never_hold_course_when_real_risk_exists_unless_stand_on_full_dataset() 
             state = rec["state"]
             if state["own_ship"].get("paused") or state["own_ship"].get("stopped"):
                 continue
-            any_real_risk = any(_real_risk(c) for c in state["contacts"]
-                                if c["own_role"] in ("give_way", "both_give_way", "stand_on")
-                                or c.get("encounter_type") == "stationary_contact")
-            if not any_real_risk:
+            if not any(_real_risk(c) for c in state["contacts"]):
                 continue
             decision = leo_choose_action(state)
             if decision["action"] == "hold_course" and decision["conduct_rule"] != "Rule 17":
@@ -195,17 +185,15 @@ def test_never_hold_course_when_real_risk_exists_unless_stand_on_full_dataset() 
     assert not violations, f"{len(violations)} frame(s) chose hold_course despite real risk without Rule 17: {violations[:10]}"
 
 
-def test_not_applicable_moving_contact_real_risk_not_yet_handled() -> None:
-    """NOT a regression test -- a NEW, documented gap surfaced while writing the test
-    above: own_role=="not_applicable" also occurs on MOVING contacts (encounter_type
-    "crossing"/"parallel", real vessels with vessel_type/colregs_vessel_type=="ship"/
-    "power_driven", sometimes even carrying active_encounter_rules=[8,15] already) --
-    distinct from the stationary_contact case this session already fixed. Leo's own
-    role classifier evidently sometimes fails to assign give_way/stand_on for these,
-    and leo_choose_action() has no fallback -- they still fall through to hold_course/
-    "cleared"/rule "none" despite real CPA/TCPA risk. Affects 220/7928 frames at time
-    of writing. Documents the CURRENT count so a future fix changes it deliberately."""
-    n = 0
+# ── not_applicable moving contacts (decision 2026-09-23: "nu fixen, geometrisch, gescoped") ──
+def test_not_applicable_moving_contacts_now_get_a_role_or_are_excluded() -> None:
+    """Bugfix regression (was a documented-gap test at STOP 1, 220/7928 frames): every
+    real Leo frame with a real-risk, MOVING, own_role=="not_applicable" contact must now
+    either (a) get a geometrically-derived give_way/both_give_way/stand_on role and a
+    non-None action/rule, or (b) be explicitly EXCLUDED (action=None, role="excluded") --
+    never silently hold_course/speed_up with rule "none"."""
+    violations = []
+    n_population = 0
     with LEO_FILE.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -217,13 +205,92 @@ def test_not_applicable_moving_contact_real_risk_not_yet_handled() -> None:
                 continue
             risky = [c for c in state["contacts"] if _real_risk(c)
                     and c["own_role"] == "not_applicable"
-                    and c.get("encounter_type") != "stationary_contact"]
+                    and c.get("encounter_type") != "stationary_contact"
+                    and (c.get("speed") or 0) > 0.5]
+            if not risky:
+                continue
+            n_population += 1
+            decision = leo_choose_action(state)
+            ok = (decision["role"] == "excluded"
+                 or (decision["action"] is not None and decision["conduct_rule"] != "none"))
+            if not ok:
+                violations.append((rec["id"], decision["action"], decision["role"], decision["conduct_rule"]))
+    assert n_population > 0
+    assert not violations, f"{len(violations)} frame(s) still not handled: {violations[:10]}"
+
+
+def test_not_applicable_moving_contact_breakdown_report() -> None:
+    """Reports (not asserts a specific split -- see chat for the STOP 1 numbers) the
+    resulting role/action breakdown of the 220-frame population, for the STOP 1 report."""
+    from collections import Counter
+    role_counter = Counter()
+    action_counter = Counter()
+    with LEO_FILE.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            state = rec["state"]
+            if state["own_ship"].get("paused") or state["own_ship"].get("stopped"):
+                continue
+            risky = [c for c in state["contacts"] if _real_risk(c)
+                    and c["own_role"] == "not_applicable"
+                    and c.get("encounter_type") != "stationary_contact"
+                    and (c.get("speed") or 0) > 0.5]
             if not risky:
                 continue
             decision = leo_choose_action(state)
-            if decision["action"] == "hold_course" and decision["conduct_rule"] != "Rule 17":
-                n += 1
-    assert n == 220
+            role_counter[decision["role"]] += 1
+            action_counter[decision["action"]] += 1
+    print(f"\nnot_applicable-moving breakdown: roles={dict(role_counter)} actions={dict(action_counter)}")
+
+
+def test_geometric_role_head_on_yields_both_give_way_mutual() -> None:
+    state = _leo_state("not_applicable", "head_on", cpa_m=300.0, tcpa_s=100.0, risk_label="low")
+    state["contacts"][0]["relative_bearing_deg"] = 2.0
+    state["contacts"][0]["heading"] = 180.0
+    state["contacts"][0]["closing_speed"] = 5.0
+    d = leo_choose_action(state)
+    assert d["encounter_rule"] == "Rule 14" and d["conduct_rule"] == "Rule 14"
+    assert d["action"] == "turn_right"
+
+
+def test_geometric_role_crossing_target_on_starboard_is_give_way() -> None:
+    state = _leo_state("not_applicable", "crossing", cpa_m=300.0, tcpa_s=100.0, risk_label="low")
+    state["contacts"][0]["relative_bearing_deg"] = 45.0
+    state["contacts"][0]["heading"] = 270.0
+    state["contacts"][0]["closing_speed"] = 5.0
+    d = leo_choose_action(state)
+    assert d["encounter_rule"] == "Rule 15" and d["conduct_rule"] == "Rule 16"
+    assert d["action"] == "turn_right"
+
+
+def test_geometric_role_crossing_target_on_port_is_stand_on() -> None:
+    # tcpa_s=200 is within RISK_HORIZON_S (300) but above STAND_ON_TCPA_S (180) --
+    # a real risk that is NOT yet imminent enough to trigger 17(a)(ii)/(b)'s own turn.
+    state = _leo_state("not_applicable", "crossing", cpa_m=300.0, tcpa_s=200.0, risk_label="low")
+    state["contacts"][0]["relative_bearing_deg"] = -45.0
+    state["contacts"][0]["heading"] = 90.0
+    state["contacts"][0]["closing_speed"] = 5.0
+    d = leo_choose_action(state)
+    assert d["encounter_rule"] == "Rule 15" and d["conduct_rule"] == "Rule 17"
+    assert d["action"] == "hold_course"
+
+
+def test_not_converging_not_applicable_contact_excludes_the_frame() -> None:
+    """closing_speed<=0 despite CPA/TCPA real_risk -- too ambiguous to trust, must
+    EXCLUDE the whole frame (action=None, role="excluded"), never hold_course."""
+    state = _leo_state("not_applicable", "crossing", cpa_m=300.0, tcpa_s=100.0, risk_label="low")
+    state["contacts"][0]["relative_bearing_deg"] = 45.0
+    state["contacts"][0]["heading"] = 270.0
+    state["contacts"][0]["closing_speed"] = 0.0  # NOT converging
+    d = leo_choose_action(state)
+    assert d["action"] is None
+    assert d["role"] == "excluded"
+    assert d["category"] == "leo_excluded_ambiguous_geometry"
+
+
 
 
 # ── stationary-object avoidance (decision 2026-09-23, option (a)) ─────────────────────
