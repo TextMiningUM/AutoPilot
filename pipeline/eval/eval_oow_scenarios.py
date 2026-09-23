@@ -256,6 +256,10 @@ def main() -> None:
                     help="v1: original free-prose scenarios + rule-based/RAGAS scoring (default). "
                          "v2: unified JSON-task-format scenarios + deterministic exact-match "
                          "scoring only, no judge/RAGAS.")
+    ap.add_argument("--scenarios-file", type=str, default=None,
+                    help="(--schema v2 only) explicit path overriding oow_colreg_scenarios_v2.json "
+                         "-- quality-review STAP 4: point this at oow_colreg_scenarios_v2_probe_"
+                         "300.json / _probe_926.json to evaluate the safe_distance_m probes.")
     args = ap.parse_args()
     if args.schema == "v2":
         _run_v2(args)
@@ -406,7 +410,8 @@ def _run_v2(args) -> None:
     gen_file    = CACHE / f"eval_{tag}_colreg_v2_gen.jsonl"
     summary_out = CACHE / f"eval_{tag}_colreg_v2_summary.json"
 
-    scenarios = json.loads(SCENARIOS_FILE_V2.read_text(encoding="utf-8"))
+    scenarios_file = Path(args.scenarios_file) if args.scenarios_file else SCENARIOS_FILE_V2
+    scenarios = json.loads(scenarios_file.read_text(encoding="utf-8"))
     if args.n:
         scenarios = scenarios[:args.n]
     print(f"Evaluating {len(scenarios)} OOW scenarios (Track 2: applied helm/engine-order decisions, schema=v2)")

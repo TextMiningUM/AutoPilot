@@ -65,7 +65,7 @@ from core import AgentPaths, load_env, review_path, safe_write_jsonl, CONTAM_THR
 from pipeline.oow_agent_spec import (
     SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, goal_course_check_line, goal_course_action,
     classify_rules, render_previous_decisions, real_risk, STAND_ON_TCPA_S, classify_encounter,
-    sample_row_limits, constraint_line,
+    sample_row_limits, constraint_line, bearing_and_range, relative_bearing,
 )
 
 paths = AgentPaths.oow()
@@ -273,11 +273,47 @@ def _turn_degrees(cpa_m: float, limits: dict | None = None) -> float:
     return round(MIN_TURN_DEG + shortfall * (max_turn_deg - MIN_TURN_DEG), 1)
 
 
-def _diverging_turn(c: dict) -> str:
-    """Turn direction when EITHER side is COLREG-permitted (Rule 13 overtaking): turn
-    AWAY from whichever side the contact currently sits on, so the manoeuvre increases
-    separation instead of cutting across the contact's bow."""
-    return "turn_left" if c["relative_bearing_deg"] >= 0 else "turn_right"
+def _diverging_turn(c: dict, own: dict | None = None, other_real_risk_contacts: list[dict] | None = None,
+                    mission: dict | None = None, degrees: float | None = None) -> str:
+    """Turn direction when EITHER side is COLREG-permitted (Rule 13 overtaking, or a
+    stationary/17(b) avoidance where either side clears): turn AWAY from whichever side
+    the contact currently sits on, so the manoeuvre increases separation instead of
+    cutting across the contact's bow.
+
+    Quality-review STAP 3b (2026-09-23), MAJOR BUG FIX: Leo's own relative_bearing_deg is
+    UNSIGNED [0, 360) (verified: min 0.0, max 359.9, zero negative values across all
+    14225 contacts in the dataset), but the previous check used it directly as if it were
+    SIGNED (-180, 180] -- an unsigned value is never negative, so the old code ALWAYS
+    returned turn_left regardless of which side the contact was actually on (confirmed:
+    100% turn_left across all 3 call sites -- stationary 684/684, stand_on_17b 440/440,
+    overtaking 833/833 non-hardcoded cases). Converted to SIGNED here before the side
+    check (positive = starboard, matching classify_encounter()'s own convention: `if
+    rel_from_own > 0: crossing_target_on_starboard`).
+
+    Within 5 degrees of dead ahead/astern the side is a genuine geometric tie (NOT a
+    float-noise artefact -- a histogram of the affected bearings showed mass spread
+    broadly across 0-90 and 270-360 degrees, not clustered near 0), resolved via the
+    review's option (ii): the side that leaves the GREATEST minimum CPA to every OTHER
+    real-risk contact after the turn, falling back to whichever side is closer to the
+    mission's goal bearing when there are no other contacts to compare against (or
+    `own`/`mission` aren't supplied, e.g. a unit test calling this in isolation)."""
+    signed_bearing = ((c["relative_bearing_deg"] + 180) % 360) - 180
+    if abs(signed_bearing) >= 5.0 or own is None:
+        return "turn_left" if signed_bearing >= 0 else "turn_right"
+    turn_deg = degrees if degrees is not None else MIN_TURN_DEG
+    if other_real_risk_contacts:
+        left_heading = (own["heading"] - turn_deg) % 360.0
+        right_heading = (own["heading"] + turn_deg) % 360.0
+        left_min = min(_cpa_with_own_heading(own, oc, left_heading) for oc in other_real_risk_contacts)
+        right_min = min(_cpa_with_own_heading(own, oc, right_heading) for oc in other_real_risk_contacts)
+        if left_min != right_min:
+            return "turn_left" if left_min > right_min else "turn_right"
+    if mission is not None:
+        goal_brg, _ = bearing_and_range(own["x"], own["y"], mission["x"], mission["y"])
+        off_course = relative_bearing(own["heading"], goal_brg)
+        if off_course != 0:
+            return "turn_right" if off_course > 0 else "turn_left"
+    return "turn_left" if signed_bearing >= 0 else "turn_right"
 
 
 def _should_stop(c: dict) -> bool:
@@ -318,19 +354,38 @@ def _cpa_with_own_heading(own: dict, c: dict, own_heading_deg: float) -> float:
 
 
 def _turn_shrinks_other_cpa(own: dict, other: dict, action: str, degrees: float | None) -> bool:
-    """Minimal, SCOPED Rule 8(c) multi-contact check (quality-review STAP 1 extension,
-    2026-09-23) -- covers only the stationary-vs-give-way priority case; STAP 3d
-    generalizes this to every multi-real-risk-contact combination. True if turning
-    `degrees` in `action`'s direction would reduce `other`'s CPA below its CURRENT
-    recorded cpa_distance_m (a 1m tolerance avoids float-noise false positives on an
-    unchanged/near-parallel course). Never fires for a non-turn action (stop/slow_down
-    have no heading component to check)."""
+    """True if turning `degrees` in `action`'s direction would reduce `other`'s CPA below
+    its CURRENT recorded cpa_distance_m (a 1m tolerance avoids float-noise false
+    positives on an unchanged/near-parallel course). Never fires for a non-turn action
+    (stop/slow_down have no heading component to check)."""
     if action not in ("turn_left", "turn_right") or degrees is None:
         return False
     delta = -degrees if action == "turn_left" else degrees
     new_heading = (own["heading"] + delta) % 360.0
     new_cpa = _cpa_with_own_heading(own, other, new_heading)
     return new_cpa < other["cpa_distance_m"] - 1.0
+
+
+def _any_shrinks(own: dict, others: list[dict], action: str, degrees: float | None) -> bool:
+    """Rule 8(c) multi-contact check (quality-review STAP 3d, 2026-09-23, generalizing the
+    STAP 1 stationary-vs-give-way scoped version): True if `action`/`degrees` would shrink
+    the CPA of ANY of `others` (every OTHER real-risk contact in the current frame, not
+    just one specific paired contact)."""
+    return any(_turn_shrinks_other_cpa(own, oc, action, degrees) for oc in others)
+
+
+def _rule17c_guard(c: dict, action: str) -> str:
+    """Rule 17(c) (quality-review STAP 3c, 2026-09-23): a stand-on vessel taking her own
+    17(a)(ii)/(b) action must never alter to PORT for a contact that is on her OWN port
+    side (signed bearing < 0) -- previously true only 'by accident' (365x left/0x right)
+    because the pre-STAP-3b bug always returned turn_left regardless of side; now that
+    _diverging_turn() is fixed AND has a genuine near-zero free-space tie-break, this
+    guard makes the constraint explicit and unconditional (the tie-break's free-space
+    reasoning must never be allowed to override it)."""
+    signed_bearing = ((c["relative_bearing_deg"] + 180) % 360) - 180
+    if signed_bearing < 0 and action == "turn_left":
+        return "turn_right"
+    return action
 
 
 def _rule_list(c: dict) -> list[str]:
@@ -436,12 +491,19 @@ def leo_choose_action(state: dict, limits: dict | None = None) -> dict:
                         "category": f"leo_{worst['encounter_type']}", "bucket": "stop",
                         "decisive_contact_name": worst["name"], "training_limits": limits}
             degrees = _turn_degrees(worst["cpa_distance_m"], limits)
+            other = [x for x in (stationary + give_way + stand_on) if x is not worst]
             if worst["encounter_type"] in ("head_on", "crossing"):
-                action = "turn_right"  # Rule 14/15+16: give-way alters to starboard
+                action = "turn_right"  # Rule 14/15+16 mandates starboard -- no alternate side
+                if _any_shrinks(own, other, action, degrees):
+                    action, degrees = "slow_down", None
             else:
-                action = _diverging_turn(worst)  # Rule 13: either side permitted
-            if worst_stationary is not None and _turn_shrinks_other_cpa(own, worst_stationary, action, degrees):
-                action, degrees = "slow_down", None
+                action = _diverging_turn(worst, own, other, state["mission"], degrees)  # Rule 13: either side permitted
+                if _any_shrinks(own, other, action, degrees):
+                    alt = "turn_right" if action == "turn_left" else "turn_left"
+                    if not _any_shrinks(own, other, alt, degrees):
+                        action = alt
+                    else:
+                        action, degrees = "slow_down", None
             encounter_rule, conduct_rule = classify_rules(classify_role, action)
             return {"action": action, "degrees": degrees, "encounter_rule": encounter_rule,
                     "conduct_rule": conduct_rule, "role": worst["own_role"], "rules": _rule_list(worst),
@@ -451,10 +513,15 @@ def leo_choose_action(state: dict, limits: dict | None = None) -> dict:
         # Stationary avoidance wins (no give-way contact, or its CPA is not smaller). Never
         # a stop-default, never a give-way/stand-on role -- Rule 8 covers the action alone.
         worst = worst_stationary
-        action = _diverging_turn(worst)
         degrees = _turn_degrees(worst["cpa_distance_m"], limits)
-        if worst_give_way is not None and _turn_shrinks_other_cpa(own, worst_give_way, action, degrees):
-            action, degrees = "slow_down", None
+        other = [x for x in (stationary + give_way + stand_on) if x is not worst]
+        action = _diverging_turn(worst, own, other, state["mission"], degrees)
+        if _any_shrinks(own, other, action, degrees):
+            alt = "turn_right" if action == "turn_left" else "turn_left"
+            if not _any_shrinks(own, other, alt, degrees):
+                action = alt
+            else:
+                action, degrees = "slow_down", None
         encounter_rule, conduct_rule = classify_rules("stationary", action)
         return {"action": action, "degrees": degrees, "encounter_rule": encounter_rule,
                 "conduct_rule": conduct_rule, "role": "stationary",
@@ -470,7 +537,14 @@ def leo_choose_action(state: dict, limits: dict | None = None) -> dict:
         if triggered:
             worst = min(triggered, key=lambda c: c["cpa_distance_m"])
             degrees = _turn_degrees(worst["cpa_distance_m"], limits)
-            action = _diverging_turn(worst)
+            other = [x for x in stand_on if x is not worst]
+            action = _rule17c_guard(worst, _diverging_turn(worst, own, other, state["mission"], degrees))
+            if _any_shrinks(own, other, action, degrees):
+                alt = _rule17c_guard(worst, "turn_right" if action == "turn_left" else "turn_left")
+                if alt != action and not _any_shrinks(own, other, alt, degrees):
+                    action = alt
+                else:
+                    action, degrees = "slow_down", None
             classify_role = _leo_role_for_classify("stand_on", worst["encounter_type"])
             encounter_rule, conduct_rule = classify_rules(classify_role, action)
             return {"action": action, "degrees": degrees, "encounter_rule": encounter_rule,

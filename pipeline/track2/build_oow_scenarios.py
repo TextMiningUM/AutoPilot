@@ -1492,6 +1492,12 @@ def main() -> None:
                          "(pass --overwrite to allow replacing an existing v2 file).")
     ap.add_argument("--overwrite", action="store_true",
                     help="allow --build-v2 to overwrite an existing oow_colreg_scenarios_v2.json")
+    ap.add_argument("--build-v2-probe", type=float, default=None,
+                    help="Quality-review STAP 4: build oow_colreg_scenarios_v2_probe_<N>.json at "
+                         "this safe_distance_m -- ONLY safe_distance_m changes vs --build-v2 "
+                         "(max_turn_deg stays 30, risk horizon stays each scenario's OWN derived "
+                         "default), isolating that one variable. Same no-overwrite protection as "
+                         "--build-v2 (pass --overwrite for production).")
     ap.add_argument("--b3-review-sample", type=int, default=None,
                     help="Fase B3 25-first review gate: generate this many REAL Anthropic "
                          "reasoning-derivation calls (REASONING_SYSTEM_PROMPT, stratified across "
@@ -1517,6 +1523,19 @@ def main() -> None:
              + ("" if args.overwrite else "  [dry-run/review path -- pass --overwrite for production]"))
         from collections import Counter
         print("category distribution:", Counter(r["category"] for r in v2_records))
+        return
+
+    if args.build_v2_probe is not None:
+        v2_records = build_v2_eval_records(safe_distance_m=args.build_v2_probe)
+        probe_name = f"oow_colreg_scenarios_v2_probe_{args.build_v2_probe:.0f}.json"
+        probe_path = EVAL_OUT_V2.parent / probe_name
+        out_path = probe_path if args.overwrite else review_path(probe_path)
+        if out_path.exists() and not args.overwrite:
+            raise FileExistsError(f"{out_path} already exists -- pass --overwrite for production")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(v2_records, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"Wrote {out_path} ({len(v2_records)} probe scenarios, safe_distance_m={args.build_v2_probe})"
+             + ("" if args.overwrite else "  [dry-run/review path -- pass --overwrite for production]"))
         return
 
     if args.b3_review_sample is not None:
