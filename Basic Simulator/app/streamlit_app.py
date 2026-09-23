@@ -25,6 +25,7 @@ import streamlit.components.v1 as components
 from app.missions import Mission, list_mission_ids, load_mission
 from app.simulation import Simulation, VesselConstraints, project_scenario, find_collision
 from app.narrate import narrate, contact_line, bearing_and_range, relative_bearing, cpa_tcpa
+from app.measurement import measure_decision_quality
 from app.viz_plotly import trajectory_figure, trajectory_bounds, animated_trajectory_figure
 from app.evaluation import score_trajectory
 from app.units import kn_to_mps, mps_to_kn, m_to_nm, nm_to_m
@@ -216,6 +217,7 @@ if "sim" not in st.session_state or st.session_state.get("_loaded_mission_id") !
     st.session_state._loaded_mission_id = st.session_state.mission_id
     st.session_state.last_decision = None
     st.session_state.last_debug = None
+    st.session_state.last_measurement = None
     st.session_state.llm_run_path = None
     st.session_state.llm_compliance_audit = None
     st.session_state.llm_compliance_checked_key = None
@@ -243,13 +245,18 @@ def _describe_decision(decision: dict) -> str:
     """Human-readable rendering of a decision dict ({action, degrees, encounter_rule,
     conduct_rule, reasoning}) for end-user display -- replaces a raw st.json() dump with
     plain sentences: what the helm order actually is (or that nothing changes), which
-    COLREG rules were cited, and the model's own reasoning."""
+    COLREG rules were cited, and the model's own reasoning.
+
+    Archived pre-Fase-B3 runs only ever recorded a single "rule_applied" field (no
+    encounter_rule/conduct_rule split yet) -- falls back to it for BOTH fields, same
+    backward-compat reading as app/measurement.py's own Check A/B, so old runs don't
+    silently show "none | none" for a decision that actually did cite a rule."""
     action = decision.get("action", "hold_course")
     label = _ACTION_TEXT.get(action, action)
     if action in ("turn_left", "turn_right") and decision.get("degrees") is not None:
         label += f" by {float(decision['degrees']):.0f}\u00b0"
-    encounter_rule = decision.get("encounter_rule") or "none"
-    conduct_rule = decision.get("conduct_rule") or "none"
+    encounter_rule = decision.get("encounter_rule") or decision.get("rule_applied") or "none"
+    conduct_rule = decision.get("conduct_rule") or decision.get("rule_applied") or "none"
     lines = [f"**Helm order:** {label}",
             f"**Encounter rule:** {encounter_rule}  |  **Conduct rule:** {conduct_rule}"]
     if decision.get("reasoning"):
@@ -267,13 +274,52 @@ def _short_decision(decision: dict) -> str:
     label = _ACTION_TEXT.get(action, action)
     if action in ("turn_left", "turn_right") and decision.get("degrees") is not None:
         label += f" {float(decision['degrees']):.0f}\u00b0"
-    conduct_rule = decision.get("conduct_rule") or "none"
+    conduct_rule = decision.get("conduct_rule") or decision.get("rule_applied") or "none"
     header = f"<b>{label} \u2022 {conduct_rule}</b>"
     reasoning = decision.get("reasoning")
     if not reasoning:
         return header
     wrapped = "<br>".join(textwrap.wrap(reasoning, width=42))
     return f"{header}<br>{wrapped}"
+
+
+_CHECK_LABELS = {
+    "A_fabricated_risk": "\u26a0\ufe0f Check A -- fabricated risk: a rule was cited even "
+                        "though no contact's CPA was below the safe passing distance.",
+    "B_wrong_direction": "\u26a0\ufe0f Check B -- wrong turn direction: a give-way turn went "
+                        "to port instead of starboard.",
+    "C_degrees_over_limit": "\u26a0\ufe0f Check C -- degrees over limit: the requested turn "
+                            "exceeded what's physically achievable in one decision step.",
+}
+
+
+def _describe_measurement(measurement: dict | None) -> str:
+    """Human-readable rendering of app/measurement.py's deterministic Check A/B/C result
+    (see pipeline/eval/measure_archived_checkpoints.py for how archived pre-measurement.py
+    runs got this field retroactively attached). Never invents a verdict for a checkpoint
+    that doesn't have one at all (older logs predating both the live wiring and the
+    retroactive retrofit)."""
+    if measurement is None:
+        return "_No measurement data recorded for this checkpoint (predates app/measurement.py's wiring)._"
+    checks_fired = measurement.get("checks_fired") or []
+    if not checks_fired:
+        return "\u2705 No issues detected (Checks A/B/C all pass for this decision)."
+    details = measurement.get("details", {})
+    lines = [_CHECK_LABELS.get(c, c) for c in checks_fired]
+    if "A_fabricated_risk" in checks_fired:
+        a = details.get("A", {})
+        lines.append(f"  closest CPA {a.get('min_cpa_m', '?')} m vs safe distance "
+                     f"{a.get('safe_distance_m', '?')} m -- cited "
+                     f"{a.get('cited_encounter_rule', '?')}/{a.get('cited_conduct_rule', '?')}.")
+    if "B_wrong_direction" in checks_fired:
+        b = details.get("B", {})
+        lines.append(f"  cited {b.get('cited_encounter_rule', '?')}/{b.get('cited_conduct_rule', '?')}, "
+                     f"action {b.get('action', '?')}.")
+    if "C_degrees_over_limit" in checks_fired:
+        c = details.get("C", {})
+        lines.append(f"  requested {c.get('requested_degrees', '?')}\u00b0, physical limit "
+                     f"{c.get('limit_degrees', '?')}\u00b0.")
+    return "\n\n".join(lines)
 
 
 def _describe_params(params: dict) -> str:
@@ -486,6 +532,11 @@ def _render_agent_detail(ph, mission) -> None:
         if reasoning_raw:
             with st.expander("Full reasoning (every 'Wait, ...' step, not just the final answer)"):
                 st.code(reasoning_raw, language=None, wrap_lines=True)
+        measurement = cp.get("measurement")
+        checks_fired = (measurement or {}).get("checks_fired") or []
+        badge = f" ({len(checks_fired)})" if checks_fired else ""
+        with st.expander(f"\U0001F52C Measurement -- Check A/B/C{badge}", expanded=bool(checks_fired)):
+            st.markdown(_describe_measurement(measurement))
 
 
 # Plot header/mode-radio/placeholder created here (before the sidebar) so the sidebar's
@@ -671,6 +722,7 @@ with st.sidebar:
         st.session_state.sim = Simulation(mission, build_vessel_constraints(mission))
         st.session_state.last_decision = None
         st.session_state.last_debug = None
+        st.session_state.last_measurement = None
         st.session_state.llm_compliance_audit = None
         st.session_state.llm_compliance_checked_key = None
         st.rerun()
@@ -889,12 +941,23 @@ with side_panel:
                                           k=effective_k, constraints=sim.constraints)
             st.session_state.last_decision = decision
             st.session_state.last_debug = debug
+            # Same deterministic, read-only Check A/B/C measurement run_llm_scenario.py
+            # attaches per-checkpoint in a batch sweep -- computed live here too, against
+            # the SAME contacts the agent was just shown, so "Ask OOW agent" gets the same
+            # insight without needing a precomputed run.
+            situation_now = [contact_line(sim.own, t) for t in sim.targets]
+            st.session_state.last_measurement = measure_decision_quality(decision, situation_now, sim.constraints)
 
         decision = st.session_state.last_decision
         debug = st.session_state.last_debug
         if decision:
             st.markdown("**Recommendation**")
             st.markdown(_describe_decision(decision))
+            measurement = st.session_state.get("last_measurement")
+            checks_fired = (measurement or {}).get("checks_fired") or []
+            badge = f" ({len(checks_fired)})" if checks_fired else ""
+            with st.expander(f"\U0001F52C Measurement -- Check A/B/C{badge}", expanded=bool(checks_fired)):
+                st.markdown(_describe_measurement(measurement))
             b1, b2 = st.columns(2)
             if b1.button("\u2705 Apply", use_container_width=True):
                 sim.apply_action(decision)
