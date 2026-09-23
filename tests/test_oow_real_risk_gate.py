@@ -340,11 +340,17 @@ def test_stationary_contact_port_diverges_to_starboard() -> None:
     assert d["encounter_rule"] == "none" and d["conduct_rule"] == "Rule 8"
 
 
-def test_stationary_contact_beyond_horizon_is_not_real_risk() -> None:
+def test_stationary_contact_beyond_horizon_is_early_band_and_still_avoids() -> None:
+    """Quality-review STOP-1-blocking-bug fix (2026-09-23), SUPERSEDES this test's
+    original expectation: CPA is below the safe distance but TCPA sits beyond the
+    horizon -- risk_band() says "early", not "safe": a stationary object on a collision
+    course does not wait for a horizon either, so this is STILL Rule 8 avoidance, just
+    bucketed "early_stationary" instead of "stationary"."""
     state = _leo_state_stationary(cpa_m=120.0, tcpa_s=RISK_HORIZON_S + 1, bearing_deg=20.0)
     d = leo_choose_action(state)
-    assert d["conduct_rule"] != "Rule 8"
-    assert d["category"] != "leo_stationary_avoid"
+    assert d["conduct_rule"] == "Rule 8" and d["encounter_rule"] == "none"
+    assert d["category"] == "leo_early_stationary_avoid"
+    assert d["bucket"] == "early_stationary"
 
 
 def test_stationary_contact_already_past_is_not_real_risk() -> None:

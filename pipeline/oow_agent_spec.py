@@ -80,6 +80,53 @@ def real_risk(cpa_m: float | None, tcpa_s: float | None, safe_distance_m: float,
             and tcpa_s is not None and 0 <= tcpa_s < risk_horizon_s)
 
 
+def risk_band(cpa_m: float | None, tcpa_s: float | None, safe_distance_m: float,
+             risk_horizon_s: float = RISK_HORIZON_S) -> str:
+    """Quality-review STOP-1-blocking-bug fix (2026-09-23): the ONE encounter-band
+    classifier, shared by BOTH Track-2 labelers (leo_choose_action()/to_unified_action())
+    and Basic Simulator/app/evaluation.py's auditor ground truth (previously duplicated
+    there as `_contact_ground_truth()`'s own inline if/elif chain -- extracted here so
+    all three call sites can never silently disagree). Four bands, one governing
+    principle: identifying an encounter is required as soon as CPA < safe_distance_m; the
+    horizon only decides when ACTING becomes mandatory (or when resuming is allowed), it
+    never decides whether a rule applies at all.
+
+      "passed": tcpa_s < 0 -- the closest point of approach is already behind us (the
+                contact is diverging). Checked BEFORE "safe" so a contact still technically
+                inside the safe distance while diverging is "passed", not "acute". Reports
+                no rule, by convention (matches Fase B4's "past and clear" handling, which
+                is what actually governs whether a DIFFERENT, still-pending contact must
+                still be held against).
+      "safe":   cpa_m is None, or cpa_m >= safe_distance_m -- no encounter at all.
+      "acute":  cpa_m < safe_distance_m AND 0 <= tcpa_s < risk_horizon_s -- real_risk()
+                itself; action is MANDATORY.
+      "early":  cpa_m < safe_distance_m AND (tcpa_s is None OR tcpa_s >= risk_horizon_s)
+                -- a real encounter that does not yet mandate action: identify the
+                encounter/rule now, act early if convenient (never with "stop", which
+                stays exclusive to "acute"), but the D-check (acting is REQUIRED) only
+                fires once the band becomes "acute". Was previously silently folded into
+                real_risk()==False ("no risk") by every caller, training a model that a
+                CPA-0, TCPA-beyond-horizon collision course has no encounter at all --
+                the blocking bug this function exists to fix (measured: 229/276 (83%) of
+                Leo's genuine early-band frames mislabeled encounter_rule='none', 40 of
+                those mislabeled 'speed_up'). tcpa_s=None is treated as "early", never
+                "safe" -- CPA alone already says an encounter exists; missing TCPA data
+                must never hide it.
+    """
+    if tcpa_s is not None and tcpa_s < 0:
+        return "passed"
+    if cpa_m is None or cpa_m >= safe_distance_m:
+        return "safe"
+    if tcpa_s is not None and tcpa_s < risk_horizon_s:
+        return "acute"
+    return "early"
+
+
+# Bands that constitute a real encounter needing to be identified (I1/I2 invariants,
+# quality-review STOP-1-blocking-bug fix) -- "passed" and "safe" both report no rule.
+ENCOUNTER_BANDS = ("acute", "early")
+
+
 # Quality-review STAP 2 (2026-09-23): THREE previously-hardcoded training-data constants
 # (safe_distance_m, max_turn_deg, and now also the risk horizon) become PER-ROW sampled
 # variables instead -- a value that never varies in training is learned as a constant
@@ -109,7 +156,15 @@ def derive_risk_horizon_s(safe_distance_m: float, max_turn_deg: float, own_speed
     replaces a single fixed RISK_HORIZON_S=300 for every mission regardless of speed/turn
     limit/safe distance. Falls back to the historical RISK_HORIZON_S when own_speed_mps is
     missing/zero/negative (a stopped/unknown-speed own-ship has no manoeuvre time to derive
-    a horizon from at all)."""
+    a horizon from at all).
+
+    Quality-review STOP-1-blocking-bug fix (2026-09-23): the horizon's role is DELIBERATELY
+    limited to exactly three things -- (a) the D-check, i.e. whether acting is MANDATORY
+    right now (real_risk()/risk_band()=="acute"); (b) STAND_ON_TCPA_S, when a stand-on
+    vessel's own Rule 17(a)(ii)/(b) action may/must trigger; (c) the auditor's safe/early/
+    acute/passed band. It never decides whether a rule/encounter applies at all -- a
+    contact with CPA below safe_distance_m is a real encounter (risk_band()=="early" or
+    "acute") regardless of how far beyond the horizon its TCPA sits; see risk_band()."""
     if not own_speed_mps or own_speed_mps <= 0:
         return RISK_HORIZON_S
     t_manoeuvre = safe_distance_m / (own_speed_mps * math.sin(math.radians(max_turn_deg)))

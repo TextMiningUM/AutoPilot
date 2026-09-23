@@ -132,7 +132,7 @@ from core import AgentPaths, load_env, review_path, safe_write_jsonl, EMBEDDER_M
 from pipeline.oow_agent_spec import (
     SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, classify_rules,
     bearing_and_range, relative_bearing, goal_course_action, goal_course_check_line,
-    render_previous_decisions, real_risk, sample_row_limits, fixed_limits, constraint_line,
+    render_previous_decisions, real_risk, risk_band, sample_row_limits, fixed_limits, constraint_line,
 )
 
 paths = AgentPaths.oow()
@@ -443,83 +443,70 @@ def to_unified_action(rec: dict, limits: dict | None = None) -> dict:
     STAP 1 extension, 2026-09-23): verified -- this generator's CATEGORIES/_classify_target()
     only ever produce moving-vessel encounter_type values (head_on/crossing_target_on_*/
     overtaking_geometry/same_line ahead/astern); no "stationary_contact"/"not_applicable"
-    role is ever generated, so there is nothing for a stationary branch to catch here."""
+    role is ever generated, so there is nothing for a stationary branch to catch here.
+
+    Quality-review STOP-1-blocking-bug fix (2026-09-23): restructured around risk_band()
+    (pipeline.oow_agent_spec) instead of real_risk() alone -- a target whose CPA is below
+    the safe distance but whose TCPA sits beyond the row's risk_horizon_s ("early" band)
+    is STILL a real encounter that must be identified/acted on early, not silently folded
+    into "no risk" (measured live on Leo's equivalent labeler: 229/276 (83%) of genuine
+    early-band frames mislabeled encounter_rule='none', 40 mislabeled 'speed_up' -- the
+    same class of bug applies here since this generator shares risk_band()'s definition).
+    give-way targets in band "acute" or "early" are both handled (same action either way,
+    "stop" reserved for "acute" only -- I4 invariant); give-way band takes priority over a
+    co-present stand-on target exactly like before. `old_action` only still matters for
+    choosing "stop" (acute give-way) vs "speed_up" (no encounter at all) -- every early/
+    acute encounter is now detected BEFORE `old_action` is even consulted, closing the
+    same "old_action==resume_cruising_speed but a real encounter exists" gap I2 guards."""
     limits = limits or _LEGACY_LIMITS
     safe_distance_m = limits["safe_distance_m"]
+    risk_horizon_s = limits["risk_horizon_s"]
     old_action = rec["action"]
-    roles = rec["role"].split("+")
+
+    def _band(t: dict) -> str:
+        return risk_band(t["_cpa_m"], t["_tcpa_min"] * 60.0, safe_distance_m, risk_horizon_s)
+
+    give_way_targets = [t for t in rec["targets"] if t["_role"] in ("mutual", "give_way", "overtaking_give_way")
+                        and _band(t) in ("acute", "early")]
+    stand_on_targets = [t for t in rec["targets"] if t["_role"] in ("stand_on", "overtaking_stand_on")
+                        and _band(t) in ("acute", "early")]
+
+    if give_way_targets:
+        worst = min(give_way_targets, key=lambda t: t["_cpa_m"])
+        worst_index = rec["targets"].index(worst)
+        worst_band = _band(worst)
+        range_m = math.hypot(*worst["start_xy_m"])
+        closing = closing_rate(rec["own_speed"], worst)
+        role = worst["_role"]
+        if worst_band == "acute" and (old_action == "stop" or _should_stop(worst["_cpa_m"], range_m, closing)):
+            encounter_rule, conduct_rule = classify_rules(role, "stop")
+            return {"action": "stop", "degrees": None, "encounter_rule": encounter_rule,
+                   "conduct_rule": conduct_rule, "decisive_contact_index": worst_index}
+        degrees = _turn_degrees(worst["_cpa_m"], limits)
+        if role == "overtaking_give_way":
+            action = _diverging_turn(relative_bearing(0.0, worst["bearing_from_os_deg"]))
+        else:
+            action = "turn_right"  # Rule 14 (mutual/head-on) / Rule 15+16 (give_way, crossing)
+        encounter_rule, conduct_rule = classify_rules(role, action)
+        return {"action": action, "degrees": degrees, "encounter_rule": encounter_rule,
+               "conduct_rule": conduct_rule, "decisive_contact_index": worst_index}
+
+    if stand_on_targets:
+        worst = min(stand_on_targets, key=lambda t: t["_cpa_m"])
+        encounter_rule, conduct_rule = classify_rules(worst["_role"], "hold_course")
+        return {"action": "hold_course", "degrees": None, "encounter_rule": encounter_rule,
+               "conduct_rule": conduct_rule, "decisive_contact_index": rec["targets"].index(worst)}
+
+    # No target in band acute/early -- no encounter to identify at all. Only now does
+    # old_action=="resume_cruising_speed" get to produce speed_up (I2: never with a real
+    # encounter still pending, which is exactly what the two checks above already ruled out).
     if old_action == "resume_cruising_speed":
         encounter_rule, conduct_rule = classify_rules("none", "speed_up")
         return {"action": "speed_up", "degrees": None, "encounter_rule": encounter_rule,
                "conduct_rule": conduct_rule, "decisive_contact_index": None}
-    if old_action == "maintain_course":
-        # A genuine stand-on situation (real risk, Rule 17 correctly says hold course) is
-        # NOT the same as no encounter at all ("none"/"none") -- never conflate them.
-        # Gated by the ONE shared real_risk() (quality-review STAP 1) -- same function
-        # leo_choose_action() and measurement.py's Check A use, so a role label alone
-        # (assigned upstream from bearing geometry only) can never stand in for an actual
-        # CPA/TCPA risk judgement here either.
-        stand_on_targets = [t for t in rec["targets"] if t["_role"] in ("stand_on", "overtaking_stand_on")
-                           and real_risk(t["_cpa_m"], t["_tcpa_min"] * 60.0, safe_distance_m,
-                                        limits["risk_horizon_s"])]
-        if stand_on_targets:
-            worst = min(stand_on_targets, key=lambda t: t["_cpa_m"])
-            encounter_rule, conduct_rule = classify_rules(worst["_role"], "hold_course")
-            return {"action": "hold_course", "degrees": None, "encounter_rule": encounter_rule,
-                   "conduct_rule": conduct_rule,
-                   "decisive_contact_index": rec["targets"].index(worst)}
-        encounter_rule, conduct_rule = classify_rules("none", "hold_course")
-        return {"action": "hold_course", "degrees": None, "encounter_rule": encounter_rule,
-               "conduct_rule": conduct_rule, "decisive_contact_index": None}
-    # Every remaining old_action (alter_course/stop) is driven by the give-way contact(s)
-    # specifically, not necessarily whichever target has the smallest CPA overall (a
-    # multi-target instance can mix give-way and stand-on contacts).
-    #
-    # Quality-review STAP 5 (2026-09-23), MAJOR BUG FIX: this branch previously trusted
-    # the upstream role assignment (bearing-only geometry, via _classify_target()/
-    # choose_action()) UNCONDITIONALLY -- unlike the maintain_course/stand-on branch
-    # above, it never re-checked real_risk() against THIS row's own sampled
-    # safe_distance_m/risk_horizon_s. Under the old fixed 500m/300s regime this was
-    # usually harmless (this generator's geometry is deliberately close-quarters), but
-    # STAP 2's per-row sampling can land a SHORTER risk_horizon_s than the geometry's
-    # natural TCPA -- found live: a give-way row with tcpa_s=307.5 and a sampled
-    # risk_horizon_s=183.1 was still being labelled a real-risk give-way turn. Filtered
-    # here exactly like the stand-on branch already was.
-    give_way_targets = [t for t in rec["targets"] if t["_role"] in ("mutual", "give_way", "overtaking_give_way")
-                        and real_risk(t["_cpa_m"], t["_tcpa_min"] * 60.0, safe_distance_m,
-                                     limits["risk_horizon_s"])]
-    if not give_way_targets:
-        # The upstream role said give-way, but no such target actually clears THIS row's
-        # real_risk() thresholds -- check a co-present stand-on-role target the same way
-        # the maintain_course branch does, else this is genuinely a no-risk situation.
-        stand_on_targets = [t for t in rec["targets"] if t["_role"] in ("stand_on", "overtaking_stand_on")
-                           and real_risk(t["_cpa_m"], t["_tcpa_min"] * 60.0, safe_distance_m,
-                                        limits["risk_horizon_s"])]
-        if stand_on_targets:
-            worst = min(stand_on_targets, key=lambda t: t["_cpa_m"])
-            encounter_rule, conduct_rule = classify_rules(worst["_role"], "hold_course")
-            return {"action": "hold_course", "degrees": None, "encounter_rule": encounter_rule,
-                   "conduct_rule": conduct_rule, "decisive_contact_index": rec["targets"].index(worst)}
-        encounter_rule, conduct_rule = classify_rules("none", "hold_course")
-        return {"action": "hold_course", "degrees": None, "encounter_rule": encounter_rule,
-               "conduct_rule": conduct_rule, "decisive_contact_index": None}
-    worst = min(give_way_targets, key=lambda t: t["_cpa_m"])
-    worst_index = rec["targets"].index(worst)
-    range_m = math.hypot(*worst["start_xy_m"])
-    closing = closing_rate(rec["own_speed"], worst)
-    role = worst["_role"]
-    if old_action == "stop" or _should_stop(worst["_cpa_m"], range_m, closing):
-        encounter_rule, conduct_rule = classify_rules(role, "stop")
-        return {"action": "stop", "degrees": None, "encounter_rule": encounter_rule,
-               "conduct_rule": conduct_rule, "decisive_contact_index": worst_index}
-    degrees = _turn_degrees(worst["_cpa_m"], limits)
-    if role == "overtaking_give_way":
-        action = _diverging_turn(relative_bearing(0.0, worst["bearing_from_os_deg"]))
-    else:
-        action = "turn_right"  # Rule 14 (mutual/head-on) / Rule 15+16 (give_way, crossing)
-    encounter_rule, conduct_rule = classify_rules(role, action)
-    return {"action": action, "degrees": degrees, "encounter_rule": encounter_rule,
-           "conduct_rule": conduct_rule, "decisive_contact_index": worst_index}
+    encounter_rule, conduct_rule = classify_rules("none", "hold_course")
+    return {"action": "hold_course", "degrees": None, "encounter_rule": encounter_rule,
+           "conduct_rule": conduct_rule, "decisive_contact_index": None}
 
 
 def render_scenario_situation(rec: dict, limits: dict | None = None) -> str:

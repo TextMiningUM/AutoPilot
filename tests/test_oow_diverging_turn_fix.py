@@ -116,7 +116,15 @@ def test_full_dataset_stand_on_17b_turn_left_never_violates_rule_17c() -> None:
     was violated by 329/379 (87%) such frames -- the pre-STAP-3b bug always returned
     turn_left regardless of the contact's actual side, silently teaching the model to
     alter to port for a contact on her OWN port side, a real Rule 17(c) violation in the
-    training labels themselves."""
+    training labels themselves.
+
+    Quality-review STOP-1-blocking-bug fix (2026-09-23): pinned count moved 48 -> 46 --
+    widening give_way/stationary detection to band "acute" OR "early" (risk_band()) means
+    2 frames that previously reached this stand_on_17b branch (because give_way/
+    stationary were empty under the old acute-only real_risk() filter) now have an
+    early-band give_way/stationary contact that wins the existing give-way/stationary
+    PRIORITY ordering instead -- not a regression, a direct, explainable consequence of
+    the early-band fix (give-way/stationary priority over stand-on is unchanged)."""
     import json
     from pipeline.track2.build_oow_scenarios_leo import LEO_FILE, limits_for_leo_record
 
@@ -133,6 +141,6 @@ def test_full_dataset_stand_on_17b_turn_left_never_violates_rule_17c() -> None:
             signed_bearing = ((c["relative_bearing_deg"] + 180) % 360) - 180
             if signed_bearing < 0:
                 violations.append((r["id"], signed_bearing))
-    assert n_turn_left == 48, f"expected 48 stand_on_17b turn_left frames, got {n_turn_left}"
+    assert n_turn_left == 46, f"expected 46 stand_on_17b turn_left frames, got {n_turn_left}"
     assert violations == [], f"Rule 17(c) violated in {len(violations)}/{n_turn_left} frames: {violations[:5]}"
 

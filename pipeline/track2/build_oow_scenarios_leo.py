@@ -65,8 +65,8 @@ import numpy as np
 from core import AgentPaths, load_env, review_path, safe_write_jsonl, CONTAM_THRESH, EMBEDDER_MODEL
 from pipeline.oow_agent_spec import (
     SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, goal_course_check_line, goal_course_action,
-    classify_rules, render_previous_decisions, real_risk, STAND_ON_TCPA_S, classify_encounter,
-    sample_row_limits, constraint_line, bearing_and_range, relative_bearing,
+    classify_rules, render_previous_decisions, real_risk, risk_band, STAND_ON_TCPA_S,
+    classify_encounter, sample_row_limits, constraint_line, bearing_and_range, relative_bearing,
 )
 
 paths = AgentPaths.oow()
@@ -280,6 +280,16 @@ def _real_risk(c: dict, limits: dict | None = None) -> bool:
     return real_risk(c.get("cpa_distance_m"), c.get("tcpa_s"), limits["safe_distance_m"], limits["risk_horizon_s"])
 
 
+def _band(c: dict, limits: dict | None = None) -> str:
+    """Quality-review STOP-1-blocking-bug fix (2026-09-23): the ONE shared risk_band()
+    (pipeline.oow_agent_spec) applied to a Leo contact dict -- "acute" is exactly
+    `_real_risk()`==True; "early" is a genuine encounter (CPA below safe_distance_m) whose
+    TCPA sits beyond the row's risk_horizon_s, previously silently treated as "no risk" by
+    every caller that filtered on `_real_risk()` alone (see leo_choose_action())."""
+    limits = limits or _DEFAULT_LIMITS
+    return risk_band(c.get("cpa_distance_m"), c.get("tcpa_s"), limits["safe_distance_m"], limits["risk_horizon_s"])
+
+
 def _turn_degrees(cpa_m: float, limits: dict | None = None) -> float:
     """Substantial, geometry-scaled turn -- bigger the further CPA falls below the row's
     safe_distance_m, always at least MIN_TURN_DEG, capped at the row's own max_turn_deg
@@ -477,10 +487,16 @@ def leo_choose_action(state: dict, limits: dict | None = None) -> dict:
     # despite passing real_risk(), the record is too ambiguous to trust -- EXCLUDE the
     # whole frame from training rather than force a role/action that wouldn't make
     # physical/COLREG sense (never silently label it hold_course).
+    #
+    # Quality-review STOP-1-blocking-bug fix (2026-09-23): widened from `_real_risk()`
+    # (acute only) to band "acute" OR "early" -- an early-band not_applicable contact left
+    # unclassified here would silently vanish from every role list below (its own_role
+    # stays "not_applicable", matching none of stationary/give_way/stand_on), reproducing
+    # the exact same bug through this side channel.
     contacts = [dict(c) for c in contacts]  # never mutate the caller's state
     for c in contacts:
         if (c["own_role"] == "not_applicable" and c.get("encounter_type") != "stationary_contact"
-                and (c.get("speed") or 0) > MOVING_SPEED_THRESHOLD and _real_risk(c, limits)):
+                and (c.get("speed") or 0) > MOVING_SPEED_THRESHOLD and _band(c, limits) in ("acute", "early")):
             geo = _geometric_role_and_type(own, c)
             if geo is None:
                 return {"action": None, "degrees": None, "encounter_rule": None, "conduct_rule": None,
@@ -490,9 +506,17 @@ def leo_choose_action(state: dict, limits: dict | None = None) -> dict:
                                           "(closing_speed<=0) despite CPA/TCPA real_risk"}
             c["own_role"], c["encounter_type"] = geo
 
-    stationary = [c for c in contacts if c.get("encounter_type") == "stationary_contact" and _real_risk(c, limits)]
-    give_way = [c for c in contacts if c["own_role"] in ("give_way", "both_give_way") and _real_risk(c, limits)]
-    stand_on = [c for c in contacts if c["own_role"] == "stand_on" and _real_risk(c, limits)]
+    # Quality-review STOP-1-blocking-bug fix (2026-09-23): filter on band "acute" OR
+    # "early" -- NOT `_real_risk()` (=="acute" only) as before. A contact whose CPA is
+    # below the safe distance but whose TCPA sits beyond the horizon ("early") is STILL a
+    # real encounter that must be identified/acted on early; it was previously silently
+    # dropped to the "no risk" clear branch below (measured: 229/276 (83%) of Leo's genuine
+    # early-band frames mislabeled encounter_rule='none', 40 mislabeled 'speed_up' -- see
+    # risk_band()'s own docstring). "stop" stays exclusive to "acute" (I4 invariant) --
+    # gated explicitly below, never inferred from band membership alone.
+    stationary = [c for c in contacts if c.get("encounter_type") == "stationary_contact" and _band(c, limits) in ("acute", "early")]
+    give_way = [c for c in contacts if c["own_role"] in ("give_way", "both_give_way") and _band(c, limits) in ("acute", "early")]
+    stand_on = [c for c in contacts if c["own_role"] == "stand_on" and _band(c, limits) in ("acute", "early")]
 
     if stationary or give_way:
         worst_stationary = min(stationary, key=lambda c: c["cpa_distance_m"]) if stationary else None
@@ -502,8 +526,9 @@ def leo_choose_action(state: dict, limits: dict | None = None) -> dict:
 
         if give_way_wins:
             worst = worst_give_way
+            worst_band = _band(worst, limits)
             classify_role = _leo_role_for_classify(worst["own_role"], worst["encounter_type"])
-            if _should_stop(worst):
+            if worst_band == "acute" and _should_stop(worst):
                 encounter_rule, conduct_rule = classify_rules(classify_role, "stop")
                 return {"action": "stop", "degrees": None, "encounter_rule": encounter_rule,
                         "conduct_rule": conduct_rule, "role": worst["own_role"], "rules": _rule_list(worst),
@@ -524,14 +549,23 @@ def leo_choose_action(state: dict, limits: dict | None = None) -> dict:
                     else:
                         action, degrees = "slow_down", None
             encounter_rule, conduct_rule = classify_rules(classify_role, action)
+            # I4: an early-band give-way encounter still HANDELT (acts) -- same action as
+            # the acute branch, just its own bucket/category so the early-vs-acute split
+            # stays measurable (see the STOP-3 population report).
+            bucket = "alter_course" if worst_band == "acute" else "early_give_way"
+            category = (f"leo_{worst['encounter_type']}" if worst_band == "acute"
+                       else f"leo_early_{worst['encounter_type']}")
             return {"action": action, "degrees": degrees, "encounter_rule": encounter_rule,
                     "conduct_rule": conduct_rule, "role": worst["own_role"], "rules": _rule_list(worst),
-                    "category": f"leo_{worst['encounter_type']}", "bucket": "alter_course",
+                    "category": category, "bucket": bucket,
                     "decisive_contact_name": worst["name"], "training_limits": limits}
 
         # Stationary avoidance wins (no give-way contact, or its CPA is not smaller). Never
         # a stop-default, never a give-way/stand-on role -- Rule 8 covers the action alone.
+        # A stationary object on a collision course does not wait for a horizon either --
+        # early and acute get the SAME turn-away action, just a distinct bucket/category.
         worst = worst_stationary
+        worst_band = _band(worst, limits)
         degrees = _turn_degrees(worst["cpa_distance_m"], limits)
         other = [x for x in (stationary + give_way + stand_on) if x is not worst]
         action = _diverging_turn(worst, own, other, state["mission"], degrees)
@@ -542,17 +576,23 @@ def leo_choose_action(state: dict, limits: dict | None = None) -> dict:
             else:
                 action, degrees = "slow_down", None
         encounter_rule, conduct_rule = classify_rules("stationary", action)
+        bucket = "stationary" if worst_band == "acute" else "early_stationary"
+        category = "leo_stationary_avoid" if worst_band == "acute" else "leo_early_stationary_avoid"
         return {"action": action, "degrees": degrees, "encounter_rule": encounter_rule,
                 "conduct_rule": conduct_rule, "role": "stationary",
                 "rules": ["Rule 2", "Rule 5", "Rule 6", "Rule 7", "Rule 8"],
-                "category": "leo_stationary_avoid", "bucket": "stationary",
+                "category": category, "bucket": bucket,
                 "decisive_contact_name": worst["name"], "training_limits": limits}
 
     if stand_on:
         # Rule 17(a)(ii)/(b): own-ship (stand-on) may/must act once it's apparent the
         # give-way vessel isn't -- requires BOTH a real CPA shortfall AND an imminent
         # encounter (short TCPA, scaled to THIS row's risk_horizon_s), never TCPA alone.
-        triggered = [c for c in stand_on if (c.get("tcpa_s") or 1e9) < limits["stand_on_tcpa_s"]]
+        # Quality-review STOP-1-blocking-bug fix: this proactive 17(b) action stays
+        # exclusive to "acute" contacts (I4) -- an early-band stand-on contact always
+        # just holds course, matching the acute-but-not-yet-triggered case below.
+        acute_stand_on = [c for c in stand_on if _band(c, limits) == "acute"]
+        triggered = [c for c in acute_stand_on if (c.get("tcpa_s") or 1e9) < limits["stand_on_tcpa_s"]]
         if triggered:
             worst = min(triggered, key=lambda c: c["cpa_distance_m"])
             degrees = _turn_degrees(worst["cpa_distance_m"], limits)
@@ -570,12 +610,16 @@ def leo_choose_action(state: dict, limits: dict | None = None) -> dict:
                     "conduct_rule": conduct_rule, "role": "stand_on", "rules": _rule_list(worst),
                     "category": f"leo_stand_on_{worst['encounter_type']}_17b", "bucket": "stand_on_17b",
                     "decisive_contact_name": worst["name"], "training_limits": limits}
-        ref = stand_on[0]
+        ref = min(stand_on, key=lambda c: c["cpa_distance_m"])  # decisive = smallest CPA (acute first, else early)
+        ref_band = _band(ref, limits)
         classify_role = _leo_role_for_classify("stand_on", ref["encounter_type"])
         encounter_rule, conduct_rule = classify_rules(classify_role, "hold_course")
+        bucket = "stand_on" if ref_band == "acute" else "early_stand_on"
+        category = (f"leo_stand_on_{ref['encounter_type']}" if ref_band == "acute"
+                   else f"leo_early_stand_on_{ref['encounter_type']}")
         return {"action": "hold_course", "degrees": None, "encounter_rule": encounter_rule,
                 "conduct_rule": conduct_rule, "role": "stand_on", "rules": _rule_list(ref),
-                "category": f"leo_stand_on_{ref['encounter_type']}", "bucket": "stand_on",
+                "category": category, "bucket": bucket,
                 "decisive_contact_name": ref["name"], "training_limits": limits}
 
     # No contact poses real risk -- follow GOAL COURSE CHECK exactly (SYSTEM_OOW_AGENT's
