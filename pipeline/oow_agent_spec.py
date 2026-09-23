@@ -80,8 +80,63 @@ Ground your reasoning in the COLREG excerpts/procedure guidance provided, where 
 ONLY a JSON object, no other text:
 {"action": "turn_left|turn_right|hold_course|speed_up|slow_down|stop",
  "degrees": <float, only for turn_left/turn_right>,
- "rule_applied": "<e.g. Rule 15, or 'none' if no rule applies>",
- "reasoning": "<one or two sentences>"}"""
+ "encounter_rule": "<Rule 13, Rule 14, Rule 15, or 'none' if no encounter poses real risk>",
+ "conduct_rule": "<Rule 8, Rule 13, Rule 14, Rule 16, Rule 17, Rule 19, or 'none' -- the rule that
+   governs YOUR specific action (see below), 'none' if no real risk>",
+ "reasoning": "<one or two sentences>"}
+
+encounter_rule names which COLREG encounter you are in, from the geometry alone (Rule 13
+overtaking, Rule 14 head-on, Rule 15 crossing, or 'none' if no contact poses real risk).
+conduct_rule names the rule that governs the SPECIFIC action you are taking: Rule 16 for a
+give-way vessel's turn/speed change (except overtaking, which stays Rule 13), Rule 14 for a
+head-on turn, Rule 17 for a stand-on vessel (holding course, or its own 17(b) action), Rule 8
+for a give-way vessel's emergency stop (Rule 17(b) is for the STAND-ON vessel only, never a
+give-way vessel's own stop), Rule 19 in restricted visibility, or 'none' if no real risk. Both
+fields are whole rule numbers only (no sub-paragraphs like "17(b)" -- put that detail in
+reasoning instead), and both are 'none' together whenever no contact poses real risk -- standing
+rules (2/5/6/7/11) are never cited in either field, they always apply and are not what these
+fields are for."""
+
+
+# Fase B3 (RAG-rebuild-v2 plan, 2026-09-22): the ONE ground-truth mapping from (encounter role,
+# action) to (encounter_rule, conduct_rule), shared by BOTH Track-2 generators' deterministic
+# labelers (to_unified_action() / leo_choose_action()) and the B3 reasoning cross-check -- so
+# none of the three can silently disagree about what the "correct" rule pair is for a given
+# role/action combination. Replaces the single rule_applied field, which conflated "why are
+# these two vessels in a give-way/stand-on relationship" with "which rule governs THIS action"
+# (e.g. every stop was labelled Rule 17 even for a give-way vessel, when 17(b) is exclusively
+# the stand-on vessel's provision -- Rule 8 is the correct citation for a give-way vessel's own
+# emergency stop).
+_ENCOUNTER_RULE_BY_ROLE = {
+    "mutual": "Rule 14", "give_way": "Rule 15", "stand_on": "Rule 15",
+    "overtaking_give_way": "Rule 13", "overtaking_stand_on": "Rule 13",
+}
+_STAND_ON_ROLES = ("stand_on", "overtaking_stand_on")
+
+
+def classify_rules(role: str, action: str, restricted_visibility: bool = False) -> tuple[str, str]:
+    """(encounter_rule, conduct_rule) for a given encounter role and the action taken.
+    `role` is one of "mutual" (head-on) | "give_way" | "stand_on" | "overtaking_give_way" |
+    "overtaking_stand_on" | "cleared"/"none"/None (no real risk). `action` is any value from
+    ACTIONS. `restricted_visibility=True` forces conduct_rule="Rule 19" (not yet produced by
+    either generator, included for forward-compatibility with Basic Simulator's live agent).
+    """
+    if role in (None, "none", "cleared"):
+        return "none", "none"
+    encounter_rule = _ENCOUNTER_RULE_BY_ROLE.get(role, "none")
+    if restricted_visibility:
+        return encounter_rule, "Rule 19"
+    if role in _STAND_ON_ROLES:
+        conduct_rule = "Rule 17"
+    elif action == "stop":
+        conduct_rule = "Rule 8"  # give-way emergency stop -- 17(b) is stand-on only
+    elif role == "mutual":
+        conduct_rule = "Rule 14"
+    elif role == "overtaking_give_way":
+        conduct_rule = "Rule 13"
+    else:  # give_way (crossing), turning or a speed change
+        conduct_rule = "Rule 16"
+    return encounter_rule, conduct_rule
 
 
 def validate_action_json(obj: dict) -> list[str]:
@@ -93,7 +148,7 @@ def validate_action_json(obj: dict) -> list[str]:
     errors: list[str] = []
     if not isinstance(obj, dict):
         return [f"expected a dict, got {type(obj).__name__}"]
-    for key in ("action", "degrees", "rule_applied", "reasoning"):
+    for key in ("action", "degrees", "encounter_rule", "conduct_rule", "reasoning"):
         if key not in obj:
             errors.append(f"missing required key {key!r}")
     action = obj.get("action")
@@ -105,9 +160,15 @@ def validate_action_json(obj: dict) -> list[str]:
             errors.append(f"action {action!r} requires a numeric 'degrees', got {degrees!r}")
     elif degrees is not None:
         errors.append(f"action {action!r} must have degrees=None, got {degrees!r}")
-    rule_applied = obj.get("rule_applied")
-    if rule_applied != "none" and not (isinstance(rule_applied, str) and rule_applied.startswith("Rule ")):
-        errors.append(f"rule_applied {rule_applied!r} must be 'none' or 'Rule N'")
+    encounter_rule = obj.get("encounter_rule")
+    conduct_rule = obj.get("conduct_rule")
+    for field_name, value in (("encounter_rule", encounter_rule), ("conduct_rule", conduct_rule)):
+        if value != "none" and not (isinstance(value, str) and value.startswith("Rule ")
+                                    and value.split(" ", 1)[-1].isdigit()):
+            errors.append(f"{field_name} {value!r} must be 'none' or a whole 'Rule N'")
+    if (encounter_rule == "none") != (conduct_rule == "none"):
+        errors.append(f"encounter_rule {encounter_rule!r} and conduct_rule {conduct_rule!r} "
+                     "must be 'none' together, never only one of them")
     reasoning = obj.get("reasoning")
     if not isinstance(reasoning, str) or not reasoning.strip():
         errors.append("'reasoning' must be a non-empty string")
@@ -156,4 +217,25 @@ def goal_course_check_line(own_x: float, own_y: float, own_heading: float,
            f"bearing, to {side} -- to correct, use action \"{action}\" with "
            f"degrees={degrees:.0f} (unless a target poses a real collision "
            f"risk, which takes precedence).")
+
+
+# Fase B4 (RAG-rebuild-v2 plan): a "previous decisions" history preamble, prepended to a
+# SUBSET of training rows' user turns, teaching the model not to reverse/re-derive an
+# already-established decision from scratch every single step (the measured zigzag
+# problem). Both Track-2 generators use this exact renderer so the wording a model is
+# trained on never silently drifts between them.
+def render_previous_decisions(decisions: list[dict]) -> str:
+    """`decisions` is an ordered list (oldest first) of dicts with at least {"action",
+    "degrees"} -- the helm orders actually given on the immediately preceding step(s) of
+    THIS mission. Returns "" for an empty/None list (no history preamble to add)."""
+    if not decisions:
+        return ""
+    labels = []
+    for d in decisions:
+        action, degrees = d["action"], d.get("degrees")
+        labels.append(f"{action} ({degrees:.0f} deg)" if degrees is not None else action)
+    return (f"Your last {len(decisions)} helm decision(s), oldest first: {'; '.join(labels)}. "
+           "Stay consistent with this unless the CURRENT situation below has genuinely "
+           "changed enough to justify a different action -- do not reverse or re-derive an "
+           "already-established decision from scratch every step.\n\n")
 

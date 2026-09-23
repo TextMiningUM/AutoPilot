@@ -68,8 +68,9 @@ OUTPUTS
 - Data/OOW/OOW_Agents_Training/oow_scenario_sft_direct.jsonl / _cot.jsonl
       Training SFT rows in the UNIFIED format: system=SYSTEM_OOW_AGENT,
       user=render_scenario_situation() (the SAME renderer v2's eval records use),
-      assistant=JSON {action, degrees, rule_applied, reasoning} (reasoning reuses
-      the already-approved Claude-authored gold_answer text). Written DIRECTLY,
+      assistant=JSON {action, degrees, encounter_rule, conduct_rule, reasoning} (reasoning
+      comes from Fase B3's gated, geometry-derived reasoning generation -- see
+      pipeline/track2/b3_reasoning_gates.py). Written DIRECTLY,
       NOT via build_sft.py -- see write_scenario_sft_files()'s docstring for why
       that generic builder doesn't fit this fixed-question data shape.
 - Data/OOW/OOW_Agents_Training/oow_scenario_dpo_pairs.jsonl
@@ -129,8 +130,9 @@ import numpy as np
 
 from core import AgentPaths, load_env, review_path, safe_write_jsonl, EMBEDDER_MODEL, CONTAM_THRESH
 from pipeline.oow_agent_spec import (
-    SYSTEM_OOW_AGENT, ACTIONS, validate_action_json,
+    SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, classify_rules,
     bearing_and_range, relative_bearing, goal_course_action, goal_course_check_line,
+    render_previous_decisions,
 )
 
 paths = AgentPaths.oow()
@@ -373,7 +375,7 @@ def choose_action(contact_roles: list[str], worst_tcpa_min: float) -> tuple[str,
 # ══════════════════════════════════════════════════════════════════════════════════
 # UNIFIED TASK FORMAT (Fase B2, RAG-rebuild-v2 plan, 2026-09-22)
 # ══════════════════════════════════════════════════════════════════════════════════
-# Everything below derives NEW fields (action/degrees/rule_applied in
+# Everything below derives NEW fields (action/degrees/encounter_rule/conduct_rule in
 # pipeline.oow_agent_spec.ACTIONS' vocabulary, plus a unified situation-report renderer)
 # from the SAME geometry/CATEGORIES/generate_*_instance() machinery above -- none of that
 # machinery is touched, so oow_colreg_scenarios_v1.json stays exactly reproducible.
@@ -386,8 +388,6 @@ CRITICAL_RANGE_M = 200.0  # Rule 17(b): manoeuvre alone no longer suffices -- ra
                           # criterion, never a TCPA cutoff (same as build_oow_scenarios_leo.py)
 MIN_TURN_DEG = 15.0       # Rule 16's "early and substantial" rules out a token gesture
 MAX_TURN_DEG = 30.0       # matches Basic Simulator VesselConstraints' max_rudder_angle_deg
-
-_PRIMARY_RULE_BY_ROLE = {"mutual": "Rule 14", "give_way": "Rule 15", "overtaking_give_way": "Rule 13"}
 
 
 def _turn_degrees(cpa_m: float) -> float:
@@ -407,33 +407,54 @@ def to_unified_action(rec: dict) -> dict:
     """Maps this generator's OLD action taxonomy (maintain_course/alter_course/stop/
     resume_cruising_speed, always a fixed +/-30 degrees) onto the unified simulator
     vocabulary with geometry-scaled degrees -- for training rows / v2 eval only, never
-    touches rec["action"]/rec["action_params"] (v1's own fields)."""
+    touches rec["action"]/rec["action_params"] (v1's own fields). encounter_rule/
+    conduct_rule come from pipeline.oow_agent_spec.classify_rules() -- the ONE shared
+    mapping table, so this generator, build_oow_scenarios_leo.py, and the B3 reasoning
+    cross-check can never silently disagree about which rule pair a role/action implies.
+    `decisive_contact_index` (index into rec["targets"], or None when no real risk) is
+    the contact that actually drove this decision -- fed to the B3 teacher prompt as
+    answer-side context (never leaked to render_scenario_situation()'s user-facing text)
+    and checked by the B3 acceptance gates' contact-consistency check."""
     old_action = rec["action"]
     roles = rec["role"].split("+")
     if old_action == "resume_cruising_speed":
-        return {"action": "speed_up", "degrees": None, "rule_applied": "none"}
+        encounter_rule, conduct_rule = classify_rules("none", "speed_up")
+        return {"action": "speed_up", "degrees": None, "encounter_rule": encounter_rule,
+               "conduct_rule": conduct_rule, "decisive_contact_index": None}
     if old_action == "maintain_course":
         # A genuine stand-on situation (real risk, Rule 17 correctly says hold course) is
-        # NOT the same as no encounter at all (rule_applied "none") -- never conflate them.
-        if any(r in ("stand_on", "overtaking_stand_on") for r in roles):
-            return {"action": "hold_course", "degrees": None, "rule_applied": "Rule 17"}
-        return {"action": "hold_course", "degrees": None, "rule_applied": "none"}
+        # NOT the same as no encounter at all ("none"/"none") -- never conflate them.
+        stand_on_targets = [t for t in rec["targets"] if t["_role"] in ("stand_on", "overtaking_stand_on")]
+        if stand_on_targets:
+            worst = min(stand_on_targets, key=lambda t: t["_cpa_m"])
+            encounter_rule, conduct_rule = classify_rules(worst["_role"], "hold_course")
+            return {"action": "hold_course", "degrees": None, "encounter_rule": encounter_rule,
+                   "conduct_rule": conduct_rule,
+                   "decisive_contact_index": rec["targets"].index(worst)}
+        encounter_rule, conduct_rule = classify_rules("none", "hold_course")
+        return {"action": "hold_course", "degrees": None, "encounter_rule": encounter_rule,
+               "conduct_rule": conduct_rule, "decisive_contact_index": None}
     # Every remaining old_action (alter_course/stop) is driven by the give-way contact(s)
     # specifically, not necessarily whichever target has the smallest CPA overall (a
     # multi-target instance can mix give-way and stand-on contacts).
     give_way_targets = [t for t in rec["targets"] if t["_role"] in ("mutual", "give_way", "overtaking_give_way")]
     worst = min(give_way_targets or rec["targets"], key=lambda t: t["_cpa_m"])
+    worst_index = rec["targets"].index(worst)
     range_m = math.hypot(*worst["start_xy_m"])
     closing = closing_rate(rec["own_speed"], worst)
-    if old_action == "stop" or _should_stop(worst["_cpa_m"], range_m, closing):
-        return {"action": "stop", "degrees": None, "rule_applied": "Rule 17"}
-    degrees = _turn_degrees(worst["_cpa_m"])
     role = worst["_role"]
+    if old_action == "stop" or _should_stop(worst["_cpa_m"], range_m, closing):
+        encounter_rule, conduct_rule = classify_rules(role, "stop")
+        return {"action": "stop", "degrees": None, "encounter_rule": encounter_rule,
+               "conduct_rule": conduct_rule, "decisive_contact_index": worst_index}
+    degrees = _turn_degrees(worst["_cpa_m"])
     if role == "overtaking_give_way":
         action = _diverging_turn(relative_bearing(0.0, worst["bearing_from_os_deg"]))
     else:
         action = "turn_right"  # Rule 14 (mutual/head-on) / Rule 15+16 (give_way, crossing)
-    return {"action": action, "degrees": degrees, "rule_applied": _PRIMARY_RULE_BY_ROLE.get(role, "none")}
+    encounter_rule, conduct_rule = classify_rules(role, action)
+    return {"action": action, "degrees": degrees, "encounter_rule": encounter_rule,
+           "conduct_rule": conduct_rule, "decisive_contact_index": worst_index}
 
 
 def render_scenario_situation(rec: dict) -> str:
@@ -509,11 +530,12 @@ def build_v2_eval_records() -> list[dict]:
             raise RuntimeError(f"record {i}: category mismatch ({rec['category']!r} vs "
                               f"v1's {v1_rec['category']!r}) -- geometry has drifted from v1")
         unified = to_unified_action(rec)
+        gold = {k: v for k, v in unified.items() if k != "decisive_contact_index"}
         out.append({
             "id": f"oowcol_v2_{i + 1:05d}", "v1_id": v1_rec["id"], "category": rec["category"],
             "situation": render_scenario_situation(rec),
             "question": FIXED_QUESTION_UNIFIED,
-            "gold": unified,
+            "gold": gold,
             "degrees_tolerance": 10.0 if unified["degrees"] is not None else None,
             "gold_reasoning": v1_rec.get("gold_answer", ""),
             "expected_points": rec["pass_criteria"],
@@ -982,6 +1004,205 @@ def render_all(client, model: str, recs: list[dict], batch_size: int, max_tokens
               f"({time.time() - t0:.1f}s, total {start + len(batch)}/{len(todo)})", flush=True)
 
 
+# ══════════════════════════════════════════════════════════════════════════════════
+# Fase B3 (RAG-rebuild-v2 plan, 2026-09-22, 25-first review gate): the reasoning text
+# must DERIVE the applicable rule(s) from the raw situation facts, never restate a rule
+# it was handed -- unlike RENDER_SYSTEM_PROMPT above (which is v1/legacy-only: it hands
+# Claude the already-computed role/rules and asks it to phrase around them, and must
+# stay byte-for-byte as-is for v1 reproducibility). This is the unified-format
+# reasoning generator: situation text only, NO role/rule/degrees-justification labels in
+# the input -- EXCEPT `decisive_contact` (name + CPA), which is answer-side context for
+# the TEACHER only (same status as the already-given action/degrees), never part of
+# Qwen's own user-facing prompt (render_scenario_situation()/build_user_message() never
+# take or embed it -- see test_oow_scenarios_task_format.py's
+# test_qwen_user_content_never_contains_the_decisive_contact_hint). Output is
+# schema-validated AND gated (pipeline.track2.b3_reasoning_gates) before acceptance.
+# ══════════════════════════════════════════════════════════════════════════════════
+REASONING_SYSTEM_PROMPT = """\
+You are an expert deck officer analysing a COLREG close-quarters situation. You are \
+given a FUSED SITUATION REPORT (own-ship state, contact bearing/range/CPA/TCPA/speed/ \
+heading -- no rule numbers or role labels), the ACTION already decided (never change, \
+second-guess, or invent a different action/degrees than given), and -- only when a real \
+collision risk exists -- which contact (`decisive_contact`, by name) actually drove that \
+decision. Never mention any OTHER contact as if it were the reason for the decision.
+
+Write ONE fluent reasoning paragraph, in the officer's own voice, that:
+  1. Describes what the geometry of the decisive contact shows (closing or opening, \
+which side it is on, how much risk it poses) in your own words -- never a template or \
+label dump. If other contacts are present, you may mention them, but the decisive \
+contact must be the one your reasoning is actually built on.
+  2. From THAT geometry alone, determines which vessel is give-way/stand-on (if \
+either) and names BOTH: the encounter rule (Rule 13 overtaking / Rule 14 head-on / \
+Rule 15 crossing / 'none' if no real risk), and the conduct rule that governs the \
+SPECIFIC action being taken (Rule 16 give-way turn/speed change, Rule 14 head-on turn, \
+Rule 17 stand-on, Rule 8 a give-way vessel's own emergency stop -- Rule 17(b) is the \
+STAND-ON vessel's provision only, never cite it for a give-way vessel's stop -- Rule 19 \
+restricted visibility, or 'none' if no real risk). Whole rule numbers only, no
+sub-paragraphs.
+  3. States the given action (and degrees, if any) and justifies it under the conduct
+rule.
+
+Each input record has:
+  - situation: the full fused situation report text
+  - action: the action name already decided
+  - degrees: turn amount in degrees (only for turn_left/turn_right, else null)
+  - decisive_contact: {"name", "cpa_m"} of the contact that drove the decision (omitted
+    when there is no real risk)
+
+OUTPUT FORMAT: return ONLY one JSON object, no markdown fences, no commentary:
+{"id": "<copied verbatim from input>", "action": "<copied verbatim from input>",
+ "degrees": <copied verbatim from input, null if not given>,
+ "encounter_rule": "Rule N or 'none'", "conduct_rule": "Rule N or 'none'", "reasoning": "..."}
+"""
+
+
+def contact_name_for_index(i: int) -> str:
+    return CONTACT_NAME_POOL[i] if i < len(CONTACT_NAME_POOL) else f"RANDOM_TS{i + 1}"
+
+
+def build_teacher_payload(rec: dict, rec_id: str) -> tuple[dict, dict]:
+    """The TEACHER-only payload (includes decisive_contact -- answer-side info, never
+    sent to Qwen) plus the ground-truth dict used both for row assembly and gating."""
+    truth = to_unified_action(rec)
+    situation = render_scenario_situation(rec)
+    idx = truth["decisive_contact_index"]
+    cpa_m = rec["targets"][idx]["_cpa_m"] if idx is not None else None
+    payload = {"id": rec_id, "situation": situation, "action": truth["action"], "degrees": truth["degrees"]}
+    decisive_name = None
+    if idx is not None:
+        decisive_name = contact_name_for_index(idx)
+        payload["decisive_contact"] = {"name": decisive_name, "cpa_m": round(cpa_m, 0) if cpa_m is not None else None}
+    return payload, {
+        "situation": situation, "expected_action": truth["action"], "expected_degrees": truth["degrees"],
+        "expected_encounter_rule": truth["encounter_rule"], "expected_conduct_rule": truth["conduct_rule"],
+        "real_risk": truth["encounter_rule"] != "none", "cpa_m": cpa_m, "safe_distance_m": SAFE_CPA_M,
+        "decisive_contact_name": decisive_name,
+    }
+
+
+def render_reasoning_review_sample(client, model: str, recs: list[dict], n: int, seed: int,
+                                   max_attempts: int, max_tokens: int) -> dict:
+    """B3's 25-first review gate: stratified sample across categories (never the full
+    population), REAL Anthropic calls, EVERY row passes through the gated
+    generate/retry/drop loop (pipeline.track2.b3_reasoning_gates) before acceptance.
+    Returns {"accepted": [...], "rejected": [...], "gate_rejection_counts": {...}} --
+    writes NOTHING to any production file."""
+    from pipeline.track2.b3_reasoning_gates import generate_gated_row, GATE_NAMES
+
+    by_cat: dict[str, list[dict]] = {}
+    for r in recs:
+        by_cat.setdefault(r["category"], []).append(r)
+    rnd = random.Random(seed)
+    for v in by_cat.values():
+        rnd.shuffle(v)
+    cat_names = list(by_cat)
+    sample: list[dict] = []
+    i = 0
+    while len(sample) < n and any(by_cat.values()):
+        cat = cat_names[i % len(cat_names)]
+        if by_cat[cat]:
+            sample.append(by_cat[cat].pop())
+        i += 1
+
+    accepted, rejected = [], []
+    gate_rejection_counts = {name: 0 for name in GATE_NAMES}
+    for r in sample:
+        payload, expected = build_teacher_payload(r, r["_id"])
+        obj, attempt_log = generate_gated_row(
+            client, model, REASONING_SYSTEM_PROMPT, payload, max_attempts=max_attempts,
+            max_tokens=max_tokens, **expected,
+        )
+        for attempt in attempt_log:
+            for gate_name in attempt["failures"]:
+                gate_rejection_counts[gate_name] += 1
+        row = {
+            "id": r["_id"], "category": r["category"], "situation": expected["situation"],
+            "ground_truth": {"action": expected["expected_action"], "degrees": expected["expected_degrees"],
+                            "encounter_rule": expected["expected_encounter_rule"],
+                            "conduct_rule": expected["expected_conduct_rule"]},
+            "n_attempts": len(attempt_log), "attempt_log": attempt_log,
+        }
+        if obj is not None:
+            row["model_response"] = obj
+            accepted.append(row)
+        else:
+            rejected.append(row)
+    return {"accepted": accepted, "rejected": rejected, "gate_rejection_counts": gate_rejection_counts}
+
+
+B3_CHECKPOINT_FILE = CACHE / "oow_scenario_b3_checkpoint.jsonl"
+
+
+def load_b3_checkpoint() -> dict[str, dict]:
+    """_id -> {"accepted": bool, "reasoning": str|None}, from every row a prior
+    --b3-full-population run already completed -- resumable across crashes/interrupts,
+    same pattern as build_oow_scenarios_leo.py's load_checkpoint()."""
+    if not B3_CHECKPOINT_FILE.exists():
+        return {}
+    out: dict[str, dict] = {}
+    for line in B3_CHECKPOINT_FILE.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            rec = json.loads(line)
+            out[rec["id"]] = rec
+    return out
+
+
+def append_b3_checkpoint(rows: list[dict]) -> None:
+    B3_CHECKPOINT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with B3_CHECKPOINT_FILE.open("a", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            f.flush()
+
+
+def render_reasoning_full_population(client, model: str, recs: list[dict], max_attempts: int,
+                                     max_tokens: int) -> dict:
+    """Full-population version of render_reasoning_review_sample(): EVERY record in
+    `recs` (not a sample) passes through the SAME gated generate/retry/drop loop.
+    Checkpointed (B3_CHECKPOINT_FILE) so a crash/interrupt only loses the single
+    in-flight row, not the whole run -- re-running skips every _id already checkpointed.
+    Sets r["reasoning"] IN PLACE on accepted records (never on dropped ones, which stay
+    None and are naturally excluded by write_scenario_*_files()'s own
+    `if not r.get("reasoning")` guard). Returns {"n_accepted", "n_rejected",
+    "gate_rejection_counts"} -- the counts only cover THIS run's fresh generations, not
+    rows resumed from a prior checkpoint."""
+    from pipeline.track2.b3_reasoning_gates import generate_gated_row, GATE_NAMES
+
+    done = load_b3_checkpoint()
+    if done:
+        print(f"  [B3] resume: {len(done)}/{len(recs)} row(s) already checkpointed")
+    gate_rejection_counts = {name: 0 for name in GATE_NAMES}
+    n_accepted = n_rejected = 0
+    for i, r in enumerate(recs):
+        cp = done.get(r["_id"])
+        if cp is not None:
+            if cp["accepted"]:
+                r["reasoning"] = cp["reasoning"]
+                n_accepted += 1
+            else:
+                n_rejected += 1
+            continue
+        payload, expected = build_teacher_payload(r, r["_id"])
+        obj, attempt_log = generate_gated_row(
+            client, model, REASONING_SYSTEM_PROMPT, payload, max_attempts=max_attempts,
+            max_tokens=max_tokens, **expected,
+        )
+        for attempt in attempt_log:
+            for gate_name in attempt["failures"]:
+                gate_rejection_counts[gate_name] += 1
+        if obj is not None:
+            r["reasoning"] = obj["reasoning"]
+            n_accepted += 1
+            append_b3_checkpoint([{"id": r["_id"], "accepted": True, "reasoning": obj["reasoning"]}])
+        else:
+            n_rejected += 1
+            append_b3_checkpoint([{"id": r["_id"], "accepted": False, "reasoning": None}])
+        done_now = i + 1
+        if done_now % 20 == 0 or done_now == len(recs):
+            print(f"  [B3] {done_now}/{len(recs)} processed ({n_accepted} accepted, "
+                 f"{n_rejected} dropped)", flush=True)
+    return {"n_accepted": n_accepted, "n_rejected": n_rejected, "gate_rejection_counts": gate_rejection_counts}
+
 
 def wrong_action_variant(decision: dict) -> dict:
     """A plausible but COLREG-INCORRECT alternative decision, for DPO 'rejected' answers
@@ -993,38 +1214,47 @@ def wrong_action_variant(decision: dict) -> dict:
     action, degrees = decision["action"], decision["degrees"]
     if action in ("turn_left", "turn_right"):
         wrong_action = "turn_left" if action == "turn_right" else "turn_right"
-        return {"action": wrong_action, "degrees": degrees, "rule_applied": decision["rule_applied"]}
+        return {"action": wrong_action, "degrees": degrees,
+               "encounter_rule": decision["encounter_rule"], "conduct_rule": decision["conduct_rule"]}
     if action == "hold_course":
         # Wrong: manoeuvring when no real risk exists.
-        return {"action": "turn_right", "degrees": MIN_TURN_DEG, "rule_applied": "none"}
+        return {"action": "turn_right", "degrees": MIN_TURN_DEG,
+               "encounter_rule": "none", "conduct_rule": "none"}
     # Wrong response to a stop/speed-up-worthy situation: holding course instead.
-    return {"action": "hold_course", "degrees": None, "rule_applied": "none"}
+    return {"action": "hold_course", "degrees": None, "encounter_rule": "none", "conduct_rule": "none"}
+
+
+def _assistant_fields(unified: dict) -> dict:
+    """Strips decisive_contact_index (teacher-only metadata) before a unified action
+    dict is embedded as an assistant/chosen/rejected JSON response."""
+    return {k: v for k, v in unified.items() if k != "decisive_contact_index"}
 
 
 def write_scenario_sft_files(recs: list[dict], cache_dir: Path, mode: str = "w") -> None:
     """Writes oow_scenario_sft_direct.jsonl / _cot.jsonl in the UNIFIED task format (Fase
-    B2, RAG-rebuild-v2 plan): system=SYSTEM_OOW_AGENT, user=render_scenario_situation(r)
-    (the SAME renderer oow_colreg_scenarios_v2.json's eval records use -- see
+    B2, RAG-rebuild-v2 plan): system=SYSTEM_OOW_AGENT, user=user_message_for(r) (Fase B4's
+    optional previous-decisions preamble + render_scenario_situation(r) -- the latter is
+    the SAME renderer oow_colreg_scenarios_v2.json's eval records use, see
     tests/test_oow_scenarios_v2_shared_renderer_identity.py), assistant=the schema-validated
-    JSON object {action, degrees, rule_applied, reasoning}. `reasoning` reuses the
-    already-existing, already-approved Claude-authored gold_answer text (no NEW [LLM] call
-    -- only its wrapping changes from bare prose to a JSON field). direct/cot share the
-    same content, matching the old writer's own rationale (one fixed question, one fused
-    decision+reasoning paragraph, no separate terse/step-by-step version to write).
-    `mode="a"` appends new-category rows onto already-committed files."""
+    JSON object {action, degrees, encounter_rule, conduct_rule, reasoning}. `reasoning`
+    comes from Fase B3's gated Claude-authored text, set in place on each rec by
+    render_reasoning_full_population() before this is called. direct/cot
+    share the same content, matching the old writer's own rationale (one fixed question,
+    one fused decision+reasoning paragraph, no separate terse/step-by-step version to
+    write). `mode="a"` appends new-category rows onto already-committed files."""
     direct_path = cache_dir / "oow_scenario_sft_direct.jsonl"
     cot_path = cache_dir / "oow_scenario_sft_cot.jsonl"
     with direct_path.open(mode, encoding="utf-8") as fd, cot_path.open(mode, encoding="utf-8") as fc:
         for r in recs:
-            if not r.get("gold_answer"):
+            if not r.get("reasoning"):
                 continue
             unified = to_unified_action(r)
-            assistant = {**unified, "reasoning": r["gold_answer"]}
+            assistant = {**_assistant_fields(unified), "reasoning": r["reasoning"]}
             row = {
                 "category": r["category"], "action": r["action"],
                 "messages": [
                     {"role": "system", "content": SYSTEM_OOW_AGENT},
-                    {"role": "user", "content": f"Situation:\n{render_scenario_situation(r)}\n\n{FIXED_QUESTION_UNIFIED}"},
+                    {"role": "user", "content": user_message_for(r)},
                     {"role": "assistant", "content": json.dumps(assistant, ensure_ascii=False)},
                 ],
             }
@@ -1034,18 +1264,28 @@ def write_scenario_sft_files(recs: list[dict], cache_dir: Path, mode: str = "w")
     print(f"Wrote {direct_path.name} and {cot_path.name}")
 
 
+def user_message_for(r: dict) -> str:
+    """The full user-turn text for record `r`: render_scenario_situation()'s deterministic
+    rendering plus FIXED_QUESTION_UNIFIED, with Fase B4's real-history preamble prepended
+    when r["prev_decisions"] is set (never touches render_scenario_situation()'s own
+    output, so v2 eval-file identity is unaffected -- see
+    test_v2_eval_record_situation_is_byte_identical_to_what_a_training_row_would_embed)."""
+    history_prefix = render_previous_decisions(r.get("prev_decisions"))
+    return f"Situation:\n{history_prefix}{render_scenario_situation(r)}\n\n{FIXED_QUESTION_UNIFIED}"
+
+
 def write_scenario_dpo_file(recs: list[dict], cache_dir: Path, mode: str = "w") -> None:
     out_path = cache_dir / "oow_scenario_dpo_pairs.jsonl"
     n = 0
     with out_path.open(mode, encoding="utf-8") as f:
         for r in recs:
-            if not r.get("gold_answer"):
+            if not r.get("reasoning"):
                 continue
-            unified = to_unified_action(r)
-            chosen = {**unified, "reasoning": r["gold_answer"]}
+            unified = _assistant_fields(to_unified_action(r))
+            chosen = {**unified, "reasoning": r["reasoning"]}
             rejected_action = wrong_action_variant(unified)
-            rejected = {**rejected_action, "reasoning": r["gold_answer"]}
-            user_msg = f"Situation:\n{render_scenario_situation(r)}\n\n{FIXED_QUESTION_UNIFIED}"
+            rejected = {**rejected_action, "reasoning": r["reasoning"]}
+            user_msg = user_message_for(r)
             row = {
                 "category": r["category"], "action": r["action"],
                 "prompt": [{"role": "system", "content": SYSTEM_OOW_AGENT}, {"role": "user", "content": user_msg}],
@@ -1061,15 +1301,15 @@ def write_scenario_reflection_file(recs: list[dict], cache_dir: Path, mode: str 
     """Draft/Critique/Refined triples, same convention as build_reflection.py's output
     (see oow_reflection.jsonl): draft = the bare action name with no parameters or rule
     citation (deliberately vague, not wrong), critique = fixed text pointing out exactly
-    that gap, refined = the unified JSON object with the full gold_answer reasoning."""
+    that gap, refined = the unified JSON object with the full B3 reasoning text."""
     out_path = cache_dir / "oow_scenario_reflection.jsonl"
     n = 0
     with out_path.open(mode, encoding="utf-8") as f:
         for r in recs:
-            if not r.get("gold_answer"):
+            if not r.get("reasoning"):
                 continue
-            unified = to_unified_action(r)
-            refined = json.dumps({**unified, "reasoning": r["gold_answer"]}, ensure_ascii=False)
+            unified = _assistant_fields(to_unified_action(r))
+            refined = json.dumps({**unified, "reasoning": r["reasoning"]}, ensure_ascii=False)
             draft = f"I will {r['action'].replace('_', ' ')}."
             critique = ("This response is too vague -- it must state the exact action parameters "
                        "and cite the specific COLREG rule(s) that justify the decision.")
@@ -1077,7 +1317,7 @@ def write_scenario_reflection_file(recs: list[dict], cache_dir: Path, mode: str 
                 "category": r["category"],
                 "messages": [
                     {"role": "system", "content": SYSTEM_OOW_AGENT},
-                    {"role": "user", "content": f"Situation:\n{render_scenario_situation(r)}\n\n{FIXED_QUESTION_UNIFIED}"},
+                    {"role": "user", "content": user_message_for(r)},
                     {"role": "assistant", "content": f"Draft: {draft}\n\nCritique: {critique}\n\n"
                                                       f"Refined: {refined}"},
                 ],
@@ -1198,6 +1438,18 @@ def main() -> None:
                          "(pass --overwrite to allow replacing an existing v2 file).")
     ap.add_argument("--overwrite", action="store_true",
                     help="allow --build-v2 to overwrite an existing oow_colreg_scenarios_v2.json")
+    ap.add_argument("--b3-review-sample", type=int, default=None,
+                    help="Fase B3 25-first review gate: generate this many REAL Anthropic "
+                         "reasoning-derivation calls (REASONING_SYSTEM_PROMPT, stratified across "
+                         "categories from the training pool) and write them to _review/ for human "
+                         "review, then exit -- never runs the full population, never touches any "
+                         "production file.")
+    ap.add_argument("--b3-full-population", action="store_true",
+                    help="Fase B3 full run (post 25-first-gate approval): gated reasoning "
+                         "generation for EVERY training record (not a sample), checkpointed "
+                         "(B3_CHECKPOINT_FILE) so it can resume after a crash/interrupt. Writes "
+                         "oow_scenario_sft_direct/_cot/_dpo_pairs/_reflection.jsonl + the training "
+                         "traces file -- never touches EVAL_OUT (v1, frozen) or gold_answer.")
     args = ap.parse_args()
 
     if args.build_v2:
@@ -1211,6 +1463,86 @@ def main() -> None:
              + ("" if args.overwrite else "  [dry-run/review path -- pass --overwrite for production]"))
         from collections import Counter
         print("category distribution:", Counter(r["category"] for r in v2_records))
+        return
+
+    if args.b3_review_sample is not None:
+        load_env(paths.env_file)
+        key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        if not key:
+            sys.exit("ANTHROPIC_API_KEY not set in .env")
+        import anthropic
+        ws = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
+        headers = {"anthropic-workspace-id": ws} if ws else None
+        client = anthropic.Anthropic(api_key=key, default_headers=headers)
+        pop = generate_population(N_EVAL_PER_CATEGORY_DEFAULT + N_TRAIN_PER_CATEGORY_DEFAULT, seed=args.seed)
+        _, train_recs = split_eval_train(pop, N_EVAL_PER_CATEGORY_DEFAULT)
+        for i, r in enumerate(train_recs):
+            r["_id"] = f"t{i:05d}"
+        result = render_reasoning_review_sample(
+            client, args.model, train_recs, args.b3_review_sample, args.seed,
+            max_attempts=3, max_tokens=args.max_tokens)
+        out_path = review_path(CACHE / "oow_scenario_b3_review_sample.jsonl")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", encoding="utf-8") as f:
+            for row in result["accepted"] + result["rejected"]:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        n_acc, n_rej = len(result["accepted"]), len(result["rejected"])
+        print(f"Wrote {out_path} ({n_acc + n_rej} review rows: {n_acc} accepted, {n_rej} dropped)")
+        print(f"Per-gate rejection counts (across all attempts): {result['gate_rejection_counts']}")
+        if result["rejected"]:
+            print(f"  DROPPED ids (exhausted retries): {[r['id'] for r in result['rejected']]}")
+        print("This is a REVIEW-ONLY sample -- no production file was written. "
+             "STOP here pending human review before running the full population.")
+        return
+
+    if args.b3_full_population:
+        load_env(paths.env_file)
+        key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        if not key:
+            sys.exit("ANTHROPIC_API_KEY not set in .env")
+        import anthropic
+        ws = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
+        headers = {"anthropic-workspace-id": ws} if ws else None
+        client = anthropic.Anthropic(api_key=key, default_headers=headers)
+        pop, rnd = generate_population(N_EVAL_PER_CATEGORY_DEFAULT + N_TRAIN_PER_CATEGORY_DEFAULT,
+                                       seed=args.seed, return_rng=True)
+        _, train_recs = split_eval_train(pop, N_EVAL_PER_CATEGORY_DEFAULT)
+        held_out = load_held_out_signatures()
+        if held_out:
+            train_recs = resample_train_away_from_held_out(train_recs, rnd, held_out)
+        for i, r in enumerate(train_recs):
+            r["_id"] = f"t{i:05d}"
+        print(f"Fase B3 full population: {len(train_recs)} training records...")
+        result = render_reasoning_full_population(client, args.model, train_recs,
+                                                   max_attempts=3, max_tokens=args.max_tokens)
+        print(f"Done: {result['n_accepted']} accepted, {result['n_rejected']} dropped "
+             f"(this run's fresh generations only)")
+        print(f"Per-gate rejection counts (this run's fresh generations): "
+             f"{result['gate_rejection_counts']}")
+        # Fase B4: this synthetic generator has no real multi-step trajectories, so
+        # "previous decisions" are reinforced self-consistency (the SAME action that is
+        # already correct for this snapshot, shown as if already established) rather than
+        # Leo's genuinely-real predecessor states -- applied to 1-in-5 real-risk rows only
+        # (a no-risk hold_course history would be a trivial, uninformative signal).
+        n_with_history = 0
+        for i, r in enumerate(train_recs):
+            unified = to_unified_action(r)
+            if i % 5 == 0 and unified["encounter_rule"] != "none":
+                r["prev_decisions"] = [{"action": unified["action"], "degrees": unified["degrees"]}] * 2
+                n_with_history += 1
+            else:
+                r["prev_decisions"] = None
+        print(f"Fase B4: {n_with_history}/{len(train_recs)} rows given a previous-decisions "
+             "history preamble")
+        trace_out = [to_trace_record(r, i + 1) for i, r in enumerate(train_recs)]
+        TRACES_OUT.parent.mkdir(parents=True, exist_ok=True)
+        with TRACES_OUT.open("w", encoding="utf-8") as f:
+            for t in trace_out:
+                f.write(json.dumps(t, ensure_ascii=False) + "\n")
+        print(f"Wrote {TRACES_OUT} ({len(trace_out)} training traces)")
+        write_scenario_sft_files(train_recs, CACHE, mode="w")
+        write_scenario_dpo_file(train_recs, CACHE, mode="w")
+        write_scenario_reflection_file(train_recs, CACHE, mode="w")
         return
 
     n_eval = 2 if args.smoke else args.n_eval_per_category
@@ -1292,6 +1624,14 @@ def main() -> None:
     # now builds the rejected side deterministically via wrong_action_variant() on the
     # unified JSON action, same principle as build_oow_scenarios_leo.py. One fewer LLM call.
 
+    # NOTE (Fase B3, RAG-rebuild-v2 plan, 2026-09-22): the training-row writers below now
+    # read r["reasoning"] (B3's gated, geometry-derived reasoning text), NOT the OLD
+    # render_all()-produced r["gold_answer"] (still populated above -- v1's own eval file
+    # needs it, unchanged). The B3 FULL-population reasoning generator is NOT implemented
+    # yet -- only --b3-review-sample's review-only gate has landed, pending a second
+    # 25-review per the plan's own gate. Until that lands, r["reasoning"] is never set
+    # here, so these writers emit zero rows (their own `if not r.get("reasoning")` guard) --
+    # an empty-but-honest output, not a silent fabrication.
     write_scenario_sft_files(train_recs, CACHE, mode=trace_mode)
     write_scenario_dpo_file(train_recs, CACHE, mode=trace_mode)
     write_scenario_reflection_file(train_recs, CACHE, mode=trace_mode)

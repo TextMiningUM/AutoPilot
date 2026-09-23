@@ -14,10 +14,10 @@ def _own(speed=10.0, target_speed=10.0, paused=False, stopped=False,
 
 def _contact(own_role="give_way", encounter_type="crossing", risk="high",
             cpa_distance_m=200.0, tcpa_s=300.0, relative_bearing_deg=45.0,
-            range_m=800.0, closing_speed=5.0,
+            range_m=800.0, closing_speed=5.0, name="RANDOM_TS1",
             active_encounter_rules=(15, 16), standing_rules=(2, 5, 6, 7)):
     return {
-        "own_role": own_role, "encounter_type": encounter_type, "risk": risk,
+        "name": name, "own_role": own_role, "encounter_type": encounter_type, "risk": risk,
         "cpa_distance_m": cpa_distance_m, "tcpa_s": tcpa_s,
         "relative_bearing_deg": relative_bearing_deg, "range_m": range_m,
         "closing_speed": closing_speed,
@@ -42,7 +42,7 @@ def test_low_risk_give_way_holds_course() -> None:
     c = _contact(own_role="give_way", risk="low", cpa_distance_m=SAFE_CPA_M + 50)
     d = leo_choose_action(_state([c]))
     assert d["action"] == "hold_course"
-    assert d["rule_applied"] == "none"
+    assert d["encounter_rule"] == "none" and d["conduct_rule"] == "none"
 
 
 def test_tcpa_zero_with_large_cpa_is_not_real_risk() -> None:
@@ -51,7 +51,7 @@ def test_tcpa_zero_with_large_cpa_is_not_real_risk() -> None:
     c = _contact(own_role="give_way", risk="medium", cpa_distance_m=SAFE_CPA_M + 300, tcpa_s=0.0)
     d = leo_choose_action(_state([c]))
     assert d["action"] == "hold_course"
-    assert d["rule_applied"] == "none"
+    assert d["encounter_rule"] == "none" and d["conduct_rule"] == "none"
 
 
 def test_head_on_give_way_turns_starboard() -> None:
@@ -59,7 +59,7 @@ def test_head_on_give_way_turns_starboard() -> None:
                 cpa_distance_m=100.0)
     d = leo_choose_action(_state([c]))
     assert d["action"] == "turn_right"
-    assert d["rule_applied"] == "Rule 14"
+    assert d["encounter_rule"] == "Rule 14" and d["conduct_rule"] == "Rule 14"
     assert d["degrees"] is not None and 15.0 <= d["degrees"] <= 30.0
 
 
@@ -69,7 +69,7 @@ def test_crossing_give_way_turns_starboard_and_scales_degrees_with_cpa_shortfall
     d_close = leo_choose_action(_state([close]))
     d_far = leo_choose_action(_state([far]))
     assert d_close["action"] == d_far["action"] == "turn_right"
-    assert d_close["rule_applied"] == "Rule 15"
+    assert d_close["encounter_rule"] == "Rule 15" and d_close["conduct_rule"] == "Rule 16"
     # A bigger CPA shortfall must never produce a SMALLER turn.
     assert d_close["degrees"] > d_far["degrees"]
     assert 15.0 <= d_far["degrees"] <= 30.0
@@ -87,7 +87,8 @@ def test_rule13_overtaking_permits_either_turn_direction_by_geometry() -> None:
                             risk="high", cpa_distance_m=100.0, relative_bearing_deg=-20.0)
     d_stbd = leo_choose_action(_state([starboard_contact]))
     d_port = leo_choose_action(_state([port_contact]))
-    assert d_stbd["rule_applied"] == d_port["rule_applied"] == "Rule 13"
+    assert d_stbd["encounter_rule"] == d_port["encounter_rule"] == "Rule 13"
+    assert d_stbd["conduct_rule"] == d_port["conduct_rule"] == "Rule 13"
     # Diverge-away convention: turn AWAY from whichever side the contact is currently on.
     assert d_stbd["action"] == "turn_left"
     assert d_port["action"] == "turn_right"
@@ -99,7 +100,7 @@ def test_stand_on_holds_course_without_17b_trigger() -> None:
                 cpa_distance_m=100.0, tcpa_s=600.0)  # real risk, but NOT imminent
     d = leo_choose_action(_state([c]))
     assert d["action"] == "hold_course"
-    assert d["rule_applied"] == "Rule 17"
+    assert d["encounter_rule"] == "Rule 15" and d["conduct_rule"] == "Rule 17"
 
 
 def test_stand_on_rule17b_triggers_own_action_when_imminent() -> None:
@@ -107,7 +108,7 @@ def test_stand_on_rule17b_triggers_own_action_when_imminent() -> None:
                 cpa_distance_m=100.0, tcpa_s=60.0, relative_bearing_deg=30.0)  # real risk AND imminent
     d = leo_choose_action(_state([c]))
     assert d["action"] in ("turn_left", "turn_right")
-    assert d["rule_applied"] == "Rule 17"
+    assert d["encounter_rule"] == "Rule 15" and d["conduct_rule"] == "Rule 17"
     assert d["degrees"] is not None
 
 
@@ -116,6 +117,10 @@ def test_stop_only_on_close_range_still_closing_critical_risk() -> None:
                 cpa_distance_m=50.0, range_m=CRITICAL_RANGE_M - 50, closing_speed=3.0)
     d = leo_choose_action(_state([c]))
     assert d["action"] == "stop"
+    # B3 review fix: a GIVE-WAY vessel's own emergency stop is Rule 8, never Rule 17
+    # (Rule 17(b) is the stand-on vessel's provision only).
+    assert d["conduct_rule"] == "Rule 8"
+    assert d["decisive_contact_name"] == c["name"]
 
 
 def test_stop_not_triggered_merely_by_short_tcpa() -> None:
@@ -132,11 +137,11 @@ def test_stop_not_triggered_merely_by_short_tcpa() -> None:
 def test_no_contacts_holds_course_or_speeds_up() -> None:
     d_at_speed = leo_choose_action(_state([], own=_own(speed=10.0, target_speed=10.0)))
     assert d_at_speed["action"] == "hold_course"
-    assert d_at_speed["rule_applied"] == "none"
+    assert d_at_speed["encounter_rule"] == "none" and d_at_speed["conduct_rule"] == "none"
 
     d_below_target = leo_choose_action(_state([], own=_own(speed=5.0, target_speed=10.0)))
     assert d_below_target["action"] == "speed_up"
-    assert d_below_target["rule_applied"] == "none"
+    assert d_below_target["encounter_rule"] == "none" and d_below_target["conduct_rule"] == "none"
 
 
 def test_no_real_risk_follows_goal_course_check_when_off_bearing() -> None:
@@ -149,7 +154,7 @@ def test_no_real_risk_follows_goal_course_check_when_off_bearing() -> None:
     d = leo_choose_action(_state([], own=own, mission=mission))
     assert d["action"] == "turn_right"
     assert d["degrees"] == 90.0
-    assert d["rule_applied"] == "none"
+    assert d["encounter_rule"] == "none" and d["conduct_rule"] == "none"
 
 
 def test_paused_own_ship_gets_no_manoeuvre_label() -> None:

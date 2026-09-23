@@ -62,7 +62,10 @@ from pathlib import Path
 import numpy as np
 
 from core import AgentPaths, load_env, review_path, safe_write_jsonl, CONTAM_THRESH, EMBEDDER_MODEL
-from pipeline.oow_agent_spec import SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, goal_course_check_line, goal_course_action
+from pipeline.oow_agent_spec import (
+    SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, goal_course_check_line, goal_course_action,
+    classify_rules, render_previous_decisions,
+)
 
 paths = AgentPaths.oow()
 CACHE = paths.cache_dir
@@ -72,7 +75,11 @@ LEO_FILE = paths.workspace / "Data" / "OOW" / "OOW_Scenarios_Leo" / "moos_tempor
 # (e.g. --n 7928 is ~530 sequential batches, hours unattended) only loses the single
 # in-flight batch, not everything already done. Re-running the same --n/--seed skips
 # every leo_id already in here instead of re-spending API calls on it.
-CHECKPOINT_FILE = CACHE / "oow_scenario_Leo_checkpoint.jsonl"
+# NOTE: NOT oow_scenario_Leo_checkpoint.jsonl -- that file is stale data from a
+# pre-Fase-B3-gates approach (committed 2026-09-21, predates the gated
+# encounter_rule/conduct_rule schema entirely) and would silently make every row look
+# already-processed-and-dropped if reused here.
+CHECKPOINT_FILE = CACHE / "oow_scenario_Leo_b3_checkpoint.jsonl"
 
 PASS_CRITERIA = {
     "stop": ["Own-ship stops given a genuinely close-range, still-closing, critical-risk "
@@ -172,8 +179,22 @@ def render_leo_narrative(state: dict) -> str:
 # Primary rule cited per real-risk encounter type -- the ONE rule that actually drives
 # the required action, not every standing/background rule (those stay in "rules" for
 # metadata/PG tagging).
-_PRIMARY_RULE_BY_ENCOUNTER = {"head_on": "Rule 14", "crossing": "Rule 15",
-                             "we_are_overtaking_contact": "Rule 13"}
+def _leo_role_for_classify(own_role: str, encounter_type: str) -> str:
+    """Maps Leo's own (own_role, encounter_type) labels onto the shared classify_rules()
+    role vocabulary (mutual/give_way/stand_on/overtaking_give_way/overtaking_stand_on) --
+    the ONE place this translation happens, so leo_choose_action() and the B3 cross-check
+    can never silently disagree about which rule pair a Leo record implies."""
+    if own_role in ("give_way", "both_give_way"):
+        if encounter_type == "head_on":
+            return "mutual"
+        if encounter_type == "we_are_overtaking_contact":
+            return "overtaking_give_way"
+        return "give_way"
+    if own_role == "stand_on":
+        if encounter_type == "contact_overtaking_us":
+            return "overtaking_stand_on"
+        return "stand_on"
+    return "none"
 
 
 def _real_risk(c: dict) -> bool:
@@ -226,34 +247,46 @@ def leo_choose_action(state: dict) -> dict:
     low-risk-only contacts, 526 on opening-range contacts, 875 stop-labels, 883 paused
     frames mislabeled as manoeuvres).
 
-    Returns simulator-format fields (action/degrees/rule_applied) directly, matching
-    Basic Simulator/app/agents.py's SYSTEM_OOW_AGENT JSON contract -- see Fase B2."""
+    Returns simulator-format fields (action/degrees/encounter_rule/conduct_rule) directly,
+    matching Basic Simulator/app/agents.py's SYSTEM_OOW_AGENT JSON contract -- see Fase B2.
+    encounter_rule/conduct_rule come from pipeline.oow_agent_spec.classify_rules() (Fase
+    B3) via _leo_role_for_classify()'s role translation -- the ONE shared mapping table,
+    so this generator, build_oow_scenarios.py, and the B3 reasoning cross-check can never
+    silently disagree. `decisive_contact_name` (Leo contacts already carry a "name" field)
+    is the contact that actually drove the decision, or None when there is no real risk --
+    fed to the B3 teacher prompt as answer-side context, never leaked to
+    render_leo_narrative()'s user-facing text."""
     own = state["own_ship"]
     contacts = state["contacts"]
 
     # Never a manoeuvre label for a ship that isn't moving -- there is no manoeuvre to take.
     if own.get("paused") or own.get("stopped"):
-        return {"action": None, "degrees": None, "rule_applied": None, "role": "paused",
-                "rules": [], "category": "leo_paused", "bucket": "paused"}
+        return {"action": None, "degrees": None, "encounter_rule": None, "conduct_rule": None,
+                "role": "paused", "rules": [], "category": "leo_paused", "bucket": "paused",
+                "decisive_contact_name": None}
 
     give_way = [c for c in contacts if c["own_role"] in ("give_way", "both_give_way") and _real_risk(c)]
     stand_on = [c for c in contacts if c["own_role"] == "stand_on" and _real_risk(c)]
 
     if give_way:
         worst = min(give_way, key=lambda c: c["cpa_distance_m"])
+        classify_role = _leo_role_for_classify(worst["own_role"], worst["encounter_type"])
         if _should_stop(worst):
-            return {"action": "stop", "degrees": None, "rule_applied": "Rule 17",
-                    "role": worst["own_role"], "rules": _rule_list(worst),
-                    "category": f"leo_{worst['encounter_type']}", "bucket": "stop"}
+            encounter_rule, conduct_rule = classify_rules(classify_role, "stop")
+            return {"action": "stop", "degrees": None, "encounter_rule": encounter_rule,
+                    "conduct_rule": conduct_rule, "role": worst["own_role"], "rules": _rule_list(worst),
+                    "category": f"leo_{worst['encounter_type']}", "bucket": "stop",
+                    "decisive_contact_name": worst["name"]}
         degrees = _turn_degrees(worst["cpa_distance_m"])
         if worst["encounter_type"] in ("head_on", "crossing"):
             action = "turn_right"  # Rule 14/15+16: give-way alters to starboard
         else:
             action = _diverging_turn(worst)  # Rule 13: either side permitted
-        rule_applied = _PRIMARY_RULE_BY_ENCOUNTER.get(worst["encounter_type"], "none")
-        return {"action": action, "degrees": degrees, "rule_applied": rule_applied,
-                "role": worst["own_role"], "rules": _rule_list(worst),
-                "category": f"leo_{worst['encounter_type']}", "bucket": "alter_course"}
+        encounter_rule, conduct_rule = classify_rules(classify_role, action)
+        return {"action": action, "degrees": degrees, "encounter_rule": encounter_rule,
+                "conduct_rule": conduct_rule, "role": worst["own_role"], "rules": _rule_list(worst),
+                "category": f"leo_{worst['encounter_type']}", "bucket": "alter_course",
+                "decisive_contact_name": worst["name"]}
 
     if stand_on:
         # Rule 17(a)(ii)/(b): own-ship (stand-on) may/must act once it's apparent the
@@ -263,13 +296,20 @@ def leo_choose_action(state: dict) -> dict:
         if triggered:
             worst = min(triggered, key=lambda c: c["cpa_distance_m"])
             degrees = _turn_degrees(worst["cpa_distance_m"])
-            return {"action": _diverging_turn(worst), "degrees": degrees, "rule_applied": "Rule 17",
-                    "role": "stand_on", "rules": _rule_list(worst),
-                    "category": f"leo_stand_on_{worst['encounter_type']}_17b", "bucket": "stand_on_17b"}
+            action = _diverging_turn(worst)
+            classify_role = _leo_role_for_classify("stand_on", worst["encounter_type"])
+            encounter_rule, conduct_rule = classify_rules(classify_role, action)
+            return {"action": action, "degrees": degrees, "encounter_rule": encounter_rule,
+                    "conduct_rule": conduct_rule, "role": "stand_on", "rules": _rule_list(worst),
+                    "category": f"leo_stand_on_{worst['encounter_type']}_17b", "bucket": "stand_on_17b",
+                    "decisive_contact_name": worst["name"]}
         ref = stand_on[0]
-        return {"action": "hold_course", "degrees": None, "rule_applied": "Rule 17",
-                "role": "stand_on", "rules": _rule_list(ref),
-                "category": f"leo_stand_on_{ref['encounter_type']}", "bucket": "stand_on"}
+        classify_role = _leo_role_for_classify("stand_on", ref["encounter_type"])
+        encounter_rule, conduct_rule = classify_rules(classify_role, "hold_course")
+        return {"action": "hold_course", "degrees": None, "encounter_rule": encounter_rule,
+                "conduct_rule": conduct_rule, "role": "stand_on", "rules": _rule_list(ref),
+                "category": f"leo_stand_on_{ref['encounter_type']}", "bucket": "stand_on",
+                "decisive_contact_name": ref["name"]}
 
     # No contact poses real risk -- follow GOAL COURSE CHECK exactly (SYSTEM_OOW_AGENT's
     # decision procedure step 3/5), never a fixed hold_course default: only standing rules
@@ -279,13 +319,16 @@ def leo_choose_action(state: dict) -> dict:
     mission = state["mission"]
     goal_action, goal_degrees = goal_course_action(own["x"], own["y"], own["heading"], mission["x"], mission["y"])
     if goal_action != "hold_course":
-        return {"action": goal_action, "degrees": goal_degrees, "rule_applied": "none",
-                "role": "cleared", "rules": rules, "category": "leo_clear_goal_turn", "bucket": "clear"}
+        return {"action": goal_action, "degrees": goal_degrees, "encounter_rule": "none",
+                "conduct_rule": "none", "role": "cleared", "rules": rules,
+                "category": "leo_clear_goal_turn", "bucket": "clear", "decisive_contact_name": None}
     if own["speed"] < own["target_speed"] - RESUME_SPEED_MARGIN:
-        return {"action": "speed_up", "degrees": None, "rule_applied": "none",
-                "role": "cleared", "rules": rules, "category": "leo_clear_resume", "bucket": "resume"}
-    return {"action": "hold_course", "degrees": None, "rule_applied": "none",
-            "role": "cleared", "rules": rules, "category": "leo_clear_maintain", "bucket": "clear"}
+        return {"action": "speed_up", "degrees": None, "encounter_rule": "none", "conduct_rule": "none",
+                "role": "cleared", "rules": rules, "category": "leo_clear_resume", "bucket": "resume",
+                "decisive_contact_name": None}
+    return {"action": "hold_course", "degrees": None, "encounter_rule": "none", "conduct_rule": "none",
+            "role": "cleared", "rules": rules, "category": "leo_clear_maintain", "bucket": "clear",
+            "decisive_contact_name": None}
 
 
 
@@ -301,10 +344,11 @@ def build_user_message(situation_report: str) -> str:
 
 def build_assistant_json(decision: dict, reasoning: str) -> dict:
     """The ASSISTANT turn -- the schema-validated JSON object itself (never free prose),
-    reasoning supplied separately (Fase B3's [LLM] step derives it from bearing/CPA/rule,
-    never hands the rule to the model to just restate)."""
+    reasoning supplied separately (Fase B3's gated [LLM] step derives it from bearing/
+    CPA/rule, never hands the rule to the model to just restate)."""
     return {"action": decision["action"], "degrees": decision["degrees"],
-            "rule_applied": decision["rule_applied"], "reasoning": reasoning}
+            "encounter_rule": decision["encounter_rule"], "conduct_rule": decision["conduct_rule"],
+            "reasoning": reasoning}
 
 
 def wrong_action_variant(decision: dict) -> dict:
@@ -313,12 +357,127 @@ def wrong_action_variant(decision: dict) -> dict:
     action, degrees = decision["action"], decision["degrees"]
     if action in ("turn_left", "turn_right"):
         wrong_action = "turn_left" if action == "turn_right" else "turn_right"
-        return {"action": wrong_action, "degrees": degrees, "rule_applied": decision["rule_applied"]}
+        return {"action": wrong_action, "degrees": degrees,
+               "encounter_rule": decision["encounter_rule"], "conduct_rule": decision["conduct_rule"]}
     if action == "hold_course":
         # Wrong: manoeuvring when no real risk exists.
-        return {"action": "turn_right", "degrees": MIN_TURN_DEG, "rule_applied": "none"}
+        return {"action": "turn_right", "degrees": MIN_TURN_DEG,
+               "encounter_rule": "none", "conduct_rule": "none"}
     # Wrong response to a stop/speed-up-worthy situation: holding course instead.
-    return {"action": "hold_course", "degrees": None, "rule_applied": "none"}
+    return {"action": "hold_course", "degrees": None, "encounter_rule": "none", "conduct_rule": "none"}
+
+
+# ══════════════════════════════════════════════════════════════════════════════════
+# Fase B3 (RAG-rebuild-v2 plan, 2026-09-22, 25-first review gate): reasoning text must
+# DERIVE the applicable rule(s) from the raw situation facts alone, never restate a rule
+# it was handed -- EXCEPT `decisive_contact` (name + CPA), which is answer-side context
+# for the TEACHER only (same status as the already-given action/degrees), never part of
+# Qwen's own user-facing prompt (build_user_message() never takes or embeds it -- see
+# tests/test_oow_scenarios_leo_task_format.py's
+# test_qwen_user_content_never_contains_the_decisive_contact_hint). Same design as
+# build_oow_scenarios.py's REASONING_SYSTEM_PROMPT (kept as a separate constant here, not
+# a cross-import, matching this file's established pattern of small deliberate
+# duplication between the two parallel generators). Output is schema-validated AND gated
+# (pipeline.track2.b3_reasoning_gates) before acceptance.
+# ══════════════════════════════════════════════════════════════════════════════════
+REASONING_SYSTEM_PROMPT = """\
+You are an expert deck officer analysing a COLREG close-quarters situation. You are \
+given a FUSED SITUATION REPORT (own-ship state, contact bearing/range/CPA/TCPA/speed/ \
+heading -- no rule numbers or role labels), the ACTION already decided (never change, \
+second-guess, or invent a different action/degrees than given), and -- only when a real \
+collision risk exists -- which contact (`decisive_contact`, by name) actually drove that \
+decision. Never mention any OTHER contact as if it were the reason for the decision.
+
+Write ONE fluent reasoning paragraph, in the officer's own voice, that:
+  1. Describes what the geometry of the decisive contact shows (closing or opening, \
+which side it is on, how much risk it poses) in your own words -- never a template or \
+label dump. If other contacts are present, you may mention them, but the decisive \
+contact must be the one your reasoning is actually built on.
+  2. From THAT geometry alone, determines which vessel is give-way/stand-on (if \
+either) and names BOTH: the encounter rule (Rule 13 overtaking / Rule 14 head-on / \
+Rule 15 crossing / 'none' if no real risk), and the conduct rule that governs the \
+SPECIFIC action being taken (Rule 16 give-way turn/speed change, Rule 14 head-on turn, \
+Rule 17 stand-on, Rule 8 a give-way vessel's own emergency stop -- Rule 17(b) is the \
+STAND-ON vessel's provision only, never cite it for a give-way vessel's stop -- Rule 19 \
+restricted visibility, or 'none' if no real risk). Whole rule numbers only, no \
+sub-paragraphs.
+  3. States the given action (and degrees, if any) and justifies it under the conduct \
+rule.
+
+Each input record has:
+  - situation: the full fused situation report text
+  - action: the action name already decided
+  - degrees: turn amount in degrees (only for turn_left/turn_right, else null)
+  - decisive_contact: {"name", "cpa_m"} of the contact that drove the decision (omitted
+    when there is no real risk)
+
+OUTPUT FORMAT: return ONLY one JSON object, no markdown fences, no commentary:
+{"id": "<copied verbatim from input>", "action": "<copied verbatim from input>",
+ "degrees": <copied verbatim from input, null if not given>,
+ "encounter_rule": "Rule N or 'none'", "conduct_rule": "Rule N or 'none'", "reasoning": "..."}
+"""
+
+
+def build_teacher_payload(rec: dict) -> tuple[dict, dict]:
+    """The TEACHER-only payload (includes decisive_contact -- answer-side info, never
+    sent to Qwen) plus the ground-truth dict used both for row assembly and gating.
+    `rec` is one row from `recs` as built in main()/the --b3-review-sample branch below
+    (already has action/degrees/encounter_rule/conduct_rule/decisive_contact_name set by
+    leo_choose_action())."""
+    situation = rec["situation_report"]
+    decisive_name = rec.get("decisive_contact_name")
+    cpa_m = None
+    if decisive_name is not None:
+        for c in rec["state"]["contacts"]:
+            if c["name"] == decisive_name:
+                cpa_m = c.get("cpa_distance_m")
+                break
+    payload = {"id": rec["_id"], "situation": situation, "action": rec["action"], "degrees": rec["degrees"]}
+    if decisive_name is not None:
+        payload["decisive_contact"] = {"name": decisive_name, "cpa_m": round(cpa_m, 0) if cpa_m is not None else None}
+    return payload, {
+        "situation": situation, "expected_action": rec["action"], "expected_degrees": rec["degrees"],
+        "expected_encounter_rule": rec["encounter_rule"], "expected_conduct_rule": rec["conduct_rule"],
+        "real_risk": rec["encounter_rule"] != "none", "cpa_m": cpa_m, "safe_distance_m": SAFE_CPA_M,
+        "decisive_contact_name": decisive_name,
+    }
+
+
+def render_reasoning_review_sample(client, model: str, recs: list[dict], max_attempts: int,
+                                   max_tokens: int) -> dict:
+    """B3's 25-first review gate for the Leo dataset: `recs` is already the output of
+    stratified_sample() (never the full 7928 -- caller decides `n`). REAL Anthropic
+    calls, EVERY row passes through the gated generate/retry/drop loop
+    (pipeline.track2.b3_reasoning_gates) before acceptance. Returns {"accepted": [...],
+    "rejected": [...], "gate_rejection_counts": {...}} -- writes NOTHING to any
+    production or checkpoint file."""
+    from pipeline.track2.b3_reasoning_gates import generate_gated_row, GATE_NAMES
+
+    accepted, rejected = [], []
+    gate_rejection_counts = {name: 0 for name in GATE_NAMES}
+    for r in recs:
+        payload, expected = build_teacher_payload(r)
+        obj, attempt_log = generate_gated_row(
+            client, model, REASONING_SYSTEM_PROMPT, payload, max_attempts=max_attempts,
+            max_tokens=max_tokens, **expected,
+        )
+        for attempt in attempt_log:
+            for gate_name in attempt["failures"]:
+                gate_rejection_counts[gate_name] += 1
+        row = {
+            "id": r["_id"], "leo_id": r["leo_id"], "category": r["category"],
+            "situation": expected["situation"],
+            "ground_truth": {"action": expected["expected_action"], "degrees": expected["expected_degrees"],
+                            "encounter_rule": expected["expected_encounter_rule"],
+                            "conduct_rule": expected["expected_conduct_rule"]},
+            "n_attempts": len(attempt_log), "attempt_log": attempt_log,
+        }
+        if obj is not None:
+            row["model_response"] = obj
+            accepted.append(row)
+        else:
+            rejected.append(row)
+    return {"accepted": accepted, "rejected": rejected, "gate_rejection_counts": gate_rejection_counts}
 
 
 def write_outputs(outputs: dict[str, list[dict]], cache_dir: Path, overwrite: bool) -> None:
@@ -360,6 +519,38 @@ def stratified_sample(recs: list[dict], n: int, seed: int = 0) -> list[dict]:
             out.append(buckets[b].pop())
         i += 1
     return out
+
+
+def build_trajectory_index(all_recs: list[dict]) -> dict[str, list[dict]]:
+    """Group raw Leo states by source_file, preserving the file's original (already
+    chronological, per cycle_id) order -- used by real_previous_decisions() (Fase B4) to
+    look up a state's real predecessors within the SAME multi-step trajectory."""
+    trajectories: dict[str, list[dict]] = {}
+    for r in all_recs:
+        trajectories.setdefault(r["source_file"], []).append(r)
+    return trajectories
+
+
+def real_previous_decisions(trajectories: dict[str, list[dict]], source_file: str, leo_id: str,
+                            n: int = 2) -> list[dict] | None:
+    """The real previous `n` helm decisions for the state `leo_id`, derived from its own
+    trajectory's REAL preceding states (never synthesized) via leo_choose_action() --
+    Fase B4's "previous decisions" history variant. Returns None (no history to add) if
+    the state isn't found, doesn't have `n` predecessors in its own trajectory, or any
+    predecessor was a paused frame (no manoeuvre decision to report for it)."""
+    traj = trajectories.get(source_file)
+    if traj is None:
+        return None
+    idx = next((i for i, r in enumerate(traj) if r["id"] == leo_id), None)
+    if idx is None or idx < n:
+        return None
+    decisions = []
+    for r in traj[idx - n:idx]:
+        d = leo_choose_action(r["state"])
+        if d["action"] is None:
+            return None  # a paused predecessor breaks the history chain
+        decisions.append({"action": d["action"], "degrees": d["degrees"]})
+    return decisions
 
 
 def load_checkpoint() -> dict[str, dict]:
@@ -418,11 +609,18 @@ def main() -> None:
                          "without this, a run whose output already exists on disk refuses to write "
                          "(see core.safe_write_jsonl); dry-run/review passes never need this, they "
                          "always write to _review/ instead")
+    ap.add_argument("--b3-review-sample", type=int, default=None,
+                    help="Fase B3 25-first review gate: generate this many REAL Anthropic "
+                         "reasoning-derivation calls (REASONING_SYSTEM_PROMPT, stratified across "
+                         "action buckets via stratified_sample) and write them to _review/ for "
+                         "human review, then exit -- never runs the full population, never touches "
+                         "any production or checkpoint file.")
     args = ap.parse_args()
 
     all_recs = [json.loads(l) for l in LEO_FILE.read_text(encoding="utf-8").splitlines()]
     print(f"Loaded {len(all_recs)} Leo states; sampling {args.n} (stratified by action bucket)...")
     sample = stratified_sample(all_recs, args.n, seed=args.seed)
+    trajectories = build_trajectory_index(all_recs)
 
     recs: list[dict] = []
     for i, r in enumerate(sample):
@@ -430,52 +628,147 @@ def main() -> None:
         recs.append({
             "_id": f"leo{i:05d}", "leo_id": r["id"], "leo_source_file": r["source_file"],
             "category": decision["category"], "action": decision["action"],
-            "degrees": decision["degrees"], "rule_applied": decision["rule_applied"],
+            "degrees": decision["degrees"], "encounter_rule": decision["encounter_rule"],
+            "conduct_rule": decision["conduct_rule"], "decisive_contact_name": decision["decisive_contact_name"],
             "role": decision["role"], "rules": decision["rules"],
             "pass_criteria": PASS_CRITERIA[decision["bucket"]],
-            "situation_report": render_leo_narrative(r["state"]),
+            "situation_report": render_leo_narrative(r["state"]), "state": r["state"],
+            # Fase B4: real previous decisions from this state's own trajectory, when
+            # it has 2 real (non-paused) predecessors -- None for the rest (no history
+            # preamble added for those rows).
+            "prev_decisions": real_previous_decisions(trajectories, r["source_file"], r["id"]),
             "reasoning": None, "wrong_decision": None, "wrong_reasoning": None,
         })
+
+    if args.b3_review_sample is not None:
+        load_env(paths.env_file)
+        key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        if not key:
+            sys.exit("ANTHROPIC_API_KEY not set in .env")
+        import anthropic
+        ws = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
+        headers = {"anthropic-workspace-id": ws} if ws else None
+        client = anthropic.Anthropic(api_key=key, default_headers=headers)
+        review_sample = stratified_sample(all_recs, args.b3_review_sample, seed=args.seed)
+        review_recs: list[dict] = []
+        for i, r in enumerate(review_sample):
+            decision = leo_choose_action(r["state"])
+            review_recs.append({
+                "_id": f"leo{i:05d}", "leo_id": r["id"], "category": decision["category"],
+                "action": decision["action"], "degrees": decision["degrees"],
+                "encounter_rule": decision["encounter_rule"], "conduct_rule": decision["conduct_rule"],
+                "decisive_contact_name": decision["decisive_contact_name"],
+                "situation_report": render_leo_narrative(r["state"]), "state": r["state"],
+            })
+        result = render_reasoning_review_sample(client, args.model, review_recs,
+                                                max_attempts=3, max_tokens=args.max_tokens)
+        out_path = review_path(CACHE / "oow_scenario_Leo_b3_review_sample.jsonl")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", encoding="utf-8") as f:
+            for row in result["accepted"] + result["rejected"]:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        n_acc, n_rej = len(result["accepted"]), len(result["rejected"])
+        print(f"Wrote {out_path} ({n_acc + n_rej} review rows: {n_acc} accepted, {n_rej} dropped)")
+        print(f"Per-gate rejection counts (across all attempts): {result['gate_rejection_counts']}")
+        if result["rejected"]:
+            print(f"  DROPPED ids (exhausted retries): {[r['id'] for r in result['rejected']]}")
+        print("This is a REVIEW-ONLY sample -- no production/checkpoint file was written. "
+             "STOP here pending human review before running the full population.")
+        return
 
     # Fase B1 (leo_choose_action rewrite) + Fase B2 (unified task format -- system prompt/
     # user framing/JSON response schema, all from pipeline/oow_agent_spec.py) have landed.
     # Fase B3 (the actual [LLM] reasoning-text generation, gated behind the 25-first review
-    # per this repo's RAG-rebuild-v2 plan) has NOT started yet -- every rec's "reasoning"
-    # stays None below, so the row-building loop naturally emits zero SFT/DPO/reflection
-    # rows until that lands. --skip-llm and a real run both currently do the same thing
-    # (no API calls at all); the --skip-llm flag is kept for interface compatibility with
-    # the eventual B3 implementation, which will only make real Anthropic calls when it
-    # is NOT set.
+    # per this repo's RAG-rebuild-v2 plan) is approved and implemented below -- every rec
+    # passes through the SAME gated generate/retry/drop loop as --b3-review-sample,
+    # checkpointed (CHECKPOINT_FILE) so a crash/interrupt only loses the in-flight row.
     if not args.skip_llm:
-        raise NotImplementedError(
-            "Fase B3 (the [LLM] reasoning-text generation step) has not been implemented "
-            "yet -- it requires the 25-first review gate per the RAG-rebuild-v2 plan, "
-            "which has not been approved. Use --skip-llm for now (geometry/narrative/"
-            "action/degrees/rule_applied only, no reasoning text)."
-        )
-    print("--skip-llm: situation_report/action/degrees/rule_applied are set; "
-         "reasoning left None pending Fase B3.")
+        load_env(paths.env_file)
+        key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        if not key:
+            sys.exit("ANTHROPIC_API_KEY not set in .env")
+        import anthropic
+        ws = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
+        headers = {"anthropic-workspace-id": ws} if ws else None
+        client = anthropic.Anthropic(api_key=key, default_headers=headers)
+        from pipeline.track2.b3_reasoning_gates import generate_gated_row, GATE_NAMES
+        checkpoint = load_checkpoint()
+        print(f"Fase B3 full population: {len(recs)} training records "
+             f"({len(checkpoint)} already checkpointed)...")
+        gate_rejection_counts = {name: 0 for name in GATE_NAMES}
+        n_accepted = n_rejected = 0
+        for i, r in enumerate(recs):
+            cp = checkpoint.get(r["leo_id"])
+            if cp is not None:
+                if cp.get("reasoning"):
+                    r["reasoning"] = cp["reasoning"]
+                    n_accepted += 1
+                else:
+                    n_rejected += 1
+                continue
+            payload, expected = build_teacher_payload(r)
+            obj, attempt_log = generate_gated_row(
+                client, args.model, REASONING_SYSTEM_PROMPT, payload,
+                max_attempts=3, max_tokens=args.max_tokens, **expected,
+            )
+            for attempt in attempt_log:
+                for gate_name in attempt["failures"]:
+                    gate_rejection_counts[gate_name] += 1
+            if obj is not None:
+                r["reasoning"] = obj["reasoning"]
+                n_accepted += 1
+            else:
+                n_rejected += 1
+            append_checkpoint([{"leo_id": r["leo_id"], "reasoning": r.get("reasoning")}])
+            done_now = i + 1
+            if done_now % 20 == 0 or done_now == len(recs):
+                print(f"  [B3] {done_now}/{len(recs)} processed ({n_accepted} accepted, "
+                     f"{n_rejected} dropped)", flush=True)
+        print(f"Fase B3 done: {n_accepted} accepted, {n_rejected} dropped "
+             "(this run's fresh generations + resumed checkpoint)")
+        print(f"Per-gate rejection counts (this run's fresh generations only): {gate_rejection_counts}")
+    else:
+        print("--skip-llm: situation_report/action/degrees/encounter_rule/conduct_rule are set; "
+             "reasoning left None pending Fase B3.")
     final_recs = recs
 
     sft_rows, dpo_rows, reflect_rows, trace_rows = [], [], [], []
+    n_with_history = 0
     for r in final_recs:
         if not r.get("reasoning"):
             continue
-        user_msg = build_user_message(r["situation_report"])
-        decision = {"action": r["action"], "degrees": r["degrees"], "rule_applied": r["rule_applied"]}
+        # Fase B4: prepend the real-history preamble for rows that have one.
+        history_prefix = render_previous_decisions(r.get("prev_decisions"))
+        if history_prefix:
+            n_with_history += 1
+        user_msg = build_user_message(history_prefix + r["situation_report"])
+        decision = {"action": r["action"], "degrees": r["degrees"],
+                   "encounter_rule": r["encounter_rule"], "conduct_rule": r["conduct_rule"]}
         assistant_json = build_assistant_json(decision, r["reasoning"])
         sft_rows.append({"category": r["category"], "action": r["action"], "leo_id": r["leo_id"], "messages": [
             {"role": "system", "content": SYSTEM_OOW_AGENT}, {"role": "user", "content": user_msg},
             {"role": "assistant", "content": json.dumps(assistant_json, ensure_ascii=False)},
         ]})
-        if r.get("wrong_decision") and r.get("wrong_reasoning"):
-            rejected_json = build_assistant_json(r["wrong_decision"], r["wrong_reasoning"])
-            dpo_rows.append({
-                "category": r["category"], "action": r["action"], "leo_id": r["leo_id"],
-                "prompt": [{"role": "system", "content": SYSTEM_OOW_AGENT}, {"role": "user", "content": user_msg}],
-                "chosen": [{"role": "assistant", "content": json.dumps(assistant_json, ensure_ascii=False)}],
-                "rejected": [{"role": "assistant", "content": json.dumps(rejected_json, ensure_ascii=False)}],
-            })
+        wrong_decision = wrong_action_variant(decision)
+        rejected_json = build_assistant_json(wrong_decision, r["reasoning"])
+        dpo_rows.append({
+            "category": r["category"], "action": r["action"], "leo_id": r["leo_id"],
+            "prompt": [{"role": "system", "content": SYSTEM_OOW_AGENT}, {"role": "user", "content": user_msg}],
+            "chosen": [{"role": "assistant", "content": json.dumps(assistant_json, ensure_ascii=False)}],
+            "rejected": [{"role": "assistant", "content": json.dumps(rejected_json, ensure_ascii=False)}],
+        })
+        draft = f"I will {r['action'].replace('_', ' ')}." if r["action"] else "I will hold course."
+        critique = ("This response is too vague -- it must state the exact action parameters "
+                   "and cite the specific COLREG rule(s) that justify the decision.")
+        reflect_rows.append({
+            "category": r["category"], "leo_id": r["leo_id"],
+            "messages": [
+                {"role": "system", "content": SYSTEM_OOW_AGENT},
+                {"role": "user", "content": user_msg},
+                {"role": "assistant", "content": f"Draft: {draft}\n\nCritique: {critique}\n\n"
+                                                  f"Refined: {json.dumps(assistant_json, ensure_ascii=False)}"},
+            ],
+        })
         trace_rows.append({
             "document_id": f"oow_scenario_leo_{r['leo_id']}", "chunk_id": f"oow_scenario_leo_{r['leo_id']}",
             "source_file": f"oow_scenario_generator_leo::{r['leo_source_file']}",
@@ -512,6 +805,8 @@ def main() -> None:
 
     from collections import Counter
     print("category distribution:", Counter(r["category"] for r in final_recs))
+    print(f"Fase B4: {n_with_history}/{len(sft_rows)} SFT rows include a real previous-decisions "
+         "history preamble")
 
 
 if __name__ == "__main__":

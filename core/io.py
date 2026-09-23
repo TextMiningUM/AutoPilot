@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import sys
 from pathlib import Path
 from typing import Iterator
@@ -41,6 +42,22 @@ def load_jsonl_keyed(path: Path, key: str) -> dict[str, dict]:
         if k is not None:
             done[str(k)] = row
     return done
+
+
+def load_jsonl_rows_capped(path: Path, max_rows: int | None, seed: int = 0) -> list[dict]:
+    """Load a JSONL file into a list of dicts, deterministically subsampled down to at
+    most `max_rows` (random.Random(seed).sample, so repeated loads of an unchanged file
+    are stable) when the file has more rows than that. `max_rows=None` loads everything.
+    Used to cap one data source's share of a final train-mix (e.g. the Leo MOOS-
+    trajectory files, which have far more raw material than the other Track 2 sources)
+    without touching how many rows the underlying generator actually wrote to disk.
+    Returns [] if `path` doesn't exist."""
+    if not path.exists():
+        return []
+    rows = list(load_jsonl(path))
+    if max_rows is not None and len(rows) > max_rows:
+        rows = random.Random(seed).sample(rows, max_rows)
+    return rows
 
 
 def load_env(path: Path) -> None:

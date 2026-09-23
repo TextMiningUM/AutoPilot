@@ -17,30 +17,19 @@ See run_llm_scenario.py's checkpoint-building loop for the one call site (attach
 TODO (explicitly NOT built here, later improvement): every checkpoint where Check B
 fires is a natural DPO "rejected" example (the decision the model actually made) against
 a deterministic "chosen" (the correct give-way direction); Check A similarly pairs a
-"rejected" fabricated rule_applied against a "chosen" of "none" + the goal-course action.
-`details` carries every underlying value (min_cpa_m, safe_distance_m, cited_rule,
-requested_degrees, limit_degrees) specifically so that future mining doesn't need to
-re-derive anything -- only the mining step itself is out of scope for now.
+"rejected" fabricated (encounter_rule, conduct_rule) against a "chosen" of "none"/"none"
++ the goal-course action. `details` carries every underlying value (min_cpa_m,
+safe_distance_m, cited rules, requested_degrees, limit_degrees) specifically so that
+future mining doesn't need to re-derive anything -- only the mining step itself is out
+of scope for now.
 """
 from __future__ import annotations
 import copy
-import re
 
 from app.simulation import VesselConstraints
 
-_RULE_NUM_RE = re.compile(r"rule\s*(\d+)", re.IGNORECASE)
-
-
-def _cited_rule_number(rule_applied) -> int | None:
-    """Leading rule number cited in `rule_applied`, or None if no rule was cited at all
-    (covers the literal "none", empty string, and missing-field cases)."""
-    if not rule_applied:
-        return None
-    text = str(rule_applied).strip()
-    if text.lower() == "none":
-        return None
-    m = _RULE_NUM_RE.search(text)
-    return int(m.group(1)) if m else None
+_GIVE_WAY_TURN_CONDUCT_RULES = ("Rule 14", "Rule 16")
+_GIVE_WAY_TURN_ENCOUNTER_RULES = ("Rule 14", "Rule 15")
 
 
 def measure_decision_quality(decision: dict, situation: list[dict],
@@ -48,8 +37,8 @@ def measure_decision_quality(decision: dict, situation: list[dict],
     """Read-only measurement of one decision against its situation/constraints.
 
     decision: the dict returned by agents._parse_json_action() -- {"action", "degrees",
-        "rule_applied", "reasoning", ...}. Never mutated (deep-copied before inspection;
-        see test_measurement.py's test_never_mutates_decision).
+        "encounter_rule", "conduct_rule", "reasoning", ...}. Never mutated (deep-copied
+        before inspection; see test_measurement.py's test_never_mutates_decision).
     situation: list of per-contact dicts as returned by narrate.contact_line() for every
         live contact this decision was made against -- each must carry at least "cpa_m".
         Pass [] for a contact-free situation (no targets at all).
@@ -65,8 +54,15 @@ def measure_decision_quality(decision: dict, situation: list[dict],
     checks_fired: list[str] = []
     details: dict = {}
 
-    cited_rule_raw = decision.get("rule_applied")
-    rule_num = _cited_rule_number(cited_rule_raw)
+    # Fase C0 (RAG-rebuild-v2 plan): the 147 archived units_v1 checkpoints predate the
+    # encounter_rule/conduct_rule schema split and only ever recorded a single
+    # "rule_applied" field. Falling back to it here (as BOTH fields at once) is the
+    # closest faithful reading of that old data -- the old system genuinely used one
+    # field for both concerns, so this is a backward-compat reinterpretation, not a
+    # fabrication -- and never changes behaviour for any live/new-schema decision, which
+    # always has its own encounter_rule/conduct_rule keys already.
+    encounter_rule = decision.get("encounter_rule") or decision.get("rule_applied") or "none"
+    conduct_rule = decision.get("conduct_rule") or decision.get("rule_applied") or "none"
     action = decision.get("action")
 
     # Check A -- fabricated risk: a rule was cited even though NO contact has a real
@@ -77,28 +73,40 @@ def measure_decision_quality(decision: dict, situation: list[dict],
     # was asked to use, or it measures something else).
     min_cpa_m = min((c["cpa_m"] for c in situation), default=float("inf"))
     real_risk = min_cpa_m < constraints.min_cpa_m
-    a_fired = (not real_risk) and rule_num is not None
+    a_fired = (not real_risk) and (encounter_rule != "none" or conduct_rule != "none")
     if a_fired:
         checks_fired.append("A_fabricated_risk")
         details["A"] = {
             "min_cpa_m": min_cpa_m if situation else None,
             "safe_distance_m": constraints.min_cpa_m,
-            "cited_rule": cited_rule_raw,
+            "cited_encounter_rule": encounter_rule, "cited_conduct_rule": conduct_rule,
         }
 
     # Check B -- wrong turn direction: only meaningful once a REAL risk exists (Check A
-    # did not fire) and the cited rule is one of the give-way rules mandating a starboard
-    # alteration (14 head-on / 15+16 crossing give-way). Rule 13 (overtaking) may
-    # legitimately pass either side -- never counted. Rule 17 (stand-on) has its own
-    # 17(c) nuance -- logged separately as informational only, never counted as an error.
-    # Rule 19 (restricted visibility) has different port-turn restrictions and is simply
-    # out of scope -- it is not in the {14,15,16} set below, so it can never fire B.
+    # did not fire) and the decision is a give-way vessel's turn mandating starboard
+    # (conduct_rule Rule 14 head-on / Rule 16 crossing give-way, or encounter_rule
+    # Rule 14/15 as a fallback). conduct_rule=="Rule 17" (stand-on) or "Rule 19"
+    # (restricted visibility, different port-turn restrictions) are checked FIRST and are
+    # mutually exclusive with the give-way branch -- either could otherwise ALSO match
+    # the encounter_rule Rule 14/15 fallback and false-positive as "wrong direction",
+    # which is exactly the case the original single-rule_applied version's if/elif
+    # exclusivity already avoided. Rule 13 (overtaking) may legitimately pass either
+    # side -- never counted, and never needs an exclusivity carve-out since its
+    # encounter_rule is always "Rule 13" too, never 14/15.
     if not a_fired:
-        if rule_num in (14, 15, 16) and action == "turn_left":
-            checks_fired.append("B_wrong_direction")
-            details["B"] = {"cited_rule": cited_rule_raw, "action": action}
-        elif rule_num == 17 and action == "turn_left":
-            details["B_suspect_rule17"] = {"cited_rule": cited_rule_raw, "action": action}
+        if conduct_rule == "Rule 17":
+            if action == "turn_left":
+                details["B_suspect_rule17"] = {"cited_encounter_rule": encounter_rule,
+                                               "cited_conduct_rule": conduct_rule, "action": action}
+        elif conduct_rule == "Rule 19":
+            pass  # out of scope -- different port-turn restrictions, never measured here
+        else:
+            give_way_turn = (conduct_rule in _GIVE_WAY_TURN_CONDUCT_RULES
+                            or encounter_rule in _GIVE_WAY_TURN_ENCOUNTER_RULES)
+            if give_way_turn and action == "turn_left":
+                checks_fired.append("B_wrong_direction")
+                details["B"] = {"cited_encounter_rule": encounter_rule,
+                                "cited_conduct_rule": conduct_rule, "action": action}
 
     # Check C -- physically impossible turn request: degrees requested above what the
     # ship can actually turn in one decision step (turn_rate_deg_s * time_step_s, read
@@ -113,3 +121,4 @@ def measure_decision_quality(decision: dict, situation: list[dict],
             details["C"] = {"requested_degrees": degrees, "limit_degrees": limit_degrees}
 
     return {"checks_fired": checks_fired, "details": details}
+

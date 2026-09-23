@@ -120,7 +120,8 @@ BARE_SYSTEM = """You are an AI assistant helping a ship's navigation system deci
 change. Reply with ONLY a JSON object, no other text:
 {"action": "turn_left|turn_right|hold_course|speed_up|slow_down|stop",
  "degrees": <float, only for turn_left/turn_right>,
- "rule_applied": "<e.g. Rule 15, or 'none' if no rule applies>",
+ "encounter_rule": "<Rule 13, Rule 14, Rule 15, or 'none' if no encounter poses real risk>",
+ "conduct_rule": "<Rule 8, Rule 13, Rule 14, Rule 16, Rule 17, Rule 19, or 'none'>",
  "reasoning": "<one or two sentences>"}"""
 
 # SYSTEM_OOW_AGENT (the v0-v9 system prompt) lives in pipeline/oow_agent_spec.py -- the
@@ -256,7 +257,7 @@ def _parse_json_action(text: str) -> dict:
             continue
         if isinstance(parsed, dict) and "action" in parsed and not validate_action_json(parsed):
             return parsed
-    return {"action": "hold_course", "rule_applied": "none",
+    return {"action": "hold_course", "encounter_rule": "none", "conduct_rule": "none",
             "reasoning": f"[parse error -- raw model output] {text[:300]}", "_parse_error": True}
 
 

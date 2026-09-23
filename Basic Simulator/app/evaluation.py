@@ -211,9 +211,9 @@ def _format_checkpoint_citations(checkpoints: list[dict] | None,
                                  trajectory_rows: list[dict] | None,
                                  own_vehicle: str) -> str:
     """own-ship's own self-reported action + COLREG rule citation at each decision point
-    (app.agents.ask_oow's `rule_applied` field), each paired with a DETERMINISTIC ground-truth
-    encounter classification (see _ground_truth_at_checkpoint) computed the same way the rest
-    of this project already does -- without this, the audit only ever saw raw positions/
+    (app.agents.ask_oow's `encounter_rule`/`conduct_rule` fields), each paired with a DETERMINISTIC
+    ground-truth encounter classification (see _ground_truth_at_checkpoint) computed the same way
+    the rest of this project already does -- without this, the audit only ever saw raw positions/
     headings and had to freehand-judge from scratch whether a rule applied at all, which is
     non-deterministic for a borderline-distance encounter (see that function's docstring)."""
     if not checkpoints:
@@ -228,7 +228,8 @@ def _format_checkpoint_citations(checkpoints: list[dict] | None,
         ground_truth = (_ground_truth_at_checkpoint(trajectory_rows, t, own_vehicle)
                        if trajectory_rows else "(no trajectory provided)")
         lines.append(f"t={t:.0f}s: action={decision.get('action', '?')}, "
-                     f"rule_applied={decision.get('rule_applied', 'none')} | "
+                     f"encounter_rule={decision.get('encounter_rule', 'none')}, "
+                     f"conduct_rule={decision.get('conduct_rule', 'none')} | "
                      f"ground truth: {ground_truth}")
     return "\n".join(lines)
 
@@ -248,8 +249,8 @@ def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_sh
     passed back in as `llm_compliance_score`.
 
     `checkpoints`, if given (run_llm_scenario.py's/a precomputed run log's own checkpoint
-    list), lets the audit ALSO cross-check own-ship's SELF-REPORTED rule_applied citation at
-    each decision against the actual geometry -- catching a fabricated/wrong-but-safe
+    list), lets the audit ALSO cross-check own-ship's SELF-REPORTED encounter_rule/conduct_rule
+    citations at each decision against the actual geometry -- catching a fabricated/wrong-but-safe
     citation that pure trajectory geometry alone can't reveal. Optional: omitted for the
     live "Agent Real-Time" mode, which only tracks the single most recent decision.
 

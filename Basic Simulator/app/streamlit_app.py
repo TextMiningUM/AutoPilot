@@ -240,16 +240,18 @@ _ACTION_TEXT = {
 
 
 def _describe_decision(decision: dict) -> str:
-    """Human-readable rendering of a decision dict ({action, degrees, rule_applied,
-    reasoning}) for end-user display -- replaces a raw st.json() dump with plain sentences:
-    what the helm order actually is (or that nothing changes), which COLREG rule was cited,
-    and the model's own reasoning."""
+    """Human-readable rendering of a decision dict ({action, degrees, encounter_rule,
+    conduct_rule, reasoning}) for end-user display -- replaces a raw st.json() dump with
+    plain sentences: what the helm order actually is (or that nothing changes), which
+    COLREG rules were cited, and the model's own reasoning."""
     action = decision.get("action", "hold_course")
     label = _ACTION_TEXT.get(action, action)
     if action in ("turn_left", "turn_right") and decision.get("degrees") is not None:
         label += f" by {float(decision['degrees']):.0f}\u00b0"
-    rule = decision.get("rule_applied") or "none"
-    lines = [f"**Helm order:** {label}", f"**Rule applied:** {rule}"]
+    encounter_rule = decision.get("encounter_rule") or "none"
+    conduct_rule = decision.get("conduct_rule") or "none"
+    lines = [f"**Helm order:** {label}",
+            f"**Encounter rule:** {encounter_rule}  |  **Conduct rule:** {conduct_rule}"]
     if decision.get("reasoning"):
         lines.append(f"**Reasoning:** {decision['reasoning']}")
     return "\n\n".join(lines)
@@ -265,8 +267,8 @@ def _short_decision(decision: dict) -> str:
     label = _ACTION_TEXT.get(action, action)
     if action in ("turn_left", "turn_right") and decision.get("degrees") is not None:
         label += f" {float(decision['degrees']):.0f}\u00b0"
-    rule = decision.get("rule_applied") or "none"
-    header = f"<b>{label} \u2022 Rule {rule}</b>"
+    conduct_rule = decision.get("conduct_rule") or "none"
+    header = f"<b>{label} \u2022 {conduct_rule}</b>"
     reasoning = decision.get("reasoning")
     if not reasoning:
         return header

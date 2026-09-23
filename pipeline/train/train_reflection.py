@@ -45,7 +45,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import LoraConfig, PeftModel, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 
-from core import AgentPaths, add_dry_run_arg, write_stub_output
+from core import AgentPaths, add_dry_run_arg, write_stub_output, load_jsonl_rows_capped
 
 paths = AgentPaths.from_env()
 W = paths.workspace
@@ -76,22 +76,26 @@ REFL_FILES   = {
         CACHE / "oow_scenario_reflection.jsonl",
         # Track 2 (continued) -- Leo MOOS-trajectory sample (notebook § 6.5.1),
         # kept separate from the plain oow_scenario_* reflection above for traceability.
+        # Fase B5: capped at LEO_REFLECTION_CAP below, same rationale as train_sft.py's LEO_SFT_CAP.
         CACHE / "oow_scenario_Leo_reflection.jsonl",
     ],
 }[paths.domain]
 
+LEO_REFLECTION_CAP = 500
+
 
 def load_reflection() -> Dataset:
-    """Load and shuffle the reflection JSONL files (Track 1 + Track 2) into one Dataset."""
+    """Load and shuffle the reflection JSONL files (Track 1 + Track 2) into one Dataset.
+    Leo's file is deterministically subsampled to LEO_REFLECTION_CAP rows (Fase B5)."""
     rows = []
     for path in REFL_FILES:
         if not path.exists():
             print(f"  (skipping {path.name} -- not found)")
             continue
-        with path.open("r", encoding="utf-8") as f:
-            for line in f:
-                r = json.loads(line)
-                rows.append({"messages": r["messages"]})
+        raw = load_jsonl_rows_capped(path, LEO_REFLECTION_CAP, seed=42) if "_Leo_" in path.name \
+            else list(json.loads(line) for line in path.open("r", encoding="utf-8"))
+        for r in raw:
+            rows.append({"messages": r["messages"]})
     ds = Dataset.from_list(rows).shuffle(seed=91)
     print(f"Reflection rows: {len(ds)}")
     return ds

@@ -40,7 +40,7 @@ def test_no_risk_labels_match_goal_course_check_on_a_sample() -> None:
             assert decision["action"] == "speed_up", r["id"]
         else:
             assert decision["action"] == "hold_course", r["id"]
-        assert decision["rule_applied"] == "none", r["id"]
+        assert decision["encounter_rule"] == "none" and decision["conduct_rule"] == "none", r["id"]
     assert checked > 0, "sample contained no no-real-risk records -- test didn't check anything"
 
 

@@ -88,7 +88,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import LoraConfig, PeftModel, prepare_model_for_kbit_training
 from trl import DPOTrainer, DPOConfig
 
-from core import AgentPaths, add_dry_run_arg, write_stub_output
+from core import AgentPaths, add_dry_run_arg, write_stub_output, load_jsonl_rows_capped
 
 paths = AgentPaths.from_env()
 W = paths.workspace
@@ -118,9 +118,16 @@ DPO_FILES   = {
         CACHE / "oow_scenario_dpo_pairs.jsonl",
         # Track 2 (continued) -- Leo MOOS-trajectory sample (notebook § 6.5.1),
         # kept separate from the plain oow_scenario_* pairs above for traceability.
+        # Fase B5: capped at LEO_DPO_CAP below, same rationale as train_sft.py's LEO_SFT_CAP.
         CACHE / "oow_scenario_Leo_dpo_pairs.jsonl",
+        # Fase C2(ii) -- "anti-fabricated-risk" pairs mined deterministically (no LLM)
+        # from real model mistakes in the archived units_v1 mission checkpoints
+        # (build_measurement_dpo.py against app/measurement.py's Check A hits).
+        CACHE / "oow_measurement_dpo_pairs.jsonl",
     ],
 }[paths.domain]
+
+LEO_DPO_CAP = 500
 
 
 # ── Data ─────────────────────────────────────────────────────────────────
@@ -132,21 +139,22 @@ def load_dpo() -> Dataset:
       * text-only:      {"prompt": str,    "chosen": str,    "rejected": str}
 
     Our JSONL is already conversational (list of messages), which is what
-    build_rlhf.py emitted, so we can pass through unchanged.
+    build_rlhf.py emitted, so we can pass through unchanged. Leo's file is
+    deterministically subsampled to LEO_DPO_CAP pairs (Fase B5).
     """
     rows = []
     for path in DPO_FILES:
         if not path.exists():
             print(f"  (skipping {path.name} -- not found)")
             continue
-        with path.open("r", encoding="utf-8") as f:
-            for line in f:
-                r = json.loads(line)
-                rows.append({
-                    "prompt":   r["prompt"],
-                    "chosen":   r["chosen"],
-                    "rejected": r["rejected"],
-                })
+        raw = load_jsonl_rows_capped(path, LEO_DPO_CAP, seed=42) if "_Leo_" in path.name \
+            else list(json.loads(line) for line in path.open("r", encoding="utf-8"))
+        for r in raw:
+            rows.append({
+                "prompt":   r["prompt"],
+                "chosen":   r["chosen"],
+                "rejected": r["rejected"],
+            })
     ds = Dataset.from_list(rows).shuffle(seed=17)
     print(f"DPO pairs loaded: {len(ds)}")
     return ds

@@ -226,10 +226,12 @@ def v2_direction_correct_score(parsed: dict | None, gold: dict, tolerance: float
     return 1.0 if abs(parsed["degrees"] - gold["degrees"]) <= tol else 0.0
 
 
-def v2_rule_correct_score(parsed: dict | None, gold: dict) -> float:
+def v2_rule_correct_score(parsed: dict | None, gold: dict, field: str) -> float:
+    """`field` is "encounter_rule" or "conduct_rule" -- scored separately per the
+    RAG-rebuild-v2 plan's B3 schema split (see pipeline.oow_agent_spec.classify_rules)."""
     if parsed is None:
         return 0.0
-    return 1.0 if parsed.get("rule_applied") == gold["rule_applied"] else 0.0
+    return 1.0 if parsed.get(field) == gold[field] else 0.0
 
 
 
@@ -397,7 +399,8 @@ def _run_v2(args) -> None:
     Metrics: JsonParseSuccess (own metric, v1 has no equivalent since v1 never asked for
     JSON), ActionCorrect (exact action-name match), DirectionCorrect (action AND degrees
     match within the record's own tolerance -- vacuous None for non-turn actions),
-    RuleCorrect (rule_applied exact-or-'none' match). Reported overall AND per category."""
+    EncounterRuleCorrect and ConductRuleCorrect (scored SEPARATELY -- Fase B3's schema
+    split, see pipeline.oow_agent_spec.classify_rules). Reported overall AND per category."""
     tag = args.tag or Path(args.model).name.replace("/", "_")
     out_file    = CACHE / f"eval_{tag}_colreg_v2.jsonl"
     gen_file    = CACHE / f"eval_{tag}_colreg_v2_gen.jsonl"
@@ -444,7 +447,7 @@ def _run_v2(args) -> None:
     gen_records = [done_gen[str(s["id"])] for s in scenarios]
 
     print("Scoring (deterministic only, no judge)...")
-    keys = ["JsonParseSuccess", "ActionCorrect", "DirectionCorrect", "RuleCorrect"]
+    keys = ["JsonParseSuccess", "ActionCorrect", "DirectionCorrect", "EncounterRuleCorrect", "ConductRuleCorrect"]
     per_category: dict[str, dict[str, list[float]]] = {}
     # RAG-rebuild-v2 plan point 3: oow_qwen_full (and any model trained before the
     # held-out-contamination-avoidance fix) may have seen these 2 exact geometries during
@@ -459,7 +462,8 @@ def _run_v2(args) -> None:
                 "JsonParseSuccess": 1.0 if parsed is not None else 0.0,
                 "ActionCorrect": v2_action_correct_score(parsed, gold),
                 "DirectionCorrect": v2_direction_correct_score(parsed, gold, r.get("degrees_tolerance")),
-                "RuleCorrect": v2_rule_correct_score(parsed, gold),
+                "EncounterRuleCorrect": v2_rule_correct_score(parsed, gold, "encounter_rule"),
+                "ConductRuleCorrect": v2_rule_correct_score(parsed, gold, "conduct_rule"),
             }
             row = {**r, "parsed_answer": parsed, "metrics": m}
             f.write(json.dumps(row, ensure_ascii=False) + "\n")

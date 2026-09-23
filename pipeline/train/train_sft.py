@@ -62,7 +62,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import LoraConfig, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 
-from core import AgentPaths, load_messages_jsonl, add_dry_run_arg, write_stub_output
+from core import AgentPaths, load_messages_jsonl, load_jsonl_rows_capped, add_dry_run_arg, write_stub_output
 
 # ── Paths ────────────────────────────────────────────────────────────────────────────────────────────────────
 paths = AgentPaths.from_env()
@@ -131,7 +131,8 @@ SFT_DATASETS = {
         # real bridge states, richer situations -- build_oow_scenarios_leo.py, notebook
         # § 6.5.1). Kept in its own oow_scenario_Leo_* files (never merged into the
         # plain oow_scenario_* files) for independent traceability, per explicit user
-        # direction -- currently a small reviewed sample (n=25), not the full 7928.
+        # direction. Fase B5: capped at LEO_SFT_CAP rows below (Leo's raw pool is far
+        # bigger than every other Track 2 source and previously dominated the mix at 69%).
         CACHE / "oow_scenario_Leo_sft_direct.jsonl",
         CACHE / "oow_scenario_Leo_sft_cot.jsonl",
         # Procedural-graph step-order data: merged graph (rule+incident+scenario
@@ -142,6 +143,13 @@ SFT_DATASETS = {
     ],
 }[paths.domain]
 
+
+
+# Fase B5: Leo's MOOS-trajectory pool (7928 raw states) is far bigger than every other
+# Track 2 source (390 synthetic rows) and previously dominated the SFT mix at 69% of
+# ALL rows -- cap its per-file row count at load time, independent of how many rows
+# Fase B3's full-population run actually wrote to disk.
+LEO_SFT_CAP = 500
 
 
 # ── Data loading ─────────────────────────────────────────────────────────
@@ -156,13 +164,20 @@ def load_jsonl_dataset(path: Path) -> Dataset:
 
 
 def load_all_sft() -> Dataset:
-    """Load, print row counts for, and shuffle all SFT JSONL files (Track 1 + Track 2) into one Dataset."""
+    """Load, print row counts for, and shuffle all SFT JSONL files (Track 1 + Track 2) into one
+    Dataset. Leo's oow_scenario_Leo_* files are deterministically subsampled to LEO_SFT_CAP rows
+    each (Fase B5) so Leo's much larger raw pool can't dominate the final mix."""
     parts = []
     for p in SFT_DATASETS:
-        if not p.exists():
-            raise FileNotFoundError(f"Missing training file: {p}")
-        d = load_jsonl_dataset(p)
-        print(f"  {p.name:<30} {len(d):>5} rows")
+        if "_Leo_" in p.name:
+            rows = load_jsonl_rows_capped(p, LEO_SFT_CAP, seed=42)
+            d = Dataset.from_list([{"messages": r["messages"]} for r in rows])
+            print(f"  {p.name:<30} {len(d):>5} rows  (capped at {LEO_SFT_CAP})")
+        else:
+            if not p.exists():
+                raise FileNotFoundError(f"Missing training file: {p}")
+            d = load_jsonl_dataset(p)
+            print(f"  {p.name:<30} {len(d):>5} rows")
         parts.append(d)
     combined = concatenate_datasets(parts)
     # Shuffle so the model doesn't see all direct-rows then all CoT-rows in order.

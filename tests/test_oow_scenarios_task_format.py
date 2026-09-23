@@ -10,7 +10,7 @@ from pipeline.oow_agent_spec import ACTIONS, SYSTEM_OOW_AGENT, validate_action_j
 from pipeline.track2.build_oow_scenarios import (
     FIXED_QUESTION_UNIFIED, N_EVAL_PER_CATEGORY_DEFAULT, N_TRAIN_PER_CATEGORY_DEFAULT,
     generate_population, render_scenario_situation, split_eval_train, to_unified_action,
-    wrong_action_variant,
+    wrong_action_variant, build_teacher_payload, contact_name_for_index,
 )
 
 paths = AgentPaths.oow()
@@ -35,10 +35,10 @@ def test_to_unified_action_always_validates_against_the_shared_schema() -> None:
 
 def test_wrong_action_variant_still_validates_and_differs() -> None:
     for decision in (
-        {"action": "turn_right", "degrees": 20.0, "rule_applied": "Rule 15"},
-        {"action": "turn_left", "degrees": 15.0, "rule_applied": "Rule 13"},
-        {"action": "hold_course", "degrees": None, "rule_applied": "none"},
-        {"action": "stop", "degrees": None, "rule_applied": "Rule 17"},
+        {"action": "turn_right", "degrees": 20.0, "encounter_rule": "Rule 15", "conduct_rule": "Rule 16"},
+        {"action": "turn_left", "degrees": 15.0, "encounter_rule": "Rule 13", "conduct_rule": "Rule 13"},
+        {"action": "hold_course", "degrees": None, "encounter_rule": "none", "conduct_rule": "none"},
+        {"action": "stop", "degrees": None, "encounter_rule": "Rule 15", "conduct_rule": "Rule 8"},
     ):
         wrong = wrong_action_variant(decision)
         obj = {**wrong, "reasoning": "placeholder"}
@@ -56,7 +56,7 @@ def test_no_risk_records_never_get_a_turn_or_stop_action() -> None:
     eval_recs, train_recs = _fresh_pop()
     for rec in eval_recs + train_recs:
         unified = to_unified_action(rec)
-        if unified["rule_applied"] == "none":
+        if unified["encounter_rule"] == "none":
             assert unified["action"] in ("hold_course", "speed_up"), (rec["category"], unified)
 
 
@@ -106,3 +106,54 @@ def test_v2_eval_record_situation_is_byte_identical_to_what_a_training_row_would
 def test_system_prompt_is_the_shared_object() -> None:
     from pipeline.track2 import build_oow_scenarios
     assert build_oow_scenarios.SYSTEM_OOW_AGENT is SYSTEM_OOW_AGENT
+
+
+# ── Fase B3 point 2: the teacher-only decisive-contact hint must NEVER reach Qwen ──
+def test_qwen_user_content_never_contains_the_decisive_contact_hint() -> None:
+    """build_teacher_payload()'s `decisive_contact` field (name + CPA) is answer-side
+    context for the reasoning-generation teacher only -- the actual Qwen user turn
+    (render_scenario_situation() + FIXED_QUESTION_UNIFIED) must never mention it, and
+    must be byte-identical to render_scenario_situation() alone (i.e. building the
+    teacher payload must not have mutated/augmented the situation text itself)."""
+    eval_recs, train_recs = _fresh_pop()
+    multi_contact_recs = [r for r in train_recs if len(r["targets"]) > 1][:10]
+    assert multi_contact_recs, "expected at least one multi-contact training record to test"
+    for i, rec in enumerate(multi_contact_recs):
+        situation = render_scenario_situation(rec)
+        qwen_user_content = f"Situation:\n{situation}\n\n{FIXED_QUESTION_UNIFIED}"
+        payload, _expected = build_teacher_payload(rec, f"t{i:05d}")
+        assert payload["situation"] == situation
+        if "decisive_contact" in payload:
+            assert "decisive_contact" not in qwen_user_content
+            assert "decisive" not in qwen_user_content.lower()
+
+
+def test_contact_name_for_index_matches_the_pool_used_in_the_situation_text() -> None:
+    eval_recs, train_recs = _fresh_pop()
+    multi = next(r for r in train_recs if len(r["targets"]) > 1)
+    situation = render_scenario_situation(multi)
+    for i in range(len(multi["targets"])):
+        assert contact_name_for_index(i) in situation
+
+
+def test_written_sft_file_rows_all_pass_the_shared_schema_and_action_vocabulary() -> None:
+    """B6 (real integration check, not just a unit-level property test): once Fase B3's
+    full population has actually been written, every row in the real
+    oow_scenario_sft_direct.jsonl must have an assistant JSON that both parses and passes
+    validate_action_json() -- catching any real generation-time bug the in-memory tests
+    above can't see. No-ops (returns) if the file hasn't been generated yet."""
+    path = paths.cache_dir / "oow_scenario_sft_direct.jsonl"
+    if not path.exists():
+        return
+    n_checked = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        assert row["messages"][-1]["role"] == "assistant"
+        obj = json.loads(row["messages"][-1]["content"])
+        errors = validate_action_json(obj)
+        assert not errors, (row.get("category"), errors)
+        assert obj["action"] in ACTIONS
+        n_checked += 1
+    assert n_checked > 0, f"{path} exists but is empty"

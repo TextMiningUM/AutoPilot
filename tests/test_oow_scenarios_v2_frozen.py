@@ -15,8 +15,11 @@ paths = AgentPaths.oow()
 V1_FILE = paths.eval_dir / "oow_colreg_scenarios_v1.json"
 V2_FILE = paths.eval_dir / "oow_colreg_scenarios_v2.json"
 
-# Computed 2026-09-22 immediately after `build_oow_scenarios.py --build-v2 --overwrite`.
-V2_SHA256 = "cb9de445e8d3c7b427d86ab2134ea5d77cef246350b27946ec480f29a5d663cf"
+# Computed 2026-09-22 immediately after `build_oow_scenarios.py --build-v2 --overwrite`
+# (RE-computed the same day after the B3 schema fix: rule_applied -> encounter_rule +
+# conduct_rule, see pipeline.oow_agent_spec.classify_rules -- an intentional, approved
+# re-generation, not a drift; the 325 geometries/v1_id linkage are unchanged).
+V2_SHA256 = "a5ad3aa1357ac802069cb7b6713e4d0b6ca18689f7010c1ec4af2b8b67e6d873"
 
 
 def test_v2_scenarios_file_is_byte_for_byte_frozen() -> None:
