@@ -26,7 +26,9 @@ pipeline package cannot import across cleanly, and would force torch/streamlit o
 every pipeline data-builder that just wants the prompt/schema constants).
 """
 from __future__ import annotations
+import hashlib
 import math
+import random
 
 ACTIONS = ("turn_left", "turn_right", "hold_course", "speed_up", "slow_down", "stop")
 _DEGREES_ONLY_FOR = ("turn_left", "turn_right")
@@ -54,11 +56,12 @@ RISK_HORIZON_S = 300.0
 STAND_ON_TCPA_S = RISK_HORIZON_S * 0.6  # == 180.0, matches the prior hardcoded value
 
 
-def real_risk(cpa_m: float | None, tcpa_s: float | None, safe_distance_m: float) -> bool:
+def real_risk(cpa_m: float | None, tcpa_s: float | None, safe_distance_m: float,
+             risk_horizon_s: float = RISK_HORIZON_S) -> bool:
     """The ONE gate for "does this contact pose a real risk of collision right now" --
     CPA below `safe_distance_m` (a per-row/per-mission PARAMETER, never a hardcoded
     constant, so training data never learns a shortcut against one fixed number) AND TCPA
-    within [0, RISK_HORIZON_S). Both conditions are required:
+    within [0, risk_horizon_s). Both conditions are required:
       - CPA alone is not enough: a contact can have a tiny CPA that is still hours away
         (not yet actionable) or -- more commonly -- already resolved.
       - TCPA alone is not enough: TCPA==0 is genuinely ambiguous on its own (it occurs
@@ -66,10 +69,111 @@ def real_risk(cpa_m: float | None, tcpa_s: float | None, safe_distance_m: float)
         -- never disambiguate using TCPA alone).
       - TCPA < 0 (already past the closest point) is explicitly EXCLUDED (`0 <= tcpa_s`),
         never treated as a risk regardless of how small CPA was.
-      - TCPA >= RISK_HORIZON_S is a contact to monitor, not yet one to act on.
+      - TCPA >= risk_horizon_s is a contact to monitor, not yet one to act on.
+    `risk_horizon_s` defaults to the module-level RISK_HORIZON_S (300s, the live MOOS
+    bridge's own default) for backward compatibility -- quality-review STAP 2 (2026-09-
+    23) makes it an explicit PER-ROW parameter too: a fixed 300s horizon silently treated
+    some genuinely-slow-manoeuvring missions' real risks as "no risk" (Imazu01 compliance
+    finding: TCPA 1800s, CPA 0 -- see derive_risk_horizon_s() below).
     """
     return (cpa_m is not None and cpa_m < safe_distance_m
-            and tcpa_s is not None and 0 <= tcpa_s < RISK_HORIZON_S)
+            and tcpa_s is not None and 0 <= tcpa_s < risk_horizon_s)
+
+
+# Quality-review STAP 2 (2026-09-23): THREE previously-hardcoded training-data constants
+# (safe_distance_m, max_turn_deg, and now also the risk horizon) become PER-ROW sampled
+# variables instead -- a value that never varies in training is learned as a constant
+# (shortcut learning), so a user who configures the live simulator away from the old
+# hardcoded defaults (500m/30deg) would find the fine-tuned model still silently judging
+# against 500/30. Sampling weights favour the historical defaults (40-50%) while still
+# giving real coverage to the simulator's full configurable range.
+SAFE_DISTANCE_WEIGHTS: dict[float, float] = {300.0: 0.15, 400.0: 0.15, 500.0: 0.40, 750.0: 0.15, 926.0: 0.15}
+MAX_TURN_DEG_WEIGHTS: dict[float, float] = {20.0: 0.15, 25.0: 0.20, 30.0: 0.50, 35.0: 0.15}
+# Applied as a MULTIPLIER of the per-row geometry-derived risk_horizon_s default (see
+# derive_risk_horizon_s()), never sampled as an absolute second independent number.
+HORIZON_MULTIPLIER_WEIGHTS: dict[float, float] = {0.6: 0.15, 0.8: 0.20, 1.0: 0.40, 1.3: 0.15, 1.6: 0.10}
+# t_manoeuvre = safe_distance_m / (v_own * sin(max_turn_deg)) is roughly how long own-ship
+# takes to physically open the safe distance by turning at its per-command max; K is a
+# safety multiple of that so the horizon covers deciding, executing, AND confirming
+# separation -- not just the bare manoeuvre time. Verified against the two reference
+# speeds given at Imazu01 review: 12 kt/30deg/500m -> t_manoeuvre~162s -> horizon~567s
+# (~570s); a 2.5 m/s USV/30deg/500m -> t_manoeuvre~400s -> horizon~1400s (a MUCH longer
+# horizon than the bridge's old fixed 300s -- genuinely correct for how slowly a USV can
+# manoeuvre relative to that safe distance, not a bug; see STOP-1-supplement report).
+RISK_HORIZON_K = 3.5
+
+
+def derive_risk_horizon_s(safe_distance_m: float, max_turn_deg: float, own_speed_mps: float | None) -> float:
+    """Per-row DEFAULT risk horizon, derived from how long own-ship actually takes to open
+    the safe distance by turning at its per-command max (see RISK_HORIZON_K above) --
+    replaces a single fixed RISK_HORIZON_S=300 for every mission regardless of speed/turn
+    limit/safe distance. Falls back to the historical RISK_HORIZON_S when own_speed_mps is
+    missing/zero/negative (a stopped/unknown-speed own-ship has no manoeuvre time to derive
+    a horizon from at all)."""
+    if not own_speed_mps or own_speed_mps <= 0:
+        return RISK_HORIZON_S
+    t_manoeuvre = safe_distance_m / (own_speed_mps * math.sin(math.radians(max_turn_deg)))
+    return RISK_HORIZON_K * t_manoeuvre
+
+
+def _weighted_choice(rnd: random.Random, weights: dict[float, float]) -> float:
+    keys = list(weights.keys())
+    return rnd.choices(keys, weights=[weights[k] for k in keys], k=1)[0]
+
+
+def sample_row_limits(row_id: str, own_speed_mps: float | None) -> dict:
+    """Deterministic per-row sample of the three STAP-2 training-variable limits -- a
+    FIXED seed derived from `row_id` (never the module's global RNG) so the exact same
+    row always samples the exact same limits across separate regeneration runs. Returns
+    {safe_distance_m, max_turn_deg, risk_horizon_s, risk_horizon_default_s,
+    risk_horizon_multiplier, stand_on_tcpa_s} -- the sampled values themselves are
+    METADATA (carried alongside a training row, never inside its `messages`), only their
+    rendered constraint_line() text and their effect on the derived label are ever shown
+    to the model."""
+    seed = int(hashlib.sha256(str(row_id).encode("utf-8")).hexdigest()[:16], 16)
+    rnd = random.Random(seed)
+    safe_distance_m = _weighted_choice(rnd, SAFE_DISTANCE_WEIGHTS)
+    max_turn_deg = _weighted_choice(rnd, MAX_TURN_DEG_WEIGHTS)
+    horizon_default = derive_risk_horizon_s(safe_distance_m, max_turn_deg, own_speed_mps)
+    multiplier = _weighted_choice(rnd, HORIZON_MULTIPLIER_WEIGHTS)
+    risk_horizon_s = horizon_default * multiplier
+    return {
+        "safe_distance_m": safe_distance_m, "max_turn_deg": max_turn_deg,
+        "risk_horizon_s": risk_horizon_s, "risk_horizon_default_s": horizon_default,
+        "risk_horizon_multiplier": multiplier, "stand_on_tcpa_s": risk_horizon_s * 0.6,
+    }
+
+
+def fixed_limits(safe_distance_m: float, max_turn_deg: float, own_speed_mps: float | None,
+                horizon_multiplier: float = 1.0) -> dict:
+    """Non-sampled limits at an EXPLICIT (safe_distance_m, max_turn_deg) pair, with the
+    risk horizon at its geometry-derived default (or an explicit multiple of it) -- for
+    oow_colreg_scenarios_v2.json (500/30/derived-default) and its probe_{300,926} files
+    (ONLY safe_distance_m changed; max_turn_deg and the horizon stay at each scenario's
+    OWN derived default), as opposed to sample_row_limits()'s full per-row weighted
+    sampling used for training data."""
+    horizon_default = derive_risk_horizon_s(safe_distance_m, max_turn_deg, own_speed_mps)
+    risk_horizon_s = horizon_default * horizon_multiplier
+    return {
+        "safe_distance_m": safe_distance_m, "max_turn_deg": max_turn_deg,
+        "risk_horizon_s": risk_horizon_s, "risk_horizon_default_s": horizon_default,
+        "risk_horizon_multiplier": horizon_multiplier, "stand_on_tcpa_s": risk_horizon_s * 0.6,
+    }
+
+
+def constraint_line(safe_distance_m: float, max_turn_deg: float, risk_horizon_s: float) -> str:
+    """Single-source rendering of the three STAP-2 per-row training-variable limits --
+    used by BOTH Track-2 generators' situation-text renderers AND Basic Simulator/app/
+    agents.py's live prompt, so a training row and a live simulator step given the SAME
+    settings render byte-identical constraint text (see the parity test)."""
+    return (
+        f"This mission's safe passing distance is {safe_distance_m:.0f}m: CPA below that "
+        "is a real collision risk, CPA well above it is safe regardless of how small it "
+        f"looks. A single turn_left/turn_right command may request at most "
+        f"{max_turn_deg:.0f} degrees. A contact only drives a decision if its time-to-"
+        f"closest-point-of-approach is under {risk_horizon_s:.0f}s (0 <= TCPA < horizon; "
+        "an already-past or far-future contact is monitored only, not acted on)."
+    )
 
 # Fixed response-format contract, byte-identical to what Basic Simulator/app/agents.py's
 # build_oow_prompt() has always sent for v0-v9 (only the USER turn varies across

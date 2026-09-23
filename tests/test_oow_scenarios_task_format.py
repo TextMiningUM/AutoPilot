@@ -5,8 +5,10 @@ classification the model is meant to derive itself into the user prompt.
 """
 import json
 
+import pytest
+
 from core import AgentPaths
-from pipeline.oow_agent_spec import ACTIONS, SYSTEM_OOW_AGENT, validate_action_json
+from pipeline.oow_agent_spec import ACTIONS, SYSTEM_OOW_AGENT, validate_action_json, fixed_limits
 from pipeline.track2.build_oow_scenarios import (
     FIXED_QUESTION_UNIFIED, N_EVAL_PER_CATEGORY_DEFAULT, N_TRAIN_PER_CATEGORY_DEFAULT,
     generate_population, render_scenario_situation, split_eval_train, to_unified_action,
@@ -88,15 +90,26 @@ def test_v2_eval_record_situation_is_byte_identical_to_what_a_training_row_would
     training row's situation text must be byte-identical for the same geometry, because
     both call the exact same render_scenario_situation() function -- verified here against
     the REAL, already-written v2 file (not just an in-memory re-derivation), by
-    regenerating the same deterministic population and matching by position."""
+    regenerating the same deterministic population and matching by position.
+
+    Quality-review STAP 2 (2026-09-23) added max_turn_deg/risk_horizon_s to the shared
+    constraint_line() -- the CURRENTLY-frozen oow_colreg_scenarios_v2.json predates that
+    change (single safe-distance sentence only) and is explicitly scheduled for
+    regeneration in STAP 4 (BLOK II), not yet approved/run -- skip rather than fail until
+    that regeneration lands, so this stays a genuine identity check (not a stale-fixture
+    false negative) once v2 is rebuilt against the new renderer."""
     if not V2_FILE.exists():
         return
     v2 = json.loads(V2_FILE.read_text(encoding="utf-8"))
+    if "may request at most" not in v2[0]["situation"]:
+        pytest.skip("oow_colreg_scenarios_v2.json predates STAP 2's constraint_line() "
+                   "(max_turn_deg/risk_horizon_s) -- pending STAP 4 regeneration")
     eval_recs, _ = _fresh_pop(seed=0)
     assert len(eval_recs) == len(v2)
     for rec, v2_rec in zip(eval_recs[:20], v2[:20]):
+        limits = fixed_limits(v2_rec["safe_distance_m"], v2_rec["max_turn_deg"], rec["own_speed"])
         # What write_scenario_sft_files() would embed as the user turn for this geometry:
-        training_user_text = f"Situation:\n{render_scenario_situation(rec)}\n\n{FIXED_QUESTION_UNIFIED}"
+        training_user_text = f"Situation:\n{render_scenario_situation(rec, limits)}\n\n{FIXED_QUESTION_UNIFIED}"
         assert training_user_text == f"Situation:\n{v2_rec['situation']}\n\n{v2_rec['question']}", (
             f"v2 record {v2_rec['id']} situation text diverges from what a training row "
             "would embed for the same geometry -- the two paths must call the same renderer"

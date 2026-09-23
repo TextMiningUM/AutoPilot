@@ -132,7 +132,7 @@ from core import AgentPaths, load_env, review_path, safe_write_jsonl, EMBEDDER_M
 from pipeline.oow_agent_spec import (
     SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, classify_rules,
     bearing_and_range, relative_bearing, goal_course_action, goal_course_check_line,
-    render_previous_decisions, real_risk,
+    render_previous_decisions, real_risk, sample_row_limits, fixed_limits, constraint_line,
 )
 
 paths = AgentPaths.oow()
@@ -389,10 +389,27 @@ CRITICAL_RANGE_M = 200.0  # Rule 17(b): manoeuvre alone no longer suffices -- ra
 MIN_TURN_DEG = 15.0       # Rule 16's "early and substantial" rules out a token gesture
 MAX_TURN_DEG = 30.0       # matches Basic Simulator VesselConstraints' max_rudder_angle_deg
 
+# Quality-review STAP 2 (2026-09-23): fallback limits for any caller that doesn't pass an
+# explicit per-row `limits` dict (existing tests, v1's own frozen geometry machinery) --
+# the historical fixed 500/30/300 values, so nothing that doesn't opt in to sampling
+# changes behaviour.
+_LEGACY_LIMITS = {"safe_distance_m": SAFE_CPA_M, "max_turn_deg": MAX_TURN_DEG,
+                  "risk_horizon_s": 300.0, "stand_on_tcpa_s": 300.0 * 0.6}
 
-def _turn_degrees(cpa_m: float) -> float:
-    shortfall = min(1.0, max(0.0, (SAFE_CPA_M - cpa_m) / SAFE_CPA_M))
-    return round(MIN_TURN_DEG + shortfall * (MAX_TURN_DEG - MIN_TURN_DEG), 1)
+
+def limits_for_scenario_record(r: dict) -> dict:
+    """Deterministic per-row STAP-2 sampled limits for training record `r` -- seeded off
+    the record's OWN stable `_id` (assigned once per population build, stable across
+    reruns of the SAME seed), so the same row always samples the same
+    safe_distance_m/max_turn_deg/risk_horizon_s across separate runs."""
+    return sample_row_limits(r["_id"], r["own_speed"])
+
+
+def _turn_degrees(cpa_m: float, limits: dict | None = None) -> float:
+    limits = limits or _LEGACY_LIMITS
+    safe_distance_m, max_turn_deg = limits["safe_distance_m"], limits["max_turn_deg"]
+    shortfall = min(1.0, max(0.0, (safe_distance_m - cpa_m) / safe_distance_m))
+    return round(MIN_TURN_DEG + shortfall * (max_turn_deg - MIN_TURN_DEG), 1)
 
 
 def _diverging_turn(rel_bearing_deg: float) -> str:
@@ -403,7 +420,7 @@ def _should_stop(cpa_m: float, range_m: float, closing_speed: float) -> bool:
     return cpa_m < CRITICAL_RANGE_M and range_m < CRITICAL_RANGE_M and closing_speed > 0
 
 
-def to_unified_action(rec: dict) -> dict:
+def to_unified_action(rec: dict, limits: dict | None = None) -> dict:
     """Maps this generator's OLD action taxonomy (maintain_course/alter_course/stop/
     resume_cruising_speed, always a fixed +/-30 degrees) onto the unified simulator
     vocabulary with geometry-scaled degrees -- for training rows / v2 eval only, never
@@ -416,11 +433,19 @@ def to_unified_action(rec: dict) -> dict:
     answer-side context (never leaked to render_scenario_situation()'s user-facing text)
     and checked by the B3 acceptance gates' contact-consistency check.
 
+    `limits` (quality-review STAP 2, 2026-09-23): the row's {safe_distance_m, max_turn_deg,
+    risk_horizon_s} -- defaults to the historical fixed 500m/30deg/300s (_LEGACY_LIMITS)
+    when omitted, so every existing caller/test keeps working unchanged; the real training
+    loop passes an explicit per-row sampled dict (limits_for_scenario_record()), and
+    build_v2_eval_records() passes an explicit FIXED (non-sampled) dict instead.
+
     NO stationary-contact branch here (unlike build_oow_scenarios_leo.py's quality-review
     STAP 1 extension, 2026-09-23): verified -- this generator's CATEGORIES/_classify_target()
     only ever produce moving-vessel encounter_type values (head_on/crossing_target_on_*/
     overtaking_geometry/same_line ahead/astern); no "stationary_contact"/"not_applicable"
     role is ever generated, so there is nothing for a stationary branch to catch here."""
+    limits = limits or _LEGACY_LIMITS
+    safe_distance_m = limits["safe_distance_m"]
     old_action = rec["action"]
     roles = rec["role"].split("+")
     if old_action == "resume_cruising_speed":
@@ -435,7 +460,8 @@ def to_unified_action(rec: dict) -> dict:
         # (assigned upstream from bearing geometry only) can never stand in for an actual
         # CPA/TCPA risk judgement here either.
         stand_on_targets = [t for t in rec["targets"] if t["_role"] in ("stand_on", "overtaking_stand_on")
-                           and real_risk(t["_cpa_m"], t["_tcpa_min"] * 60.0, SAFE_CPA_M)]
+                           and real_risk(t["_cpa_m"], t["_tcpa_min"] * 60.0, safe_distance_m,
+                                        limits["risk_horizon_s"])]
         if stand_on_targets:
             worst = min(stand_on_targets, key=lambda t: t["_cpa_m"])
             encounter_rule, conduct_rule = classify_rules(worst["_role"], "hold_course")
@@ -458,7 +484,7 @@ def to_unified_action(rec: dict) -> dict:
         encounter_rule, conduct_rule = classify_rules(role, "stop")
         return {"action": "stop", "degrees": None, "encounter_rule": encounter_rule,
                "conduct_rule": conduct_rule, "decisive_contact_index": worst_index}
-    degrees = _turn_degrees(worst["_cpa_m"])
+    degrees = _turn_degrees(worst["_cpa_m"], limits)
     if role == "overtaking_give_way":
         action = _diverging_turn(relative_bearing(0.0, worst["bearing_from_os_deg"]))
     else:
@@ -468,7 +494,7 @@ def to_unified_action(rec: dict) -> dict:
            "conduct_rule": conduct_rule, "decisive_contact_index": worst_index}
 
 
-def render_scenario_situation(rec: dict) -> str:
+def render_scenario_situation(rec: dict, limits: dict | None = None) -> str:
     """Unified house-style narrative -- shared byte-for-byte between training rows and
     oow_colreg_scenarios_v2.json (see the identity test). Deliberately parallel to
     build_oow_scenarios_leo.py's render_leo_narrative() and Basic Simulator's narrate():
@@ -477,7 +503,11 @@ def render_scenario_situation(rec: dict) -> str:
     included. Own-ship is always at the origin, heading 0 (north); the mission waypoint
     sits straight ahead by construction (see generate_single_target_instance()), so GOAL
     COURSE CHECK always reports "already on bearing" here -- still rendered (never hand-
-    waved away) so this matches the other two callers' structure exactly."""
+    waved away) so this matches the other two callers' structure exactly.
+
+    `limits` (quality-review STAP 2, 2026-09-23): defaults to the historical fixed
+    500m/30deg/300s (_LEGACY_LIMITS) when omitted -- see to_unified_action()'s docstring."""
+    limits = limits or _LEGACY_LIMITS
     own_speed = rec["own_speed"]
     cruise = own_speed + 7.0
     wx, wy = 0.0, 2000.0
@@ -487,8 +517,7 @@ def render_scenario_situation(rec: dict) -> str:
         f"Target cruise speed is {cruise:.1f}.",
         f"Mission waypoint is at ({wx:.1f}, {wy:.1f}).",
         goal_course_check_line(0.0, 0.0, 0.0, wx, wy),
-        f"This mission's safe passing distance is {SAFE_CPA_M:.0f}m: CPA below that is a real "
-        "collision risk, CPA well above it is safe regardless of how small it looks.",
+        constraint_line(limits["safe_distance_m"], limits["max_turn_deg"], limits["risk_horizon_s"]),
         f"{n} other ship{'s' if n != 1 else ''}:" if n else "No other ships tracked.",
     ]
     for i, t in enumerate(rec["targets"]):
@@ -516,7 +545,7 @@ def render_scenario_situation(rec: dict) -> str:
 FIXED_QUESTION_UNIFIED = "Recommend exactly ONE manoeuvre as the specified JSON object."
 
 
-def build_v2_eval_records() -> list[dict]:
+def build_v2_eval_records(safe_distance_m: float = SAFE_CPA_M, max_turn_deg: float = MAX_TURN_DEG) -> list[dict]:
     """RAG-rebuild-v2 plan point 2: regenerates the SAME 325 held-out geometries as v1
     (generate_population(seed=0) + split_eval_train with the SAME defaults v1 was built
     with -- verified byte-for-byte identical, see tests/test_oow_scenarios_v2_eval.py)
@@ -524,7 +553,14 @@ def build_v2_eval_records() -> list[dict]:
     NEVER regenerates v1 itself, and NEVER runs as part of training-data regeneration --
     only from main()'s explicit --build-v2 flag. `gold_reasoning` reuses v1's own already-
     LLM-authored gold_answer text as a non-scored reference -- no new [LLM] call needed,
-    since that text already exists and was never the field any scoring reads for v2."""
+    since that text already exists and was never the field any scoring reads for v2.
+
+    `safe_distance_m`/`max_turn_deg` (quality-review STAP 2/4, 2026-09-23): EXPLICIT,
+    non-sampled values -- v2 itself uses the historical 500m/30deg defaults; the
+    probe_{300,926} files (STAP 4) call this with ONLY safe_distance_m changed. The risk
+    horizon is NEVER a flat number here -- each scenario gets ITS OWN geometry-derived
+    default (fixed_limits(), multiplier=1.0), never STAP 2's per-row random sampling
+    (which is for TRAINING data only, to teach the model the limits genuinely vary)."""
     if not EVAL_OUT.exists():
         raise FileNotFoundError(f"{EVAL_OUT} (v1) not found -- v2 is built FROM v1's exact "
                                 "geometries, it cannot be built standalone")
@@ -540,16 +576,19 @@ def build_v2_eval_records() -> list[dict]:
         if rec["category"] != v1_rec["category"]:
             raise RuntimeError(f"record {i}: category mismatch ({rec['category']!r} vs "
                               f"v1's {v1_rec['category']!r}) -- geometry has drifted from v1")
-        unified = to_unified_action(rec)
+        limits = fixed_limits(safe_distance_m, max_turn_deg, rec["own_speed"])
+        unified = to_unified_action(rec, limits)
         gold = {k: v for k, v in unified.items() if k != "decisive_contact_index"}
         out.append({
             "id": f"oowcol_v2_{i + 1:05d}", "v1_id": v1_rec["id"], "category": rec["category"],
-            "situation": render_scenario_situation(rec),
+            "situation": render_scenario_situation(rec, limits),
             "question": FIXED_QUESTION_UNIFIED,
             "gold": gold,
             "degrees_tolerance": 10.0 if unified["degrees"] is not None else None,
             "gold_reasoning": v1_rec.get("gold_answer", ""),
             "expected_points": rec["pass_criteria"],
+            "safe_distance_m": limits["safe_distance_m"], "max_turn_deg": limits["max_turn_deg"],
+            "risk_horizon_s": limits["risk_horizon_s"],
         })
     return out
 
@@ -1071,11 +1110,12 @@ def contact_name_for_index(i: int) -> str:
     return CONTACT_NAME_POOL[i] if i < len(CONTACT_NAME_POOL) else f"RANDOM_TS{i + 1}"
 
 
-def build_teacher_payload(rec: dict, rec_id: str) -> tuple[dict, dict]:
+def build_teacher_payload(rec: dict, rec_id: str, limits: dict | None = None) -> tuple[dict, dict]:
     """The TEACHER-only payload (includes decisive_contact -- answer-side info, never
     sent to Qwen) plus the ground-truth dict used both for row assembly and gating."""
-    truth = to_unified_action(rec)
-    situation = render_scenario_situation(rec)
+    limits = limits or _LEGACY_LIMITS
+    truth = to_unified_action(rec, limits)
+    situation = render_scenario_situation(rec, limits)
     idx = truth["decisive_contact_index"]
     cpa_m = rec["targets"][idx]["_cpa_m"] if idx is not None else None
     payload = {"id": rec_id, "situation": situation, "action": truth["action"], "degrees": truth["degrees"]}
@@ -1086,7 +1126,7 @@ def build_teacher_payload(rec: dict, rec_id: str) -> tuple[dict, dict]:
     return payload, {
         "situation": situation, "expected_action": truth["action"], "expected_degrees": truth["degrees"],
         "expected_encounter_rule": truth["encounter_rule"], "expected_conduct_rule": truth["conduct_rule"],
-        "real_risk": truth["encounter_rule"] != "none", "cpa_m": cpa_m, "safe_distance_m": SAFE_CPA_M,
+        "real_risk": truth["encounter_rule"] != "none", "cpa_m": cpa_m, "safe_distance_m": limits["safe_distance_m"],
         "decisive_contact_name": decisive_name,
     }
 
@@ -1118,7 +1158,7 @@ def render_reasoning_review_sample(client, model: str, recs: list[dict], n: int,
     accepted, rejected = [], []
     gate_rejection_counts = {name: 0 for name in GATE_NAMES}
     for r in sample:
-        payload, expected = build_teacher_payload(r, r["_id"])
+        payload, expected = build_teacher_payload(r, r["_id"], limits_for_scenario_record(r))
         obj, attempt_log = generate_gated_row(
             client, model, REASONING_SYSTEM_PROMPT, payload, max_attempts=max_attempts,
             max_tokens=max_tokens, **expected,
@@ -1193,7 +1233,7 @@ def render_reasoning_full_population(client, model: str, recs: list[dict], max_a
             else:
                 n_rejected += 1
             continue
-        payload, expected = build_teacher_payload(r, r["_id"])
+        payload, expected = build_teacher_payload(r, r["_id"], limits_for_scenario_record(r))
         obj, attempt_log = generate_gated_row(
             client, model, REASONING_SYSTEM_PROMPT, payload, max_attempts=max_attempts,
             max_tokens=max_tokens, **expected,
@@ -1259,13 +1299,14 @@ def write_scenario_sft_files(recs: list[dict], cache_dir: Path, mode: str = "w")
         for r in recs:
             if not r.get("reasoning"):
                 continue
-            unified = to_unified_action(r)
+            limits = limits_for_scenario_record(r)
+            unified = to_unified_action(r, limits)
             assistant = {**_assistant_fields(unified), "reasoning": r["reasoning"]}
             row = {
                 "category": r["category"], "action": r["action"],
                 "messages": [
                     {"role": "system", "content": SYSTEM_OOW_AGENT},
-                    {"role": "user", "content": user_message_for(r)},
+                    {"role": "user", "content": user_message_for(r, limits)},
                     {"role": "assistant", "content": json.dumps(assistant, ensure_ascii=False)},
                 ],
             }
@@ -1275,14 +1316,14 @@ def write_scenario_sft_files(recs: list[dict], cache_dir: Path, mode: str = "w")
     print(f"Wrote {direct_path.name} and {cot_path.name}")
 
 
-def user_message_for(r: dict) -> str:
+def user_message_for(r: dict, limits: dict | None = None) -> str:
     """The full user-turn text for record `r`: render_scenario_situation()'s deterministic
     rendering plus FIXED_QUESTION_UNIFIED, with Fase B4's real-history preamble prepended
     when r["prev_decisions"] is set (never touches render_scenario_situation()'s own
     output, so v2 eval-file identity is unaffected -- see
     test_v2_eval_record_situation_is_byte_identical_to_what_a_training_row_would_embed)."""
     history_prefix = render_previous_decisions(r.get("prev_decisions"))
-    return f"Situation:\n{history_prefix}{render_scenario_situation(r)}\n\n{FIXED_QUESTION_UNIFIED}"
+    return f"Situation:\n{history_prefix}{render_scenario_situation(r, limits)}\n\n{FIXED_QUESTION_UNIFIED}"
 
 
 def write_scenario_dpo_file(recs: list[dict], cache_dir: Path, mode: str = "w") -> None:
@@ -1292,11 +1333,12 @@ def write_scenario_dpo_file(recs: list[dict], cache_dir: Path, mode: str = "w") 
         for r in recs:
             if not r.get("reasoning"):
                 continue
-            unified = _assistant_fields(to_unified_action(r))
+            limits = limits_for_scenario_record(r)
+            unified = _assistant_fields(to_unified_action(r, limits))
             chosen = {**unified, "reasoning": r["reasoning"]}
             rejected_action = wrong_action_variant(unified)
             rejected = {**rejected_action, "reasoning": r["reasoning"]}
-            user_msg = user_message_for(r)
+            user_msg = user_message_for(r, limits)
             row = {
                 "category": r["category"], "action": r["action"],
                 "prompt": [{"role": "system", "content": SYSTEM_OOW_AGENT}, {"role": "user", "content": user_msg}],
@@ -1319,7 +1361,8 @@ def write_scenario_reflection_file(recs: list[dict], cache_dir: Path, mode: str 
         for r in recs:
             if not r.get("reasoning"):
                 continue
-            unified = _assistant_fields(to_unified_action(r))
+            limits = limits_for_scenario_record(r)
+            unified = _assistant_fields(to_unified_action(r, limits))
             refined = json.dumps({**unified, "reasoning": r["reasoning"]}, ensure_ascii=False)
             draft = f"I will {r['action'].replace('_', ' ')}."
             critique = ("This response is too vague -- it must state the exact action parameters "
@@ -1328,7 +1371,7 @@ def write_scenario_reflection_file(recs: list[dict], cache_dir: Path, mode: str 
                 "category": r["category"],
                 "messages": [
                     {"role": "system", "content": SYSTEM_OOW_AGENT},
-                    {"role": "user", "content": user_message_for(r)},
+                    {"role": "user", "content": user_message_for(r, limits)},
                     {"role": "assistant", "content": f"Draft: {draft}\n\nCritique: {critique}\n\n"
                                                       f"Refined: {refined}"},
                 ],
@@ -1541,7 +1584,7 @@ def main() -> None:
         # (a no-risk hold_course history would be a trivial, uninformative signal).
         n_with_history = 0
         for i, r in enumerate(train_recs):
-            unified = to_unified_action(r)
+            unified = to_unified_action(r, limits_for_scenario_record(r))
             if i % 5 == 0 and unified["encounter_rule"] != "none":
                 r["prev_decisions"] = [{"action": unified["action"], "degrees": unified["degrees"]}] * 2
                 n_with_history += 1

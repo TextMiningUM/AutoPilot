@@ -65,6 +65,7 @@ from core import AgentPaths, load_env, review_path, safe_write_jsonl, CONTAM_THR
 from pipeline.oow_agent_spec import (
     SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, goal_course_check_line, goal_course_action,
     classify_rules, render_previous_decisions, real_risk, STAND_ON_TCPA_S, classify_encounter,
+    sample_row_limits, constraint_line,
 )
 
 paths = AgentPaths.oow()
@@ -118,8 +119,21 @@ MOVING_SPEED_THRESHOLD = 0.5  # quality-review STAP 2 (2026-09-23): a contact be
                               # speed is treated as effectively stationary/noise, never
                               # fed into the geometric not_applicable-role fallback below.
 
+# Quality-review STAP 2 (2026-09-23): fallback limits for any caller that doesn't pass an
+# explicit per-row `limits` dict (existing tests, ad-hoc scripts) -- the historical fixed
+# 500/30/300 values, so nothing that doesn't opt in to sampling changes behaviour.
+_DEFAULT_LIMITS = {"safe_distance_m": SAFE_CPA_M, "max_turn_deg": MAX_TURN_DEG,
+                   "risk_horizon_s": STAND_ON_TCPA_S / 0.6, "stand_on_tcpa_s": STAND_ON_TCPA_S}
 
-def render_leo_narrative(state: dict) -> str:
+
+def limits_for_leo_record(r: dict) -> dict:
+    """Deterministic per-row STAP-2 sampled limits for Leo record `r` -- seeded off the
+    record's OWN stable `id` (never a running index), so the same source row always
+    samples the same safe_distance_m/max_turn_deg/risk_horizon_s across separate runs."""
+    return sample_row_limits(r["id"], r["state"]["own_ship"]["speed"])
+
+
+def render_leo_narrative(state: dict, limits: dict | None = None) -> str:
     """Deterministic house-style narrative from a Leo `state` dict -- no LLM, and
     deliberately NOT the source file's own ALL-CAPS-headers 'narrative' field. Matches
     Basic Simulator's narrate.py convention byte-for-byte where the two overlap (own-ship/
@@ -131,6 +145,7 @@ def render_leo_narrative(state: dict) -> str:
     data, never handed to the model in the prompt" principle -- handing over "We are
     meeting head-on" or "Rules engaged: Rule 15, Rule 16" would leak the answer instead of
     testing whether the model can derive it."""
+    limits = limits or _DEFAULT_LIMITS
     own, mission, contacts, cond = state["own_ship"], state["mission"], state["contacts"], state["conditions"]
     ox, oy = own["x"], own["y"]
     mx, my = mission["x"], mission["y"]
@@ -145,8 +160,7 @@ def render_leo_narrative(state: dict) -> str:
         f"Own-ship vessel type is {own['colregs_vessel_type'].replace('_', ' ')}.",
         f"Mission waypoint is at ({mx:.1f}, {my:.1f}), {dist:.0f} m away, bearing {bearing:.1f} deg.",
         goal_course_check_line(ox, oy, own["heading"], mx, my),
-        f"This mission's safe passing distance is {SAFE_CPA_M:.0f}m: CPA below that is a real "
-        "collision risk, CPA well above it is safe regardless of how small it looks.",
+        constraint_line(limits["safe_distance_m"], limits["max_turn_deg"], limits["risk_horizon_s"]),
         f"{n} other ship{'s' if n != 1 else ''}:" if n else "No other ships tracked.",
     ]
     for c in contacts:
@@ -233,24 +247,30 @@ def _geometric_role_and_type(own: dict, c: dict) -> tuple[str, str] | None:
     return _GEOMETRIC_ENCOUNTER_MAP[enc]
 
 
-def _real_risk(c: dict) -> bool:
+def _real_risk(c: dict, limits: dict | None = None) -> bool:
     """Rule 7 gate: real collision risk, via the ONE shared real_risk() (pipeline.
-    oow_agent_spec) -- CPA below SAFE_CPA_M AND TCPA within RISK_HORIZON_S, NEVER gated
-    on Leo's own "risk" label (medium/high/critical): that label is a TCPA-urgency
-    judgement from the source data, not a CPA-based risk-of-collision judgement -- see
-    quality-review STAP 1 (2026-09-23) for the concrete real-data example this fixes.
-    Leo's risk label stays available as METADATA (c["risk"] itself, still surfaced in the
-    rendered narrative for uncertain-track contacts) but is never a gate here again."""
-    return real_risk(c.get("cpa_distance_m"), c.get("tcpa_s"), SAFE_CPA_M)
+    oow_agent_spec) -- CPA below the row's safe_distance_m AND TCPA within its
+    risk_horizon_s (quality-review STAP 2, 2026-09-23: both now PER-ROW sampled values,
+    `limits`, rather than the fixed SAFE_CPA_M/RISK_HORIZON_S), NEVER gated on Leo's own
+    "risk" label (medium/high/critical): that label is a TCPA-urgency judgement from the
+    source data, not a CPA-based risk-of-collision judgement -- see quality-review STAP 1
+    (2026-09-23) for the concrete real-data example this fixes. Leo's risk label stays
+    available as METADATA (c["risk"] itself, still surfaced in the rendered narrative for
+    uncertain-track contacts) but is never a gate here again."""
+    limits = limits or _DEFAULT_LIMITS
+    return real_risk(c.get("cpa_distance_m"), c.get("tcpa_s"), limits["safe_distance_m"], limits["risk_horizon_s"])
 
 
-def _turn_degrees(cpa_m: float) -> float:
-    """Substantial, geometry-scaled turn -- bigger the further CPA falls below the safe
-    distance, always at least MIN_TURN_DEG, capped at the physical per-command limit
-    (MAX_TURN_DEG). A fixed +30 regardless of shortfall was the original bug's fixed-
-    degree half; this scales with how much clearance is actually missing."""
-    shortfall = min(1.0, max(0.0, (SAFE_CPA_M - cpa_m) / SAFE_CPA_M))
-    return round(MIN_TURN_DEG + shortfall * (MAX_TURN_DEG - MIN_TURN_DEG), 1)
+def _turn_degrees(cpa_m: float, limits: dict | None = None) -> float:
+    """Substantial, geometry-scaled turn -- bigger the further CPA falls below the row's
+    safe_distance_m, always at least MIN_TURN_DEG, capped at the row's own max_turn_deg
+    (quality-review STAP 2: both now PER-ROW sampled via `limits`, not the fixed
+    SAFE_CPA_M/MAX_TURN_DEG). A fixed +30 regardless of shortfall was the original bug's
+    fixed-degree half; this scales with how much clearance is actually missing."""
+    limits = limits or _DEFAULT_LIMITS
+    safe_distance_m, max_turn_deg = limits["safe_distance_m"], limits["max_turn_deg"]
+    shortfall = min(1.0, max(0.0, (safe_distance_m - cpa_m) / safe_distance_m))
+    return round(MIN_TURN_DEG + shortfall * (max_turn_deg - MIN_TURN_DEG), 1)
 
 
 def _diverging_turn(c: dict) -> str:
@@ -318,7 +338,7 @@ def _rule_list(c: dict) -> list[str]:
     return [f"Rule {n}" for n in nums]
 
 
-def leo_choose_action(state: dict) -> dict:
+def leo_choose_action(state: dict, limits: dict | None = None) -> dict:
     """Deterministic action from the record's OWN own_role/encounter/CPA/TCPA/risk labels
     (trusted, since Leo's own encounter/risk computation already accounts for track
     quality etc. this script does not re-derive). Rule 7 gates everything: a contact only
@@ -328,6 +348,14 @@ def leo_choose_action(state: dict) -> dict:
     diagnosis of what the previous role-only version got wrong (857 manoeuvres on
     low-risk-only contacts, 526 on opening-range contacts, 875 stop-labels, 883 paused
     frames mislabeled as manoeuvres).
+
+    `limits` (quality-review STAP 2, 2026-09-23): the row's {safe_distance_m, max_turn_deg,
+    risk_horizon_s, stand_on_tcpa_s} -- see pipeline.oow_agent_spec.sample_row_limits().
+    Defaults to the historical fixed 500m/30deg/300s (_DEFAULT_LIMITS) when omitted, so
+    every existing caller/test keeps working unchanged; the real production loop always
+    passes an explicit per-row sampled dict (limits_for_leo_record()). Echoed back in the
+    returned dict as "training_limits" -- METADATA carried alongside the row, never fed
+    into `messages` beyond its already-rendered constraint_line() text.
 
     STATIONARY CONTACTS (quality-review STAP 1 extension, 2026-09-23): a real-risk contact
     with encounter_type=="stationary_contact" (own_role "not_applicable" -- an anchored
@@ -340,13 +368,13 @@ def leo_choose_action(state: dict) -> dict:
     (_turn_shrinks_other_cpa) -- if the winning turn would shrink it, the action falls
     back to slow_down (never stop, never a direction flip) rather than being taken anyway.
 
-    NOT_APPLICABLE MOVING CONTACTS (quality-review STAP 2, 2026-09-23): own_role==
-    "not_applicable" on a MOVING, real-risk contact (not stationary) is a gap in Leo's own
-    role classifier, not a "no risk" case -- its role/encounter_type are geometrically
-    re-derived via the shared classify_encounter() and it is then treated exactly like a
-    normal give_way/stand_on contact. A contact whose geometry shows it isn't actually
-    converging is too ambiguous to label at all -- the WHOLE frame is excluded (action=
-    None, role="excluded"), never silently defaulted to hold_course.
+    NOT_APPLICABLE MOVING CONTACTS (quality-review STAP 2 (classify_encounter), 2026-09-23):
+    own_role=="not_applicable" on a MOVING, real-risk contact (not stationary) is a gap in
+    Leo's own role classifier, not a "no risk" case -- its role/encounter_type are
+    geometrically re-derived via the shared classify_encounter() and it is then treated
+    exactly like a normal give_way/stand_on contact. A contact whose geometry shows it
+    isn't actually converging is too ambiguous to label at all -- the WHOLE frame is
+    excluded (action=None, role="excluded"), never silently defaulted to hold_course.
 
     Returns simulator-format fields (action/degrees/encounter_rule/conduct_rule) directly,
     matching Basic Simulator/app/agents.py's SYSTEM_OOW_AGENT JSON contract -- see Fase B2.
@@ -357,6 +385,7 @@ def leo_choose_action(state: dict) -> dict:
     is the contact that actually drove the decision, or None when there is no real risk --
     fed to the B3 teacher prompt as answer-side context, never leaked to
     render_leo_narrative()'s user-facing text."""
+    limits = limits or _DEFAULT_LIMITS
     own = state["own_ship"]
     contacts = state["contacts"]
 
@@ -364,7 +393,7 @@ def leo_choose_action(state: dict) -> dict:
     if own.get("paused") or own.get("stopped"):
         return {"action": None, "degrees": None, "encounter_rule": None, "conduct_rule": None,
                 "role": "paused", "rules": [], "category": "leo_paused", "bucket": "paused",
-                "decisive_contact_name": None}
+                "decisive_contact_name": None, "training_limits": limits}
 
     # Quality-review STAP 2 (2026-09-23): own_role=="not_applicable" on a MOVING,
     # real-risk contact is a gap in the SOURCE data's own role classifier (220/7928
@@ -377,19 +406,19 @@ def leo_choose_action(state: dict) -> dict:
     contacts = [dict(c) for c in contacts]  # never mutate the caller's state
     for c in contacts:
         if (c["own_role"] == "not_applicable" and c.get("encounter_type") != "stationary_contact"
-                and (c.get("speed") or 0) > MOVING_SPEED_THRESHOLD and _real_risk(c)):
+                and (c.get("speed") or 0) > MOVING_SPEED_THRESHOLD and _real_risk(c, limits)):
             geo = _geometric_role_and_type(own, c)
             if geo is None:
                 return {"action": None, "degrees": None, "encounter_rule": None, "conduct_rule": None,
                         "role": "excluded", "rules": [], "category": "leo_excluded_ambiguous_geometry",
-                        "bucket": "excluded", "decisive_contact_name": c["name"],
+                        "bucket": "excluded", "decisive_contact_name": c["name"], "training_limits": limits,
                         "exclude_reason": "not_applicable moving contact not actually converging "
                                           "(closing_speed<=0) despite CPA/TCPA real_risk"}
             c["own_role"], c["encounter_type"] = geo
 
-    stationary = [c for c in contacts if c.get("encounter_type") == "stationary_contact" and _real_risk(c)]
-    give_way = [c for c in contacts if c["own_role"] in ("give_way", "both_give_way") and _real_risk(c)]
-    stand_on = [c for c in contacts if c["own_role"] == "stand_on" and _real_risk(c)]
+    stationary = [c for c in contacts if c.get("encounter_type") == "stationary_contact" and _real_risk(c, limits)]
+    give_way = [c for c in contacts if c["own_role"] in ("give_way", "both_give_way") and _real_risk(c, limits)]
+    stand_on = [c for c in contacts if c["own_role"] == "stand_on" and _real_risk(c, limits)]
 
     if stationary or give_way:
         worst_stationary = min(stationary, key=lambda c: c["cpa_distance_m"]) if stationary else None
@@ -405,8 +434,8 @@ def leo_choose_action(state: dict) -> dict:
                 return {"action": "stop", "degrees": None, "encounter_rule": encounter_rule,
                         "conduct_rule": conduct_rule, "role": worst["own_role"], "rules": _rule_list(worst),
                         "category": f"leo_{worst['encounter_type']}", "bucket": "stop",
-                        "decisive_contact_name": worst["name"]}
-            degrees = _turn_degrees(worst["cpa_distance_m"])
+                        "decisive_contact_name": worst["name"], "training_limits": limits}
+            degrees = _turn_degrees(worst["cpa_distance_m"], limits)
             if worst["encounter_type"] in ("head_on", "crossing"):
                 action = "turn_right"  # Rule 14/15+16: give-way alters to starboard
             else:
@@ -417,13 +446,13 @@ def leo_choose_action(state: dict) -> dict:
             return {"action": action, "degrees": degrees, "encounter_rule": encounter_rule,
                     "conduct_rule": conduct_rule, "role": worst["own_role"], "rules": _rule_list(worst),
                     "category": f"leo_{worst['encounter_type']}", "bucket": "alter_course",
-                    "decisive_contact_name": worst["name"]}
+                    "decisive_contact_name": worst["name"], "training_limits": limits}
 
         # Stationary avoidance wins (no give-way contact, or its CPA is not smaller). Never
         # a stop-default, never a give-way/stand-on role -- Rule 8 covers the action alone.
         worst = worst_stationary
         action = _diverging_turn(worst)
-        degrees = _turn_degrees(worst["cpa_distance_m"])
+        degrees = _turn_degrees(worst["cpa_distance_m"], limits)
         if worst_give_way is not None and _turn_shrinks_other_cpa(own, worst_give_way, action, degrees):
             action, degrees = "slow_down", None
         encounter_rule, conduct_rule = classify_rules("stationary", action)
@@ -431,30 +460,30 @@ def leo_choose_action(state: dict) -> dict:
                 "conduct_rule": conduct_rule, "role": "stationary",
                 "rules": ["Rule 2", "Rule 5", "Rule 6", "Rule 7", "Rule 8"],
                 "category": "leo_stationary_avoid", "bucket": "stationary",
-                "decisive_contact_name": worst["name"]}
+                "decisive_contact_name": worst["name"], "training_limits": limits}
 
     if stand_on:
         # Rule 17(a)(ii)/(b): own-ship (stand-on) may/must act once it's apparent the
         # give-way vessel isn't -- requires BOTH a real CPA shortfall AND an imminent
-        # encounter (short TCPA), never TCPA alone.
-        triggered = [c for c in stand_on if (c.get("tcpa_s") or 1e9) < STAND_ON_TCPA_S]
+        # encounter (short TCPA, scaled to THIS row's risk_horizon_s), never TCPA alone.
+        triggered = [c for c in stand_on if (c.get("tcpa_s") or 1e9) < limits["stand_on_tcpa_s"]]
         if triggered:
             worst = min(triggered, key=lambda c: c["cpa_distance_m"])
-            degrees = _turn_degrees(worst["cpa_distance_m"])
+            degrees = _turn_degrees(worst["cpa_distance_m"], limits)
             action = _diverging_turn(worst)
             classify_role = _leo_role_for_classify("stand_on", worst["encounter_type"])
             encounter_rule, conduct_rule = classify_rules(classify_role, action)
             return {"action": action, "degrees": degrees, "encounter_rule": encounter_rule,
                     "conduct_rule": conduct_rule, "role": "stand_on", "rules": _rule_list(worst),
                     "category": f"leo_stand_on_{worst['encounter_type']}_17b", "bucket": "stand_on_17b",
-                    "decisive_contact_name": worst["name"]}
+                    "decisive_contact_name": worst["name"], "training_limits": limits}
         ref = stand_on[0]
         classify_role = _leo_role_for_classify("stand_on", ref["encounter_type"])
         encounter_rule, conduct_rule = classify_rules(classify_role, "hold_course")
         return {"action": "hold_course", "degrees": None, "encounter_rule": encounter_rule,
                 "conduct_rule": conduct_rule, "role": "stand_on", "rules": _rule_list(ref),
                 "category": f"leo_stand_on_{ref['encounter_type']}", "bucket": "stand_on",
-                "decisive_contact_name": ref["name"]}
+                "decisive_contact_name": ref["name"], "training_limits": limits}
 
     # No contact poses real risk -- follow GOAL COURSE CHECK exactly (SYSTEM_OOW_AGENT's
     # decision procedure step 3/5), never a fixed hold_course default: only standing rules
@@ -466,14 +495,15 @@ def leo_choose_action(state: dict) -> dict:
     if goal_action != "hold_course":
         return {"action": goal_action, "degrees": goal_degrees, "encounter_rule": "none",
                 "conduct_rule": "none", "role": "cleared", "rules": rules,
-                "category": "leo_clear_goal_turn", "bucket": "clear", "decisive_contact_name": None}
+                "category": "leo_clear_goal_turn", "bucket": "clear", "decisive_contact_name": None,
+                "training_limits": limits}
     if own["speed"] < own["target_speed"] - RESUME_SPEED_MARGIN:
         return {"action": "speed_up", "degrees": None, "encounter_rule": "none", "conduct_rule": "none",
                 "role": "cleared", "rules": rules, "category": "leo_clear_resume", "bucket": "resume",
-                "decisive_contact_name": None}
+                "decisive_contact_name": None, "training_limits": limits}
     return {"action": "hold_course", "degrees": None, "encounter_rule": "none", "conduct_rule": "none",
             "role": "cleared", "rules": rules, "category": "leo_clear_maintain", "bucket": "clear",
-            "decisive_contact_name": None}
+            "decisive_contact_name": None, "training_limits": limits}
 
 
 
@@ -649,7 +679,7 @@ def stratified_sample(recs: list[dict], n: int, seed: int = 0) -> list[dict]:
     rnd = random.Random(seed)
     buckets: dict[str, list[dict]] = {}
     for r in recs:
-        decision = leo_choose_action(r["state"])
+        decision = leo_choose_action(r["state"], limits_for_leo_record(r))
         if decision["bucket"] == "paused":
             continue
         buckets.setdefault(decision["bucket"], []).append(r)
@@ -691,7 +721,7 @@ def real_previous_decisions(trajectories: dict[str, list[dict]], source_file: st
         return None
     decisions = []
     for r in traj[idx - n:idx]:
-        d = leo_choose_action(r["state"])
+        d = leo_choose_action(r["state"], limits_for_leo_record(r))
         if d["action"] is None:
             return None  # a paused predecessor breaks the history chain
         decisions.append({"action": d["action"], "degrees": d["degrees"]})
@@ -769,15 +799,16 @@ def main() -> None:
 
     recs: list[dict] = []
     for i, r in enumerate(sample):
-        decision = leo_choose_action(r["state"])
+        limits = limits_for_leo_record(r)
+        decision = leo_choose_action(r["state"], limits)
         recs.append({
             "_id": f"leo{i:05d}", "leo_id": r["id"], "leo_source_file": r["source_file"],
             "category": decision["category"], "action": decision["action"],
             "degrees": decision["degrees"], "encounter_rule": decision["encounter_rule"],
             "conduct_rule": decision["conduct_rule"], "decisive_contact_name": decision["decisive_contact_name"],
-            "role": decision["role"], "rules": decision["rules"],
+            "role": decision["role"], "rules": decision["rules"], "training_limits": limits,
             "pass_criteria": PASS_CRITERIA[decision["bucket"]],
-            "situation_report": render_leo_narrative(r["state"]), "state": r["state"],
+            "situation_report": render_leo_narrative(r["state"], limits), "state": r["state"],
             # Fase B4: real previous decisions from this state's own trajectory, when
             # it has 2 real (non-paused) predecessors -- None for the rest (no history
             # preamble added for those rows).
@@ -797,13 +828,14 @@ def main() -> None:
         review_sample = stratified_sample(all_recs, args.b3_review_sample, seed=args.seed)
         review_recs: list[dict] = []
         for i, r in enumerate(review_sample):
-            decision = leo_choose_action(r["state"])
+            limits = limits_for_leo_record(r)
+            decision = leo_choose_action(r["state"], limits)
             review_recs.append({
                 "_id": f"leo{i:05d}", "leo_id": r["id"], "category": decision["category"],
                 "action": decision["action"], "degrees": decision["degrees"],
                 "encounter_rule": decision["encounter_rule"], "conduct_rule": decision["conduct_rule"],
-                "decisive_contact_name": decision["decisive_contact_name"],
-                "situation_report": render_leo_narrative(r["state"]), "state": r["state"],
+                "decisive_contact_name": decision["decisive_contact_name"], "training_limits": limits,
+                "situation_report": render_leo_narrative(r["state"], limits), "state": r["state"],
             })
         result = render_reasoning_review_sample(client, args.model, review_recs,
                                                 max_attempts=3, max_tokens=args.max_tokens)
