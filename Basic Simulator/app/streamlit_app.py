@@ -886,7 +886,8 @@ with side_panel:
         with st.expander("Situation report", expanded=False):
             st.caption(_goal_quickfacts(sim.own.x, sim.own.y, sim.own.heading, sim.own.speed,
                                        mission.goal))
-            st.code(narrate(mission, sim.own, sim.targets), language=None, wrap_lines=True)
+            st.code(narrate(mission, sim.own, sim.targets, safe_distance_m=sim.constraints.min_cpa_m,
+                           max_turn_deg=sim.constraints.max_rudder_angle_deg), language=None, wrap_lines=True)
 
         model_config = st.selectbox(
             "Model / prompt config", options=list(MODEL_CONFIGS),
@@ -945,7 +946,8 @@ with side_panel:
             # attaches per-checkpoint in a batch sweep -- computed live here too, against
             # the SAME contacts the agent was just shown, so "Ask OOW agent" gets the same
             # insight without needing a precomputed run.
-            situation_now = [contact_line(sim.own, t) for t in sim.targets]
+            situation_now = [contact_line(sim.own, t, sim.constraints.min_cpa_m, sim.constraints.max_rudder_angle_deg)
+                             for t in sim.targets]
             st.session_state.last_measurement = measure_decision_quality(decision, situation_now, sim.constraints)
 
         decision = st.session_state.last_decision
@@ -1064,7 +1066,9 @@ with plot_col:
                 with st.spinner("Asking Claude to audit COLREG compliance..."):
                     try:
                         st.session_state.llm_compliance_audit = llm_compliance_check(
-                            eval_traj, checkpoints=_eval_checkpoints)
+                            eval_traj, checkpoints=_eval_checkpoints,
+                            safe_distance_m=sim.constraints.min_cpa_m,
+                            max_turn_deg=sim.constraints.max_rudder_angle_deg)
                         st.session_state.llm_compliance_checked_key = (eval_cache_key, len(eval_traj))
                     except Exception as e:
                         st.error(f"Compliance check failed: {e}")
@@ -1159,7 +1163,7 @@ with plot_col:
             if mission.id.startswith("q"):
                 st.write("This is a **quiet** scenario -- correct recommendation is `hold_course`.")
             for tgt in sim.targets:
-                c = contact_line(sim.own, tgt)
+                c = contact_line(sim.own, tgt, sim.constraints.min_cpa_m, sim.constraints.max_rudder_angle_deg)
                 if c["quiet"]:
                     st.caption(f"{c['name']}: quiet (CPA {m_to_nm(c['cpa_m']):.3f} NM, "
                               f"TCPA {c['tcpa_s']:.0f}s)")

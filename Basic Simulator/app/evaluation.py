@@ -169,12 +169,17 @@ def _rows_at_time(trajectory_rows: list[dict], t: float, tol: float = 0.5) -> di
     return {r["vehicle"]: r for r in trajectory_rows if r["time"] == nearest}
 
 
-def _ground_truth_at_checkpoint(trajectory_rows: list[dict], t: float,
-                                own_vehicle: str) -> str:
+def _ground_truth_at_checkpoint(trajectory_rows: list[dict], t: float, own_vehicle: str,
+                                safe_distance_m: float, max_turn_deg: float) -> str:
     """Deterministic encounter classification (app.narrate's own CPA/TCPA + relative-bearing
-    rule classifier + its QUIET_CPA_M/QUIET_TCPA_S 'no real risk' gate -- the SAME machinery
-    the live agent's own situation report and recommended_decision_interval() already rely
-    on) computed independently of the LLM, at the exact instant a decision was made.
+    rule classifier + pipeline.oow_agent_spec.real_risk()'s mission-parameterised 'no real
+    risk' gate -- the SAME machinery the live agent's own situation report/constraint line
+    already rely on) computed independently of the LLM, at the exact instant a decision was
+    made. `safe_distance_m`/`max_turn_deg` MUST be the run's own VesselConstraints values
+    (min_cpa_m/max_rudder_angle_deg) -- compliance-rebuild STAP 1 (2026-09-23): this used to
+    gate on two hardcoded module constants (600s TCPA / 300m CPA cutoffs), a THIRD,
+    independently-drifting risk definition alongside real_risk()'s mission-parameterised gate
+    and the constraint line the agent itself reads.
 
     Without this, llm_compliance_check() only ever saw a raw trajectory CSV and had to
     freehand-judge from scratch whether a rule applied -- a genuinely non-deterministic
@@ -183,14 +188,15 @@ def _ground_truth_at_checkpoint(trajectory_rows: list[dict], t: float,
     identical CPA=6322m, 3 of 4 calls disagreed on whether Rule 15 applied at all). Injecting
     this FIXED fact means the LLM only ever has to judge whether the agent's citation/action
     matches it, not re-derive "was there risk of collision" itself each time."""
-    from app.narrate import cpa_tcpa, QUIET_CPA_M, QUIET_TCPA_S
+    from app.narrate import cpa_tcpa
     from app.units import m_to_nm
-    from pipeline.oow_agent_spec import classify_encounter
+    from pipeline.oow_agent_spec import classify_encounter, real_risk, derive_risk_horizon_s
 
     rows = _rows_at_time(trajectory_rows, t)
     own = rows.get(own_vehicle)
     if not own:
         return "(no ground truth available -- no trajectory sample at this time)"
+    risk_horizon_s = derive_risk_horizon_s(safe_distance_m, max_turn_deg, own["speed"])
     parts = []
     for vname, row in sorted(rows.items()):
         if vname == own_vehicle:
@@ -199,7 +205,7 @@ def _ground_truth_at_checkpoint(trajectory_rows: list[dict], t: float,
                              row["x"], row["y"], row["heading"], row["speed"])
         enc, rules, rel = classify_encounter(own["x"], own["y"], own["heading"],
                                              row["x"], row["y"], row["heading"])
-        if tcpa > QUIET_TCPA_S or cpa > QUIET_CPA_M:
+        if not real_risk(cpa, tcpa, safe_distance_m, risk_horizon_s):
             verdict = "no rule applies (quiet -- CPA/TCPA too large for real risk of collision)"
         else:
             verdict = f"{'/'.join(rules)} applies ({enc})"
@@ -210,13 +216,15 @@ def _ground_truth_at_checkpoint(trajectory_rows: list[dict], t: float,
 
 def _format_checkpoint_citations(checkpoints: list[dict] | None,
                                  trajectory_rows: list[dict] | None,
-                                 own_vehicle: str) -> str:
+                                 own_vehicle: str, safe_distance_m: float, max_turn_deg: float) -> str:
     """own-ship's own self-reported action + COLREG rule citation at each decision point
     (app.agents.ask_oow's `encounter_rule`/`conduct_rule` fields), each paired with a DETERMINISTIC
     ground-truth encounter classification (see _ground_truth_at_checkpoint) computed the same way
     the rest of this project already does -- without this, the audit only ever saw raw positions/
     headings and had to freehand-judge from scratch whether a rule applied at all, which is
-    non-deterministic for a borderline-distance encounter (see that function's docstring)."""
+    non-deterministic for a borderline-distance encounter (see that function's docstring).
+    `safe_distance_m`/`max_turn_deg` MUST be the run's own VesselConstraints values, threaded
+    straight through to _ground_truth_at_checkpoint."""
     if not checkpoints:
         return ""
     lines = ["\n\nOwn-ship's own self-reported decisions, each paired with a FIXED, "
@@ -226,7 +234,8 @@ def _format_checkpoint_citations(checkpoints: list[dict] | None,
     for cp in checkpoints:
         decision = cp.get("decision") or {}
         t = cp.get("time", 0)
-        ground_truth = (_ground_truth_at_checkpoint(trajectory_rows, t, own_vehicle)
+        ground_truth = (_ground_truth_at_checkpoint(trajectory_rows, t, own_vehicle,
+                                                    safe_distance_m, max_turn_deg)
                        if trajectory_rows else "(no trajectory provided)")
         lines.append(f"t={t:.0f}s: action={decision.get('action', '?')}, "
                      f"encounter_rule={decision.get('encounter_rule', 'none')}, "
@@ -237,7 +246,8 @@ def _format_checkpoint_citations(checkpoints: list[dict] | None,
 
 def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_ship",
                          model: str = "claude-sonnet-4-5",
-                         checkpoints: list[dict] | None = None) -> dict:
+                         checkpoints: list[dict] | None = None,
+                         safe_distance_m: float = 500.0, max_turn_deg: float = 30.0) -> dict:
     """One-shot LLM judge of full-trajectory COLREG compliance, using Anthropic Claude -- a
     full two-sided AUDIT (what was done wrong AND what was done right, each explained), not
     just a list of mistakes.
@@ -254,6 +264,10 @@ def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_sh
     citations at each decision against the actual geometry -- catching a fabricated/wrong-but-safe
     citation that pure trajectory geometry alone can't reveal. Optional: omitted for the
     live "Agent Real-Time" mode, which only tracks the single most recent decision.
+    `safe_distance_m`/`max_turn_deg` should always be the run's own VesselConstraints values
+    (min_cpa_m/max_rudder_angle_deg) -- only used for the checkpoint ground-truth text above,
+    defaults here match VesselConstraints()'s own defaults for callers with no live run
+    constraints available.
 
     Returns {"violations": [...], "compliant_actions": [...], "compliance_score": float}
     (compliance_score is Claude's own 0.0-1.0 severity-weighted judgement, see
@@ -268,7 +282,7 @@ def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_sh
 
     client = anthropic.Anthropic(api_key=key)
     user_msg = (f"Trajectory (own_vehicle={own_vehicle}):\n\n{_format_trajectory_csv(trajectory_rows)}"
-               f"{_format_checkpoint_citations(checkpoints, trajectory_rows, own_vehicle)}")
+               f"{_format_checkpoint_citations(checkpoints, trajectory_rows, own_vehicle, safe_distance_m, max_turn_deg)}")
     resp = client.messages.create(
         # 3072 (not the old 800) -- every manoeuvre now gets a full when/what/why explanation
         # (violation OR compliant), not just a short sentence per mistake.

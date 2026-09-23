@@ -102,7 +102,8 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
             # Deterministic, read-only measurement (Checks A/B/C -- see app/measurement.py)
             # against the SAME live contacts the agent was actually shown this step. Never
             # changes `decision`/`sim.apply_action()` below -- purely counted and logged.
-            contacts_now = [contact_line(sim.own, t) for t in sim.targets]
+            contacts_now = [contact_line(sim.own, t, constraints.min_cpa_m, constraints.max_rudder_angle_deg)
+                           for t in sim.targets]
             checkpoints.append({
                 "step": step, "time": sim.t,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -145,7 +146,9 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
                         "compliance_score": None, "error": None}
     if check_colreg_compliance:
         try:
-            audit = llm_compliance_check(sim.trajectory, checkpoints=checkpoints)
+            audit = llm_compliance_check(sim.trajectory, checkpoints=checkpoints,
+                                         safe_distance_m=constraints.min_cpa_m,
+                                         max_turn_deg=constraints.max_rudder_angle_deg)
             colreg_llm_check["violations"] = audit["violations"]
             colreg_llm_check["compliant_actions"] = audit["compliant_actions"]
             colreg_llm_check["compliance_score"] = audit["compliance_score"]

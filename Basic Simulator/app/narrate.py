@@ -25,6 +25,7 @@ from app.units import m_to_nm, mps_to_kn
 # drifts -- see that module's docstring.
 from pipeline.oow_agent_spec import (
     bearing_and_range, relative_bearing, classify_encounter, goal_course_check_line,
+    real_risk, derive_risk_horizon_s,
 )
 
 
@@ -76,6 +77,10 @@ def recommended_decision_interval(mission: Mission, dt: float = 10.0) -> int:
                     t.x, t.y, t.heading, t.speed)[1]
             for t in mission.targets
         )
+        # Compliance-rebuild STAP 1 (2026-09-23): reviewed for a dependency on the two
+        # removed hardcoded risk-threshold module constants -- it has none (these 250/600
+        # cutoffs are this function's OWN, independent decision-CADENCE thresholds, never
+        # the removed constants), so left unchanged here.
         if min_tcpa < 250:
             base = 10
         elif min_tcpa < 600:
@@ -110,14 +115,18 @@ def recommended_max_steps(mission: Mission, dt: float = 10.0) -> int:
     return min(1200, max(20, needed_steps))
 
 
-# Below these thresholds a target isn't a live collision-avoidance concern
-# (per Design Ideas.docx's DTU-paper finding: most real encounters need no
-# action) -- purely descriptive labels for the narration, no behaviour change.
-QUIET_TCPA_S = 600.0
-QUIET_CPA_M = 300.0
-
-
-def contact_line(own: Vessel, tgt: Vessel) -> dict:
+def contact_line(own: Vessel, tgt: Vessel, safe_distance_m: float = 500.0,
+                 max_turn_deg: float = 30.0) -> dict:
+    """`safe_distance_m`/`max_turn_deg` should always be the LIVE mission/constraints values
+    (VesselConstraints.min_cpa_m/max_rudder_angle_deg) -- compliance-rebuild STAP 1 (2026-09-23):
+    this used to gate the returned `quiet` flag on two hardcoded module constants (a 600s
+    TCPA cutoff and a 300m CPA cutoff), a THIRD, independently-drifting risk definition
+    alongside real_risk()'s mission-parameterised gate and the constraint line the agent
+    itself reads -- now uses the SAME real_risk()/derive_risk_horizon_s() (pipeline/
+    oow_agent_spec.py) as everything else, so "quiet" always means the same thing
+    everywhere. Defaults here match VesselConstraints()'s own defaults, only for callers
+    with no live mission constraints available (e.g. a bare preview) -- never used when
+    real per-mission values are on hand."""
     _, rng = bearing_and_range(own.x, own.y, tgt.x, tgt.y)
     cpa, tcpa = cpa_tcpa(own.x, own.y, own.heading, own.speed, tgt.x, tgt.y, tgt.heading, tgt.speed)
     # Same dot-product sign check as inside cpa_tcpa(), duplicated here rather than
@@ -135,7 +144,8 @@ def contact_line(own: Vessel, tgt: Vessel) -> dict:
     rel_sq = dvx ** 2 + dvy ** 2
     closing = rel_sq >= 1e-6 and -(dx * dvx + dy * dvy) > 0
     enc, rules, rel = classify_encounter(own.x, own.y, own.heading, tgt.x, tgt.y, tgt.heading)
-    quiet = tcpa > QUIET_TCPA_S or cpa > QUIET_CPA_M
+    risk_horizon_s = derive_risk_horizon_s(safe_distance_m, max_turn_deg, own.speed)
+    quiet = not real_risk(cpa, tcpa, safe_distance_m, risk_horizon_s)
     return {
         "name": tgt.name, "range_m": rng, "rel_bearing_deg": rel,
         "heading": tgt.heading, "speed": tgt.speed,
@@ -143,7 +153,8 @@ def contact_line(own: Vessel, tgt: Vessel) -> dict:
     }
 
 
-def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_mps: float | None = None) -> str:
+def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_mps: float | None = None,
+           safe_distance_m: float = 500.0, max_turn_deg: float = 30.0) -> str:
     """Situation report text handed to the OOW agent -- own-ship state, goal, and every
     target's range/bearing/heading/speed/CPA/TCPA. `targets` MUST be the simulation's live,
     currently-moving contact list (Simulation.targets) -- NEVER `mission.targets`, which is
@@ -199,7 +210,7 @@ def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_m
         n = len(targets)
         lines.append(f"{n} other ship{'s' if n != 1 else ''}:")
         for tgt in targets:
-            c = contact_line(own, tgt)
+            c = contact_line(own, tgt, safe_distance_m, max_turn_deg)
             tcpa_note = "" if c["closing"] else " (already past closest point, ranges now increasing)"
             lines.append(
                 f'  - Ship named "{c["name"]}": range {m_to_nm(c["range_m"]):.3f} NM, rel.bearing '

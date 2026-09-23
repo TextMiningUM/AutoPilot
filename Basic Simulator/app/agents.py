@@ -264,7 +264,8 @@ def _parse_json_action(text: str) -> dict:
             "reasoning": f"[parse error -- raw model output] {text[:300]}", "_parse_error": True}
 
 
-def _pg_match_query(own: Vessel, targets: list[Vessel]) -> str:
+def _pg_match_query(own: Vessel, targets: list[Vessel], safe_distance_m: float = 500.0,
+                    max_turn_deg: float = 30.0) -> str:
     """Short COLREG-encounter phrase used ONLY to retrieve procedural-graph guidance --
     never shown to the model in place of the real situation report. render_guidance()'s
     node/family matching is embedding-similarity based against a graph built from
@@ -286,7 +287,7 @@ def _pg_match_query(own: Vessel, targets: list[Vessel]) -> str:
     generic lookout guidance instead of give-way guidance at the moment it mattered most)."""
     if not targets:
         return "routine passage, no other traffic, no close-quarters encounter"
-    contacts = [contact_line(own, t) for t in targets]
+    contacts = [contact_line(own, t, safe_distance_m, max_turn_deg) for t in targets]
     live = [c for c in contacts if not c["quiet"]]
     if not live:
         return "routine passage, no close-quarters encounter, maintain course and speed"
@@ -324,7 +325,13 @@ def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], confi
     if config not in _CONFIG_SPECS:
         raise ValueError(f"Unknown model config {config!r}; choose one of {list(MODEL_CONFIGS)}")
     spec = _CONFIG_SPECS[config]
-    situation = narrate(mission, own, targets, cruise_speed_mps=constraints.cruise_speed_mps if constraints else None)
+    # Compliance-rebuild STAP 1 (2026-09-23): the SAME mission/constraints values used below for
+    # the constraint-line text and risk_horizon_s, never a hardcoded/independently-drifting
+    # default once real constraints are known -- see narrate.contact_line()'s docstring.
+    safe_distance_m = constraints.min_cpa_m if constraints else 500.0
+    max_turn_deg = constraints.max_rudder_angle_deg if constraints else 30.0
+    situation = narrate(mission, own, targets, cruise_speed_mps=constraints.cruise_speed_mps if constraints else None,
+                        safe_distance_m=safe_distance_m, max_turn_deg=max_turn_deg)
 
     if spec["bare"]:
         user_msg = f"Situation:\n{situation}\n\nRecommend exactly ONE manoeuvre as the specified JSON object."
@@ -352,7 +359,7 @@ def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], confi
     if spec["pg"]:
         graph = pg_graphs.get(spec["pg"])
         if graph is not None:
-            pg_text = render_guidance(_pg_match_query(own, targets), graph)
+            pg_text = render_guidance(_pg_match_query(own, targets, safe_distance_m, max_turn_deg), graph)
 
     user_parts = []
     if spec["cot"] or spec["pg"]:
