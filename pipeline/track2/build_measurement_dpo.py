@@ -62,10 +62,16 @@ def build_rejected(decision: dict) -> dict:
     both fields, same backward-compat interpretation as measurement.py's own fallback)."""
     encounter_rule = decision.get("encounter_rule") or decision.get("rule_applied") or "none"
     conduct_rule = decision.get("conduct_rule") or decision.get("rule_applied") or "none"
+    reasoning = decision.get("reasoning", "")
+    if isinstance(reasoning, list):
+        # v2_cot/v3_rag_cot archived checkpoints sometimes returned "reasoning" as a
+        # list of step strings (a CoT bullet-list style) rather than one string --
+        # every OTHER config/consumer expects a plain string, so normalise here once.
+        reasoning = " ".join(str(s) for s in reasoning)
     return {
         "action": decision.get("action"), "degrees": decision.get("degrees"),
         "encounter_rule": encounter_rule, "conduct_rule": conduct_rule,
-        "reasoning": decision.get("reasoning", ""),
+        "reasoning": reasoning,
     }
 
 

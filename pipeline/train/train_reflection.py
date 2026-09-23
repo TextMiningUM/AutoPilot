@@ -77,6 +77,18 @@ REFL_FILES   = {
         # CHIRP collision-relevant newsletter article reflection triples (Fase C1 --
         # extract_chirp_reasoning.py -> build_reflection.py).
         CACHE / "oow_chirp_reflection.jsonl",
+        # Fase C3 "C1 pairs": REAL incident/CHIRP reflection triples -- critique is the
+        # investigators' OWN avoidance_summary analysis, never a synthetic "too vague"
+        # template (build_incident_reflection_real.py, listed twice for the same
+        # "higher weight" rationale as build_incident_dpo_real.py in train_dpo.py).
+        CACHE / "oow_incident_reflection_real.jsonl",
+        CACHE / "oow_incident_reflection_real.jsonl",
+        # Fase C3 (continued): Track-2 reflection redesign -- 3-check-question critique
+        # (does a real risk exist? does direction match the rule? is the manoeuvre
+        # physically achievable?) grounded in REAL model mistakes from the archived
+        # units_v1 missions (build_measurement_reflection.py against app/measurement.py's
+        # Check A/B/C hits), replacing the old "too vague, add parameters" pattern.
+        CACHE / "oow_measurement_reflection.jsonl",
         # Track 2 -- applied helm/engine-order decisions (build_reflection.py run against
         # the deterministic MOOS-scenario reasoning traces, notebook § 6.5).
         CACHE / "oow_scenario_reflection.jsonl",
