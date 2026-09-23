@@ -2,19 +2,19 @@
  "nodes": {
   "pg_0000": {
    "label": "Assess the fused contact picture (bearing/range/CPA/TCPA) against own-ship's course and speed.",
-   "n_occurrences": 390,
+   "n_occurrences": 938,
    "families": {
-    "colreg_encounter": 390
+    "colreg_encounter": 938
    },
-   "n_starts": 390,
+   "n_starts": 938,
    "n_ends": 0,
    "is_failure": false
   },
   "pg_0001": {
    "label": "Determine own-ship's role: give way.",
-   "n_occurrences": 360,
+   "n_occurrences": 938,
    "families": {
-    "colreg_encounter": 360
+    "colreg_encounter": 938
    },
    "n_starts": 0,
    "n_ends": 0,
@@ -22,45 +22,35 @@
   },
   "pg_0002": {
    "label": "Execute the action: alter_course (+30 degrees to starboard, lookahead distance 200 m).",
-   "n_occurrences": 250,
+   "n_occurrences": 241,
    "families": {
-    "colreg_encounter": 250
+    "colreg_encounter": 241
    },
    "n_starts": 0,
-   "n_ends": 250,
+   "n_ends": 241,
    "is_failure": false
   },
   "pg_0003": {
    "label": "Execute the action: stop.",
-   "n_occurrences": 20,
+   "n_occurrences": 105,
    "families": {
-    "colreg_encounter": 20
+    "colreg_encounter": 105
    },
    "n_starts": 0,
-   "n_ends": 20,
+   "n_ends": 105,
    "is_failure": false
   },
   "pg_0004": {
-   "label": "Execute the action: maintain_course.",
-   "n_occurrences": 90,
+   "label": "Execute the action: hold_course.",
+   "n_occurrences": 228,
    "families": {
-    "colreg_encounter": 90
+    "colreg_encounter": 228
    },
    "n_starts": 0,
-   "n_ends": 90,
+   "n_ends": 228,
    "is_failure": false
   },
   "pg_0005": {
-   "label": "Determine own-ship's role: cleared.",
-   "n_occurrences": 30,
-   "families": {
-    "colreg_encounter": 30
-   },
-   "n_starts": 0,
-   "n_ends": 0,
-   "is_failure": false
-  },
-  "pg_0006": {
    "label": "Execute the action: resume_cruising_speed (return to cruising speed).",
    "n_occurrences": 30,
    "families": {
@@ -69,6 +59,36 @@
    "n_starts": 0,
    "n_ends": 30,
    "is_failure": false
+  },
+  "pg_0006": {
+   "label": "Execute the action: speed_up.",
+   "n_occurrences": 109,
+   "families": {
+    "colreg_encounter": 109
+   },
+   "n_starts": 0,
+   "n_ends": 109,
+   "is_failure": false
+  },
+  "pg_0007": {
+   "label": "Execute the action: turn_left (25 deg).",
+   "n_occurrences": 164,
+   "families": {
+    "colreg_encounter": 164
+   },
+   "n_starts": 0,
+   "n_ends": 164,
+   "is_failure": false
+  },
+  "pg_0008": {
+   "label": "Execute the action: turn_right (25 deg).",
+   "n_occurrences": 61,
+   "families": {
+    "colreg_encounter": 61
+   },
+   "n_starts": 0,
+   "n_ends": 61,
+   "is_failure": false
   }
  },
  "edges": [
@@ -76,16 +96,16 @@
    "u": "pg_0000",
    "rel": "NEXT",
    "v": "pg_0001",
-   "support": 360,
+   "support": 938,
    "condition": [
     "Minimum CPA stays above the safe-distance threshold.",
-    "Minimum CPA to BOTH targets stays above the safe-distance threshold.",
-    "Own-ship alters course to starboard (not port)."
+    "Own-ship resumes cruise speed now that no contact requires give-way action.",
+    "Own-ship does not needlessly remain at reduced speed with no active encounter."
    ],
    "guidance": [
-    "Rule 15, Rule 16 governs this encounter.",
-    "Rule 15, Rule 17 governs this encounter.",
-    "Rule 14, Rule 15, Rule 16 governs this encounter."
+    "Rule 2, Rule 5, Rule 6, Rule 7, Rule 11 governs this encounter.",
+    "Rule 2, Rule 5, Rule 6, Rule 7, Rule 8, Rule 11, Rule 13, Rule 16 governs this encounter.",
+    "Rule 2, Rule 5, Rule 6, Rule 7, Rule 8, Rule 11, Rule 15, Rule 17 governs this encounter."
    ],
    "pitfalls": [
     "Own-ship alters course to starboard (not port).",
@@ -93,7 +113,7 @@
     "Own-ship does not alter to port toward the target if she must eventually act."
    ],
    "families": {
-    "colreg_encounter": 360
+    "colreg_encounter": 938
    },
    "sources": [
     "oow_scenario_generator::head_on",
@@ -107,7 +127,7 @@
    "u": "pg_0001",
    "rel": "NEXT",
    "v": "pg_0002",
-   "support": 250,
+   "support": 241,
    "condition": [
     "Minimum CPA stays above the safe-distance threshold.",
     "Minimum CPA to BOTH targets stays above the safe-distance threshold.",
@@ -122,7 +142,7 @@
     "Own-ship alters course to starboard (not port)."
    ],
    "families": {
-    "colreg_encounter": 250
+    "colreg_encounter": 241
    },
    "sources": [
     "oow_scenario_generator::overtaking_give_way",
@@ -136,11 +156,11 @@
    "u": "pg_0001",
    "rel": "NEXT",
    "v": "pg_0004",
-   "support": 90,
+   "support": 228,
    "condition": [
     "Minimum CPA stays above the safe-distance threshold.",
-    "Own-ship holds course and speed initially.",
-    "Own-ship does not alter to port toward the target if she must eventually act."
+    "Own-ship maintains course and speed; no contact currently requires action.",
+    "Own-ship does not manoeuvre against a contact whose CPA is not below the safe distance."
    ],
    "guidance": [
     "The chosen action must comply with the applicable COLREG rule(s) above."
@@ -150,16 +170,121 @@
     "If the target never gives way, own-ship takes late avoiding action under Rule 17(b)."
    ],
    "families": {
-    "colreg_encounter": 90
+    "colreg_encounter": 228
    },
    "sources": [
     "oow_scenario_generator::crossing_stand_on_fine",
     "oow_scenario_generator::crossing_stand_on_broad",
-    "oow_scenario_generator::overtaking_stand_on"
+    "oow_scenario_generator::overtaking_stand_on",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_22534.jsonl",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_2560.jsonl"
    ]
   },
   {
-   "u": "pg_0000",
+   "u": "pg_0001",
+   "rel": "NEXT",
+   "v": "pg_0007",
+   "support": 164,
+   "condition": [
+    "Own-ship (stand-on) takes her own action once it is apparent the give-way vessel isn't -- CPA under the safe distance AND the encounter is imminent.",
+    "Own-ship takes early, substantial action to keep clear as the give-way vessel, scaled to how far CPA falls under the safe passing distance.",
+    "Own-ship does not simply hold course while she holds a give-way obligation."
+   ],
+   "guidance": [
+    "The chosen action must comply with the applicable COLREG rule(s) above."
+   ],
+   "pitfalls": [],
+   "families": {
+    "colreg_encounter": 164
+   },
+   "sources": [
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_2566.jsonl",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_2018.jsonl",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_22544.jsonl",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_22562.jsonl",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_543.jsonl"
+   ]
+  },
+  {
+   "u": "pg_0001",
+   "rel": "NEXT",
+   "v": "pg_0006",
+   "support": 109,
+   "condition": [
+    "Own-ship resumes cruise speed now that no contact requires give-way action.",
+    "Own-ship does not needlessly remain at reduced speed with no active encounter."
+   ],
+   "guidance": [
+    "The chosen action must comply with the applicable COLREG rule(s) above."
+   ],
+   "pitfalls": [],
+   "families": {
+    "colreg_encounter": 109
+   },
+   "sources": [
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_2575.jsonl",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_2594.jsonl",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_2503.jsonl",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_2703.jsonl",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_2709.jsonl"
+   ]
+  },
+  {
+   "u": "pg_0001",
+   "rel": "NEXT",
+   "v": "pg_0003",
+   "support": 105,
+   "condition": [
+    "Own-ship stops given a genuinely close-range, still-closing, critical-risk contact that manoeuvre alone can no longer clear (Rule 17(b)).",
+    "Own-ship does not simply hold course when a give-way contact is at critical risk.",
+    "Minimum CPA to BOTH targets stays above the safe-distance threshold."
+   ],
+   "guidance": [
+    "The chosen action must comply with the applicable COLREG rule(s) above."
+   ],
+   "pitfalls": [
+    "Own-ship does not alter to port toward the port-side target while manoeuvring.",
+    "Own-ship avoids crossing ahead of the target.",
+    "Own-ship alters course to starboard (not port)."
+   ],
+   "families": {
+    "colreg_encounter": 105
+   },
+   "sources": [
+    "oow_scenario_generator::headon_plus_crossing",
+    "oow_scenario_generator::overtake_plus_crossing",
+    "oow_scenario_generator::converging_cluster",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_2686.jsonl",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_2047.jsonl"
+   ]
+  },
+  {
+   "u": "pg_0001",
+   "rel": "NEXT",
+   "v": "pg_0008",
+   "support": 61,
+   "condition": [
+    "Own-ship takes early, substantial action to keep clear as the give-way vessel, scaled to how far CPA falls under the safe passing distance.",
+    "Own-ship does not simply hold course while she holds a give-way obligation.",
+    "Own-ship does not manoeuvre against a contact that poses no real CPA-based risk."
+   ],
+   "guidance": [
+    "The chosen action must comply with the applicable COLREG rule(s) above."
+   ],
+   "pitfalls": [],
+   "families": {
+    "colreg_encounter": 61
+   },
+   "sources": [
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_2598.jsonl",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_22558.jsonl",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_2639.jsonl",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_2634.jsonl",
+    "oow_scenario_generator_leo::sft/jsonl_files/seed_2586.jsonl"
+   ]
+  },
+  {
+   "u": "pg_0001",
    "rel": "NEXT",
    "v": "pg_0005",
    "support": 30,
@@ -168,28 +293,6 @@
     "Own-ship does not needlessly remain at reduced speed or off track once safely clear of the contact."
    ],
    "guidance": [
-    "Rule 14 governs this encounter."
-   ],
-   "pitfalls": [
-    "Own-ship does not needlessly remain at reduced speed or off track once safely clear of the contact."
-   ],
-   "families": {
-    "colreg_encounter": 30
-   },
-   "sources": [
-    "oow_scenario_generator::risk_cleared_resume"
-   ]
-  },
-  {
-   "u": "pg_0005",
-   "rel": "NEXT",
-   "v": "pg_0006",
-   "support": 30,
-   "condition": [
-    "Own-ship resumes cruise speed/course now that the earlier close-quarters situation is resolved.",
-    "Own-ship does not needlessly remain at reduced speed or off track once safely clear of the contact."
-   ],
-   "guidance": [
     "The chosen action must comply with the applicable COLREG rule(s) above."
    ],
    "pitfalls": [
@@ -200,49 +303,20 @@
    },
    "sources": [
     "oow_scenario_generator::risk_cleared_resume"
-   ]
-  },
-  {
-   "u": "pg_0001",
-   "rel": "NEXT",
-   "v": "pg_0003",
-   "support": 20,
-   "condition": [
-    "Minimum CPA stays above the safe-distance threshold.",
-    "Minimum CPA to BOTH targets stays above the safe-distance threshold.",
-    "Own-ship is give-way: alters course and/or speed early."
-   ],
-   "guidance": [
-    "The chosen action must comply with the applicable COLREG rule(s) above."
-   ],
-   "pitfalls": [
-    "Own-ship avoids crossing ahead of the target.",
-    "Own-ship does not alter to port toward the port-side target while manoeuvring.",
-    "Own-ship alters course to starboard (not port)."
-   ],
-   "families": {
-    "colreg_encounter": 20
-   },
-   "sources": [
-    "oow_scenario_generator::crossing_give_way_fine",
-    "oow_scenario_generator::overtake_plus_crossing",
-    "oow_scenario_generator::converging_cluster",
-    "oow_scenario_generator::head_on",
-    "oow_scenario_generator::headon_plus_crossing"
    ]
   }
  ],
  "params": {
-  "canon_thresh": 0.89,
-  "embedder": "BAAI/bge-base-en-v1.5"
+  "canon_thresh": 0.893,
+  "embedder": "BAAI/bge-large-en-v1.5"
  },
  "stats": {
-  "n_traces": 390,
-  "n_steps": 1170,
-  "n_nodes": 7,
-  "n_edges": 6,
+  "n_traces": 938,
+  "n_steps": 2814,
+  "n_nodes": 9,
+  "n_edges": 8,
   "families": {
-   "colreg_encounter": 390
+   "colreg_encounter": 938
   }
  }
 }

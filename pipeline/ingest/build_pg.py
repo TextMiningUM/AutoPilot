@@ -377,7 +377,17 @@ def sample_path(pg: dict, family: str, max_len: int = 8) -> list[str]:
 
 def main() -> None:
     default_traces = [CACHE / f"{_PFX}_reasoning_traces.jsonl"]
-    for extra in (f"{_PFX}_conversation_traces.jsonl", f"{_PFX}_incident_reasoning_traces.jsonl",
+    # Fase C1 (RAG-rebuild-v2 plan): oow_incident_reasoning_traces_fulltext.jsonl
+    # supersedes the old excerpt-based oow_incident_reasoning_traces.jsonl (full report
+    # text, not a trimmed 2-section excerpt) -- prefer it when present so the merged
+    # default graph never double-counts the same incidents under both trace files.
+    incident_fulltext = CACHE / f"{_PFX}_incident_reasoning_traces_fulltext.jsonl"
+    incident_excerpt = CACHE / f"{_PFX}_incident_reasoning_traces.jsonl"
+    if incident_fulltext.exists():
+        default_traces.append(incident_fulltext)
+    elif incident_excerpt.exists():
+        default_traces.append(incident_excerpt)
+    for extra in (f"{_PFX}_conversation_traces.jsonl", f"{_PFX}_chirp_reasoning_traces.jsonl",
                  f"{_PFX}_scenario_reasoning_traces.jsonl", f"{_PFX}_scenario_Leo_reasoning_traces.jsonl"):
         if (CACHE / extra).exists():
             default_traces.append(CACHE / extra)
