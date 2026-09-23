@@ -75,18 +75,20 @@ elegance, raise `temporal`/`spatial`. The weights are a parameter, not a
 constant, precisely so you can tune this to what your evaluation actually
 values.
 
-## Compliance axis: pluggable, not exhaustive
+## Compliance axis: deterministic, band-aware (compliance-rebuild STAP 3, 2026-09-23)
 
-`compliance_axis()` takes a list of `violation_checks` callables you supply
-— exhaustive COLREG rule-checking is scenario-specific (does the give-way
-vessel alter early enough, does the stand-on vessel hold course
-appropriately long, etc.), so this isn't something a generic function can
-fully automate. One concrete example check is included
-(`check_gave_way_to_port_when_should_be_starboard`) as a template. The
-natural place to grow this list is the `pass_criteria` already defined per
-scenario in `scenarios_manifest.json` from the MOOS eval missions — each
-scenario's specific pass/fail rules translate fairly directly into one more
-`violation_checks` callable.
+`compliance_axis()` no longer takes pluggable `violation_checks` callables or an
+LLM-supplied `llm_compliance_score` -- it computes the score itself, deterministically,
+from two inputs the CALLER supplies (see `app/evaluation.py`'s `score_trajectory()`,
+which builds both from `app/measurement.py`'s checks and `app/evaluation.py`'s own
+STAP-2 structured ground truth, never from a hardcoded/independent risk definition):
+  - `checkpoint_codes`: `[(step, [code, ...]), ...]` -- per-decision error codes.
+  - `run_level_codes`: `[(code, detail), ...]` -- trajectory-level findings (e.g.
+    `P_wrong_side_pass`, `cpa_violation`).
+Each code in `COMPLIANCE_WEIGHTS` deducts a fixed amount from a 1.0 starting score, once
+per occurrence, clipped to `[0,1]`; an actual collision (`collided=True`) is a hard gate
+straight to `0.0`, never just a large deduction. The result's `compliance.breakdown` list
+of `(code, step_or_detail, deduction)` makes every score traceable back to its findings.
 
 ## Usage
 
@@ -96,8 +98,7 @@ python3 evaluate_run.py trajectory.csv \\
     --nominal-speed 5.0 --collision-radius 15 --safe-distance 50
 ```
 
-Or from Python, to plug in scenario-specific compliance checks and custom
-weights:
+Or from Python, to plug in pre-computed compliance codes and custom weights:
 
 ```python
 from evaluate_run import evaluate_run
@@ -106,8 +107,10 @@ result = evaluate_run(
     "trajectory.csv", own_vehicle="opship",
     start_xy=(0, 0), goal_xy=(2000, 0), nominal_speed=5.0,
     collision_radius_m=15, safe_distance_m=50,
-    violation_checks=[my_scenario_specific_check],
+    checkpoint_codes=[(0, ["B_wrong_direction"])],
+    run_level_codes=[("P_wrong_side_pass", "ts1")],
     weights={"compliance": 0.35, "temporal": 0.10, "spatial": 0.10,
              "manoeuvre": 0.15, "smoothness": 0.30},
 )
 ```
+

@@ -169,9 +169,8 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
         "evaluation": score_trajectory(
             sim.trajectory, start_xy=(mission.own_ship.x, mission.own_ship.y),
             goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
-            safe_distance_m=constraints.min_cpa_m,
-            llm_violations=colreg_llm_check["violations"],
-            llm_compliance_score=colreg_llm_check["compliance_score"],
+            safe_distance_m=constraints.min_cpa_m, max_turn_deg=constraints.max_rudder_angle_deg,
+            checkpoints=checkpoints,
         ),
         "colreg_llm_check": colreg_llm_check,
         "params": {

@@ -25,24 +25,156 @@ _spec.loader.exec_module(_evaluate_run_mod)
 evaluate_run = _evaluate_run_mod.evaluate_run
 
 
+def _auditor_codes_at_checkpoint(decision: dict, ground_truth: dict) -> list[str]:
+    """Compliance-rebuild STAP 3 (2026-09-23): per-checkpoint auditor codes, computed
+    against _ground_truth_at_checkpoint()'s STAP-2 dict (never real_risk() alone).
+    `decision` is the agent's own self-reported {"action","encounter_rule","conduct_rule"}.
+
+      E_role_fabrication:       a rule cited with no decisive contact at all (band
+                                 safe/passed for every contact) -- STAP-2-band-aware
+                                 counterpart to measurement.py Check A's CPA-only gate.
+      E_encounter_mismatch:     a rule WAS cited but doesn't match the expected one for
+                                 the decisive contact's geometry.
+      E_unclassified_encounter: NO rule cited even though the decisive contact's geometry
+                                 expects one (failed to recognise a real encounter).
+      B_17c:                    own-ship is the STAND-ON vessel and acted (anything other
+                                 than hold_course) before the encounter was even "acute" --
+                                 Rule 17(a)(i) requires holding course/speed until it is
+                                 acute (17(a)(ii)); early action here is itself the error,
+                                 independent of which direction was chosen.
+      E_8c:                     conduct_rule "Rule 8" cited for neither a genuine give-way
+                                 emergency stop (action=="stop") nor a stationary/non-
+                                 vessel encounter -- a fabricated/misapplied Rule 8 citation.
+      P_port_toward_contact:    turn_left in band early/acute, decisive contact on own's
+                                 own port side (rel_bearing_deg < 0), under Rule 14/15.
+    """
+    codes: list[str] = []
+    encounter_rule = decision.get("encounter_rule") or decision.get("rule_applied") or "none"
+    conduct_rule = decision.get("conduct_rule") or decision.get("rule_applied") or "none"
+    action = decision.get("action")
+
+    contacts = {c["contact"]: c for c in ground_truth.get("contacts", [])}
+    decisive_name = ground_truth.get("decisive_contact")
+    decisive = contacts.get(decisive_name) if decisive_name else None
+
+    if decisive is None:
+        if encounter_rule != "none" or conduct_rule != "none":
+            codes.append("E_role_fabrication")
+        return codes
+
+    band = decisive["band"]
+    exp_encounter_rule = decisive["expected_encounter_rule"]
+    exp_direction = decisive["expected_direction"]
+
+    if encounter_rule == "none":
+        if exp_encounter_rule != "none":
+            codes.append("E_unclassified_encounter")
+    elif encounter_rule != exp_encounter_rule:
+        codes.append("E_encounter_mismatch")
+
+    if decisive["own_role"] == "stand_on" and band == "early" and action != "hold_course":
+        codes.append("B_17c")
+
+    if conduct_rule == "Rule 8" and action != "stop" and decisive["encounter"] != "stationary":
+        codes.append("E_8c")
+
+    if (action == "turn_left" and band in ("early", "acute")
+            and decisive["rel_bearing_deg"] < 0 and exp_encounter_rule in ("Rule 14", "Rule 15")):
+        codes.append("P_port_toward_contact")
+
+    return codes
+
+
+def _check_wrong_side_pass(trajectory_rows: list[dict], own_vehicle: str) -> list[tuple[str, str]]:
+    """Compliance-rebuild STAP 3 (2026-09-23): run-level P_wrong_side_pass. For each
+    contact, finds its closest-approach instant in the REALIZED trajectory (not a single
+    instant's projected CPA) and checks the pass-side convention for whichever encounter
+    type classify_encounter() reports THERE:
+      - head_on (Rule 14): both vessels alter to starboard -> must end port-to-port, i.e.
+        the contact must be on own's own PORT side (rel_bearing < 0) at closest approach.
+      - crossing, own give-way (Rule 15, contact on own's starboard side): own must pass
+        BEHIND the contact -- projecting the contact's position onto own's own course
+        vector at closest approach must be non-positive (not still ahead along-track)."""
+    from pipeline.oow_agent_spec import classify_encounter
+
+    by_vehicle: dict[str, list[dict]] = {}
+    for row in trajectory_rows:
+        by_vehicle.setdefault(row["vehicle"], []).append(row)
+    own_rows = sorted(by_vehicle.get(own_vehicle, []), key=lambda r: r["time"])
+    if not own_rows:
+        return []
+
+    findings: list[tuple[str, str]] = []
+    for vname, rows in by_vehicle.items():
+        if vname == own_vehicle:
+            continue
+        best_own, best_tgt, best_d = None, None, float("inf")
+        for tgt_row in rows:
+            nearest_own = min(own_rows, key=lambda o: abs(o["time"] - tgt_row["time"]))
+            d = math.hypot(nearest_own["x"] - tgt_row["x"], nearest_own["y"] - tgt_row["y"])
+            if d < best_d:
+                best_d, best_own, best_tgt = d, nearest_own, tgt_row
+        if best_own is None:
+            continue
+        enc, _, rel = classify_encounter(best_own["x"], best_own["y"], best_own["heading"],
+                                         best_tgt["x"], best_tgt["y"], best_tgt["heading"])
+        if enc == "head_on":
+            if rel >= 0:  # contact ended up on own's STARBOARD side at closest approach
+                findings.append(("P_wrong_side_pass", vname))
+        elif enc == "crossing_target_on_starboard":  # own is the give-way vessel
+            oh = math.radians(best_own["heading"])
+            course_x, course_y = math.sin(oh), math.cos(oh)
+            dx, dy = best_tgt["x"] - best_own["x"], best_tgt["y"] - best_own["y"]
+            if dx * course_x + dy * course_y > 0:  # contact still ahead along own's track
+                findings.append(("P_wrong_side_pass", vname))
+    return findings
+
+
 def score_trajectory(trajectory_rows: list[dict], start_xy: tuple[float, float],
                       goal_xy: tuple[float, float], nominal_speed: float,
                       own_vehicle: str = "own_ship", collision_radius_m: float = 15.0,
-                      safe_distance_m: float = 50.0, reached_radius_m: float = GOAL_RADIUS_M,
-                      llm_violations: list[str] | None = None,
-                      llm_compliance_score: float | None = None) -> dict:
+                      safe_distance_m: float = 50.0, max_turn_deg: float = 30.0,
+                      reached_radius_m: float = GOAL_RADIUS_M,
+                      checkpoints: list[dict] | None = None) -> dict:
     """trajectory_rows: list of {time, vehicle, x, y, heading, speed} dicts
     (Simulation.trajectory) -> evaluate_run.py's full result dict (verdict,
     composite_score, safety/compliance/temporal/spatial/manoeuvre breakdown).
-    `llm_violations`, if given (from llm_compliance_check(), called separately and on
-    demand -- see its docstring for why), is only used to surface violation TEXT in the
-    result -- the compliance SCORE itself comes from `llm_compliance_score` (Claude's own
-    0-1 audit judgement, same call). Compliance defaults to 0.0 (unaudited, not
-    innocent-until-proven) until that on-demand check has actually been run and its
-    result passed in here."""
-    violation_checks = ()
-    if llm_violations:
-        violation_checks = (lambda _own, _v=list(llm_violations): _v,)
+
+    Compliance-rebuild STAP 3 (2026-09-23): compliance is now ALWAYS a deterministic
+    score computed from `checkpoints` (own-ship's own self-reported decisions -- see
+    run_llm_scenario.py's checkpoint-building loop), never an LLM audit result -- there is
+    no more "unaudited, defaults to 0.0" state. `safe_distance_m`/`max_turn_deg` MUST be
+    the run's own VesselConstraints values, feeding both measurement.py's checks and
+    _ground_truth_at_checkpoint()'s STAP-2 bands."""
+    from app.measurement import measure_decision_quality
+    from app.narrate import cpa_tcpa
+    from app.simulation import VesselConstraints
+
+    constraints = VesselConstraints(min_cpa_m=safe_distance_m, max_rudder_angle_deg=max_turn_deg)
+    checkpoint_codes: list[tuple[float, list[str]]] = []
+    _scored_measurement_codes = ("A_fabricated_risk", "B_wrong_direction",
+                                "C_degrees_over_limit", "D_no_action_when_required")
+    for cp in (checkpoints or []):
+        t = cp.get("time", 0)
+        decision = cp.get("decision") or {}
+        gt = _ground_truth_at_checkpoint(trajectory_rows, t, own_vehicle, safe_distance_m, max_turn_deg)
+        rows = _rows_at_time(trajectory_rows, t)
+        own_row = rows.get(own_vehicle)
+        situation = []
+        if own_row:
+            for vname, row in rows.items():
+                if vname == own_vehicle:
+                    continue
+                cpa, tcpa = cpa_tcpa(own_row["x"], own_row["y"], own_row["heading"], own_row["speed"],
+                                     row["x"], row["y"], row["heading"], row["speed"])
+                situation.append({"cpa_m": cpa, "tcpa_s": tcpa})
+        measured = measure_decision_quality(decision, situation, constraints, ground_truth=gt)
+        codes = [c for c in measured["checks_fired"] if c in _scored_measurement_codes]
+        codes.extend(_auditor_codes_at_checkpoint(decision, gt))
+        checkpoint_codes.append((t, codes))
+
+    run_level_codes = _check_wrong_side_pass(trajectory_rows, own_vehicle)
+
     with tempfile.NamedTemporaryFile("w", suffix=".csv", newline="", delete=False) as f:
         writer = csv.DictWriter(f, fieldnames=["time", "vehicle", "x", "y", "heading", "speed"])
         writer.writeheader()
@@ -53,8 +185,7 @@ def score_trajectory(trajectory_rows: list[dict], start_xy: tuple[float, float],
             tmp_path, own_vehicle=own_vehicle, start_xy=start_xy, goal_xy=goal_xy,
             nominal_speed=nominal_speed, collision_radius_m=collision_radius_m,
             safe_distance_m=safe_distance_m, reached_radius_m=reached_radius_m,
-            violation_checks=violation_checks, verbose=False,
-            llm_compliance_score=llm_compliance_score,
+            checkpoint_codes=checkpoint_codes, run_level_codes=run_level_codes, verbose=False,
         )
     finally:
         Path(tmp_path).unlink(missing_ok=True)
@@ -371,10 +502,11 @@ def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_sh
 
     Deliberately NOT called during live stepping -- it's a single network round-trip
     (real latency), so it must only run on demand, once, after a run is complete (or
-    paused), triggered by an explicit UI button. score_trajectory()'s normal local
-    scoring never calls this -- compliance defaults to 0.0 (unaudited, NOT
-    innocent-until-proven) until this is explicitly run and its ["compliance_score"] is
-    passed back in as `llm_compliance_score`.
+    paused), triggered by an explicit UI button. Compliance-rebuild STAP 3 (2026-09-23):
+    score_trajectory()'s compliance score no longer comes from here at all -- it is
+    always a deterministic score computed from `checkpoints` directly (see
+    score_trajectory()'s own docstring); this audit is purely a human-readable
+    explanation, kept separate from scoring.
 
     `checkpoints`, if given (run_llm_scenario.py's/a precomputed run log's own checkpoint
     list), lets the audit ALSO cross-check own-ship's SELF-REPORTED encounter_rule/conduct_rule

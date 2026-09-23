@@ -1,0 +1,71 @@
+"""Regression tests for compliance-rebuild STAP 3 -- the deterministic compliance score
+(Evaluation Functions/evaluate_run.py's compliance_axis()) and its run-level
+P_wrong_side_pass check (app/evaluation.py's _check_wrong_side_pass()).
+"""
+import importlib.util
+import sys
+from pathlib import Path
+
+APP_ROOT = Path(__file__).resolve().parent.parent  # Basic Simulator/
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
+
+_EVAL_RUN_PATH = APP_ROOT / "Evaluation Functions" / "evaluate_run.py"
+_spec = importlib.util.spec_from_file_location("evaluate_run", _EVAL_RUN_PATH)
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+compliance_axis = _mod.compliance_axis
+COMPLIANCE_WEIGHTS = _mod.COMPLIANCE_WEIGHTS
+
+from app.evaluation import _check_wrong_side_pass  # noqa: E402
+
+
+def _row(vehicle: str, x: float, y: float, heading: float) -> dict:
+    return {"time": 0.0, "vehicle": vehicle, "x": x, "y": y, "heading": heading, "speed": 5.0}
+
+
+def test_wrong_side_pass_fires_on_starboard_to_starboard_head_on() -> None:
+    """Head-on encounter where the contact ends up on own's own STARBOARD side at closest
+    approach (rel_bearing +3deg, within classify_encounter()'s head-on window) -- the
+    Rule-14 convention (both alter to starboard) requires a PORT-to-port passage, so this
+    must fire."""
+    rows = [_row("own_ship", 0.0, 0.0, 0.0), _row("ts1", 5.24, 100.0, 180.0)]
+    findings = _check_wrong_side_pass(rows, "own_ship")
+    assert ("P_wrong_side_pass", "ts1") in findings
+
+
+def test_wrong_side_pass_does_not_fire_on_port_to_port_head_on() -> None:
+    """Same head-on encounter, contact instead on own's own PORT side (rel_bearing
+    -3deg) -- the correct, Rule-14-compliant pass side -- must NOT fire."""
+    rows = [_row("own_ship", 0.0, 0.0, 0.0), _row("ts1", -5.24, 100.0, 180.0)]
+    findings = _check_wrong_side_pass(rows, "own_ship")
+    assert findings == []
+
+
+def test_collision_gates_score_to_zero_regardless_of_findings() -> None:
+    """collided=True must force 0.0 no matter what other codes are present."""
+    score, breakdown = compliance_axis(
+        checkpoint_codes=[(0.0, ["B_wrong_direction", "E_role_fabrication"])],
+        run_level_codes=[("P_wrong_side_pass", "ts1"), ("cpa_violation", None)],
+        collided=True,
+    )
+    assert score == 0.0
+    assert breakdown == [("collision", None, -1.0)]
+
+
+def test_breakdown_sums_to_the_score() -> None:
+    """Every deduction in the breakdown must account for the full drop from 1.0."""
+    checkpoint_codes = [(0.0, ["B_wrong_direction"]), (10.0, ["A_fabricated_risk", "C_degrees_over_limit"])]
+    run_level_codes = [("P_wrong_side_pass", "ts1")]
+    score, breakdown = compliance_axis(checkpoint_codes, run_level_codes, collided=False)
+    total_deduction = sum(deduction for _, _, deduction in breakdown)
+    assert round(1.0 + total_deduction, 6) == round(score, 6)
+    assert len(breakdown) == 4  # one entry per code occurrence, none merged/dropped
+
+
+def test_score_clips_at_zero_never_negative() -> None:
+    """Enough deductions to overshoot 1.0 in magnitude must clip to 0.0, not go negative."""
+    checkpoint_codes = [(t, ["B_wrong_direction", "D_no_action_when_required", "E_role_fabrication"])
+                        for t in range(10)]
+    score, _ = compliance_axis(checkpoint_codes, [], collided=False)
+    assert score == 0.0

@@ -43,8 +43,7 @@ def test_verdict_flags_cpa_violation_short_of_a_collision() -> None:
         csv_path = Path(d) / "run.csv"
         _write_csv(csv_path, min_sep_m=380.0)  # < 500 safe distance, > 15 collision radius
         result = evaluate_run(csv_path, "own_ship", start_xy=(0.0, 0.0), goal_xy=(1000.0, 0.0),
-                              nominal_speed=10.0, safe_distance_m=SAFE_DISTANCE_M,
-                              llm_compliance_score=1.0, verbose=False)
+                              nominal_speed=10.0, safe_distance_m=SAFE_DISTANCE_M, verbose=False)
         assert result["safety"]["passed"] is True  # not a literal collision
         assert result["verdict"] == "PASS_WITH_CPA_VIOLATION"
 
@@ -54,8 +53,7 @@ def test_verdict_is_plain_pass_when_clear_of_the_safe_distance() -> None:
         csv_path = Path(d) / "run.csv"
         _write_csv(csv_path, min_sep_m=600.0)  # >= 500 safe distance
         result = evaluate_run(csv_path, "own_ship", start_xy=(0.0, 0.0), goal_xy=(1000.0, 0.0),
-                              nominal_speed=10.0, safe_distance_m=SAFE_DISTANCE_M,
-                              llm_compliance_score=1.0, verbose=False)
+                              nominal_speed=10.0, safe_distance_m=SAFE_DISTANCE_M, verbose=False)
         assert result["verdict"] == "PASS"
 
 
@@ -64,6 +62,5 @@ def test_verdict_still_fail_on_a_literal_collision() -> None:
         csv_path = Path(d) / "run.csv"
         _write_csv(csv_path, min_sep_m=5.0)  # < 15 collision radius
         result = evaluate_run(csv_path, "own_ship", start_xy=(0.0, 0.0), goal_xy=(1000.0, 0.0),
-                              nominal_speed=10.0, safe_distance_m=SAFE_DISTANCE_M,
-                              llm_compliance_score=1.0, verbose=False)
+                              nominal_speed=10.0, safe_distance_m=SAFE_DISTANCE_M, verbose=False)
         assert result["verdict"] == "FAIL -- collision occurred"

@@ -1036,6 +1036,11 @@ with plot_col:
     else:
         eval_traj = sim.trajectory
         eval_cache_key = "live"
+    # Play Agent Mission has the run's own checkpoints on disk (own-ship's self-reported
+    # decisions) -- needed both for score_trajectory()'s deterministic compliance score
+    # (compliance-rebuild STAP 3) and for the on-demand Claude audit below. Agent
+    # Real-Time only tracks the single latest decision, so it's None there.
+    _eval_checkpoints = _eval_run_log.get("checkpoints") if sim_mode == "Play Agent Mission" and _eval_run_log else None
 
     if eval_traj is None:
         st.caption("Pick a precomputed run above the plot to see its score here.")
@@ -1058,11 +1063,6 @@ with plot_col:
                              "no latency to the simulation itself. Result is kept in THIS "
                              "browser session only -- never written back to the run log file."):
                 from app.evaluation import llm_compliance_check
-                # Play Agent Mission has the run's own checkpoints on disk (own-ship's
-                # self-reported rule_applied citations) -- pass them so the audit can catch a
-                # fabricated/wrong-but-safe citation, not just judge the raw geometry. Agent
-                # Real-Time only tracks the single latest decision, so it's omitted there.
-                _eval_checkpoints = _eval_run_log.get("checkpoints") if _eval_run_log else None
                 with st.spinner("Asking Claude to audit COLREG compliance..."):
                     try:
                         st.session_state.llm_compliance_audit = llm_compliance_check(
@@ -1080,7 +1080,6 @@ with plot_col:
             audit, audit_source = precomputed_check, "saved in the run log"
         else:
             audit, audit_source = None, None
-        llm_violations = audit.get("violations") if audit else None
         if session_audit is not None and stale:
             st.caption("\u26A0\uFE0F Trajectory changed since the last compliance check -- re-run for a current result.")
         if audit is not None:
@@ -1105,8 +1104,9 @@ with plot_col:
                 if not audit["violations"] and not audit["compliant_actions"]:
                     st.caption("Nothing to audit -- no manoeuvres/encounters in this trajectory.")
         else:
-            st.caption("\u2139\uFE0F Compliance shows a default score of 0.0 (unaudited) until you "
-                      "run the Claude check above.")
+            st.caption("\u2139\uFE0F Compliance below is always a deterministic score (no API call "
+                      "needed) -- the Claude check above only adds a plain-language explanation, it "
+                      "no longer affects the score.")
 
         # Reuse the run log's own saved "evaluation" (written by run_llm_scenario.py at
         # save time) instead of recomputing, but ONLY when the audit actually in use is
@@ -1119,8 +1119,8 @@ with plot_col:
                 eval_traj, start_xy=(mission.own_ship.x, mission.own_ship.y),
                 goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
                 safe_distance_m=sim.constraints.min_cpa_m,
-                llm_violations=llm_violations,
-                llm_compliance_score=(audit.get("compliance_score") if audit else None),
+                max_turn_deg=sim.constraints.max_rudder_angle_deg,
+                checkpoints=_eval_checkpoints,
             )
         verdict = result["verdict"]
         badge_cls = "badge-pass" if verdict == "PASS" else "badge-fail"
@@ -1134,25 +1134,21 @@ with plot_col:
                   help=f"min CPA {m_to_nm(result['safety']['min_cpa_m']):.3f} NM, "
                        f"passed={result['safety']['passed']}")
         e2.metric("Compl.", result["compliance"]["score"],
-                  help=(f"{len(result['compliance']['violations'])} violation(s) -- from Claude's "
-                       f"audit ({audit_source})" if audit is not None
-                       else "0.0 = not yet audited by Claude (see the button above)"))
+                  help=f"{len(result['compliance']['breakdown'])} deterministic finding(s) -- "
+                       "always computed, no API call needed (see the breakdown below).")
         e3.metric("Temp.", result["temporal"].get("temporal_score"))
         e4.metric("Spatial", result["spatial"].get("spatial_score"))
         e5.metric("Man.", result["manoeuvre"].get("manoeuvre_score"),
                   help=f"count={result['manoeuvre'].get('manoeuvre_count')}")
-        if result["compliance"]["violations"]:
-            with st.expander(f"Compliance violations ({len(result['compliance']['violations'])})"):
-                for v in result["compliance"]["violations"]:
-                    st.write(f"- {v}")
+        if result["compliance"]["breakdown"]:
+            with st.expander(f"Compliance breakdown ({len(result['compliance']['breakdown'])})"):
+                for code, step, deduction in result["compliance"]["breakdown"]:
+                    st.write(f"- {code} @ {step}: {deduction:+.2f}")
         with st.expander("Full result JSON"):
-            # score_trajectory()'s own result dict has no field distinguishing "compliance
-            # score 0 because unaudited" from "compliance score 0 because Claude found it
-            # non-compliant" -- both look identical here (score: 0, violations: []) since an
-            # audited-clean case is always score 1.0 with empty violations, never 0. Inject
-            # this one extra key purely for the JSON dump so that ambiguity can't recur.
-            st.json({**result, "compliance_audit_status": audit_source or "NOT audited yet "
-                    "(default score 0.0 -- click 'Check COLREG compliance' above)"})
+            # compliance-rebuild STAP 3 (2026-09-23): compliance is now always a
+            # deterministic score (never "unaudited") -- audit_source only describes
+            # whether a separate, non-scoring Claude explanation is also available.
+            st.json({**result, "llm_audit_source": audit_source or "not requested"})
 
         with st.expander("Degeneracy check (always the same answer?)"):
             st.caption(

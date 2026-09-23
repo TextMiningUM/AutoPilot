@@ -306,8 +306,7 @@ DEFAULT_WEIGHTS = {
 
 def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
                   collision_radius_m=15.0, safe_distance_m=50.0, reached_radius_m=25.0,
-                  violation_checks=(), weights=None, verbose=True,
-                  llm_compliance_score=None):
+                  checkpoint_codes=(), run_level_codes=(), weights=None, verbose=True):
     weights = weights or DEFAULT_WEIGHTS
     data = load_csv(csv_path)
     own = data[own_vehicle]
@@ -316,7 +315,15 @@ def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
     passed, min_cpa, safety_score = safety_axis(own, targets, collision_radius_m, safe_distance_m)
     eff = efficiency_axes(own, start_xy, goal_xy, nominal_speed, reached_radius_m=reached_radius_m)
     man = manoeuvre_and_smoothness_axes(own)
-    violations, compliance_score = compliance_axis(own, violation_checks, llm_compliance_score)
+    # cpa_violation is derived HERE (min_cpa is already computed above for safety_axis)
+    # rather than asked of the caller -- a genuine near-miss that never reached an actual
+    # collision is still always a run-level compliance fact, not something callers should
+    # have to remember to compute themselves.
+    all_run_level_codes = list(run_level_codes)
+    if passed and min_cpa < safe_distance_m:
+        all_run_level_codes.append(("cpa_violation", None))
+    compliance_score, compliance_breakdown = compliance_axis(
+        checkpoint_codes, all_run_level_codes, collided=not passed)
 
     if not passed:
         composite = 0.0
@@ -357,7 +364,7 @@ def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
         "verdict": verdict, "composite_score": round(composite, 3),
         "safety": {"passed": passed, "min_cpa_m": round(min_cpa, 1) if min_cpa != float("inf") else None,
                    "score": round(safety_score, 3)},
-        "compliance": {"violations": violations, "score": round(compliance_score, 3)},
+        "compliance": {"breakdown": compliance_breakdown, "score": round(compliance_score, 3)},
         "temporal": {k: (round(v, 3) if isinstance(v, float) else v) for k, v in eff.items()
                      if k in ("arrived", "time_actual_s", "time_ratio", "temporal_score")},
         "spatial": {k: (round(v, 3) if isinstance(v, float) else v) for k, v in eff.items()
@@ -367,7 +374,7 @@ def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
     if verbose:
         print(f"Verdict: {result['verdict']}   Composite score: {result['composite_score']}")
         print(f"  Safety:     min CPA {result['safety']['min_cpa_m']} m -> score {result['safety']['score']}")
-        print(f"  Compliance: {len(violations)} violation(s) -> score {result['compliance']['score']}")
+        print(f"  Compliance: {len(compliance_breakdown)} finding(s) -> score {result['compliance']['score']}")
         print(f"  Temporal:   arrived={eff['arrived']}, ratio={eff.get('time_ratio')} -> score {eff['temporal_score']:.3f}")
         print(f"  Spatial:    ratio={eff.get('path_ratio')} -> score {eff['spatial_score']:.3f}")
         print(f"  Manoeuvre:  count={man['manoeuvre_count']} -> score {man['manoeuvre_score']:.3f}")

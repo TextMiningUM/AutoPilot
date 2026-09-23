@@ -126,8 +126,7 @@ def _score_log(mission_id: str, log: dict, tag: str, path: Path,
         log["trajectory"], start_xy=(mission.own_ship.x, mission.own_ship.y),
         goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
         safe_distance_m=_DEFAULT_MIN_CPA_M,
-        llm_violations=(log.get("colreg_llm_check") or {}).get("violations"),
-        llm_compliance_score=(log.get("colreg_llm_check") or {}).get("compliance_score"),
+        checkpoints=log.get("checkpoints"),
     )
     latency_s = log.get("latency_s")
     latency_is_estimate = latency_s is None
@@ -283,9 +282,9 @@ def _describe_run(r: dict) -> str:
         lines.append(f"- \u26A0\uFE0F Collision occurred (closest approach "
                     f"{safety['min_cpa_m']:.0f}m).")
 
-    if compliance["violations"]:
-        lines.append(f"- {len(compliance['violations'])} COLREG violation(s) flagged: "
-                    + "; ".join(compliance["violations"]))
+    if compliance["breakdown"]:
+        lines.append(f"- {len(compliance['breakdown'])} deterministic compliance finding(s): "
+                    + "; ".join(f"{code} @ {step}" for code, step, _ in compliance["breakdown"]))
     else:
         lines.append("- No COLREG violations flagged.")
 
