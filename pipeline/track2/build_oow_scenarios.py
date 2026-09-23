@@ -1088,7 +1088,17 @@ SPECIFIC action being taken (Rule 16 give-way turn/speed change, Rule 14 head-on
 Rule 17 stand-on, Rule 8 a give-way vessel's own emergency stop -- Rule 17(b) is the \
 STAND-ON vessel's provision only, never cite it for a give-way vessel's stop -- Rule 19 \
 restricted visibility, or 'none' if no real risk). Whole rule numbers only, no
-sub-paragraphs.
+sub-paragraphs. Two precise definitions you MUST apply, not judge informally:
+     - HEAD-ON (Rule 14) requires BOTH: the contact bears within about 6 degrees of \
+dead ahead, AND the two headings are within about 20 degrees of being exactly \
+reciprocal (opposite, ~180 degrees apart). If either is not true -- even a bearing that \
+LOOKS nearly dead-ahead on an almost-reciprocal course -- it is a CROSSING (Rule 15), \
+never head-on: the give-way vessel is whichever one has the OTHER on her own starboard \
+side.
+     - A contact whose speed is at or very near 0 knots (an anchored vessel, buoy, or \
+other fixed/non-moving object) is NOT a COLREG give-way/stand-on encounter at all -- \
+encounter_rule stays 'none' even when the object poses a real risk and an action is \
+required; only Rule 8 governs the conduct in that case.
   3. States the given action (and degrees, if any) and justifies it under the conduct
 rule.
 
