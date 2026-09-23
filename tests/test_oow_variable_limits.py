@@ -13,6 +13,7 @@ hardcoded defaults), and text parity between a training row and a live simulator
 given the same settings.
 """
 import math
+import re
 
 from pipeline.oow_agent_spec import (
     real_risk, RISK_HORIZON_S, RISK_HORIZON_K, derive_risk_horizon_s, sample_row_limits,
@@ -141,10 +142,20 @@ def test_simulator_and_training_constraint_line_are_byte_identical() -> None:
 def test_constraint_line_states_the_conjunction_not_cpa_alone() -> None:
     """Quality-review STOP-1/2-verification (2026-09-23): the OLD wording ("CPA below
     that is a real collision risk") stated the ALREADY-FIXED STAP-1 CPA-alone bug's own
-    (wrong) definition as an unconditional fact -- must never reappear. The current text
-    must state the CPA-AND-TCPA conjunction real_risk() actually computes."""
+    (wrong) definition as an unconditional fact -- must never reappear.
+
+    Screening-set-B audit follow-up (2026-09-23): the single-sentence "BOTH...AND..."
+    conjunction was ITSELF later found to conflate "is this a real encounter" with "is
+    action mandatory yet" -- a model reading "no immediate action is required" (TCPA
+    outside horizon) concluded encounter_rule 'none' on a genuine CPA-0 collision course.
+    Replaced by two explicit sentences: identifying the encounter/rule is gated on CPA
+    alone; only ACTING on it is gated on the TCPA-within-horizon condition. No rule
+    numbers -- this module states geometry/physics only."""
     text = constraint_line(500.0, 30.0, 300.0)
     assert "CPA below that is a real collision risk" not in text
-    assert "BOTH" in text and "AND" in text
-    assert "already passed its closest point" in text or "negative TCPA" in text
+    assert ("you must identify the encounter and the applicable steering rule"
+           in text)
+    assert "Action becomes mandatory when that contact's TCPA is within the risk horizon" in text
+    assert "you may act early but must at least name the encounter" in text
+    assert not re.search(r"\bRule\s*\d+", text)
 

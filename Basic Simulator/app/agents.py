@@ -243,25 +243,50 @@ def _extract_json_objects(text: str) -> list[str]:
 
 
 def _parse_json_action(text: str) -> dict:
+    """Returns {"decision": dict, "parse_ok": bool, "schema_errors": list[str]}.
+
+    Screening-set-B audit follow-up (2026-09-23): PARSE and SCHEMA are two different
+    failure modes, previously conflated. `parse_ok=True` means a JSON object with the
+    required keys was found at all (regardless of whether its FIELD VALUES are
+    internally consistent) -- schema violations (e.g. encounter_rule='none' combined with
+    conduct_rule='Rule 17', which validate_action_json() correctly rejects) are surfaced
+    via `schema_errors` / `decision["_schema_errors"]`, NEVER folded into `_parse_error`.
+    Evidence this mattered: v7/screening_standard_cloud set B showed 69.8% "parse-fail"
+    on genuinely valid JSON like {"action":"hold_course","degrees":0.0,"encounter_rule":
+    "none","conduct_rule":"Rule 17",...} -- the OLD code discarded the model's real
+    answer entirely and replaced it with the hold_course/_parse_error fallback just
+    because ONE field combination failed schema validation, destroying the actual
+    decision-quality signal (a genuine but different error -- see
+    E_rule_matrix_none_with_conduct in _analysis/audit_runs.py) a real parse failure is
+    not."""
     text = re.sub(r"^```(json)?|```$", "", text.strip(), flags=re.MULTILINE).strip()
     # Prefer the LAST complete {...} object that actually parses as an action dict -- Qwen3
     # sometimes echoes the JSON once before </think> closes and once again after (a
     # duplicate-answer pattern seen in the sweep logs), which the previous single greedy
     # first-{-to-last-} match stitched into one invalid blob spanning both copies.
     # validate_action_json() (pipeline/oow_agent_spec.py) is the SAME schema check the
-    # Track-2 training-data generators run their own written assistant answers against --
-    # an action name outside ACTIONS (or a degrees/turn mismatch) is now rejected here
-    # exactly like a malformed generator row would be, instead of being silently accepted
-    # and handed to Simulation.apply_action() with an action it doesn't recognize.
+    # Track-2 training-data generators run their own written assistant answers against.
+    schema_invalid_candidate, schema_invalid_errors = None, None
     for candidate in reversed(_extract_json_objects(text)):
         try:
             parsed = json.loads(candidate)
         except json.JSONDecodeError:
             continue
-        if isinstance(parsed, dict) and "action" in parsed and not validate_action_json(parsed):
-            return parsed
-    return {"action": "hold_course", "encounter_rule": "none", "conduct_rule": "none",
-            "reasoning": f"[parse error -- raw model output] {text[:300]}", "_parse_error": True}
+        if not (isinstance(parsed, dict) and "action" in parsed):
+            continue
+        errors = validate_action_json(parsed)
+        if not errors:
+            return {"decision": parsed, "parse_ok": True, "schema_errors": []}
+        if schema_invalid_candidate is None:  # keep the LAST (most recent) one seen
+            schema_invalid_candidate, schema_invalid_errors = parsed, errors
+    if schema_invalid_candidate is not None:
+        schema_invalid_candidate["_schema_errors"] = schema_invalid_errors
+        return {"decision": schema_invalid_candidate, "parse_ok": True,
+               "schema_errors": schema_invalid_errors}
+    return {"decision": {"action": "hold_course", "encounter_rule": "none", "conduct_rule": "none",
+                        "reasoning": f"[parse error -- raw model output] {text[:300]}",
+                        "_parse_error": True},
+           "parse_ok": False, "schema_errors": []}
 
 
 def _pg_match_query(own: Vessel, targets: list[Vessel], safe_distance_m: float = 500.0,
@@ -540,6 +565,8 @@ def ask_oow(mission: Mission, own: Vessel, targets: list[Vessel], config: str = 
                                        constraints=constraints)
     tok, mdl = _load_qwen()
     raw = _generate(tok, mdl, messages, max_new_tokens=max_new_tokens, enable_thinking=enable_thinking)
-    decision = _parse_json_action(raw)
+    parsed = _parse_json_action(raw)
+    decision = parsed["decision"]
     debug["raw_response"] = raw
+    debug["parse_ok"] = parsed["parse_ok"]
     return decision, debug

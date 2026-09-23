@@ -97,13 +97,19 @@ def test_v2_eval_record_situation_is_byte_identical_to_what_a_training_row_would
     change (single safe-distance sentence only) and is explicitly scheduled for
     regeneration in STAP 4 (BLOK II), not yet approved/run -- skip rather than fail until
     that regeneration lands, so this stays a genuine identity check (not a stale-fixture
-    false negative) once v2 is rebuilt against the new renderer."""
+    false negative) once v2 is rebuilt against the new renderer.
+
+    Screening-set-B audit follow-up (2026-09-23): constraint_line() was reworded again
+    (encounter-identification vs action-is-mandatory split into two explicit sentences,
+    replacing the single "BOTH...AND..." conjunction sentence) -- same situation, same
+    skip-not-fail policy, gated on a phrase unique to the NEW wording."""
     if not V2_FILE.exists():
         return
     v2 = json.loads(V2_FILE.read_text(encoding="utf-8"))
-    if "may request at most" not in v2[0]["situation"]:
-        pytest.skip("oow_colreg_scenarios_v2.json predates STAP 2's constraint_line() "
-                   "(max_turn_deg/risk_horizon_s) -- pending STAP 4 regeneration")
+    if ("may request at most" not in v2[0]["situation"]
+            or "you must identify the encounter and the applicable steering rule" not in v2[0]["situation"]):
+        pytest.skip("oow_colreg_scenarios_v2.json predates the current constraint_line() "
+                   "wording -- pending its own regeneration")
     eval_recs, _ = _fresh_pop(seed=0)
     assert len(eval_recs) == len(v2)
     for rec, v2_rec in zip(eval_recs[:20], v2[:20]):

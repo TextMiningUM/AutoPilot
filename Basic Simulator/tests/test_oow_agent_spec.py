@@ -26,29 +26,53 @@ def test_agents_py_shares_the_same_actions_tuple() -> None:
 
 
 def test_parse_json_action_uses_the_shared_schema() -> None:
+    """Screening-set-B audit follow-up (2026-09-23): _parse_json_action() now returns
+    {"decision", "parse_ok", "schema_errors"} -- parse_ok=True whenever a JSON object with
+    the required keys was found at all, regardless of whether its fields are internally
+    consistent (schema_errors/decision["_schema_errors"] cover that separately, never
+    _parse_error)."""
     valid = agents._parse_json_action(
         '{"action": "turn_right", "degrees": 15, "encounter_rule": "Rule 15", '
         '"conduct_rule": "Rule 16", "reasoning": "x"}'
     )
-    assert valid["action"] == "turn_right" and not valid.get("_parse_error")
+    assert valid["parse_ok"] is True and not valid["schema_errors"]
+    assert valid["decision"]["action"] == "turn_right" and not valid["decision"].get("_parse_error")
 
-    # An action name outside ACTIONS must be rejected (fall back to the parse-error dict),
-    # not silently accepted and handed to Simulation.apply_action().
+    # An action name outside ACTIONS is a SCHEMA error (JSON parsed fine, decision kept
+    # with _schema_errors attached), never a parse failure -- Simulation.apply_action()
+    # already treats any unrecognised action as a safe no-op by design.
     invalid_action = agents._parse_json_action('{"action": "maintain_course"}')
-    assert invalid_action.get("_parse_error") is True
+    assert invalid_action["parse_ok"] is True and invalid_action["schema_errors"]
+    assert invalid_action["decision"].get("_parse_error") is not True
 
-    # degrees required for a turn action.
+    # degrees required for a turn action -- also a schema error, not a parse failure.
     missing_degrees = agents._parse_json_action(
         '{"action": "turn_left", "encounter_rule": "none", "conduct_rule": "none", "reasoning": "x"}'
     )
-    assert missing_degrees.get("_parse_error") is True
+    assert missing_degrees["parse_ok"] is True and missing_degrees["schema_errors"]
 
-    # degrees must be ABSENT for a non-turn action.
+    # degrees must be ABSENT for a non-turn action -- same, schema error not parse failure.
     spurious_degrees = agents._parse_json_action(
         '{"action": "hold_course", "degrees": 10, "encounter_rule": "none", '
         '"conduct_rule": "none", "reasoning": "x"}'
     )
-    assert spurious_degrees.get("_parse_error") is True
+    assert spurious_degrees["parse_ok"] is True and spurious_degrees["schema_errors"]
+
+    # Genuinely unparseable (no JSON object at all) IS a real parse failure.
+    unparseable = agents._parse_json_action("not json at all")
+    assert unparseable["parse_ok"] is False
+    assert unparseable["decision"].get("_parse_error") is True
+
+    # A schema-invalid-but-otherwise-valid encounter_rule='none'+conduct_rule='Rule 17'
+    # combination (the exact screening-set-B evidence) must be KEPT, not discarded.
+    none_with_conduct = agents._parse_json_action(
+        '{"action": "hold_course", "degrees": 0.0, "encounter_rule": "none", '
+        '"conduct_rule": "Rule 17", "reasoning": "x"}'
+    )
+    assert none_with_conduct["parse_ok"] is True
+    assert none_with_conduct["decision"]["conduct_rule"] == "Rule 17"
+    assert none_with_conduct["decision"].get("_parse_error") is not True
+    assert none_with_conduct["schema_errors"]
 
 
 def test_narrate_uses_the_shared_goal_course_check_function() -> None:

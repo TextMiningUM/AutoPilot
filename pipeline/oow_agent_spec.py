@@ -173,16 +173,25 @@ def constraint_line(safe_distance_m: float, max_turn_deg: float, risk_horizon_s:
     real collision risk" as an unconditional, CPA-alone statement, which is the OLD,
     already-fixed STAP-1 bug's definition, not what the labeler/live agent are actually
     gated on. Never state "CPA below X is a risk" without the TCPA-within-horizon
-    qualifier in the same sentence."""
+    qualifier in the same sentence.
+
+    Screening-set-B audit follow-up (2026-09-23): split into two explicit sentences --
+    (a) identifying the encounter/steering rule is required whenever CPA alone is below
+    the safe distance, regardless of TCPA; (b) only ACTING on it is gated on the
+    TCPA-within-horizon condition. The old single-sentence wording conflated these two
+    ("no immediate action is required" read by the model as "no encounter exists at
+    all"), reproduced on v7/screening_standard_cloud: TCPA outside the horizon (1400s >
+    567s) reasoned into citing encounter_rule 'none' on a CPA-0 contact. No rule numbers
+    here -- this module states geometry/physics only, never rule knowledge (see the
+    module docstring)."""
     return (
         f"This mission's safe passing distance is {safe_distance_m:.0f}m and its risk "
-        f"horizon is {risk_horizon_s:.0f}s: a contact is a real collision risk only when "
-        f"BOTH its CPA is below {safe_distance_m:.0f}m AND its time-to-closest-point-of-"
-        f"approach (TCPA) is within that horizon (0 <= TCPA < {risk_horizon_s:.0f}s) -- a "
-        "contact that has already passed its closest point (negative TCPA) or is still "
-        "beyond the horizon poses no risk right now, regardless of how small its CPA "
-        f"looks. A single turn_left/turn_right command may request at most "
-        f"{max_turn_deg:.0f} degrees."
+        f"horizon is {risk_horizon_s:.0f}s. "
+        "Whenever a contact's CPA is below the safe passing distance, you must identify "
+        "the encounter and the applicable steering rule, even if action is not yet "
+        "required. Action becomes mandatory when that contact's TCPA is within the risk "
+        "horizon; outside it you may act early but must at least name the encounter. "
+        f"A single turn_left/turn_right command may request at most {max_turn_deg:.0f} degrees."
     )
 
 # Fixed response-format contract, byte-identical to what Basic Simulator/app/agents.py's
@@ -230,8 +239,8 @@ DECISION PROCEDURE -- follow in order:
    rule for that contact. This step overrides everything below it.
 3. Otherwise, before resuming: if your last helm decision (given further below, when present) names
    a contact that posed real risk THEN, and that SAME contact still has a closing speed above zero
-   AND a TCPA of zero or more RIGHT NOW, you are not yet "finally past and clear" of it (Rule
-   8(d)/13(d)) -- hold_course, even though no contact meets both real-risk conditions right now.
+   AND a TCPA of zero or more RIGHT NOW, you are not yet "finally past and clear" of it --
+   hold_course, even though no contact meets both real-risk conditions right now.
    Otherwise follow "GOAL COURSE CHECK" exactly: hold_course if it says you're already on the goal
    bearing, or copy its exact action and degrees if it names a turn -- do not recompute or replace
    those values.

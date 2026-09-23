@@ -25,6 +25,8 @@ Run a batch overnight (sequential -- only one GPU):
 """
 from __future__ import annotations
 import argparse
+import hashlib
+import inspect
 import json
 import sys
 import time
@@ -45,6 +47,17 @@ from app.evaluation import llm_compliance_check, score_trajectory
 from app.llm_runs import RUNS_DIR, run_log_path
 from app.measurement import measure_decision_quality
 from app.narrate import contact_line, recommended_decision_interval, recommended_max_steps
+from pipeline.oow_agent_spec import constraint_line
+
+# Screening-set-B audit follow-up (2026-09-23): identifies which PROMPT VERSION a run was
+# generated under (SYSTEM_OOW_AGENT text + constraint_line()'s own source, which renders
+# the per-mission constraint sentence) -- audit_runs.py refuses to aggregate runs whose
+# prompt_hash differs within one tag, the same guard it already applies to schema
+# mismatches. Hashing constraint_line()'s SOURCE (not one rendered instance) captures
+# wording changes independent of whatever numeric safe_distance/horizon a given mission
+# happens to sample.
+_PROMPT_HASH = hashlib.sha256(
+    (SYSTEM_OOW_AGENT + inspect.getsource(constraint_line)).encode("utf-8")).hexdigest()
 
 
 def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "default",
@@ -175,6 +188,7 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
             "k": k, "use_rag": use_rag,
             "system_prompt": system_prompt or SYSTEM_OOW_AGENT,
             "system_prompt_is_custom": system_prompt is not None,
+            "prompt_hash": _PROMPT_HASH,
         },
         "outcome": {"verdict": outcome, "final_step": step, "final_time_s": sim.t},
         "trajectory": sim.trajectory,

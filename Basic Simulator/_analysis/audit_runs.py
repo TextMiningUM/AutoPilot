@@ -280,14 +280,42 @@ def check_1_4_leaked_labels(run: dict) -> list[dict]:
     return findings
 
 
-def _min_separation_over_run(own_series: dict, tgt_series: dict) -> float:
-    times = sorted(set(own_series) & set(tgt_series))
-    if not times:
+def _interp_xy(series: list[tuple[float, float, float]], t: float) -> tuple[float, float] | None:
+    """Mirrors Evaluation Functions/evaluate_run.py's interp_xy() exactly -- same linear
+    interpolation between recorded (t, x, y) samples. Screening-set-B audit follow-up
+    (2026-09-23): BLOCKER_1_5 compared its own coarse 10s-raw-sample minimum against
+    evaluate_run.py's 1s-interpolated minimum and flagged a mismatch (88.98m vs 82.7m) --
+    a discrete 10s scan can straddle and miss the TRUE closest point entirely. Using the
+    identical interpolation here means the two can never disagree over sampling
+    resolution again."""
+    if not series or t < series[0][0] or t > series[-1][0]:
+        return None
+    for i in range(len(series) - 1):
+        t0, x0, y0 = series[i]
+        t1, x1, y1 = series[i + 1]
+        if t0 <= t <= t1:
+            f = 0.0 if t1 == t0 else (t - t0) / (t1 - t0)
+            return (x0 + f * (x1 - x0), y0 + f * (y1 - y0))
+    return None
+
+
+def _min_separation_over_run(own_series: dict[float, dict], tgt_series: dict[float, dict],
+                             dt: float = 1.0) -> float:
+    own_pts = sorted((t, r["x"], r["y"]) for t, r in own_series.items())
+    tgt_pts = sorted((t, r["x"], r["y"]) for t, r in tgt_series.items())
+    if not own_pts or not tgt_pts:
+        return float("inf")
+    t_start = max(own_pts[0][0], tgt_pts[0][0])
+    t_end = min(own_pts[-1][0], tgt_pts[-1][0])
+    if t_end < t_start:
         return float("inf")
     best = float("inf")
-    for t in times:
-        o, g = own_series[t], tgt_series[t]
-        best = min(best, math.hypot(o["x"] - g["x"], o["y"] - g["y"]))
+    t = t_start
+    while t <= t_end:
+        po, pt = _interp_xy(own_pts, t), _interp_xy(tgt_pts, t)
+        if po and pt:
+            best = min(best, math.hypot(po[0] - pt[0], po[1] - pt[1]))
+        t += dt
     return best
 
 
@@ -323,11 +351,12 @@ def check_1_5_verdict_consistency(run: dict, traj: dict[str, dict[float, dict]])
     safety = ev.get("safety") or {}
     ev_min_cpa = safety.get("min_cpa_m")
     if ev_min_cpa is not None:
-        # evaluate_run.py's own min-separation likely comes from a continuous (sub-step)
-        # quadratic-minimum interpolation between logged samples, so a few metres of gap
-        # against this module's discrete-sample recomputation is expected, not a bug --
-        # only a gap bigger than one dt's worth of relative closing distance is suspicious.
-        tol = max(5.0, 0.02 * overall_min)
+        # Screening-set-B audit follow-up (2026-09-23): _min_separation_over_run() now
+        # uses the SAME 1s-interpolation as evaluate_run.min_cpa_over_run() (previously a
+        # coarse 10s raw-sample scan, which could straddle and miss the true minimum by
+        # tens of metres) -- remaining tolerance only covers genuine floating-point/
+        # rounding noise, not a systematic sampling-resolution gap.
+        tol = max(1.0, 0.005 * overall_min)
         if abs(ev_min_cpa - overall_min) > tol:
             findings.append(_f("BLOCKER", "BLOCKER_1_5_verdict_inconsistent", None,
                               "evaluation.safety.min_cpa_m does not match the recomputed minimum "
@@ -419,7 +448,8 @@ def check_2_0_parse_format(cp: dict) -> list[dict]:
         if isinstance(val, str) and ("<think>" in val or "</think>" in val):
             findings.append(_f("ERROR", "ERROR_2_0_thinking_leak", step,
                               f"Decision field {field_name!r} leaks <think> tags.", field=field_name))
-    errors = validate_action_json({k: v for k, v in decision.items() if k != "_parse_error"})
+    errors = validate_action_json({k: v for k, v in decision.items()
+                                   if k not in ("_parse_error", "_schema_errors")})
     for err in errors:
         findings.append(_f("ERROR", "ERROR_2_0_invalid_json", step, err))
     return findings
@@ -487,7 +517,12 @@ def check_2_2_rule_matrix(cp: dict, situation: list[dict], config: str | None) -
                           "encounter Rule 14 (head-on) with conduct Rule 17 (stand-on) is "
                           "impossible -- head-on has no stand-on vessel.", **ctx))
     if enc == "none" and cond in ("Rule 13", "Rule 14", "Rule 15", "Rule 16", "Rule 17"):
-        findings.append(_f("ERROR", "E_rule_matrix_conduct_without_encounter", step,
+        # Screening-set-B audit follow-up (2026-09-23): renamed from
+        # E_rule_matrix_conduct_without_encounter -- previously this branch could barely
+        # ever fire for the "none"/"Rule 17" case specifically, since _parse_json_action()
+        # discarded that exact (valid but schema-inconsistent) decision entirely before
+        # the auditor ever saw its real fields (see agents.py's parse/schema split fix).
+        findings.append(_f("ERROR", "E_rule_matrix_none_with_conduct", step,
                           f"conduct_rule {cond!r} cited with encounter_rule 'none'.",
                           conduct_rule=cond, **ctx))
     if cond == "Rule 16" and action == "hold_course":
@@ -732,11 +767,21 @@ def check_2_7_reasoning_vs_decision(cp: dict, situation: list[dict],
                               f"Reasoning never mentions the decisive contact {decisive['name']!r}."))
 
     # gate b -- fabricated numbers: mask rule/sub-rule citations first, then compare every
-    # remaining number against situation_report's own values (raw, rounded, unit-converted)
-    # and this run's constraint values, with a tolerance (models round/paraphrase).
+    # remaining number against the FULL prompt text's own values (raw, rounded, unit-
+    # converted) and this run's constraint values, with a tolerance (models round/
+    # paraphrase). Screening-set-B audit follow-up (2026-09-23): situation_report ALONE
+    # (narrate()'s bare contact/GOAL-COURSE-CHECK text) never included the constraint
+    # line (safe distance/max turn/risk horizon) or the history-of-previous-decisions
+    # text, both of which ARE part of what the model actually read (debug.user_msg) --
+    # 567 (this run's real derived risk horizon, correctly read off the constraint line)
+    # and 1400 (a contact's own TCPA, correctly read off a history line) were flagged as
+    # "fabricated" 87x/29x purely because their source text was never in the known-set at
+    # all. debug.user_msg is the actual, complete text sent to the model; situation_report
+    # is kept only as a fallback for older logs that never stored debug.user_msg.
     reasoning_masked = _mask_rule_citations(reasoning)
     numbers_in_reasoning = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", reasoning_masked)]
-    known = _known_numbers_from_report(cp.get("situation_report") or "", constraints)
+    full_prompt_text = (cp.get("debug") or {}).get("user_msg") or cp.get("situation_report") or ""
+    known = _known_numbers_from_report(full_prompt_text, constraints)
     fabricated, nearest_map = [], {}
     for n in numbers_in_reasoning:
         if n <= 1:
@@ -956,6 +1001,7 @@ def build_summary(results: list[dict]) -> dict:
             "D_rate": rate("D_"), "E_encounter_mismatch_rate": rate("E_encounter_mismatch"),
             "E_role_fabrication_rate": rate("E_role_fabrication"),
             "E_unclassified_encounter_rate": rate("E_unclassified_encounter"),
+            "E_rule_matrix_none_with_conduct_rate": rate("E_rule_matrix_none_with_conduct"),
             "early_action_rate": rate("INFO_early_action"),
             "parse_fail_rate": rate("ERROR_2_0_parse_error"),
             "gate_a_fail_rate": rate("G_gate_a"), "gate_b_fail_rate": rate("G_gate_b"),
@@ -1018,12 +1064,13 @@ def render_markdown_report(summary: dict, baseline: dict | None = None,
     lines.append("")
     lines.append("## Primary metrics per config x weights")
     lines.append("| config::weights | runs | A-rate | B-rate | D-rate | E_enc | E_role | "
-                 "E_unclass | gate_b | gate_c | parse-fail | real findings |")
-    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
+                 "E_unclass | E_rule_matrix_none_with_conduct | gate_b | gate_c | parse-fail | real findings |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for key, m in summary["by_config"].items():
         lines.append(f"| {key} | {m['n_runs']} | {m['A_rate']:.2%} | {m['B_rate']:.2%} | "
                      f"{m['D_rate']:.2%} | {m['E_encounter_mismatch_rate']:.2%} | "
                      f"{m['E_role_fabrication_rate']:.2%} | {m['E_unclassified_encounter_rate']:.2%} | "
+                     f"{m['E_rule_matrix_none_with_conduct_rate']:.2%} | "
                      f"{m['gate_b_fail_rate']:.2%} | {m['gate_c_fail_rate']:.2%} | "
                      f"{m['parse_fail_rate']:.2%} | {m['n_real_findings']} |")
     lines.append("")
@@ -1060,13 +1107,19 @@ def render_markdown_report(summary: dict, baseline: dict | None = None,
 # ─────────────────────────────────────────────────────────────────────────────
 # CLI
 # ─────────────────────────────────────────────────────────────────────────────
-def _load_runs(tag: str, configs: list[str] | None, missions: list[str] | None) -> list[tuple[dict, Path]]:
-    """Scans ONLY Data/missions/_llm_runs/ (RUNS_DIR), non-recursively -- never any sibling
+def _load_runs(tag: str, configs: list[str] | None, missions: list[str] | None,
+               runs_dir: Path | None = None) -> list[tuple[dict, Path]]:
+    """Scans ONLY `runs_dir` (default RUNS_DIR), non-recursively -- never any sibling
     archive folder (e.g. "MIssions Data V1/", "Mission No Speed Increase/") and never its
-    own _review/ subfolder, both of which glob("*.json") on RUNS_DIR itself can't reach."""
+    own _review/ subfolder, both of which glob("*.json") on RUNS_DIR itself can't reach.
+    Pass an explicit `runs_dir` (e.g. RUNS_DIR / "screening_standard_cloud") to audit an
+    archived subfolder ("set A") separately from the live top-level runs ("set B") --
+    screening-set-B audit follow-up (2026-09-23)."""
+    runs_dir = runs_dir or RUNS_DIR
     out = []
     schemas_seen: set[str] = set()
-    for path in sorted(RUNS_DIR.glob("*.json")):
+    prompt_hashes_seen: dict[str, Path] = {}
+    for path in sorted(runs_dir.glob("*.json")):
         if path.name.startswith("_sweep_"):
             continue
         try:
@@ -1083,6 +1136,20 @@ def _load_runs(tag: str, configs: list[str] | None, missions: list[str] | None) 
             continue
         schema = detect_schema(run, path)
         schemas_seen.add(schema["decision_schema"])
+        # Screening-set-B audit follow-up (2026-09-23): a prompt_hash mismatch within one
+        # tag means the runs were generated under DIFFERENT system-prompt/constraint-line
+        # wording -- mixing them into one aggregate would silently blend two incomparable
+        # populations, exactly the failure mode the existing schema-mixing guard already
+        # prevents. Older runs with no prompt_hash at all (pre-dating this field) are
+        # never compared -- only genuinely DIFFERENT non-null hashes are a hard error.
+        prompt_hash = (run.get("params") or {}).get("prompt_hash")
+        if prompt_hash:
+            for seen_hash, seen_path in prompt_hashes_seen.items():
+                if seen_hash != prompt_hash:
+                    raise SystemExit(
+                        f"Refusing to mix runs with different prompt_hash within tag {tag!r}: "
+                        f"{seen_path.name} ({seen_hash[:12]}...) vs {path.name} ({prompt_hash[:12]}...).")
+            prompt_hashes_seen[prompt_hash] = path
         out.append((run, path))
     if len(schemas_seen) > 1:
         raise SystemExit(f"Refusing to mix schemas {schemas_seen} within tag {tag!r} in one aggregate.")
@@ -1090,8 +1157,9 @@ def _load_runs(tag: str, configs: list[str] | None, missions: list[str] | None) 
 
 
 def run_audit(tag: str, configs: list[str] | None, missions: list[str] | None,
-             out_dir: Path, baseline_tag: str | None = None) -> int:
-    runs = _load_runs(tag, configs, missions)
+             out_dir: Path, baseline_tag: str | None = None,
+             runs_dir: Path | None = None, baseline_runs_dir: Path | None = None) -> int:
+    runs = _load_runs(tag, configs, missions, runs_dir)
     if not runs:
         print(f"No runs found for tag={tag!r}.")
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -1118,7 +1186,7 @@ def run_audit(tag: str, configs: list[str] | None, missions: list[str] | None,
     ]
     baseline_summary, baseline_reason = None, None
     if baseline_tag:
-        base_runs = _load_runs(baseline_tag, configs, missions)
+        base_runs = _load_runs(baseline_tag, configs, missions, baseline_runs_dir)
         if not base_runs:
             baseline_reason = f"no runs found for baseline tag {baseline_tag!r}"
         else:
@@ -1151,9 +1219,14 @@ def main() -> None:
     ap.add_argument("--missions", nargs="+", default=None)
     ap.add_argument("--out-dir", type=Path, default=None)
     ap.add_argument("--baseline-tag", default=None)
+    ap.add_argument("--runs-dir", type=Path, default=None,
+                    help="scan this directory instead of RUNS_DIR (non-recursive) -- "
+                         "e.g. an archived subfolder like _llm_runs/screening_standard_cloud/")
+    ap.add_argument("--baseline-runs-dir", type=Path, default=None)
     args = ap.parse_args()
     out_dir = args.out_dir or (_ANALYSIS_DIR / "audit" / args.tag)
-    sys.exit(run_audit(args.tag, args.configs, args.missions, out_dir, args.baseline_tag))
+    sys.exit(run_audit(args.tag, args.configs, args.missions, out_dir, args.baseline_tag,
+                       args.runs_dir, args.baseline_runs_dir))
 
 
 if __name__ == "__main__":
