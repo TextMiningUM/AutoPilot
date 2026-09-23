@@ -34,7 +34,7 @@ for p in (ROOT, ROOT.parent):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from app.evaluation import score_trajectory
+from app.evaluation import compliance_finding_parts, score_trajectory
 from app.llm_runs import parse_run_filename
 from app.missions import list_mission_ids, load_mission
 from app.simulation import VesselConstraints
@@ -271,8 +271,9 @@ def _describe_run(r: dict) -> str:
                     f"{safety['min_cpa_m']:.0f}m).")
 
     if compliance["breakdown"]:
+        parts = [compliance_finding_parts(e) for e in compliance["breakdown"]]
         lines.append(f"- {len(compliance['breakdown'])} deterministic compliance finding(s): "
-                    + "; ".join(f"{code} @ {step}" for code, step, _ in compliance["breakdown"]))
+                    + "; ".join(f"{label} ({code}) @ {at}" for code, label, at, _ in parts))
     else:
         lines.append("- No COLREG violations flagged.")
 

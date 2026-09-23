@@ -27,7 +27,7 @@ from app.simulation import Simulation, VesselConstraints, project_scenario, find
 from app.narrate import narrate, contact_line, bearing_and_range, relative_bearing, cpa_tcpa
 from app.measurement import measure_decision_quality
 from app.viz_plotly import trajectory_figure, trajectory_bounds, animated_trajectory_figure
-from app.evaluation import score_trajectory
+from app.evaluation import compliance_finding_parts, score_trajectory
 from app.units import kn_to_mps, mps_to_kn, m_to_nm, nm_to_m
 
 st.set_page_config(page_title="OOW COLREG Simulator", page_icon="\U0001F9ED", layout="wide")
@@ -1125,8 +1125,9 @@ with plot_col:
                   help=f"count={result['manoeuvre'].get('manoeuvre_count')}")
         if result["compliance"]["breakdown"]:
             with st.expander(f"Compliance breakdown ({len(result['compliance']['breakdown'])})"):
-                for code, step, deduction in result["compliance"]["breakdown"]:
-                    st.write(f"- {code} @ {step}: {deduction:+.2f}")
+                for entry in result["compliance"]["breakdown"]:
+                    code, label, at, deduction = compliance_finding_parts(entry)
+                    st.write(f"- **{label}** (`{code}`) @ {at}: {deduction:+.2f}")
         with st.expander("Full result JSON"):
             # compliance-rebuild STAP 3 (2026-09-23): compliance is now always a
             # deterministic score (never "unaudited") -- audit_source only describes

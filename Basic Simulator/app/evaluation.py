@@ -23,6 +23,19 @@ _spec = importlib.util.spec_from_file_location("evaluate_run", EVAL_RUN_PATH)
 _evaluate_run_mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_evaluate_run_mod)
 evaluate_run = _evaluate_run_mod.evaluate_run
+COMPLIANCE_LABELS = _evaluate_run_mod.COMPLIANCE_LABELS
+
+
+def compliance_finding_parts(entry) -> tuple[str, str, object, float]:
+    """(code, label, at, deduction) for one compliance.breakdown entry -- entry is either
+    the current dict shape ({"code","label","at","deduction"}, 2026-09-24 on) or an older
+    bare [code, step_or_detail, deduction] list/tuple from a run generated before that
+    (never migrated, see evaluate_run.py's COMPLIANCE_LABELS docstring) -- old entries get
+    their label looked up here, at display time, from the same COMPLIANCE_LABELS dict."""
+    if isinstance(entry, dict):
+        return entry["code"], entry.get("label", entry["code"]), entry.get("at"), entry["deduction"]
+    code, at, deduction = entry
+    return code, COMPLIANCE_LABELS.get(code, code), at, deduction
 
 
 def _auditor_codes_at_checkpoint(decision: dict, ground_truth: dict) -> list[str]:

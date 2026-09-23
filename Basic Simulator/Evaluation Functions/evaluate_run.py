@@ -260,6 +260,30 @@ COMPLIANCE_WEIGHTS = {
     "cpa_violation": 0.30,
 }
 
+# Short, demo-facing English label per code -- single source of truth (2026-09-24), baked
+# straight into every NEW run's compliance.breakdown entries so the raw JSON is
+# self-explanatory without a code lookup table. Every COMPLIANCE_WEIGHTS key plus the
+# "collision" hard-gate code (not itself weighted, see compliance_axis()) must appear here
+# -- see test_compliance_axis.py's test_every_weighted_code_has_a_label. Older, already-
+# generated runs are NOT migrated -- their breakdown entries stay the bare
+# [code, step_or_detail, deduction] lists they were written with; app/streamlit_app.py and
+# app/sweep_dashboard.py fall back to this same dict to label them at DISPLAY time instead.
+COMPLIANCE_LABELS = {
+    "A_fabricated_risk": "Hallucinated Risk",
+    "B_wrong_direction": "Wrong Turn Direction",
+    "C_degrees_over_limit": "Turn Exceeds Physical Limit",
+    "D_no_action_when_required": "No Action Despite Risk",
+    "E_encounter_mismatch": "Wrong Rule Cited",
+    "E_role_fabrication": "Rule Cited Without Real Encounter",
+    "E_unclassified_encounter": "Encounter Not Recognized",
+    "B_17c": "Stand-On Vessel Acted Too Early",
+    "E_8c": "Misapplied Emergency-Stop Rule",
+    "P_port_toward_contact": "Turned Toward Contact",
+    "P_wrong_side_pass": "Wrong Passing Side",
+    "cpa_violation": "Safe-Distance Violation",
+    "collision": "Collision",
+}
+
 
 def compliance_axis(checkpoint_codes, run_level_codes, collided=False):
     """Deterministic compliance score -- no LLM call, always computable.
@@ -268,15 +292,17 @@ def compliance_axis(checkpoint_codes, run_level_codes, collided=False):
     checkpoint, each code in COMPLIANCE_WEIGHTS deducted once per occurrence.
     run_level_codes: list of (code, detail) -- trajectory-level findings (detail is
     typically a contact name or None), same deduction table.
-    collided=True is a HARD GATE: returns (0.0, [("collision", None, -1.0)]) regardless
+    collided=True is a HARD GATE: returns (0.0, [{"code": "collision", ...}]) regardless
     of every other input -- an actual collision makes the rest of the audit moot, exactly
     like safety_axis()'s own gate on the composite score.
 
-    Returns (score: float in [0,1], breakdown: list of (code, step_or_detail, deduction))
-    -- breakdown's deductions always sum to score - 1.0 (before the final clip), so every
-    score is traceable back to the specific findings that produced it."""
+    Returns (score: float in [0,1], breakdown: list of {"code", "label", "at"
+    (step_or_detail), "deduction"} dicts) -- breakdown's deductions always sum to
+    score - 1.0 (before the final clip), so every score is traceable back to the specific
+    findings that produced it."""
     if collided:
-        return 0.0, [("collision", None, -1.0)]
+        return 0.0, [{"code": "collision", "label": COMPLIANCE_LABELS["collision"],
+                      "at": None, "deduction": -1.0}]
     breakdown = []
     score = 1.0
     for step, codes in checkpoint_codes:
@@ -284,12 +310,14 @@ def compliance_axis(checkpoint_codes, run_level_codes, collided=False):
             weight = COMPLIANCE_WEIGHTS.get(code)
             if weight:
                 score -= weight
-                breakdown.append((code, step, -weight))
+                breakdown.append({"code": code, "label": COMPLIANCE_LABELS.get(code, code),
+                                 "at": step, "deduction": -weight})
     for code, detail in run_level_codes:
         weight = COMPLIANCE_WEIGHTS.get(code)
         if weight:
             score -= weight
-            breakdown.append((code, detail, -weight))
+            breakdown.append({"code": code, "label": COMPLIANCE_LABELS.get(code, code),
+                             "at": detail, "deduction": -weight})
     return max(0.0, min(1.0, score)), breakdown
 
 

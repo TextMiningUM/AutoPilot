@@ -87,8 +87,15 @@ STAP-2 structured ground truth, never from a hardcoded/independent risk definiti
     `P_wrong_side_pass`, `cpa_violation`).
 Each code in `COMPLIANCE_WEIGHTS` deducts a fixed amount from a 1.0 starting score, once
 per occurrence, clipped to `[0,1]`; an actual collision (`collided=True`) is a hard gate
-straight to `0.0`, never just a large deduction. The result's `compliance.breakdown` list
-of `(code, step_or_detail, deduction)` makes every score traceable back to its findings.
+straight to `0.0`, never just a large deduction. The result's `compliance.breakdown` is a
+list of `{"code", "label", "at" (step_or_detail), "deduction"}` dicts -- `label` (added
+2026-09-24, `COMPLIANCE_LABELS`) is a short, demo-facing English phrase per code (e.g.
+"Hallucinated Risk" for `A_fabricated_risk`), baked in so the raw run JSON is
+self-explanatory without a code lookup table. Every score is traceable back to the
+specific findings that produced it. Older, already-generated runs still have bare
+`[code, step_or_detail, deduction]` list entries (never migrated) -- see
+`app/evaluation.py`'s `compliance_finding_parts()` for the one place that reads both
+shapes and looks up a label for the old ones at display time.
 
 ## Usage
 

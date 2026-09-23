@@ -16,6 +16,7 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 compliance_axis = _mod.compliance_axis
 COMPLIANCE_WEIGHTS = _mod.COMPLIANCE_WEIGHTS
+COMPLIANCE_LABELS = _mod.COMPLIANCE_LABELS
 
 from app.evaluation import _check_wrong_side_pass  # noqa: E402
 
@@ -50,7 +51,7 @@ def test_collision_gates_score_to_zero_regardless_of_findings() -> None:
         collided=True,
     )
     assert score == 0.0
-    assert breakdown == [("collision", None, -1.0)]
+    assert breakdown == [{"code": "collision", "label": "Collision", "at": None, "deduction": -1.0}]
 
 
 def test_breakdown_sums_to_the_score() -> None:
@@ -58,9 +59,21 @@ def test_breakdown_sums_to_the_score() -> None:
     checkpoint_codes = [(0.0, ["B_wrong_direction"]), (10.0, ["A_fabricated_risk", "C_degrees_over_limit"])]
     run_level_codes = [("P_wrong_side_pass", "ts1")]
     score, breakdown = compliance_axis(checkpoint_codes, run_level_codes, collided=False)
-    total_deduction = sum(deduction for _, _, deduction in breakdown)
+    total_deduction = sum(f["deduction"] for f in breakdown)
     assert round(1.0 + total_deduction, 6) == round(score, 6)
     assert len(breakdown) == 4  # one entry per code occurrence, none merged/dropped
+
+
+def test_breakdown_entries_carry_a_human_label() -> None:
+    _, breakdown = compliance_axis([(0.0, ["B_wrong_direction"])], [], collided=False)
+    assert breakdown == [{"code": "B_wrong_direction", "label": "Wrong Turn Direction",
+                         "at": 0.0, "deduction": -0.15}]
+
+
+def test_every_weighted_code_has_a_label() -> None:
+    for code in COMPLIANCE_WEIGHTS:
+        assert code in COMPLIANCE_LABELS, f"{code} is weighted but has no COMPLIANCE_LABELS entry"
+    assert "collision" in COMPLIANCE_LABELS  # the hard-gate code, not itself weighted
 
 
 def test_score_clips_at_zero_never_negative() -> None:
