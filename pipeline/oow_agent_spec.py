@@ -211,8 +211,15 @@ def validate_action_json(obj: dict) -> list[str]:
     if action in _DEGREES_ONLY_FOR:
         if not isinstance(degrees, (int, float)) or isinstance(degrees, bool):
             errors.append(f"action {action!r} requires a numeric 'degrees', got {degrees!r}")
-    elif degrees is not None:
-        errors.append(f"action {action!r} must have degrees=None, got {degrees!r}")
+    # 2026-09-23: found live on the cloud pod's post-Blackwell-upgrade stack -- Qwen3-8B
+    # routinely writes "degrees": 0.0 (never null) for non-turn actions despite the schema
+    # asking for null (95% of that sweep's parse errors, 65% of ALL its decisions, were
+    # discarded for exactly this reason and silently replaced with a hold_course fallback).
+    # 0/0.0/-0.0 means the same thing as "no turn requested" here, so accept it instead of
+    # only the literal `null` -- a genuinely wrong nonzero degrees value (e.g. 45) for a
+    # non-turn action still correctly fails below.
+    elif degrees is not None and degrees != 0:
+        errors.append(f"action {action!r} must have degrees=None (or 0), got {degrees!r}")
     encounter_rule = obj.get("encounter_rule")
     conduct_rule = obj.get("conduct_rule")
     for field_name, value in (("encounter_rule", encounter_rule), ("conduct_rule", conduct_rule)):
@@ -239,6 +246,33 @@ def bearing_and_range(ox: float, oy: float, tx: float, ty: float) -> tuple[float
 
 def relative_bearing(own_heading: float, true_bearing: float) -> float:
     return (true_bearing - own_heading + 540) % 360 - 180
+
+
+def classify_encounter(own_x: float, own_y: float, own_hdg: float,
+                       tgt_x: float, tgt_y: float, tgt_hdg: float) -> tuple[str, list[str], float]:
+    """Single source of truth for COLREG encounter classification (quality-review STAP 2,
+    2026-09-23 -- moved here from Basic Simulator/app/narrate.py, which now imports this
+    instead of keeping its own copy). Correct Rule 13 check: overtaking is defined by the
+    bearing of OWN-SHIP as seen from the TARGET (>112.5 deg abaft the target's beam), not
+    by the bearing of the target as seen from own-ship -- using only the latter
+    misclassifies real overtaking cases as ordinary crossing whenever the closing angle is
+    fine/moderate rather than near-dead-astern."""
+    brg_own_to_tgt, _ = bearing_and_range(own_x, own_y, tgt_x, tgt_y)
+    rel_from_own = relative_bearing(own_hdg, brg_own_to_tgt)
+
+    brg_tgt_to_own, _ = bearing_and_range(tgt_x, tgt_y, own_x, own_y)
+    rel_from_tgt = relative_bearing(tgt_hdg, brg_tgt_to_own)
+
+    course_diff = (tgt_hdg - own_hdg + 540) % 360 - 180
+    if abs(rel_from_own) <= 6 and abs(abs(course_diff) - 180) <= 20:
+        return "head_on", ["Rule 14"], rel_from_own
+    if abs(rel_from_tgt) > 112.5:
+        return "we_are_overtaking_target", ["Rule 13"], rel_from_own
+    if abs(rel_from_own) > 112.5:
+        return "target_is_overtaking_us", ["Rule 13"], rel_from_own
+    if rel_from_own > 0:
+        return "crossing_target_on_starboard", ["Rule 15", "Rule 16"], rel_from_own
+    return "crossing_target_on_port", ["Rule 15", "Rule 17"], rel_from_own
 
 
 def goal_course_action(own_x: float, own_y: float, own_heading: float,
