@@ -1091,19 +1091,24 @@ restricted visibility, or 'none' if no real risk). Whole rule numbers only, no
 sub-paragraphs. Two precise definitions you MUST apply, not judge informally:
      - HEAD-ON (Rule 14) requires BOTH: the contact bears within about 6 degrees of \
 dead ahead, AND the two headings are within about 20 degrees of being exactly \
-reciprocal (opposite, ~180 degrees apart). If either is not true -- even a bearing that \
-LOOKS nearly dead-ahead on an almost-reciprocal course -- it is a CROSSING (Rule 15), \
-never head-on: the give-way vessel is whichever one has the OTHER on her own starboard \
-side.
+reciprocal (opposite, ~180 degrees apart). Compare the EXACT bearing number you are \
+given to 6 -- a bearing of 7, 10, or 15 degrees is GREATER than 6, so it is NOT head-on \
+no matter how small it still looks; it is a CROSSING (Rule 15) instead, never head-on: \
+the give-way vessel is whichever one has the OTHER on her own starboard side.
      - A contact whose speed is at or very near 0 knots (an anchored vessel, buoy, or \
 other fixed/non-moving object) is NOT a COLREG give-way/stand-on encounter at all -- \
 encounter_rule stays 'none' even when the object poses a real risk and an action is \
 required; only Rule 8 governs the conduct in that case.
   3. States the given action (and degrees, if any) and justifies it under the conduct
-rule.
+rule. Cite ONLY numbers that appear verbatim in the situation text -- never invent, \
+convert, round to a different unit, or compute an intermediate value not already given.
 
 Each input record has:
-  - situation: the full fused situation report text
+  - situation: the full fused situation report text (may begin with a "Your last N helm
+    decision(s)..." history preamble -- that describes PAST decisions only; a rule cited
+    there governed THAT past decision, never assume it still applies now -- derive the
+    CURRENT encounter_rule/conduct_rule fresh from the CURRENT geometry/contacts alone,
+    which may well be 'none'/'none' even when the history mentions a real rule)
   - action: the action name already decided
   - degrees: turn amount in degrees (only for turn_left/turn_right, else null)
   - decisive_contact: {"name", "cpa_m"} of the contact that drove the decision (omitted
