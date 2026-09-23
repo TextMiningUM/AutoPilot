@@ -9,7 +9,7 @@ from core import AgentPaths
 from pipeline.oow_agent_spec import SYSTEM_OOW_AGENT, ACTIONS, validate_action_json
 from pipeline.track2.build_oow_scenarios_leo import (
     build_assistant_json, build_user_message, wrong_action_variant, render_leo_narrative,
-    leo_choose_action, stratified_sample, LEO_FILE, build_teacher_payload,
+    leo_choose_action, stratified_sample, stratified_sample_by_safe_distance, LEO_FILE, build_teacher_payload,
 )
 
 CACHE = AgentPaths.oow().cache_dir
@@ -83,6 +83,15 @@ def test_sft_row_only_uses_actions_from_the_shared_vocabulary() -> None:
 def test_system_prompt_is_the_shared_object() -> None:
     from pipeline.track2 import build_oow_scenarios_leo
     assert build_oow_scenarios_leo.SYSTEM_OOW_AGENT is SYSTEM_OOW_AGENT
+
+
+# ── STAP 5: safe_distance-stratified review sample (gate b needs real variety) ─────────
+def test_stratified_sample_by_safe_distance_covers_multiple_values() -> None:
+    all_recs = [json.loads(l) for l in LEO_FILE.read_text(encoding="utf-8").splitlines()]
+    from pipeline.track2.build_oow_scenarios_leo import limits_for_leo_record
+    sample = stratified_sample_by_safe_distance(all_recs, 25, seed=0)
+    seen = {limits_for_leo_record(r)["safe_distance_m"] for r in sample}
+    assert len(seen) > 1, f"25-sample only ever sampled safe_distance value(s) {seen}"
 
 
 # ── Fase B3 point 2: the teacher-only decisive-contact hint must NEVER reach Qwen ──

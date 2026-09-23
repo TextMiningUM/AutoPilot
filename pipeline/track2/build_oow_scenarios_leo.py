@@ -594,17 +594,20 @@ def leo_choose_action(state: dict, limits: dict | None = None) -> dict:
         prev_names = set(last.get("real_risk_contact_names") or [])
         if prev_names:
             cur_by_name = {c["name"]: c for c in contacts}
-            not_yet_clear = any(
-                (cur_by_name.get(name) is not None
-                 and (cur_by_name[name].get("closing_speed") or 0) > 0
-                 and (cur_by_name[name].get("tcpa_s") if cur_by_name[name].get("tcpa_s") is not None else -1) >= 0)
-                for name in prev_names
-            )
-            if not_yet_clear:
+            pending_names = [
+                name for name in prev_names
+                if (cur_by_name.get(name) is not None
+                    and (cur_by_name[name].get("closing_speed") or 0) > 0
+                    and (cur_by_name[name].get("tcpa_s") if cur_by_name[name].get("tcpa_s") is not None else -1) >= 0)
+            ]
+            if pending_names:
+                # STAP 5 gate a needs a NAME to check the teacher's reasoning against --
+                # "decisive_contact_name" is repurposed here for that (never a give-way/
+                # stand-on decisive contact in this branch, since encounter_rule is "none").
                 return {"action": "hold_course", "degrees": None, "encounter_rule": "none",
                         "conduct_rule": "none", "role": "cleared", "rules": rules,
                         "category": "leo_clear_not_yet_past_and_clear", "bucket": "clear",
-                        "decisive_contact_name": None, "training_limits": limits,
+                        "decisive_contact_name": pending_names[0], "training_limits": limits,
                         "reason": "not yet past and clear"}
 
     goal_action, goal_degrees = goal_course_action(own["x"], own["y"], own["heading"], mission["x"], mission["y"])
@@ -714,14 +717,30 @@ def build_teacher_payload(rec: dict) -> tuple[dict, dict]:
     sent to Qwen) plus the ground-truth dict used both for row assembly and gating.
     `rec` is one row from `recs` as built in main()/the --b3-review-sample branch below
     (already has action/degrees/encounter_rule/conduct_rule/decisive_contact_name set by
-    leo_choose_action())."""
+    leo_choose_action()).
+
+    Quality-review STAP 5 gate-b fix (2026-09-23): `safe_distance_m` now reads the ROW'S
+    OWN sampled limit (rec["training_limits"]) -- was previously hardcoded to the module
+    constant SAFE_CPA_M regardless of what that row actually sampled, which would have
+    silently mis-gated gate_threshold_wording's CPA-vs-safe-distance check for any row
+    that didn't happen to sample 500m. `risk_horizon_s` is passed through too, for the
+    matching TCPA-vs-horizon wording check. History (Fase B4): when rec["history_shown"]
+    is True, the SAME render_previous_decisions() preamble a training row would embed is
+    prepended to the teacher's own situation text too -- the teacher must be able to see
+    the history it is meant to reason about (e.g. why a 'not yet past and clear'
+    hold_course is correct), never withheld from it."""
+    limits = rec.get("training_limits") or _DEFAULT_LIMITS
     situation = rec["situation_report"]
+    if rec.get("history_shown"):
+        situation = render_previous_decisions(rec.get("prev_decisions")) + situation
     decisive_name = rec.get("decisive_contact_name")
     cpa_m = None
+    tcpa_s = None
     if decisive_name is not None:
         for c in rec["state"]["contacts"]:
             if c["name"] == decisive_name:
                 cpa_m = c.get("cpa_distance_m")
+                tcpa_s = c.get("tcpa_s")
                 break
     payload = {"id": rec["_id"], "situation": situation, "action": rec["action"], "degrees": rec["degrees"]}
     if decisive_name is not None:
@@ -729,7 +748,8 @@ def build_teacher_payload(rec: dict) -> tuple[dict, dict]:
     return payload, {
         "situation": situation, "expected_action": rec["action"], "expected_degrees": rec["degrees"],
         "expected_encounter_rule": rec["encounter_rule"], "expected_conduct_rule": rec["conduct_rule"],
-        "real_risk": rec["encounter_rule"] != "none", "cpa_m": cpa_m, "safe_distance_m": SAFE_CPA_M,
+        "real_risk": rec["encounter_rule"] != "none", "cpa_m": cpa_m, "safe_distance_m": limits["safe_distance_m"],
+        "tcpa_s": tcpa_s, "risk_horizon_s": limits["risk_horizon_s"],
         "decisive_contact_name": decisive_name,
     }
 
@@ -784,6 +804,36 @@ def write_outputs(outputs: dict[str, list[dict]], cache_dir: Path, overwrite: bo
         safe_write_jsonl(rows, out_path, overwrite=overwrite)
         print(f"Wrote {out_path} ({len(rows)} rows)"
              + ("" if overwrite else "  [dry-run/review path -- pass --overwrite for production]"))
+
+
+def stratified_sample_by_safe_distance(recs: list[dict], n: int, seed: int = 0,
+                                       decisions_by_id: dict[str, dict] | None = None) -> list[dict]:
+    """Quality-review STAP 5 (2026-09-23): the SECOND 25-review sample stratifies across
+    safe_distance_m values (round-robin over the 5 sampled values: 300/400/500/750/926m)
+    instead of action bucket -- proves gate b's per-row threshold-wording check against a
+    genuine spread of sampled safe distances, not just whichever a pure action-stratified
+    sample happened to include. "paused" frames excluded (no manoeuvre decision to
+    review)."""
+    rnd = random.Random(seed)
+    buckets: dict[float, list[dict]] = {}
+    for r in recs:
+        limits = limits_for_leo_record(r)
+        decision = (decisions_by_id[r["id"]] if decisions_by_id is not None
+                   else leo_choose_action(r["state"], limits))
+        if decision["bucket"] == "paused":
+            continue
+        buckets.setdefault(limits["safe_distance_m"], []).append(r)
+    for b in buckets.values():
+        rnd.shuffle(b)
+    out: list[dict] = []
+    bucket_keys = list(buckets)
+    i = 0
+    while len(out) < n and any(buckets.values()):
+        b = bucket_keys[i % len(bucket_keys)]
+        if buckets[b]:
+            out.append(buckets[b].pop())
+        i += 1
+    return out
 
 
 def stratified_sample(recs: list[dict], n: int, seed: int = 0, decisions_by_id: dict[str, dict] | None = None) -> list[dict]:
@@ -977,7 +1027,7 @@ def main() -> None:
         ws = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
         headers = {"anthropic-workspace-id": ws} if ws else None
         client = anthropic.Anthropic(api_key=key, default_headers=headers)
-        review_sample = stratified_sample(all_recs, args.b3_review_sample, seed=args.seed, decisions_by_id=decisions_by_id)
+        review_sample = stratified_sample_by_safe_distance(all_recs, args.b3_review_sample, seed=args.seed, decisions_by_id=decisions_by_id)
         review_recs: list[dict] = []
         for i, r in enumerate(review_sample):
             limits = limits_for_leo_record(r)
@@ -990,7 +1040,7 @@ def main() -> None:
                 "encounter_rule": decision["encounter_rule"], "conduct_rule": decision["conduct_rule"],
                 "decisive_contact_name": decision["decisive_contact_name"], "training_limits": limits,
                 "situation_report": render_leo_narrative(r["state"], limits), "state": r["state"],
-                "prev_decisions": prev_decisions if show_history else None,
+                "prev_decisions": prev_decisions if show_history else None, "history_shown": show_history,
             })
         result = render_reasoning_review_sample(client, args.model, review_recs,
                                                 max_attempts=3, max_tokens=args.max_tokens)

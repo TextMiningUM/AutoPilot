@@ -125,27 +125,46 @@ def gate_number_consistency(reasoning: str, situation: str,
     return None
 
 
-def gate_threshold_wording(reasoning: str, cpa_m: float | None, safe_distance_m: float) -> str | None:
+def gate_threshold_wording(reasoning: str, cpa_m: float | None, safe_distance_m: float,
+                          tcpa_s: float | None = None, risk_horizon_s: float | None = None) -> str | None:
     """If the reasoning explicitly compares a CPA to the safe passing distance using an
     above/below-type word, that comparison must be arithmetically correct (the
-    leo00022 failure mode: '272 m well above 500 m', when 272 < 500)."""
-    if cpa_m is None:
-        return None
-    safe_str = f"{safe_distance_m:.0f}"
-    if safe_str not in reasoning:
-        return None
-    low = reasoning.lower()
-    idx = low.find(safe_str.lower())
-    window = low[max(0, idx - 100):idx + 100]
-    said_above = any(w in window for w in _ABOVE_WORDS)
-    said_below = any(w in window for w in _BELOW_WORDS)
-    actual_below = cpa_m < safe_distance_m
-    if said_above and not said_below and actual_below:
-        return (f"reasoning claims CPA is above/exceeds the {safe_distance_m:.0f}m safe "
-               f"distance, but CPA={cpa_m:.0f}m is actually below it")
-    if said_below and not said_above and not actual_below:
-        return (f"reasoning claims CPA is below/under the {safe_distance_m:.0f}m safe "
-               f"distance, but CPA={cpa_m:.0f}m is actually at or above it")
+    leo00022 failure mode: '272 m well above 500 m', when 272 < 500). Quality-review
+    STAP 5 (2026-09-23): the SAME check now also applies to TCPA vs the row's OWN
+    risk_horizon_s (per-row now, never a hardcoded 300s) -- both `safe_distance_m` and
+    `risk_horizon_s` MUST be the row's actual sampled values (see
+    build_teacher_payload()), never the historical fixed defaults, so this gate cannot
+    silently mis-judge a row that sampled a different safe_distance_m/risk_horizon_s."""
+    if cpa_m is not None:
+        safe_str = f"{safe_distance_m:.0f}"
+        if safe_str in reasoning:
+            low = reasoning.lower()
+            idx = low.find(safe_str.lower())
+            window = low[max(0, idx - 100):idx + 100]
+            said_above = any(w in window for w in _ABOVE_WORDS)
+            said_below = any(w in window for w in _BELOW_WORDS)
+            actual_below = cpa_m < safe_distance_m
+            if said_above and not said_below and actual_below:
+                return (f"reasoning claims CPA is above/exceeds the {safe_distance_m:.0f}m safe "
+                       f"distance, but CPA={cpa_m:.0f}m is actually below it")
+            if said_below and not said_above and not actual_below:
+                return (f"reasoning claims CPA is below/under the {safe_distance_m:.0f}m safe "
+                       f"distance, but CPA={cpa_m:.0f}m is actually at or above it")
+    if tcpa_s is not None and risk_horizon_s is not None:
+        horizon_str = f"{risk_horizon_s:.0f}"
+        if horizon_str in reasoning:
+            low = reasoning.lower()
+            idx = low.find(horizon_str.lower())
+            window = low[max(0, idx - 100):idx + 100]
+            said_above = any(w in window for w in _ABOVE_WORDS)
+            said_below = any(w in window for w in _BELOW_WORDS)
+            actual_below = 0 <= tcpa_s < risk_horizon_s
+            if said_above and not said_below and actual_below:
+                return (f"reasoning claims TCPA is above/exceeds the {risk_horizon_s:.0f}s risk "
+                       f"horizon, but TCPA={tcpa_s:.0f}s is actually within it")
+            if said_below and not said_above and not actual_below:
+                return (f"reasoning claims TCPA is below/under the {risk_horizon_s:.0f}s risk "
+                       f"horizon, but TCPA={tcpa_s:.0f}s is actually at or beyond it (or negative)")
     return None
 
 
@@ -162,7 +181,8 @@ def gate_risk_consistency(reasoning: str, real_risk: bool) -> str | None:
 def run_gates(obj: dict | None, reasoning: str | None, *, situation: str, expected_action: str,
              expected_degrees: float | None, expected_encounter_rule: str, expected_conduct_rule: str,
              real_risk: bool, cpa_m: float | None, safe_distance_m: float,
-             decisive_contact_name: str | None) -> dict[str, str]:
+             decisive_contact_name: str | None, tcpa_s: float | None = None,
+             risk_horizon_s: float | None = None) -> dict[str, str]:
     """Runs every gate; returns {gate_name: failure_message} for only the gates that
     failed (empty dict == accept)."""
     if obj is None or not isinstance(reasoning, str) or not reasoning.strip():
@@ -174,7 +194,7 @@ def run_gates(obj: dict | None, reasoning: str | None, *, situation: str, expect
         "contact_consistency": gate_contact_consistency(reasoning, decisive_contact_name),
         "number_consistency": gate_number_consistency(
             reasoning, situation, frozenset({expected_degrees} if expected_degrees is not None else set())),
-        "threshold_wording": gate_threshold_wording(reasoning, cpa_m, safe_distance_m),
+        "threshold_wording": gate_threshold_wording(reasoning, cpa_m, safe_distance_m, tcpa_s, risk_horizon_s),
         "risk_consistency": gate_risk_consistency(reasoning, real_risk),
     }
     return {name: msg for name, msg in checks.items() if msg}
@@ -207,7 +227,8 @@ def generate_gated_row(client, model: str, system_prompt: str, payload: dict, *,
                        situation: str, expected_action: str, expected_degrees: float | None,
                        expected_encounter_rule: str, expected_conduct_rule: str,
                        real_risk: bool, cpa_m: float | None, safe_distance_m: float,
-                       decisive_contact_name: str | None, max_attempts: int = 3,
+                       decisive_contact_name: str | None, tcpa_s: float | None = None,
+                       risk_horizon_s: float | None = None, max_attempts: int = 3,
                        max_tokens: int = 1024) -> tuple[dict | None, list[dict]]:
     """One row, one decision, gated + retried (feeding the gate failures back to the
     teacher as feedback) up to `max_attempts` times. Returns (accepted_obj_or_None,
@@ -230,6 +251,7 @@ def generate_gated_row(client, model: str, system_prompt: str, payload: dict, *,
             expected_degrees=expected_degrees, expected_encounter_rule=expected_encounter_rule,
             expected_conduct_rule=expected_conduct_rule, real_risk=real_risk, cpa_m=cpa_m,
             safe_distance_m=safe_distance_m, decisive_contact_name=decisive_contact_name,
+            tcpa_s=tcpa_s, risk_horizon_s=risk_horizon_s,
         )
         attempt_log.append({"attempt": attempt, "failures": failures, "raw": text[:800]})
         if not failures:

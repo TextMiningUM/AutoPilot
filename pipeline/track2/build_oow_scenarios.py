@@ -1112,12 +1112,21 @@ def contact_name_for_index(i: int) -> str:
 
 def build_teacher_payload(rec: dict, rec_id: str, limits: dict | None = None) -> tuple[dict, dict]:
     """The TEACHER-only payload (includes decisive_contact -- answer-side info, never
-    sent to Qwen) plus the ground-truth dict used both for row assembly and gating."""
+    sent to Qwen) plus the ground-truth dict used both for row assembly and gating.
+
+    Quality-review STAP 5 (2026-09-23): when `rec["prev_decisions"]` is set (Fase B4
+    self-consistency history), the SAME render_previous_decisions() preamble the final
+    training row's user_message_for() embeds is ALSO prepended to the teacher's own
+    situation text -- the teacher must see the same history the trained row will show,
+    never a different (or absent) view of it."""
     limits = limits or _LEGACY_LIMITS
     truth = to_unified_action(rec, limits)
     situation = render_scenario_situation(rec, limits)
+    if rec.get("prev_decisions"):
+        situation = render_previous_decisions(rec["prev_decisions"]) + situation
     idx = truth["decisive_contact_index"]
     cpa_m = rec["targets"][idx]["_cpa_m"] if idx is not None else None
+    tcpa_s = rec["targets"][idx]["_tcpa_min"] * 60.0 if idx is not None else None
     payload = {"id": rec_id, "situation": situation, "action": truth["action"], "degrees": truth["degrees"]}
     decisive_name = None
     if idx is not None:
@@ -1127,32 +1136,45 @@ def build_teacher_payload(rec: dict, rec_id: str, limits: dict | None = None) ->
         "situation": situation, "expected_action": truth["action"], "expected_degrees": truth["degrees"],
         "expected_encounter_rule": truth["encounter_rule"], "expected_conduct_rule": truth["conduct_rule"],
         "real_risk": truth["encounter_rule"] != "none", "cpa_m": cpa_m, "safe_distance_m": limits["safe_distance_m"],
+        "tcpa_s": tcpa_s, "risk_horizon_s": limits["risk_horizon_s"],
         "decisive_contact_name": decisive_name,
     }
 
 
 def render_reasoning_review_sample(client, model: str, recs: list[dict], n: int, seed: int,
-                                   max_attempts: int, max_tokens: int) -> dict:
-    """B3's 25-first review gate: stratified sample across categories (never the full
-    population), REAL Anthropic calls, EVERY row passes through the gated
-    generate/retry/drop loop (pipeline.track2.b3_reasoning_gates) before acceptance.
-    Returns {"accepted": [...], "rejected": [...], "gate_rejection_counts": {...}} --
-    writes NOTHING to any production file."""
+                                   max_attempts: int, max_tokens: int,
+                                   stratify_by: str = "category") -> dict:
+    """B3's 25-first review gate: stratified sample (never the full population), REAL
+    Anthropic calls, EVERY row passes through the gated generate/retry/drop loop
+    (pipeline.track2.b3_reasoning_gates) before acceptance. Returns {"accepted": [...],
+    "rejected": [...], "gate_rejection_counts": {...}} -- writes NOTHING to any
+    production file.
+
+    `stratify_by` (quality-review STAP 5, 2026-09-23): "category" (original, default) or
+    "safe_distance_m" -- the SECOND 25-review sample stratifies across the row's own
+    sampled safe_distance_m (via limits_for_scenario_record()) instead of category, to
+    prove gate b's per-row threshold-wording check against a genuine spread of sampled
+    safe distances."""
     from pipeline.track2.b3_reasoning_gates import generate_gated_row, GATE_NAMES
 
-    by_cat: dict[str, list[dict]] = {}
+    def _key(r: dict) -> object:
+        if stratify_by == "safe_distance_m":
+            return limits_for_scenario_record(r)["safe_distance_m"]
+        return r["category"]
+
+    by_key: dict[object, list[dict]] = {}
     for r in recs:
-        by_cat.setdefault(r["category"], []).append(r)
+        by_key.setdefault(_key(r), []).append(r)
     rnd = random.Random(seed)
-    for v in by_cat.values():
+    for v in by_key.values():
         rnd.shuffle(v)
-    cat_names = list(by_cat)
+    key_names = list(by_key)
     sample: list[dict] = []
     i = 0
-    while len(sample) < n and any(by_cat.values()):
-        cat = cat_names[i % len(cat_names)]
-        if by_cat[cat]:
-            sample.append(by_cat[cat].pop())
+    while len(sample) < n and any(by_key.values()):
+        k = key_names[i % len(key_names)]
+        if by_key[k]:
+            sample.append(by_key[k].pop())
         i += 1
 
     accepted, rejected = [], []
@@ -1553,7 +1575,7 @@ def main() -> None:
             r["_id"] = f"t{i:05d}"
         result = render_reasoning_review_sample(
             client, args.model, train_recs, args.b3_review_sample, args.seed,
-            max_attempts=3, max_tokens=args.max_tokens)
+            max_attempts=3, max_tokens=args.max_tokens, stratify_by="safe_distance_m")
         out_path = review_path(CACHE / "oow_scenario_b3_review_sample.jsonl")
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("w", encoding="utf-8") as f:

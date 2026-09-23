@@ -107,6 +107,36 @@ def test_gate_threshold_wording_no_op_when_not_discussed() -> None:
     assert gate_threshold_wording("Holding course, no contacts nearby.", cpa_m=272.0, safe_distance_m=500.0) is None
 
 
+# ── STAP 5 gate-b extension: TCPA-vs-risk-horizon wording (per-row, never hardcoded) ───
+def test_gate_threshold_wording_catches_a_horizon_wording_error() -> None:
+    reasoning = "TCPA is 400s, well above the 300s risk horizon, so no action is needed."
+    assert gate_threshold_wording(reasoning, cpa_m=None, safe_distance_m=500.0,
+                                  tcpa_s=200.0, risk_horizon_s=300.0) is not None
+
+
+def test_gate_threshold_wording_accepts_correct_horizon_wording() -> None:
+    reasoning = "TCPA is 200s, within the 300s risk horizon, so this contact is a real risk."
+    assert gate_threshold_wording(reasoning, cpa_m=None, safe_distance_m=500.0,
+                                  tcpa_s=200.0, risk_horizon_s=300.0) is None
+
+
+def test_gate_threshold_wording_uses_the_rows_own_sampled_values_not_a_fixed_default() -> None:
+    """750m/900s are NOT the historical 500m/300s defaults -- proves the gate checks
+    whatever safe_distance_m/risk_horizon_s it is GIVEN, never a hardcoded assumption."""
+    reasoning = "CPA is 800m, above the 750m safe distance, so no risk from this contact."
+    assert gate_threshold_wording(reasoning, cpa_m=800.0, safe_distance_m=750.0) is None
+    bad_reasoning = "CPA is 800m, below the 750m safe distance, which is concerning."
+    assert gate_threshold_wording(bad_reasoning, cpa_m=800.0, safe_distance_m=750.0) is not None
+
+
+# ── STAP 5 "gate a": a not-yet-past-and-clear hold_course must name the pending contact
+# (reuses gate_contact_consistency -- decisive_contact_name is repurposed to the pending
+# contact's name for this category, see leo_choose_action()'s past-and-clear branch) ────
+def test_gate_contact_consistency_covers_the_past_and_clear_pending_contact() -> None:
+    assert gate_contact_consistency("Still closing with ts1, not yet past and clear.", "ts1") is None
+    assert gate_contact_consistency("Holding course, nothing else to report.", "ts1") is not None
+
+
 def test_gate_risk_consistency() -> None:
     assert gate_risk_consistency("There is no real risk of collision here.", real_risk=True) is not None
     assert gate_risk_consistency("There is no real risk of collision here.", real_risk=False) is None
