@@ -19,19 +19,18 @@ PROBE_300_FILE = paths.eval_dir / "oow_colreg_scenarios_v2_probe_300.json"
 PROBE_926_FILE = paths.eval_dir / "oow_colreg_scenarios_v2_probe_926.json"
 
 # Computed 2026-09-23 immediately after `build_oow_scenarios.py --build-v2 --overwrite`
-# (RE-computed AGAIN the same day after fixing constraint_line()'s wording -- STOP-1/2
-# verification found the text still stated the ALREADY-FIXED STAP-1 CPA-alone bug's own
-# definition, "CPA below that is a real collision risk", unconditionally; corrected to
-# state the CPA-AND-TCPA conjunction real_risk() actually computes -- an intentional,
-# approved re-generation per the user's own verification request, not a drift; the 325
-# geometries/v1_id linkage are unchanged, only the rendered constraint-line wording).
-V2_SHA256 = "2441a29697f46ff34bca6055be928578e882e3ec03839750289b7a74d1cf1e69"
+# (RE-computed AGAIN the same day after a MAJOR bug fix: to_unified_action()'s give-way
+# branch never re-checked real_risk() against the row's own sampled safe_distance_m/
+# risk_horizon_s -- 41/325 v2 gold labels changed as a direct result. An intentional,
+# approved re-generation per the user's own explicit direction, not a drift; the 325
+# geometries/v1_id linkage are unchanged.)
+V2_SHA256 = "e8729824a96b674f0d27abaead1da45c026bc8cec1654e91686912dcbf5dbb89"
 
 # STAP 4 (2026-09-23): the two safe_distance_m probes (ONLY safe_distance_m changed vs
 # v2 -- max_turn_deg stays 30, risk horizon stays each scenario's own derived default),
-# first-time-frozen the same way v1/v2 are (recomputed alongside the same wording fix).
-PROBE_300_SHA256 = "3d056dbd2ca1f4c3588d6d8f456c0bdd736c9a54439fa05aa3e8f6852c247190"
-PROBE_926_SHA256 = "1436424313db8811847e15e686c723a426e3eae16cc83d698d472f082bb8b86c"
+# first-time-frozen the same way v1/v2 are (recomputed alongside the same give-way fix).
+PROBE_300_SHA256 = "c382c4716d554c1a824ed082266f087e5860655157f7b0119abe11a4b229c16e"
+PROBE_926_SHA256 = "3eb3aecf49d407312ded237b9b38a9ed30690fb9106ce093d98abf5e930d46c1"
 
 
 def test_v2_scenarios_file_is_byte_for_byte_frozen() -> None:

@@ -474,8 +474,36 @@ def to_unified_action(rec: dict, limits: dict | None = None) -> dict:
     # Every remaining old_action (alter_course/stop) is driven by the give-way contact(s)
     # specifically, not necessarily whichever target has the smallest CPA overall (a
     # multi-target instance can mix give-way and stand-on contacts).
-    give_way_targets = [t for t in rec["targets"] if t["_role"] in ("mutual", "give_way", "overtaking_give_way")]
-    worst = min(give_way_targets or rec["targets"], key=lambda t: t["_cpa_m"])
+    #
+    # Quality-review STAP 5 (2026-09-23), MAJOR BUG FIX: this branch previously trusted
+    # the upstream role assignment (bearing-only geometry, via _classify_target()/
+    # choose_action()) UNCONDITIONALLY -- unlike the maintain_course/stand-on branch
+    # above, it never re-checked real_risk() against THIS row's own sampled
+    # safe_distance_m/risk_horizon_s. Under the old fixed 500m/300s regime this was
+    # usually harmless (this generator's geometry is deliberately close-quarters), but
+    # STAP 2's per-row sampling can land a SHORTER risk_horizon_s than the geometry's
+    # natural TCPA -- found live: a give-way row with tcpa_s=307.5 and a sampled
+    # risk_horizon_s=183.1 was still being labelled a real-risk give-way turn. Filtered
+    # here exactly like the stand-on branch already was.
+    give_way_targets = [t for t in rec["targets"] if t["_role"] in ("mutual", "give_way", "overtaking_give_way")
+                        and real_risk(t["_cpa_m"], t["_tcpa_min"] * 60.0, safe_distance_m,
+                                     limits["risk_horizon_s"])]
+    if not give_way_targets:
+        # The upstream role said give-way, but no such target actually clears THIS row's
+        # real_risk() thresholds -- check a co-present stand-on-role target the same way
+        # the maintain_course branch does, else this is genuinely a no-risk situation.
+        stand_on_targets = [t for t in rec["targets"] if t["_role"] in ("stand_on", "overtaking_stand_on")
+                           and real_risk(t["_cpa_m"], t["_tcpa_min"] * 60.0, safe_distance_m,
+                                        limits["risk_horizon_s"])]
+        if stand_on_targets:
+            worst = min(stand_on_targets, key=lambda t: t["_cpa_m"])
+            encounter_rule, conduct_rule = classify_rules(worst["_role"], "hold_course")
+            return {"action": "hold_course", "degrees": None, "encounter_rule": encounter_rule,
+                   "conduct_rule": conduct_rule, "decisive_contact_index": rec["targets"].index(worst)}
+        encounter_rule, conduct_rule = classify_rules("none", "hold_course")
+        return {"action": "hold_course", "degrees": None, "encounter_rule": encounter_rule,
+               "conduct_rule": conduct_rule, "decisive_contact_index": None}
+    worst = min(give_way_targets, key=lambda t: t["_cpa_m"])
     worst_index = rec["targets"].index(worst)
     range_m = math.hypot(*worst["start_xy_m"])
     closing = closing_rate(rec["own_speed"], worst)
