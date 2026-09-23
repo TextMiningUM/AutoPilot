@@ -99,6 +99,10 @@ PASS_CRITERIA = {
               "Own-ship does not needlessly remain at reduced speed with no active encounter."],
     "clear": ["Own-ship maintains course and speed; no contact currently requires action.",
              "Own-ship does not manoeuvre against a contact whose CPA is not below the safe distance."],
+    "stationary": ["Own-ship takes early, substantial action to keep clear of a real-risk stationary/"
+                  "non-vessel object, scaled to how far CPA falls under the safe passing distance.",
+                  "Own-ship does not simply hold course while a stationary object poses a real risk.",
+                  "Own-ship does not cite a COLREG encounter rule for a non-vessel object (Rule 8 only)."],
 }
 
 SAFE_CPA_M = 500.0        # matches Basic Simulator VesselConstraints' default min_cpa_m
@@ -812,15 +816,16 @@ def stratified_sample_by_safe_distance(recs: list[dict], n: int, seed: int = 0,
     safe_distance_m values (round-robin over the 5 sampled values: 300/400/500/750/926m)
     instead of action bucket -- proves gate b's per-row threshold-wording check against a
     genuine spread of sampled safe distances, not just whichever a pure action-stratified
-    sample happened to include. "paused" frames excluded (no manoeuvre decision to
-    review)."""
+    sample happened to include. "paused"/"excluded" frames excluded (no manoeuvre decision
+    to review; an excluded frame is never a valid training instance at all -- see
+    leo_choose_action()'s not_applicable-moving exclusion))."""
     rnd = random.Random(seed)
     buckets: dict[float, list[dict]] = {}
     for r in recs:
         limits = limits_for_leo_record(r)
         decision = (decisions_by_id[r["id"]] if decisions_by_id is not None
                    else leo_choose_action(r["state"], limits))
-        if decision["bucket"] == "paused":
+        if decision["bucket"] in ("paused", "excluded"):
             continue
         buckets.setdefault(limits["safe_distance_m"], []).append(r)
     for b in buckets.values():
@@ -853,7 +858,7 @@ def stratified_sample(recs: list[dict], n: int, seed: int = 0, decisions_by_id: 
     for r in recs:
         decision = (decisions_by_id[r["id"]] if decisions_by_id is not None
                    else leo_choose_action(r["state"], limits_for_leo_record(r)))
-        if decision["bucket"] == "paused":
+        if decision["bucket"] in ("paused", "excluded"):
             continue
         buckets.setdefault(decision["bucket"], []).append(r)
     for b in buckets.values():
