@@ -130,30 +130,22 @@ def _check_wrong_side_pass(trajectory_rows: list[dict], own_vehicle: str) -> lis
     return findings
 
 
-def score_trajectory(trajectory_rows: list[dict], start_xy: tuple[float, float],
-                      goal_xy: tuple[float, float], nominal_speed: float,
-                      own_vehicle: str = "own_ship", collision_radius_m: float = 15.0,
-                      safe_distance_m: float = 50.0, max_turn_deg: float = 30.0,
-                      reached_radius_m: float = GOAL_RADIUS_M,
-                      checkpoints: list[dict] | None = None) -> dict:
-    """trajectory_rows: list of {time, vehicle, x, y, heading, speed} dicts
-    (Simulation.trajectory) -> evaluate_run.py's full result dict (verdict,
-    composite_score, safety/compliance/temporal/spatial/manoeuvre breakdown).
-
-    Compliance-rebuild STAP 3 (2026-09-23): compliance is now ALWAYS a deterministic
-    score computed from `checkpoints` (own-ship's own self-reported decisions -- see
-    run_llm_scenario.py's checkpoint-building loop), never an LLM audit result -- there is
-    no more "unaudited, defaults to 0.0" state. `safe_distance_m`/`max_turn_deg` MUST be
-    the run's own VesselConstraints values, feeding both measurement.py's checks and
-    _ground_truth_at_checkpoint()'s STAP-2 bands."""
+def _compliance_findings(trajectory_rows: list[dict], checkpoints: list[dict] | None,
+                         own_vehicle: str, safe_distance_m: float, max_turn_deg: float) -> list[dict]:
+    """One entry per (checkpoint, code) occurrence -- the single source both
+    score_trajectory()'s deterministic score AND llm_compliance_check()'s STAP-4
+    plain-language explanations are built from, so neither can silently diverge from the
+    other. Each finding: {"code", "step" (time), "situation_report" (rendered STAP-2
+    ground truth text), "decision" (own-ship's own self-reported action/rules), "band",
+    "expected_encounter_rule", "expected_conduct_rule", "expected_direction"}."""
     from app.measurement import measure_decision_quality
     from app.narrate import cpa_tcpa
     from app.simulation import VesselConstraints
 
     constraints = VesselConstraints(min_cpa_m=safe_distance_m, max_rudder_angle_deg=max_turn_deg)
-    checkpoint_codes: list[tuple[float, list[str]]] = []
-    _scored_measurement_codes = ("A_fabricated_risk", "B_wrong_direction",
-                                "C_degrees_over_limit", "D_no_action_when_required")
+    scored_measurement_codes = ("A_fabricated_risk", "B_wrong_direction",
+                               "C_degrees_over_limit", "D_no_action_when_required")
+    findings: list[dict] = []
     for cp in (checkpoints or []):
         t = cp.get("time", 0)
         decision = cp.get("decision") or {}
@@ -169,10 +161,48 @@ def score_trajectory(trajectory_rows: list[dict], start_xy: tuple[float, float],
                                      row["x"], row["y"], row["heading"], row["speed"])
                 situation.append({"cpa_m": cpa, "tcpa_s": tcpa})
         measured = measure_decision_quality(decision, situation, constraints, ground_truth=gt)
-        codes = [c for c in measured["checks_fired"] if c in _scored_measurement_codes]
+        codes = [c for c in measured["checks_fired"] if c in scored_measurement_codes]
         codes.extend(_auditor_codes_at_checkpoint(decision, gt))
-        checkpoint_codes.append((t, codes))
+        if not codes:
+            continue
 
+        contacts = {c["contact"]: c for c in gt.get("contacts", [])}
+        decisive = contacts.get(gt.get("decisive_contact")) if gt.get("decisive_contact") else None
+        situation_text = _render_ground_truth_text(gt)
+        for code in codes:
+            findings.append({
+                "code": code, "step": t, "situation_report": situation_text, "decision": decision,
+                "band": decisive["band"] if decisive else "safe",
+                "expected_encounter_rule": decisive["expected_encounter_rule"] if decisive else "none",
+                "expected_conduct_rule": decisive["expected_conduct_rule"] if decisive else "none",
+                "expected_direction": decisive["expected_direction"] if decisive else "none",
+            })
+    return findings
+
+
+def score_trajectory(trajectory_rows: list[dict], start_xy: tuple[float, float],
+                      goal_xy: tuple[float, float], nominal_speed: float,
+                      own_vehicle: str = "own_ship", collision_radius_m: float = 15.0,
+                      safe_distance_m: float = 50.0, max_turn_deg: float = 30.0,
+                      reached_radius_m: float = GOAL_RADIUS_M,
+                      checkpoints: list[dict] | None = None) -> dict:
+    """trajectory_rows: list of {time, vehicle, x, y, heading, speed} dicts
+    (Simulation.trajectory) -> evaluate_run.py's full result dict (verdict,
+    composite_score, safety/compliance/temporal/spatial/manoeuvre breakdown).
+
+    Compliance-rebuild STAP 3 (2026-09-23): compliance is now ALWAYS a deterministic
+    score computed from `checkpoints` (own-ship's own self-reported decisions -- see
+    run_llm_scenario.py's checkpoint-building loop), never an LLM audit result -- there is
+    no more "unaudited, defaults to 0.0" state. `safe_distance_m`/`max_turn_deg` MUST be
+    the run's own VesselConstraints values, feeding both measurement.py's checks and
+    _ground_truth_at_checkpoint()'s STAP-2 bands. The result's "compliance"."findings" is
+    the SAME list llm_compliance_check() (STAP 4) can turn into plain-language
+    explanations, on demand -- never recomputed a second, differently, way."""
+    findings = _compliance_findings(trajectory_rows, checkpoints, own_vehicle, safe_distance_m, max_turn_deg)
+    codes_by_step: dict[float, list[str]] = {}
+    for f in findings:
+        codes_by_step.setdefault(f["step"], []).append(f["code"])
+    checkpoint_codes = list(codes_by_step.items())
     run_level_codes = _check_wrong_side_pass(trajectory_rows, own_vehicle)
 
     with tempfile.NamedTemporaryFile("w", suffix=".csv", newline="", delete=False) as f:
@@ -181,7 +211,7 @@ def score_trajectory(trajectory_rows: list[dict], start_xy: tuple[float, float],
         writer.writerows(trajectory_rows)
         tmp_path = f.name
     try:
-        return evaluate_run(
+        result = evaluate_run(
             tmp_path, own_vehicle=own_vehicle, start_xy=start_xy, goal_xy=goal_xy,
             nominal_speed=nominal_speed, collision_radius_m=collision_radius_m,
             safe_distance_m=safe_distance_m, reached_radius_m=reached_radius_m,
@@ -189,71 +219,40 @@ def score_trajectory(trajectory_rows: list[dict], start_xy: tuple[float, float],
         )
     finally:
         Path(tmp_path).unlink(missing_ok=True)
+    result["compliance"]["findings"] = findings
+    return result
 
 
-LLM_COMPLIANCE_SYSTEM = """You are a COLREG compliance auditor reviewing a completed vessel \
-trajectory. You are given the full time-series track (time, vehicle, x, y, heading, speed) for \
-own-ship and every target vessel it encountered, in metres and degrees (heading 0=north, \
-clockwise, matching compass bearings). Audit EVERY course/speed change own-ship made, and every \
-encounter (head-on, crossing, overtaking) it was involved in, against the International \
-Regulations for Preventing Collisions at Sea (COLREG): the correct give-way/stand-on role for \
-each encounter type, early and substantial action by the give-way vessel (normally to \
-starboard), never altering to port toward a vessel on own-ship's own port side, and the \
-stand-on vessel holding course/speed unless it became clearly necessary to act. \
-This is a full audit, not just a list of mistakes -- classify EVERY manoeuvre/encounter you \
-review as either a violation or correctly handled, and explain BOTH kinds fully so a reader \
-understands the whole encounter without re-reading the raw trajectory themselves. \
-Each violation string must cover, in this order, as one or two sentences: (1) WHEN it happened \
-(approximate time in seconds), (2) WHAT own-ship actually did at that moment (heading/course \
-change or lack of one, relative to the target(s) involved), (3) WHY that violates COLREG (name \
-the rule number and the specific requirement it breaches), and (4) WHAT the COLREG-compliant \
-manoeuvre would have been instead (concrete: which direction to turn, or to hold course/speed, \
-and why that resolves the encounter correctly). \
-Each compliant-action string must cover, in this order, as one or two sentences: (1) WHEN it \
-happened, (2) WHAT own-ship did, (3) WHY that was the CORRECT thing to do under COLREG (name \
-the rule number and the specific requirement it satisfies). \
-If own-ship's own self-reported decisions are provided below the trajectory, each one is paired \
-with a FIXED, pre-computed ground-truth encounter classification (deterministic CPA/TCPA + \
-relative-bearing rule classification, including whether real risk of collision existed at all \
--- NOT your own judgement call). Treat that ground truth as established fact: do NOT \
-re-derive or second-guess whether a rule applied or whether risk of collision existed -- only \
-judge whether the agent's OWN citation/action matches the given ground truth. A citation that \
-contradicts the ground truth (a fabricated citation, the wrong rule number, or claiming 'none' \
-when the ground truth says a rule applied -- or the reverse: citing a rule when the ground \
-truth says 'no rule applies (quiet)') is ITSELF a violation, even when the resulting manoeuvre \
-happened to be independently safe: an accidentally-safe action reached through incorrect \
-COLREG reasoning is not true compliance. Word this kind of violation as: 't=<seconds>s: \
-own-ship cited Rule <n> (or "none") but the ground truth says <correct rule or "no rule \
-applies"> because <reason from the ground truth>.' A single isolated wrong-but-safe citation is \
-a minor/technical shortcoming (anchor 0.75 below); citations that contradict the ground truth \
-at MOST decision points are systemic non-compliance (anchor 0.0) even if every resulting action \
-happened to be safe. \
-Finally, give ONE overall compliance_score for the whole trajectory, a float from 0.0 to 1.0, \
-using these anchors (pick the closest, or interpolate between two if the situation is a genuine \
-in-between case) -- judge by SEVERITY AND CONSEQUENCE, not just by counting violations: \
-1.0 = fully compliant, every applicable rule followed correctly, zero violations. \
-0.75 = materially compliant with only a minor/technical shortcoming (e.g. a correct-direction \
-manoeuvre that was slightly late or slightly less than "early and substantial"), but it never \
-created a real close-quarters situation. \
-0.5 = at least one genuine rule violation (wrong give-way response, or a prohibited port \
-alteration) occurred, but it did NOT create an unsafe close-quarters situation -- a safe CPA was \
-maintained throughout despite the improper manoeuvre. \
-0.25 = one or more violations that DID create a real close-quarters/unsafe-CPA situation (a \
-near-miss), though no actual collision occurred. \
-0.0 = repeated or serious violations that directly caused (or were the proximate cause of) an \
-actual collision, or such systematic non-compliance that own-ship's behaviour cannot be \
-considered COLREG-aware at all. \
-If violations is empty, compliance_score MUST be 1.0. If violations is non-empty, \
-compliance_score MUST be less than 1.0, chosen using the anchors above. \
+LLM_COMPLIANCE_SYSTEM = """You write plain-language explanations for COLREG compliance findings \
+that a deterministic checker has ALREADY detected -- you never judge, score, or re-derive \
+whether a rule applied, whether a manoeuvre was correct, or whether risk of collision existed; \
+all of that is given to you as an already-decided fact (each finding's CODE). Your only job is \
+to turn each finding into one clear, human-readable sentence explaining WHY that code fired and \
+what should have happened instead. \
+You are given a list of findings, each with: a situation-report fragment (every contact's \
+range/bearing/CPA/TCPA/band/expected rule for that instant), own-ship's own self-reported \
+decision (action + cited encounter_rule/conduct_rule), the finding's band (safe/early/acute/ \
+passed), and its code -- one of: \
+A_fabricated_risk (cited a rule with no real risk), \
+B_wrong_direction (turned toward the give-way-mandated wrong side), \
+C_degrees_over_limit (requested a physically-impossible turn), \
+D_no_action_when_required (held course despite an acute, imminent risk), \
+E_encounter_mismatch (cited a rule that doesn't match the actual encounter geometry), \
+E_role_fabrication (cited a rule when no real encounter existed at all), \
+E_unclassified_encounter (cited no rule despite a real encounter existing), \
+B_17c (a stand-on vessel acted before it was actually acute -- Rule 17(a)(i)), \
+E_8c (cited Rule 8 without a genuine emergency stop or stationary-object encounter), \
+P_port_toward_contact (turned to port toward a contact on own-ship's own port side). \
+For each finding, write ONE explanation string covering, in this order, as one or two \
+sentences: (1) WHEN it happened (the finding's step, in seconds), (2) WHAT own-ship actually \
+did, (3) WHAT the code means here in plain language, and (4) WHAT should have happened instead \
+(use the finding's own expected_encounter_rule/expected_conduct_rule/expected_direction -- \
+never invent a different one). \
 Reply with ONLY a JSON object, no other text -- no preamble, no analysis, no summary before or \
 after it:
-{"violations": ["t=<seconds>s: <what own-ship did> -- violates Rule <n> because <reason>; the \
-COLREG-compliant action would have been <concrete correct manoeuvre>.", ...],
- "compliant_actions": ["t=<seconds>s: <what own-ship did> -- correctly satisfies Rule <n> \
-because <reason>.", ...],
- "compliance_score": <float 0.0-1.0, see anchors above>}
-If own-ship made no manoeuvres/encounters worth auditing at all, return both lists empty and \
-compliance_score 1.0."""
+{"explanations": ["t=<seconds>s: <what own-ship did> -- <what the code means>; the \
+COLREG-compliant action would have been <concrete correct manoeuvre>.", ...]}
+If given an empty findings list, reply {"explanations": []}."""
 
 
 
@@ -279,14 +278,6 @@ def _extract_json_objects(text: str) -> list[str]:
                     objs.append(text[start:i + 1])
                     start = None
     return objs
-
-
-def _format_trajectory_csv(trajectory_rows: list[dict]) -> str:
-    lines = ["time,vehicle,x,y,heading,speed"]
-    for r in sorted(trajectory_rows, key=lambda r: (r["time"], r["vehicle"])):
-        lines.append(f"{r['time']:.0f},{r['vehicle']},{r['x']:.1f},{r['y']:.1f},"
-                     f"{r['heading']:.1f},{r['speed']:.2f}")
-    return "\n".join(lines)
 
 
 def _rows_at_time(trajectory_rows: list[dict], t: float, tol: float = 0.5) -> dict[str, dict]:
@@ -440,10 +431,9 @@ def _ground_truth_at_checkpoint(trajectory_rows: list[dict], t: float, own_vehic
 
 
 def _render_ground_truth_text(gt: dict) -> str:
-    """Human-readable rendering of _ground_truth_at_checkpoint()'s dict, for the LLM audit
-    prompt (llm_compliance_check() still needs TEXT until STAP 4 removes the LLM's scoring
-    role) -- kept as a thin, separate rendering step so the dict itself stays the one
-    structured source of truth STAP 3's deterministic scoring will consume directly."""
+    """Human-readable rendering of _ground_truth_at_checkpoint()'s dict -- used as each
+    finding's "situation_report" fragment (see _compliance_findings()), the ONLY per-
+    contact text the STAP-4 LLM explanation step ever sees, never the raw trajectory."""
     from app.units import m_to_nm
 
     if not gt["contacts"]:
@@ -462,103 +452,67 @@ def _render_ground_truth_text(gt: dict) -> str:
     return "; ".join(parts) if parts else "(no other vessels)"
 
 
-def _format_checkpoint_citations(checkpoints: list[dict] | None,
-                                 trajectory_rows: list[dict] | None,
-                                 own_vehicle: str, safe_distance_m: float, max_turn_deg: float) -> str:
-    """own-ship's own self-reported action + COLREG rule citation at each decision point
-    (app.agents.ask_oow's `encounter_rule`/`conduct_rule` fields), each paired with a DETERMINISTIC
-    ground-truth encounter classification (see _ground_truth_at_checkpoint) computed the same way
-    the rest of this project already does -- without this, the audit only ever saw raw positions/
-    headings and had to freehand-judge from scratch whether a rule applied at all, which is
-    non-deterministic for a borderline-distance encounter (see that function's docstring).
-    `safe_distance_m`/`max_turn_deg` MUST be the run's own VesselConstraints values, threaded
-    straight through to _ground_truth_at_checkpoint."""
-    if not checkpoints:
-        return ""
-    lines = ["\n\nOwn-ship's own self-reported decisions, each paired with a FIXED, "
-            "pre-computed ground-truth encounter classification -- treat the ground truth "
-            "as established fact, do not re-derive or second-guess whether risk of collision "
-            "existed; only judge whether the agent's citation/action matches it:"]
-    for cp in checkpoints:
-        decision = cp.get("decision") or {}
-        t = cp.get("time", 0)
-        ground_truth = (_render_ground_truth_text(_ground_truth_at_checkpoint(
-                            trajectory_rows, t, own_vehicle, safe_distance_m, max_turn_deg))
-                       if trajectory_rows else "(no trajectory provided)")
-        lines.append(f"t={t:.0f}s: action={decision.get('action', '?')}, "
-                     f"encounter_rule={decision.get('encounter_rule', 'none')}, "
-                     f"conduct_rule={decision.get('conduct_rule', 'none')} | "
-                     f"ground truth: {ground_truth}")
-    return "\n".join(lines)
+def _format_findings_for_llm(findings: list[dict]) -> str:
+    """Renders _compliance_findings()'s list as the user message llm_compliance_check()
+    sends Claude -- compliance-rebuild STAP 4 (2026-09-23): no more raw trajectory CSV,
+    just the already-decided findings themselves (situation/decision/band/expected
+    rule-direction/code), since the LLM only ever explains a given finding now, never
+    re-derives whether one applies."""
+    lines = []
+    for i, f in enumerate(findings, 1):
+        d = f["decision"]
+        lines.append(
+            f"Finding {i} [{f['code']}] t={f['step']:.0f}s\n"
+            f"  Situation: {f['situation_report']}\n"
+            f"  Own-ship decision: action={d.get('action', '?')}, "
+            f"encounter_rule={d.get('encounter_rule', 'none')}, conduct_rule={d.get('conduct_rule', 'none')}\n"
+            f"  Band: {f['band']}; expected encounter_rule={f['expected_encounter_rule']}, "
+            f"conduct_rule={f['expected_conduct_rule']}, direction={f['expected_direction']}"
+        )
+    return "\n\n".join(lines)
 
 
-def llm_compliance_check(trajectory_rows: list[dict], own_vehicle: str = "own_ship",
-                         model: str = "claude-sonnet-4-5",
-                         checkpoints: list[dict] | None = None,
-                         safe_distance_m: float = 500.0, max_turn_deg: float = 30.0) -> dict:
-    """One-shot LLM judge of full-trajectory COLREG compliance, using Anthropic Claude -- a
-    full two-sided AUDIT (what was done wrong AND what was done right, each explained), not
-    just a list of mistakes.
+def llm_compliance_check(findings: list[dict], model: str = "claude-sonnet-4-5") -> dict:
+    """Compliance-rebuild STAP 4 (2026-09-23): plain-language EXPLANATION of findings the
+    deterministic compliance_axis() has already scored -- the LLM never judges, scores, or
+    re-derives anything anymore (see LLM_COMPLIANCE_SYSTEM). `findings` is
+    score_trajectory()'s own `result["compliance"]["findings"]` (from
+    _compliance_findings()) -- never the raw trajectory.
 
-    Deliberately NOT called during live stepping -- it's a single network round-trip
-    (real latency), so it must only run on demand, once, after a run is complete (or
-    paused), triggered by an explicit UI button. Compliance-rebuild STAP 3 (2026-09-23):
-    score_trajectory()'s compliance score no longer comes from here at all -- it is
-    always a deterministic score computed from `checkpoints` directly (see
-    score_trajectory()'s own docstring); this audit is purely a human-readable
-    explanation, kept separate from scoring.
+    Deliberately NOT called during live stepping or by default in a sweep -- it's a single
+    network round-trip (real latency + cost) that no longer affects any score, so it's
+    opt-in only (run_llm_scenario.py's `--explain` flag, default off). An empty findings
+    list needs no explanation at all -- returned immediately, no API call.
 
-    `checkpoints`, if given (run_llm_scenario.py's/a precomputed run log's own checkpoint
-    list), lets the audit ALSO cross-check own-ship's SELF-REPORTED encounter_rule/conduct_rule
-    citations at each decision against the actual geometry -- catching a fabricated/wrong-but-safe
-    citation that pure trajectory geometry alone can't reveal. Optional: omitted for the
-    live "Agent Real-Time" mode, which only tracks the single most recent decision.
-    `safe_distance_m`/`max_turn_deg` should always be the run's own VesselConstraints values
-    (min_cpa_m/max_rudder_angle_deg) -- only used for the checkpoint ground-truth text above,
-    defaults here match VesselConstraints()'s own defaults for callers with no live run
-    constraints available.
+    Returns {"explanations": [str, ...]} -- one string per finding, in the same when/what/
+    why/what-should-have-happened form the old audit used, now for an already-decided
+    finding rather than a judgement call."""
+    if not findings:
+        return {"explanations": []}
 
-    Returns {"violations": [...], "compliant_actions": [...], "compliance_score": float}
-    (compliance_score is Claude's own 0.0-1.0 severity-weighted judgement, see
-    LLM_COMPLIANCE_SYSTEM's anchors -- 1.0 only when violations is empty)."""
     import anthropic
     from core.io import load_env
 
     load_env(WORKSPACE_ROOT / ".env")
     key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not key:
-        raise RuntimeError("ANTHROPIC_API_KEY not set in .env -- cannot run the LLM compliance check.")
+        raise RuntimeError("ANTHROPIC_API_KEY not set in .env -- cannot run the LLM explanation.")
 
     client = anthropic.Anthropic(api_key=key)
-    user_msg = (f"Trajectory (own_vehicle={own_vehicle}):\n\n{_format_trajectory_csv(trajectory_rows)}"
-               f"{_format_checkpoint_citations(checkpoints, trajectory_rows, own_vehicle, safe_distance_m, max_turn_deg)}")
+    user_msg = _format_findings_for_llm(findings)
     resp = client.messages.create(
-        # 3072 (not the old 800) -- every manoeuvre now gets a full when/what/why explanation
-        # (violation OR compliant), not just a short sentence per mistake.
-        model=model, max_tokens=3072, system=LLM_COMPLIANCE_SYSTEM,
+        model=model, max_tokens=2048, system=LLM_COMPLIANCE_SYSTEM,
         messages=[{"role": "user", "content": user_msg}],
     )
     text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
     text = re.sub(r"^```(json)?|```$", "", text, flags=re.MULTILINE).strip()
-    # Prefer the LAST complete {...} object that actually parses AND has a "violations" key
-    # (rather than requiring the ENTIRE reply to be pure JSON) -- see _extract_json_objects.
+    # Prefer the LAST complete {...} object that actually parses AND has an "explanations"
+    # key (rather than requiring the ENTIRE reply to be pure JSON) -- see _extract_json_objects.
     for candidate in reversed(_extract_json_objects(text)):
         try:
             parsed = json.loads(candidate)
         except json.JSONDecodeError:
             continue
-        if isinstance(parsed, dict) and "violations" in parsed:
-            violations = [str(v) for v in parsed["violations"]]
-            score = parsed.get("compliance_score")
-            # Fall back to a safe binary reading (1.0/0.0) if Claude omitted the field or
-            # returned something that isn't a plain number -- never silently treat an
-            # un-scored response as perfect.
-            if not isinstance(score, (int, float)):
-                score = 1.0 if not violations else 0.0
-            return {
-                "violations": violations,
-                "compliant_actions": [str(v) for v in parsed.get("compliant_actions", [])],
-                "compliance_score": max(0.0, min(1.0, float(score))),
-            }
-    return {"violations": [f"[LLM compliance check -- could not parse response] {text[:200]}"],
-           "compliant_actions": [], "compliance_score": 0.0}
+        if isinstance(parsed, dict) and "explanations" in parsed:
+            return {"explanations": [str(e) for e in parsed["explanations"]]}
+    return {"explanations": [f"[LLM explanation -- could not parse response] {text[:200]}"]}

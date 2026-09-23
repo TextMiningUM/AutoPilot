@@ -174,20 +174,16 @@ def _scan_mission_runs(mission_id: str, gen_at_index: list[tuple[datetime, Path]
 
 
 def _colreg_status(r: dict) -> str:
-    """Narrow-column status for the end-of-mission Anthropic Claude COLREG compliance
-    check (app.evaluation.llm_compliance_check, run automatically by run_llm_scenario.py's
-    run_one() -- see its colreg_llm_check field): compact enough for a dataframe cell, full
-    violations/compliant-actions text lives in the "View details" popover instead
-    (_describe_run) since it can be long. "--" covers both older logs generated before this
-    check existed at all, and logs where it was explicitly skipped (--no-colreg-check) --
-    NOT the same as a checked 0.0 (audited and found non-compliant)."""
+    """Narrow-column status for the optional Anthropic Claude plain-language explanation
+    (app.evaluation.llm_compliance_check, compliance-rebuild STAP 4 -- opt-in via
+    run_llm_scenario.py's --explain flag, off by default) of the deterministic compliance
+    findings already scored in r['compliance']['score']. "--" covers both older logs
+    generated before this field existed and logs where --explain was not passed."""
     check = r.get("colreg_llm_check")
     if not check or not check.get("checked"):
         return "\u2014"
-    score = check.get("compliance_score")
-    violations = check.get("violations") or []
-    score_str = f"{score:.2f}" if isinstance(score, (int, float)) else "?"
-    return f"\u2705 {score_str}" if not violations else f"\u26A0\uFE0F {score_str} ({len(violations)})"
+    n = len(check.get("explanations") or [])
+    return f"\U0001F4AC {n}" if n else "\u2705 none"
 
 
 def _axis_cols(r: dict) -> dict:
@@ -242,28 +238,20 @@ def _colreg_audit_markdown(r: dict) -> str:
     explanation) -- factored out of _describe_run() so the leaderboard can show it in its
     own compact popover (r['colreg'] narrow-column status is the summary, this is the full
     text) without dragging in the rest of the safety/temporal/spatial/manoeuvre readout."""
-    lines = ["**Claude COLREG compliance check** (end-of-mission, Anthropic API -- full audit)"]
+    lines = ["**Claude explanation** (compliance-rebuild STAP 4 -- plain-language, opt-in, "
+            "never affects the score)"]
     check = r.get("colreg_llm_check")
     if not check or not check.get("checked"):
-        reason = (check or {}).get("error") or "not run for this log (older log, or --no-colreg-check)"
+        reason = (check or {}).get("error") or "not requested for this log (older log, or no --explain)"
         lines.append(f"- Not checked -- {reason}.")
         return "\n".join(lines)
-    violations = check.get("violations") or []
-    compliant_actions = check.get("compliant_actions") or []
-    score = check.get("compliance_score")
-    score_str = f"{score:.2f}" if isinstance(score, (int, float)) else "?"
-    if not violations:
-        lines.append(f"- Compliance score **{score_str}** -- Claude found no COLREG "
-                    f"violations ({len(compliant_actions)} manoeuvre(s) audited as correct).")
+    explanations = check.get("explanations") or []
+    if not explanations:
+        lines.append("- No findings to explain (deterministic compliance score was clean).")
     else:
-        lines.append(f"- Compliance score **{score_str}** -- Claude flagged "
-                    f"{len(violations)} violation(s):")
-        for v in violations:
-            lines.append(f"  - {v}")
-    if compliant_actions:
-        lines.append(f"- Correctly handled ({len(compliant_actions)}):")
-        for c in compliant_actions:
-            lines.append(f"  - {c}")
+        lines.append(f"- {len(explanations)} finding(s) explained:")
+        for e in explanations:
+            lines.append(f"  - {e}")
     return "\n".join(lines)
 
 
@@ -362,21 +350,20 @@ def _render() -> None:
     checked_missions = [m for m in MISSIONS
                        if ((best_row_by_mission.get(m) or {}).get("colreg_llm_check") or {}).get("checked")]
     if checked_missions:
-        st.caption("\U0001F4C4 View full COLREG audit (best config per mission):")
+        st.caption("\U0001F4AC View Claude explanation (best config per mission):")
         audit_cols = st.columns(min(len(checked_missions), 7))
         for i, mission_id in enumerate(checked_missions):
             with audit_cols[i % len(audit_cols)]:
                 best = best_row_by_mission[mission_id]
-                score = (best.get("colreg_llm_check") or {}).get("compliance_score")
-                score_str = f"{score:.2f}" if isinstance(score, (int, float)) else "?"
-                with st.popover(f"{mission_id}  {score_str}"):
+                n = len((best.get("colreg_llm_check") or {}).get("explanations") or [])
+                with st.popover(f"{mission_id}  {n} finding(s)"):
                     st.markdown(_colreg_audit_markdown(best))
     elif best_row_by_mission:
         # Otherwise this whole section just silently disappears with no explanation --
-        # looks like a broken/missing feature rather than "no logs have been audited yet".
-        st.caption("\U0001F4C4 No mission has a saved COLREG audit yet -- these logs predate "
-                  "the check, or were generated with --no-colreg-check. Re-run with the audit "
-                  "enabled (the default) to populate it.")
+        # looks like a broken/missing feature rather than "no logs have been explained yet".
+        st.caption("\U0001F4AC No mission has a saved Claude explanation yet -- these logs predate "
+                  "the field, or were generated without --explain (the default). Re-run with "
+                  "--explain to populate it -- it never affects the deterministic score above.")
 
     st.divider()
     st.subheader("Per-mission detail (all variations)")

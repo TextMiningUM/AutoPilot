@@ -51,7 +51,7 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
            dt: float = 10.0, max_steps: int | None = None, enable_thinking: bool = False,
            max_new_tokens: int = 256, k: int = 2, use_rag: bool = True,
            system_prompt: str | None = None, force: bool = False,
-           decision_interval: int | None = None, check_colreg_compliance: bool = True) -> Path:
+           decision_interval: int | None = None, explain: bool = False) -> Path:
     out_path = run_log_path(mission_id, config, weights, tag)
     if out_path.exists() and not force:
         print(f"  [skip] {out_path.name} already exists (use --force to overwrite)")
@@ -136,22 +136,23 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
 
     latency_s = time.time() - _t_run_start
 
-    # One-shot Anthropic Claude judge of the WHOLE completed trajectory's COLREG compliance,
-    # run automatically at the end of every mission's calculation (not per-checkpoint -- a
-    # single network round-trip after the fact, same call app.evaluation.llm_compliance_check
-    # already offered as an on-demand button in the live UI). A failure here (missing API
-    # key, network error, ...) must not take the rest of a long sweep down -- recorded as
-    # "checked: false" with the error message instead of raising.
-    colreg_llm_check = {"checked": False, "violations": None, "compliant_actions": None,
-                        "compliance_score": None, "error": None}
-    if check_colreg_compliance:
+    # Compliance-rebuild STAP 3/4 (2026-09-23): the deterministic compliance score never
+    # needs an API call, so it's always computed. The Claude explanation is a SEPARATE,
+    # opt-in step (--explain, default off in a sweep) that only turns score_trajectory()'s
+    # own findings into plain-language prose -- it never sees the raw trajectory and never
+    # affects the score. A failure here must not take the rest of a long sweep down --
+    # recorded as "checked: false" with the error message instead of raising.
+    evaluation = score_trajectory(
+        sim.trajectory, start_xy=(mission.own_ship.x, mission.own_ship.y),
+        goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
+        safe_distance_m=constraints.min_cpa_m, max_turn_deg=constraints.max_rudder_angle_deg,
+        checkpoints=checkpoints,
+    )
+    colreg_llm_check = {"checked": False, "explanations": None, "error": None}
+    if explain:
         try:
-            audit = llm_compliance_check(sim.trajectory, checkpoints=checkpoints,
-                                         safe_distance_m=constraints.min_cpa_m,
-                                         max_turn_deg=constraints.max_rudder_angle_deg)
-            colreg_llm_check["violations"] = audit["violations"]
-            colreg_llm_check["compliant_actions"] = audit["compliant_actions"]
-            colreg_llm_check["compliance_score"] = audit["compliance_score"]
+            audit = llm_compliance_check(evaluation["compliance"]["findings"])
+            colreg_llm_check["explanations"] = audit["explanations"]
             colreg_llm_check["checked"] = True
         except Exception as exc:
             colreg_llm_check["error"] = str(exc)
@@ -166,12 +167,7 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
         # that file alongside it -- see app.missions.mission_from_dict/mission_to_dict and
         # app.evaluation.score_trajectory.
         "mission": mission_to_dict(mission),
-        "evaluation": score_trajectory(
-            sim.trajectory, start_xy=(mission.own_ship.x, mission.own_ship.y),
-            goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
-            safe_distance_m=constraints.min_cpa_m, max_turn_deg=constraints.max_rudder_angle_deg,
-            checkpoints=checkpoints,
-        ),
+        "evaluation": evaluation,
         "colreg_llm_check": colreg_llm_check,
         "params": {
             "decision_interval": effective_interval, "dt": dt, "max_steps": max_steps,
@@ -186,12 +182,11 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
     }
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(log, ensure_ascii=False, indent=1), encoding="utf-8")
-    _cc = (f"score={colreg_llm_check['compliance_score']:.2f} "
-          f"({len(colreg_llm_check['violations'])} violation(s), "
-          f"{len(colreg_llm_check['compliant_actions'])} compliant action(s))"
-          if colreg_llm_check["checked"] else f"not checked ({colreg_llm_check['error']})")
+    _cc = (f"{len(colreg_llm_check['explanations'])} explanation(s)" if colreg_llm_check["checked"]
+          else ("not requested" if not explain else f"failed ({colreg_llm_check['error']})"))
     print(f"  [done] {out_path.name}  outcome={outcome}  steps={step}  "
-          f"checkpoints={len(checkpoints)}  latency={latency_s:.1f}s  colreg_check={_cc} "
+          f"checkpoints={len(checkpoints)}  latency={latency_s:.1f}s  "
+          f"compliance={evaluation['compliance']['score']:.2f} explain={_cc} "
           f"composite={log['evaluation']['composite_score']:.3f}")
     return out_path
 
@@ -235,10 +230,11 @@ def main() -> None:
                     help="path to a text file with a custom system prompt override "
                          "(default: agents.SYSTEM_OOW_AGENT)")
     ap.add_argument("--force", action="store_true", help="overwrite existing logs")
-    ap.add_argument("--no-colreg-check", action="store_true",
-                    help="skip the end-of-mission Anthropic Claude COLREG compliance check "
-                         "(saves one network call + latency per run; needs ANTHROPIC_API_KEY "
-                         "in .env otherwise)")
+    ap.add_argument("--explain", action="store_true",
+                    help="also ask Anthropic Claude for a plain-language explanation of the "
+                         "deterministic compliance findings (one network call + latency per run, "
+                         "needs ANTHROPIC_API_KEY in .env) -- never affects the score itself, off "
+                         "by default in a sweep")
     args = ap.parse_args()
 
     missions = args.missions or list_mission_ids()
@@ -257,7 +253,7 @@ def main() -> None:
             max_new_tokens=args.max_new_tokens, k=args.k, use_rag=not args.no_rag,
             system_prompt=system_prompt, force=args.force,
             decision_interval=args.decision_interval,
-            check_colreg_compliance=not args.no_colreg_check,
+            explain=args.explain,
         )
         print(f"  took {time.time() - t0:.1f}s")
 

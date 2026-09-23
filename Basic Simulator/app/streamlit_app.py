@@ -1047,31 +1047,39 @@ with plot_col:
     elif len(eval_traj) < 4:
         st.caption("Run a few steps first -- not enough trajectory yet to score.")
     else:
+        # Compliance-rebuild STAP 4 (2026-09-23): the deterministic score never needs an
+        # API call, so it's always computed up front -- the Claude button below only ever
+        # adds a plain-language EXPLANATION for the findings already in `result`, never a
+        # score. Reuse the run log's own saved "evaluation" when available (faster, and
+        # guarantees the on-disk score is what's shown by default).
+        result = precomputed_evaluation or score_trajectory(
+            eval_traj, start_xy=(mission.own_ship.x, mission.own_ship.y),
+            goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
+            safe_distance_m=sim.constraints.min_cpa_m,
+            max_turn_deg=sim.constraints.max_rudder_angle_deg,
+            checkpoints=_eval_checkpoints,
+        )
+        findings = result["compliance"].get("findings", [])
+
         if precomputed_check and precomputed_check.get("checked"):
-            _pc_score = precomputed_check.get("compliance_score")
-            _pc_score_str = f"{_pc_score:.2f}" if isinstance(_pc_score, (int, float)) else "?"
-            st.caption(f"\U0001F4BE This run already has a saved COLREG audit from when it was "
-                      f"computed (score **{_pc_score_str}**) -- shown below automatically. The "
-                      f"button only runs a NEW, separate check for this browser session; it "
-                      f"does not overwrite the saved one on disk.")
+            st.caption("\U0001F4BE This run already has a saved Claude explanation from when it was "
+                      "computed -- shown below automatically. The button only runs a NEW, separate "
+                      "explanation for this browser session; it does not overwrite the saved one.")
 
         ec1, ec2 = st.columns([2, 1])
         with ec2:
-            if st.button("\U0001F50D Check COLREG compliance (Claude)", use_container_width=True,
-                        help="One-shot AI judge of the full trajectory so far -- runs on demand "
-                             "only (a real network call), never during live stepping, so it adds "
-                             "no latency to the simulation itself. Result is kept in THIS "
-                             "browser session only -- never written back to the run log file."):
+            if st.button("\U0001F50D Explain findings (Claude)", use_container_width=True,
+                        help="Plain-language explanation of the findings already in the deterministic "
+                             "score below -- runs on demand only (a real network call), never during "
+                             "live stepping, and never changes the score itself. Result is kept in "
+                             "THIS browser session only -- never written back to the run log file."):
                 from app.evaluation import llm_compliance_check
-                with st.spinner("Asking Claude to audit COLREG compliance..."):
+                with st.spinner("Asking Claude to explain the compliance findings..."):
                     try:
-                        st.session_state.llm_compliance_audit = llm_compliance_check(
-                            eval_traj, checkpoints=_eval_checkpoints,
-                            safe_distance_m=sim.constraints.min_cpa_m,
-                            max_turn_deg=sim.constraints.max_rudder_angle_deg)
+                        st.session_state.llm_compliance_audit = llm_compliance_check(findings)
                         st.session_state.llm_compliance_checked_key = (eval_cache_key, len(eval_traj))
                     except Exception as e:
-                        st.error(f"Compliance check failed: {e}")
+                        st.error(f"Explanation failed: {e}")
         session_audit = st.session_state.get("llm_compliance_audit")
         stale = st.session_state.get("llm_compliance_checked_key") != (eval_cache_key, len(eval_traj))
         if session_audit is not None and not stale:
@@ -1081,47 +1089,22 @@ with plot_col:
         else:
             audit, audit_source = None, None
         if session_audit is not None and stale:
-            st.caption("\u26A0\uFE0F Trajectory changed since the last compliance check -- re-run for a current result.")
+            st.caption("\u26A0\uFE0F Trajectory changed since the last explanation -- re-run for a current result.")
         if audit is not None:
-            n_v, n_c = len(audit["violations"]), len(audit["compliant_actions"])
-            score = audit.get("compliance_score")
-            score_str = f"{score:.2f}" if isinstance(score, (int, float)) else "?"
-            if n_v:
-                st.caption(f"\U0001F916 Compliance score **{score_str}** ({audit_source}) -- Claude "
-                          f"found {n_v} COLREG violation(s) and {n_c} correctly handled manoeuvre(s).")
+            explanations = audit.get("explanations") or []
+            if explanations:
+                st.caption(f"\U0001F916 Claude explanation ({audit_source}) -- "
+                          f"{len(explanations)} finding(s) explained.")
+                with st.popover("\U0001F4C4 Full explanation"):
+                    for e in explanations:
+                        st.markdown(f"- {e}")
             else:
-                st.caption(f"\U0001F916 Compliance score **{score_str}** ({audit_source}) -- Claude "
-                          f"found no COLREG violations ({n_c} manoeuvre(s) audited as correct).")
-            with st.popover("\U0001F4C4 Full COLREG audit"):
-                if audit["violations"]:
-                    st.markdown("**Violations**")
-                    for v in audit["violations"]:
-                        st.markdown(f"- {v}")
-                if audit["compliant_actions"]:
-                    st.markdown("**Correctly handled**")
-                    for c in audit["compliant_actions"]:
-                        st.markdown(f"- {c}")
-                if not audit["violations"] and not audit["compliant_actions"]:
-                    st.caption("Nothing to audit -- no manoeuvres/encounters in this trajectory.")
+                st.caption(f"\U0001F916 Claude explanation ({audit_source}) -- no findings to explain.")
         else:
             st.caption("\u2139\uFE0F Compliance below is always a deterministic score (no API call "
-                      "needed) -- the Claude check above only adds a plain-language explanation, it "
-                      "no longer affects the score.")
+                      "needed) -- the Claude button above only explains the findings in plain "
+                      "language, it never affects the score.")
 
-        # Reuse the run log's own saved "evaluation" (written by run_llm_scenario.py at
-        # save time) instead of recomputing, but ONLY when the audit actually in use is
-        # that same saved one -- a fresh live click this session must recompute so the
-        # scores reflect the NEW audit, not the stale on-disk one.
-        if audit_source == "saved in the run log" and precomputed_evaluation is not None:
-            result = precomputed_evaluation
-        else:
-            result = score_trajectory(
-                eval_traj, start_xy=(mission.own_ship.x, mission.own_ship.y),
-                goal_xy=mission.goal, nominal_speed=mission.own_ship.speed,
-                safe_distance_m=sim.constraints.min_cpa_m,
-                max_turn_deg=sim.constraints.max_rudder_angle_deg,
-                checkpoints=_eval_checkpoints,
-            )
         verdict = result["verdict"]
         badge_cls = "badge-pass" if verdict == "PASS" else "badge-fail"
         st.markdown(

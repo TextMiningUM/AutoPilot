@@ -69,10 +69,10 @@ def _clear_status() -> None:
 
 def score_one(mission, log: dict) -> dict:
     """Scores one precomputed run's trajectory with the same composite evaluate_run.py
-    uses elsewhere (Evaluation panel, LLM compliance check) -- safety gate, then weighted
+    uses elsewhere (Evaluation panel) -- safety gate, then weighted deterministic
     compliance/temporal/spatial/manoeuvre/smoothness. Keeps the FULL per-axis breakdown
-    (violations list, min CPA, path ratios, manoeuvre counts, ...), not just the top-line
-    scores, so the on-disk summary is self-sufficient for later inspection.
+    (compliance finding codes, min CPA, path ratios, manoeuvre counts, ...), not just the
+    top-line scores, so the on-disk summary is self-sufficient for later inspection.
 
     Prefers the log's OWN embedded "evaluation" (written by run_llm_scenario.py's run_one()
     at save time) over recomputing -- only recomputes for older logs from before that field
@@ -168,10 +168,11 @@ def main() -> None:
     ap.add_argument("--k", type=int, default=2)
     ap.add_argument("--no-rag", action="store_true")
     ap.add_argument("--force", action="store_true", help="recompute even if a log already exists")
-    ap.add_argument("--no-colreg-check", action="store_true",
-                    help="skip the end-of-mission Anthropic Claude COLREG compliance check for "
-                         "every job in this sweep (saves one network call + latency per job; "
-                         "needs ANTHROPIC_API_KEY in .env otherwise)")
+    ap.add_argument("--explain", action="store_true",
+                    help="also ask Anthropic Claude for a plain-language explanation of the "
+                         "deterministic compliance findings for every job in this sweep (one "
+                         "network call + latency per job, needs ANTHROPIC_API_KEY in .env) -- "
+                         "never affects the score itself, off by default")
     args = ap.parse_args()
 
     missions = args.missions or list_mission_ids()
@@ -183,7 +184,7 @@ def main() -> None:
         enable_thinking=args.enable_thinking, max_new_tokens=args.max_new_tokens,
         k=args.k, use_rag=not args.no_rag, force=args.force,
         decision_interval=args.decision_interval,
-        check_colreg_compliance=not args.no_colreg_check,
+        explain=args.explain,
     )
     print(f"\nSaved incrementally to: {SUMMARY_FILE}")
 
