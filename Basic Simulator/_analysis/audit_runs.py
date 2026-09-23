@@ -433,6 +433,67 @@ def check_1_7_cadence(run: dict) -> list[dict]:
     return findings
 
 
+def _extract_json_objects(text: str) -> list[str]:
+    """Balanced-brace scan for every top-level {...} object in `text` -- duplicated
+    (deliberately, not imported) from app.agents._extract_json_objects, since app.agents
+    pulls in torch/transformers/sentence_transformers at module level and this auditor is
+    meant to stay dependency-light/importable without a GPU or the models present. Keep
+    this in sync by hand if app.agents._extract_json_objects ever changes."""
+    objs, depth, start = [], 0, None
+    for i, ch in enumerate(text):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    objs.append(text[start:i + 1])
+                    start = None
+    return objs
+
+
+def _reparse_raw_decision(raw_text: str) -> dict | None:
+    """Re-derives {decision, parse_ok, schema_errors} from a checkpoint's raw model text,
+    duplicating (not importing, same reason as _extract_json_objects above) app.agents.
+    _parse_json_action()'s parse/schema split. Returns None if raw_text is falsy.
+
+    Screening-set-B audit follow-up (2026-09-23), point 1: these run logs were generated
+    BEFORE the app.agents._parse_json_action() fix landed, so their logged `decision`/
+    `_parse_error` reflect the OLD buggy behaviour (discarding a valid-JSON-but-schema-
+    invalid decision and replacing it with a hold_course fallback). Re-running the actual
+    model is out of scope (explicitly not requested) -- but every checkpoint's raw model
+    text is ALREADY saved verbatim as `reasoning_raw`, so the auditor can retroactively
+    recompute the CORRECT parse_ok/schema_errors split from that saved text without any
+    new model calls. audit_one_run() only applies this correction to checkpoints the OLD
+    code flagged as `_parse_error` -- checkpoints that already parsed fine are left as-is."""
+    if not raw_text:
+        return None
+    text = re.sub(r"^```(json)?|```$", "", raw_text.strip(), flags=re.MULTILINE).strip()
+    schema_invalid_candidate, schema_invalid_errors = None, None
+    for candidate in reversed(_extract_json_objects(text)):
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if not (isinstance(parsed, dict) and "action" in parsed):
+            continue
+        errors = validate_action_json(parsed)
+        if not errors:
+            return {"decision": parsed, "parse_ok": True, "schema_errors": []}
+        if schema_invalid_candidate is None:
+            schema_invalid_candidate, schema_invalid_errors = parsed, errors
+    if schema_invalid_candidate is not None:
+        schema_invalid_candidate["_schema_errors"] = schema_invalid_errors
+        return {"decision": schema_invalid_candidate, "parse_ok": True,
+               "schema_errors": schema_invalid_errors}
+    return {"decision": {"action": "hold_course", "encounter_rule": "none", "conduct_rule": "none",
+                        "reasoning": f"[parse error -- raw model output] {text[:300]}",
+                        "_parse_error": True},
+           "parse_ok": False, "schema_errors": []}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SECTION 2 -- DECISION QUALITY (ERROR-class)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -939,6 +1000,14 @@ def audit_one_run(run: dict, path: Path) -> dict:
     situations: dict[int, list[dict]] = {}
     reasoning_lens = []
     for cp in checkpoints:
+        # Point 1 retroactive fix: only touch checkpoints the (old, buggy) generation-time
+        # parser flagged as a parse failure -- re-derive the true parse_ok/decision from the
+        # saved raw text instead of trusting that stale flag. Checkpoints that already
+        # parsed fine at generation time are left completely untouched.
+        if (cp.get("decision") or {}).get("_parse_error"):
+            reparsed = _reparse_raw_decision(cp.get("reasoning_raw"))
+            if reparsed is not None:
+                cp = {**cp, "decision": reparsed["decision"]}
         situation = situation_for_checkpoint(run, traj, cp)
         situations[cp["step"]] = situation
         findings += check_2_0_parse_format(cp)
