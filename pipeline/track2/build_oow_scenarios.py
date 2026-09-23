@@ -414,7 +414,13 @@ def to_unified_action(rec: dict) -> dict:
     `decisive_contact_index` (index into rec["targets"], or None when no real risk) is
     the contact that actually drove this decision -- fed to the B3 teacher prompt as
     answer-side context (never leaked to render_scenario_situation()'s user-facing text)
-    and checked by the B3 acceptance gates' contact-consistency check."""
+    and checked by the B3 acceptance gates' contact-consistency check.
+
+    NO stationary-contact branch here (unlike build_oow_scenarios_leo.py's quality-review
+    STAP 1 extension, 2026-09-23): verified -- this generator's CATEGORIES/_classify_target()
+    only ever produce moving-vessel encounter_type values (head_on/crossing_target_on_*/
+    overtaking_geometry/same_line ahead/astern); no "stationary_contact"/"not_applicable"
+    role is ever generated, so there is nothing for a stationary branch to catch here."""
     old_action = rec["action"]
     roles = rec["role"].split("+")
     if old_action == "resume_cruising_speed":

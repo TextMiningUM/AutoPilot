@@ -136,12 +136,14 @@ overtaking, Rule 14 head-on, Rule 15 crossing, or 'none' if no contact poses rea
 conduct_rule names the rule that governs the SPECIFIC action you are taking: Rule 16 for a
 give-way vessel's turn/speed change (except overtaking, which stays Rule 13), Rule 14 for a
 head-on turn, Rule 17 for a stand-on vessel (holding course, or its own 17(b) action), Rule 8
-for a give-way vessel's emergency stop (Rule 17(b) is for the STAND-ON vessel only, never a
-give-way vessel's own stop), Rule 19 in restricted visibility, or 'none' if no real risk. Both
-fields are whole rule numbers only (no sub-paragraphs like "17(b)" -- put that detail in
-reasoning instead), and both are 'none' together whenever no contact poses real risk -- standing
-rules (2/5/6/7/11) are never cited in either field, they always apply and are not what these
-fields are for."""
+for a give-way vessel's emergency stop OR for avoiding a stationary/non-vessel object (a
+verankerd/anchored ship, buoy, or other fixed obstruction is not a COLREG encounter, so
+encounter_rule stays 'none' even though conduct_rule is 'Rule 8' -- this is the ONE case where
+the two fields differ) (Rule 17(b) is for the STAND-ON vessel only, never a give-way vessel's
+own stop), Rule 19 in restricted visibility, or 'none' if no real risk. Both fields are whole
+rule numbers only (no sub-paragraphs like "17(b)" -- put that detail in reasoning instead), and
+both are 'none' together whenever no contact poses real risk -- standing rules (2/5/6/7/11) are
+never cited in either field, they always apply and are not what these fields are for."""
 
 
 # Fase B3 (RAG-rebuild-v2 plan, 2026-09-22): the ONE ground-truth mapping from (encounter role,
@@ -163,10 +165,15 @@ _STAND_ON_ROLES = ("stand_on", "overtaking_stand_on")
 def classify_rules(role: str, action: str, restricted_visibility: bool = False) -> tuple[str, str]:
     """(encounter_rule, conduct_rule) for a given encounter role and the action taken.
     `role` is one of "mutual" (head-on) | "give_way" | "stand_on" | "overtaking_give_way" |
-    "overtaking_stand_on" | "cleared"/"none"/None (no real risk). `action` is any value from
-    ACTIONS. `restricted_visibility=True` forces conduct_rule="Rule 19" (not yet produced by
-    either generator, included for forward-compatibility with Basic Simulator's live agent).
+    "overtaking_stand_on" | "stationary" (a real-risk stationary/non-vessel object -- quality-
+    review STAP 1 extension, 2026-09-23: NOT a COLREG vessel encounter, so encounter_rule stays
+    "none" even though a real risk exists and an action IS required) | "cleared"/"none"/None (no
+    real risk at all). `action` is any value from ACTIONS. `restricted_visibility=True` forces
+    conduct_rule="Rule 19" (not yet produced by either generator, included for forward-
+    compatibility with Basic Simulator's live agent).
     """
+    if role == "stationary":
+        return "none", "Rule 8"
     if role in (None, "none", "cleared"):
         return "none", "none"
     encounter_rule = _ENCOUNTER_RULE_BY_ROLE.get(role, "none")
@@ -212,9 +219,13 @@ def validate_action_json(obj: dict) -> list[str]:
         if value != "none" and not (isinstance(value, str) and value.startswith("Rule ")
                                     and value.split(" ", 1)[-1].isdigit()):
             errors.append(f"{field_name} {value!r} must be 'none' or a whole 'Rule N'")
-    if (encounter_rule == "none") != (conduct_rule == "none"):
-        errors.append(f"encounter_rule {encounter_rule!r} and conduct_rule {conduct_rule!r} "
-                     "must be 'none' together, never only one of them")
+    # The ONE exception to "both none together": a real-risk STATIONARY/non-vessel object
+    # (quality-review STAP 1 extension, 2026-09-23) is not a COLREG vessel encounter
+    # (encounter_rule stays "none") even though conduct_rule is "Rule 8" (an action IS required).
+    if not (encounter_rule == "none" and conduct_rule == "Rule 8"):
+        if (encounter_rule == "none") != (conduct_rule == "none"):
+            errors.append(f"encounter_rule {encounter_rule!r} and conduct_rule {conduct_rule!r} "
+                         "must be 'none' together, never only one of them")
     reasoning = obj.get("reasoning")
     if not isinstance(reasoning, str) or not reasoning.strip():
         errors.append("'reasoning' must be a non-empty string")

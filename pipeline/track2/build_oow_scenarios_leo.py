@@ -235,6 +235,45 @@ def _should_stop(c: dict) -> bool:
             and c["range_m"] < CRITICAL_RANGE_M and (c.get("closing_speed") or 0) > 0)
 
 
+def _cpa_with_own_heading(own: dict, c: dict, own_heading_deg: float) -> float:
+    """Recomputes contact `c`'s CPA (metres) assuming own-ship turns to
+    `own_heading_deg` and both vessels then hold course/speed -- `c`'s absolute position
+    is derived from own-ship's CURRENT heading + `c`'s relative_bearing_deg/range_m
+    (Leo contacts don't carry absolute x/y). Same dot-product CPA formula as narrate.py's
+    cpa_tcpa()/build_oow_scenarios.py's cpa_tcpa_m() -- reimplemented here rather than
+    imported (Basic Simulator's path contains a space the pipeline package can't import
+    across; see oow_agent_spec.py's own docstring) -- deliberate small duplication, same
+    pattern as REASONING_SYSTEM_PROMPT below."""
+    brg_true = math.radians((own["heading"] + c["relative_bearing_deg"]) % 360.0)
+    dx = c["range_m"] * math.sin(brg_true)
+    dy = c["range_m"] * math.cos(brg_true)
+    oh, th = math.radians(own_heading_deg), math.radians(c["heading"])
+    vox, voy = own["speed"] * math.sin(oh), own["speed"] * math.cos(oh)
+    vtx, vty = c["speed"] * math.sin(th), c["speed"] * math.cos(th)
+    dvx, dvy = vtx - vox, vty - voy
+    rel_sq = dvx ** 2 + dvy ** 2
+    if rel_sq < 1e-6:
+        return math.hypot(dx, dy)
+    t = max(0.0, -(dx * dvx + dy * dvy) / rel_sq)
+    return math.hypot(dx + dvx * t, dy + dvy * t)
+
+
+def _turn_shrinks_other_cpa(own: dict, other: dict, action: str, degrees: float | None) -> bool:
+    """Minimal, SCOPED Rule 8(c) multi-contact check (quality-review STAP 1 extension,
+    2026-09-23) -- covers only the stationary-vs-give-way priority case; STAP 3d
+    generalizes this to every multi-real-risk-contact combination. True if turning
+    `degrees` in `action`'s direction would reduce `other`'s CPA below its CURRENT
+    recorded cpa_distance_m (a 1m tolerance avoids float-noise false positives on an
+    unchanged/near-parallel course). Never fires for a non-turn action (stop/slow_down
+    have no heading component to check)."""
+    if action not in ("turn_left", "turn_right") or degrees is None:
+        return False
+    delta = -degrees if action == "turn_left" else degrees
+    new_heading = (own["heading"] + delta) % 360.0
+    new_cpa = _cpa_with_own_heading(own, other, new_heading)
+    return new_cpa < other["cpa_distance_m"] - 1.0
+
+
 def _rule_list(c: dict) -> list[str]:
     nums = sorted(set(c.get("active_encounter_rules") or []) | set(c.get("standing_rules") or []))
     return [f"Rule {n}" for n in nums]
@@ -250,6 +289,17 @@ def leo_choose_action(state: dict) -> dict:
     diagnosis of what the previous role-only version got wrong (857 manoeuvres on
     low-risk-only contacts, 526 on opening-range contacts, 875 stop-labels, 883 paused
     frames mislabeled as manoeuvres).
+
+    STATIONARY CONTACTS (quality-review STAP 1 extension, 2026-09-23): a real-risk contact
+    with encounter_type=="stationary_contact" (own_role "not_applicable" -- an anchored
+    vessel/fixed object) is NOT a COLREG give-way/stand-on encounter, so it gets its own
+    branch (checked ALONGSIDE give_way, before stand_on) rather than falling through to
+    "no risk"/speed_up as it silently did before (found via the STAP 1 full-dataset test:
+    99/7928 frames). Priority when BOTH a real-risk stationary contact and a real-risk
+    give-way contact are present: whichever has the SMALLER cpa_distance_m drives the
+    decision; the LOSING contact's CPA is then protected by a scoped Rule 8(c) check
+    (_turn_shrinks_other_cpa) -- if the winning turn would shrink it, the action falls
+    back to slow_down (never stop, never a direction flip) rather than being taken anyway.
 
     Returns simulator-format fields (action/degrees/encounter_rule/conduct_rule) directly,
     matching Basic Simulator/app/agents.py's SYSTEM_OOW_AGENT JSON contract -- see Fase B2.
@@ -269,27 +319,50 @@ def leo_choose_action(state: dict) -> dict:
                 "role": "paused", "rules": [], "category": "leo_paused", "bucket": "paused",
                 "decisive_contact_name": None}
 
+    stationary = [c for c in contacts if c.get("encounter_type") == "stationary_contact" and _real_risk(c)]
     give_way = [c for c in contacts if c["own_role"] in ("give_way", "both_give_way") and _real_risk(c)]
     stand_on = [c for c in contacts if c["own_role"] == "stand_on" and _real_risk(c)]
 
-    if give_way:
-        worst = min(give_way, key=lambda c: c["cpa_distance_m"])
-        classify_role = _leo_role_for_classify(worst["own_role"], worst["encounter_type"])
-        if _should_stop(worst):
-            encounter_rule, conduct_rule = classify_rules(classify_role, "stop")
-            return {"action": "stop", "degrees": None, "encounter_rule": encounter_rule,
+    if stationary or give_way:
+        worst_stationary = min(stationary, key=lambda c: c["cpa_distance_m"]) if stationary else None
+        worst_give_way = min(give_way, key=lambda c: c["cpa_distance_m"]) if give_way else None
+        give_way_wins = worst_give_way is not None and (
+            worst_stationary is None or worst_give_way["cpa_distance_m"] < worst_stationary["cpa_distance_m"])
+
+        if give_way_wins:
+            worst = worst_give_way
+            classify_role = _leo_role_for_classify(worst["own_role"], worst["encounter_type"])
+            if _should_stop(worst):
+                encounter_rule, conduct_rule = classify_rules(classify_role, "stop")
+                return {"action": "stop", "degrees": None, "encounter_rule": encounter_rule,
+                        "conduct_rule": conduct_rule, "role": worst["own_role"], "rules": _rule_list(worst),
+                        "category": f"leo_{worst['encounter_type']}", "bucket": "stop",
+                        "decisive_contact_name": worst["name"]}
+            degrees = _turn_degrees(worst["cpa_distance_m"])
+            if worst["encounter_type"] in ("head_on", "crossing"):
+                action = "turn_right"  # Rule 14/15+16: give-way alters to starboard
+            else:
+                action = _diverging_turn(worst)  # Rule 13: either side permitted
+            if worst_stationary is not None and _turn_shrinks_other_cpa(own, worst_stationary, action, degrees):
+                action, degrees = "slow_down", None
+            encounter_rule, conduct_rule = classify_rules(classify_role, action)
+            return {"action": action, "degrees": degrees, "encounter_rule": encounter_rule,
                     "conduct_rule": conduct_rule, "role": worst["own_role"], "rules": _rule_list(worst),
-                    "category": f"leo_{worst['encounter_type']}", "bucket": "stop",
+                    "category": f"leo_{worst['encounter_type']}", "bucket": "alter_course",
                     "decisive_contact_name": worst["name"]}
+
+        # Stationary avoidance wins (no give-way contact, or its CPA is not smaller). Never
+        # a stop-default, never a give-way/stand-on role -- Rule 8 covers the action alone.
+        worst = worst_stationary
+        action = _diverging_turn(worst)
         degrees = _turn_degrees(worst["cpa_distance_m"])
-        if worst["encounter_type"] in ("head_on", "crossing"):
-            action = "turn_right"  # Rule 14/15+16: give-way alters to starboard
-        else:
-            action = _diverging_turn(worst)  # Rule 13: either side permitted
-        encounter_rule, conduct_rule = classify_rules(classify_role, action)
+        if worst_give_way is not None and _turn_shrinks_other_cpa(own, worst_give_way, action, degrees):
+            action, degrees = "slow_down", None
+        encounter_rule, conduct_rule = classify_rules("stationary", action)
         return {"action": action, "degrees": degrees, "encounter_rule": encounter_rule,
-                "conduct_rule": conduct_rule, "role": worst["own_role"], "rules": _rule_list(worst),
-                "category": f"leo_{worst['encounter_type']}", "bucket": "alter_course",
+                "conduct_rule": conduct_rule, "role": "stationary",
+                "rules": ["Rule 2", "Rule 5", "Rule 6", "Rule 7", "Rule 8"],
+                "category": "leo_stationary_avoid", "bucket": "stationary",
                 "decisive_contact_name": worst["name"]}
 
     if stand_on:
