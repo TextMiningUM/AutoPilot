@@ -337,8 +337,11 @@ def check_1_5_verdict_consistency(run: dict, traj: dict[str, dict[float, dict]])
     constraints, _ = extract_constraints(run)
     cpa_violation = overall_min < constraints.min_cpa_m
     verdict = ev.get("verdict")
-    if cpa_violation and not collided and safety.get("passed") is True and verdict not in (
-            None, "FAIL -- collision occurred") and "FAIL" not in (verdict or ""):
+    # Exact "PASS" only -- evaluate_run.py's run-writer fix (2026-09-23) now emits
+    # "PASS_WITH_CPA_VIOLATION" for exactly this case, which must never re-trigger this
+    # BLOCKER; runs generated before that fix still legitimately show it (their embedded
+    # verdict really is a bare, now-known-wrong "PASS").
+    if cpa_violation and not collided and verdict == "PASS":
         findings.append(_f("BLOCKER", "BLOCKER_1_5_verdict_inconsistent", None,
                           "A CPA-safety-distance violation occurred (min separation below "
                           "this mission's safe distance) but the run is labelled a plain "
@@ -441,24 +444,59 @@ def check_2_1_check_d(cp: dict, situation: list[dict], constraints: VesselConstr
     return findings
 
 
-def check_2_2_rule_matrix(cp: dict) -> list[dict]:
+def check_2_1b_unclassified_encounter(cp: dict, situation: list[dict],
+                                      constraints: VesselConstraints) -> list[dict]:
+    """A contact below the safe passing distance (real risk OR early-action, see
+    measurement.py's INFO_early_action) that the model failed to recognize as any kind of
+    COLREG encounter at all -- encounter_rule left "none", or conduct_rule is a general
+    Rule 7/8 lookout/stop citation with no 13/14/15 encounter mentioned anywhere. Found via
+    51/84 (61%) of the old screening_standard_cloud A_fabricated_risk hits being exactly
+    this pattern instead (Imazu01, a scripted head-on/Rule 14 scenario, only cited Rule 14
+    on 3 of its checkpoints)."""
+    d = cp.get("decision") or {}
+    enc = d.get("encounter_rule") or "none"
+    cond = d.get("conduct_rule") or "none"
+    below_safe = [c for c in situation if c.get("cpa_m") is not None
+                and c["cpa_m"] < constraints.min_cpa_m]
+    if not below_safe:
+        return []
+    unclassified = enc == "none" or (
+        cond in ("Rule 7", "Rule 8") and not any(r in (enc, cond) for r in ("Rule 13", "Rule 14", "Rule 15")))
+    if not unclassified:
+        return []
+    worst = min(below_safe, key=lambda c: c["cpa_m"])
+    return [_f("ERROR", "E_unclassified_encounter", cp["step"],
+              f"Contact {worst.get('name')!r} is below the safe distance "
+              f"(cpa={worst['cpa_m']:.0f}m) but encounter_rule={enc!r}/conduct_rule={cond!r} "
+              "recognizes no COLREG encounter at all.",
+              contact=worst.get("name"), cpa_m=worst["cpa_m"], tcpa_s=worst.get("tcpa_s"),
+              encounter_rule=enc, conduct_rule=cond)]
+
+
+def check_2_2_rule_matrix(cp: dict, situation: list[dict], config: str | None) -> list[dict]:
     findings: list[dict] = []
     d = cp.get("decision") or {}
     step = cp["step"]
     enc, cond, action = d.get("encounter_rule"), d.get("conduct_rule"), d.get("action")
+    worst = min(situation, key=lambda c: c.get("cpa_m", float("inf"))) if situation else None
+    ctx = {"config": config, "cpa_m": worst.get("cpa_m") if worst else None,
+          "tcpa_s": worst.get("tcpa_s") if worst else None,
+          "reasoning": d.get("reasoning")}
     if enc == "Rule 14" and cond == "Rule 17":
         findings.append(_f("ERROR", "E_rule_matrix_head_on_stand_on", step,
                           "encounter Rule 14 (head-on) with conduct Rule 17 (stand-on) is "
-                          "impossible -- head-on has no stand-on vessel."))
+                          "impossible -- head-on has no stand-on vessel.", **ctx))
     if enc == "none" and cond in ("Rule 13", "Rule 14", "Rule 15", "Rule 16", "Rule 17"):
         findings.append(_f("ERROR", "E_rule_matrix_conduct_without_encounter", step,
-                          f"conduct_rule {cond!r} cited with encounter_rule 'none'.", conduct_rule=cond))
+                          f"conduct_rule {cond!r} cited with encounter_rule 'none'.",
+                          conduct_rule=cond, **ctx))
     if cond == "Rule 16" and action == "hold_course":
         findings.append(_f("ERROR", "E_rule_matrix_give_way_no_action", step,
-                          "conduct_rule Rule 16 (give-way duty) cited but action is hold_course."))
+                          "conduct_rule Rule 16 (give-way duty) cited but action is hold_course.",
+                          **ctx))
     if cond == "Rule 8" and action == "speed_up":
         findings.append(_f("ERROR", "E_rule_matrix_rule8_speed_up", step,
-                          "conduct_rule Rule 8 cited with a speed_up action."))
+                          "conduct_rule Rule 8 cited with a speed_up action.", **ctx))
     return findings
 
 
@@ -513,8 +551,9 @@ def check_2_4_direction(cp: dict, situation: list[dict], constraints: VesselCons
     for code in result["checks_fired"]:
         if code == "B_wrong_direction" and enc == "Rule 13":
             continue  # Rule 13 accepts either side -- never a violation
-        findings.append(_f("ERROR" if code.startswith(("A_", "B_")) else "ERROR", code,
-                          cp["step"], f"{code} fired.", **result["details"].get(code.split("_")[0], {})))
+        severity = "INFO" if code.startswith("INFO_") else "ERROR"
+        detail = result["details"].get(code) or result["details"].get(code.split("_")[0], {})
+        findings.append(_f(severity, code, cp["step"], f"{code} fired.", **detail))
     if d.get("conduct_rule") == "Rule 17" and d.get("action") == "turn_left":
         for c in situation:
             if c.get("rel_bearing_deg") is not None and c["rel_bearing_deg"] < 0:
@@ -596,7 +635,81 @@ def check_2_6_temporal(checkpoints: list[dict], situations: dict[int, list[dict]
     return findings
 
 
-def check_2_7_reasoning_vs_decision(cp: dict, situation: list[dict]) -> list[dict]:
+_RULE_CITATION_RE = re.compile(r"\brule\s*\d+\s*(\([a-z]\))?", re.I)
+_SUBRULE_RE = re.compile(r"\b\d+\s*\([a-z]\)", re.I)
+_NO_RISK_RE = re.compile(
+    r"\bno (real |immediate |significant |collision )*risk\b|\bsafe\b|\bclear\b|"
+    r"\bnot a (real |immediate |collision )*risk\b|\bno danger\b", re.I)
+_RISK_RE = re.compile(
+    r"\brisk\b|\bcollision course\b|\bdanger\b|\bmust give way\b|\bgive[- ]way\b|"
+    r"\bmust (alter|turn)\b", re.I)
+
+
+def _mask_rule_citations(text: str) -> str:
+    """Blanks "Rule 15", "17(b)", "Rule 17(b)" style citations before extracting numbers
+    -- these are rule/sub-rule references, never a measurement the model could fabricate,
+    and were ~all of gate_b's false positives (150x '500', plus every bare rule number)."""
+    text = _RULE_CITATION_RE.sub(" ", text)
+    text = _SUBRULE_RE.sub(" ", text)
+    return text
+
+
+def _round_sig(x: float, sig: int = 2) -> float:
+    if x == 0:
+        return 0.0
+    from math import floor, log10
+    return round(x, sig - int(floor(log10(abs(x)))) - 1)
+
+
+_UNIT_CONVERSIONS = (1852.0, 0.5144, 1 / 60.0)  # NM->m, kn->m/s, s->min
+
+
+def _known_numbers_from_report(report: str, constraints: VesselConstraints) -> list[float]:
+    """Every number a reasoning could legitimately restate: the raw situation_report
+    values, their 2-significant-figure rounding (models paraphrase, they don't quote
+    verbatim), each of those after a unit conversion (NM->m/kn->m/s/s->min) then rounded
+    again, plus this run's own constraint values (safe distance/max turn/horizon) -- never
+    a hardcoded 500/30."""
+    raw = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", report)]
+    known: set[float] = set()
+    for n in raw:
+        known.add(n)
+        r2 = _round_sig(n, 2)
+        known.add(r2)
+        for factor in _UNIT_CONVERSIONS:
+            known.add(_round_sig(n * factor, 2))
+            known.add(_round_sig(r2 * factor, 2))
+    known.add(constraints.min_cpa_m)
+    known.add(constraints.turn_rate_deg_s * constraints.time_step_s)
+    known.add(RISK_HORIZON_S)
+    return sorted(known)
+
+
+def _nearest_known(x: float, known: list[float]) -> float | None:
+    return min(known, key=lambda k: abs(k - x)) if known else None
+
+
+def _is_known_number(x: float, known: list[float], rel_tol: float = 0.05, abs_tol: float = 0.5) -> bool:
+    nearest = _nearest_known(x, known)
+    if nearest is None:
+        return False
+    return abs(nearest - x) <= max(abs_tol, rel_tol * max(abs(x), abs(nearest)))
+
+
+def _extract_risk_conclusion(reasoning: str) -> str:
+    """{"risk", "no_risk", "unknown"} -- checked in this order because "no risk" contains
+    the substring "risk", so a naive `"risk" in text` check (the old version) misread
+    every "no risk"/"safe"/"clear" conclusion as an affirmative risk statement, which was
+    exactly why gate_c mismatched 100% of UM01/UM02 (the quiet canary missions)."""
+    if _NO_RISK_RE.search(reasoning):
+        return "no_risk"
+    if _RISK_RE.search(reasoning):
+        return "risk"
+    return "unknown"
+
+
+def check_2_7_reasoning_vs_decision(cp: dict, situation: list[dict],
+                                    constraints: VesselConstraints) -> list[dict]:
     """Reimplementation of the B3 teacher-pipeline's acceptance gates a-e applied to the
     MODEL's own answer (no shared gate functions were found already factored out anywhere
     importable -- if/when they are moved into oow_agent_spec.py, switch this to call them)."""
@@ -604,35 +717,79 @@ def check_2_7_reasoning_vs_decision(cp: dict, situation: list[dict]) -> list[dic
     d = cp.get("decision") or {}
     reasoning = (d.get("reasoning") or "").lower()
     step = cp["step"]
-    real_risk_contacts = [c for c in situation if real_risk(c.get("cpa_m"), c.get("tcpa_s"), 500.0)]
+    below_safe = [c for c in situation if c.get("cpa_m") is not None
+                and c["cpa_m"] < constraints.min_cpa_m]
+    real_risk_contacts = [c for c in below_safe
+                          if real_risk(c.get("cpa_m"), c.get("tcpa_s"), constraints.min_cpa_m)]
+    early_action_contacts = [c for c in below_safe if c not in real_risk_contacts
+                            and c.get("tcpa_s") is not None and c["tcpa_s"] > RISK_HORIZON_S]
+
+    # gate a -- decisive real-risk contact must be named
     if real_risk_contacts:
         decisive = min(real_risk_contacts, key=lambda c: c.get("cpa_m", float("inf")))
         if decisive.get("name") and decisive["name"].lower() not in reasoning:
             findings.append(_f("ERROR", "G_gate_a_contact_missing", step,
                               f"Reasoning never mentions the decisive contact {decisive['name']!r}."))
-    numbers_in_reasoning = re.findall(r"\d+(?:\.\d+)?", reasoning)
-    numbers_in_report = set(re.findall(r"\d+(?:\.\d+)?", cp.get("situation_report") or ""))
-    fabricated = [n for n in numbers_in_reasoning if n not in numbers_in_report and float(n) > 1]
+
+    # gate b -- fabricated numbers: mask rule/sub-rule citations first, then compare every
+    # remaining number against situation_report's own values (raw, rounded, unit-converted)
+    # and this run's constraint values, with a tolerance (models round/paraphrase).
+    reasoning_masked = _mask_rule_citations(reasoning)
+    numbers_in_reasoning = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", reasoning_masked)]
+    known = _known_numbers_from_report(cp.get("situation_report") or "", constraints)
+    fabricated, nearest_map = [], {}
+    for n in numbers_in_reasoning:
+        if n <= 1:
+            continue  # too common/uninformative ("1 other ship", bare direction counts) to be useful signal
+        if not _is_known_number(n, known):
+            fabricated.append(n)
+            nearest_map[n] = _nearest_known(n, known)
     if fabricated:
         findings.append(_f("WARN", "G_gate_b_number_fabricated", step,
-                          "Reasoning cites number(s) not present in situation_report.",
-                          numbers=fabricated[:5]))
-    says_risk = any(w in reasoning for w in ("risk", "collision", "give way", "give-way"))
-    if says_risk != bool(real_risk_contacts):
+                          "Reasoning cites number(s) not present in (or derivable from) "
+                          "situation_report.", numbers=fabricated[:5],
+                          nearest_known={str(n): nearest_map[n] for n in fabricated[:5]}))
+
+    # gate c -- risk conclusion vs real_risk(), using the same 3-way split as Check A:
+    # "unknown" (no explicit conclusion found) is informational, never a mismatch; in the
+    # early-action zone (below safe distance, TCPA beyond horizon) either conclusion is
+    # a defensible read, so nothing is flagged there either way.
+    extracted = _extract_risk_conclusion(reasoning)
+    worst = min(situation, key=lambda c: c.get("cpa_m", float("inf"))) if situation else None
+    c_details = {"extracted": extracted, "real_risk": bool(real_risk_contacts),
+                "cpa_m": worst.get("cpa_m") if worst else None,
+                "tcpa_s": worst.get("tcpa_s") if worst else None, "horizon_s": RISK_HORIZON_S}
+    if extracted == "unknown":
+        findings.append(_f("INFO", "G_gate_c_risk_unknown", step,
+                          "Could not extract an explicit risk/no-risk conclusion from the reasoning.",
+                          **c_details))
+    elif real_risk_contacts:
+        if extracted != "risk":
+            findings.append(_f("WARN", "G_gate_c_risk_mismatch", step,
+                              "Reasoning's stated risk conclusion does not match real_risk().",
+                              **c_details))
+    elif not early_action_contacts and extracted != "no_risk":
         findings.append(_f("WARN", "G_gate_c_risk_mismatch", step,
-                          "Reasoning's stated risk conclusion does not match real_risk()."))
+                          "Reasoning's stated risk conclusion does not match real_risk().",
+                          **c_details))
+
+    # gate d -- direction word vs action taken
     action = d.get("action")
     if action in ("turn_left", "turn_right"):
         word = "starboard" if action == "turn_right" else "port"
         other = "port" if action == "turn_right" else "starboard"
         if other in reasoning and word not in reasoning:
             findings.append(_f("WARN", "G_gate_d_direction_mismatch", step,
-                              f"Reasoning says {other!r} but the action taken is {action!r}."))
+                              f"Reasoning says {other!r} but the action taken is {action!r}.",
+                              direction_word=other, action=action))
+
+    # gate e -- cited rule numbers should appear in the reasoning text
     for field_name in ("encounter_rule", "conduct_rule"):
         val = d.get(field_name)
         if val and val != "none" and val.lower() not in reasoning:
             findings.append(_f("INFO", "G_gate_e_rule_mismatch", step,
-                              f"{field_name}={val!r} not mentioned in reasoning text."))
+                              f"{field_name}={val!r} not mentioned in reasoning text.",
+                              field=field_name, value=val))
     return findings
 
 
@@ -742,13 +899,14 @@ def audit_one_run(run: dict, path: Path) -> dict:
         findings += check_2_0_parse_format(cp)
         if not schema["is_legacy"]:
             findings += check_2_1_check_d(cp, situation, constraints)
-            findings += check_2_2_rule_matrix(cp)
+            findings += check_2_1b_unclassified_encounter(cp, situation, constraints)
+            findings += check_2_2_rule_matrix(cp, situation, run.get("config"))
             own_row = _nearest(traj.get("own_ship", {}), cp["time"])
             target_rows = {n: _nearest(s, cp["time"]) for n, s in traj.items() if n != "own_ship"}
             target_rows = {n: r for n, r in target_rows.items() if r is not None}
             findings += check_2_3_encounter_mismatch(cp, own_row, target_rows)
             findings += check_2_5_magnitude(cp, situation, constraints)
-            findings += check_2_7_reasoning_vs_decision(cp, situation)
+            findings += check_2_7_reasoning_vs_decision(cp, situation, constraints)
         findings += check_2_4_direction(cp, situation, constraints)
         findings += check_3_truncation(cp, (run.get("params") or {}).get("max_new_tokens"))
         findings += check_3_self_correction(cp)
@@ -791,16 +949,23 @@ def build_summary(results: list[dict]) -> dict:
                 code_counts[f["code"]] += 1
         rate = lambda prefix: sum(v for k, v in code_counts.items() if k.startswith(prefix)) / n_checkpoints
         n_blockers = sum(r["severity_counts"].get("BLOCKER", 0) for r in rs)
+        n_real_findings = sum(1 for r in rs for f in r["findings"] if f["severity"] != "INFO")
         return {
             "n_runs": len(rs), "n_checkpoints": n_checkpoints,
             "A_rate": rate("A_fabricated_risk"), "B_rate": rate("B_wrong_direction"),
             "D_rate": rate("D_"), "E_encounter_mismatch_rate": rate("E_encounter_mismatch"),
             "E_role_fabrication_rate": rate("E_role_fabrication"),
+            "E_unclassified_encounter_rate": rate("E_unclassified_encounter"),
+            "early_action_rate": rate("INFO_early_action"),
             "parse_fail_rate": rate("ERROR_2_0_parse_error"),
             "gate_a_fail_rate": rate("G_gate_a"), "gate_b_fail_rate": rate("G_gate_b"),
-            "gate_c_fail_rate": rate("G_gate_c"), "gate_d_fail_rate": rate("G_gate_d"),
+            # exact code, not the "G_gate_c" prefix -- that would also swallow the
+            # informational G_gate_c_risk_unknown code into a "failure" rate
+            "gate_c_fail_rate": rate("G_gate_c_risk_mismatch"),
+            "gate_c_unknown_rate": rate("G_gate_c_risk_unknown"),
+            "gate_d_fail_rate": rate("G_gate_d"),
             "gate_e_fail_rate": rate("G_gate_e"),
-            "n_blockers": n_blockers,
+            "n_blockers": n_blockers, "n_real_findings": n_real_findings,
             "mean_composite": statistics.fmean(
                 [(r.get("evaluation_composite") or 0) for r in rs]) if rs else 0.0,
         }
@@ -852,18 +1017,22 @@ def render_markdown_report(summary: dict, baseline: dict | None = None,
         lines.append("## \u2705 No blockers")
     lines.append("")
     lines.append("## Primary metrics per config x weights")
-    lines.append("| config::weights | runs | A-rate | B-rate | D-rate | E_enc | E_role | parse-fail |")
-    lines.append("|---|---|---|---|---|---|---|---|")
+    lines.append("| config::weights | runs | A-rate | B-rate | D-rate | E_enc | E_role | "
+                 "E_unclass | gate_b | gate_c | parse-fail | real findings |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
     for key, m in summary["by_config"].items():
         lines.append(f"| {key} | {m['n_runs']} | {m['A_rate']:.2%} | {m['B_rate']:.2%} | "
                      f"{m['D_rate']:.2%} | {m['E_encounter_mismatch_rate']:.2%} | "
-                     f"{m['E_role_fabrication_rate']:.2%} | {m['parse_fail_rate']:.2%} |")
+                     f"{m['E_role_fabrication_rate']:.2%} | {m['E_unclassified_encounter_rate']:.2%} | "
+                     f"{m['gate_b_fail_rate']:.2%} | {m['gate_c_fail_rate']:.2%} | "
+                     f"{m['parse_fail_rate']:.2%} | {m['n_real_findings']} |")
     lines.append("")
     lines.append("## Per mission-type")
-    lines.append("| type | runs | A-rate | B-rate | D-rate |")
-    lines.append("|---|---|---|---|---|")
+    lines.append("| type | runs | A-rate | B-rate | D-rate | E_unclass |")
+    lines.append("|---|---|---|---|---|---|")
     for key, m in summary["by_mission_type"].items():
-        lines.append(f"| {key} | {m['n_runs']} | {m['A_rate']:.2%} | {m['B_rate']:.2%} | {m['D_rate']:.2%} |")
+        lines.append(f"| {key} | {m['n_runs']} | {m['A_rate']:.2%} | {m['B_rate']:.2%} | "
+                     f"{m['D_rate']:.2%} | {m['E_unclassified_encounter_rate']:.2%} |")
     lines.append("")
     if summary["canary"]:
         c = summary["canary"]

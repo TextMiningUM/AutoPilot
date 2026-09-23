@@ -599,12 +599,12 @@ def _render_audit_tab() -> None:
             f_mission = st.selectbox("Mission", ["(alle)"] + sorted({r["mission_id"] for r in all_rows}),
                                      key="audit_filter_mission")
         with f_cols[2]:
-            f_code = st.selectbox("Code", ["(alle)"] + sorted({r["code"] for r in all_rows}),
-                                  key="audit_filter_code")
+            f_codes = st.multiselect("Code(s) (leeg = alle)", sorted({r["code"] for r in all_rows}),
+                                     key="audit_filter_codes")
         filtered = [r for r in all_rows
                    if (f_config == "(alle)" or r["config"] == f_config)
                    and (f_mission == "(alle)" or r["mission_id"] == f_mission)
-                   and (f_code == "(alle)" or r["code"] == f_code)]
+                   and (not f_codes or r["code"] in f_codes)]
         st.caption(f"{len(filtered)} bevinding(en)")
         by_checkpoint: dict[tuple[str, int], list[dict]] = {}
         for r in filtered:
@@ -623,6 +623,24 @@ def _render_audit_tab() -> None:
                     st.markdown(f"- **{r['severity']}** `{r['code']}`: {r['message']}")
                     if r["details"]:
                         st.json(r["details"])
+        if by_checkpoint and st.button("\U0001F4E4 Exporteer gefilterde checkpoints als DPO-rejected-kandidaten",
+                                       key="audit_export_filtered"):
+            rows = []
+            for (run_path, step), fs in by_checkpoint.items():
+                run = _load_json(Path(run_path))
+                cp = next((c for c in (run or {}).get("checkpoints", []) if c["step"] == step), None) if run else None
+                if not cp:
+                    continue
+                rows.append({
+                    "mission_id": fs[0]["mission_id"], "config": fs[0]["config"],
+                    "weights": fs[0].get("weights"), "step": step,
+                    "codes": sorted({r["code"] for r in fs}),
+                    "situation_report": cp.get("situation_report"), "decision": cp.get("decision"),
+                })
+            code_tag = "_".join(sorted(f_codes)) if f_codes else "filtered"
+            target = review_path(RUNS_DIR / f"dpo_rejected_candidates_{tag}_{code_tag}.jsonl")
+            safe_write_jsonl(rows, target, overwrite=True)
+            st.success(f"{len(rows)} kandidaten geschreven naar {target}")
 
     # 5. Top-10 worst checkpoints + DPO-rejected export
     st.markdown("### Top-10 slechtste checkpoints")

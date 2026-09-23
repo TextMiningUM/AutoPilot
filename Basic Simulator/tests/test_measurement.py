@@ -90,13 +90,25 @@ def test_a_fires_on_low_cpa_and_tcpa_within_horizon() -> None:
 
 
 def test_a_fires_when_rule_cited_but_tcpa_beyond_horizon_even_with_low_cpa() -> None:
-    """Before this fix, Check A was CPA-only: a low CPA far off in time (TCPA beyond the
-    real-risk horizon) would NOT have fired Check A even though it should have -- a rule
-    cited against a contact that isn't yet a real risk IS a fabrication."""
+    """No longer a fabrication (reversed 2026-09-23, quality-review STAP 2): a low CPA
+    far off in time (TCPA beyond the real-risk horizon) is a genuine future collision
+    course -- citing a rule here is correct early anticipation, not fabrication. Found
+    via 84 real screening_standard_cloud hits, all at min_cpa_m~1e-12 (an exact eventual
+    collision course), every one wrongly flagged as fabricated by the old CPA-blind-to-
+    early-action version of this check."""
     decision = {"action": "turn_right", "degrees": 10.0, "encounter_rule": "Rule 15",
                "conduct_rule": "Rule 16", "reasoning": "..."}
     result = measure_decision_quality(decision, [contact(300.0, tcpa_s=301.0)], CONSTRAINTS)
-    assert "A_fabricated_risk" in result["checks_fired"]
+    assert "A_fabricated_risk" not in result["checks_fired"]
+    assert "INFO_early_action" in result["checks_fired"]
+    assert result["details"]["INFO_early_action"]["horizon_s"] == 300.0
+
+
+def test_a_does_not_fire_and_no_early_action_when_no_rule_cited_and_clear() -> None:
+    decision = {"action": "hold_course", "degrees": None, "encounter_rule": "none",
+               "conduct_rule": "none", "reasoning": "..."}
+    result = measure_decision_quality(decision, [contact(300.0, tcpa_s=301.0)], CONSTRAINTS)
+    assert result["checks_fired"] == ["INFO_early_action"]  # below safe distance, still reported
 
 
 def test_a_fires_when_rule_cited_but_tcpa_already_negative() -> None:

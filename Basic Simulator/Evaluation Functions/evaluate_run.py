@@ -234,43 +234,63 @@ def manoeuvre_and_smoothness_axes(own, heading_rate_deadband_deg_s=0.6,
 
 
 # ---------------------------------------------------------------------
-# COLREG compliance axis (pluggable — this needs scenario-specific rule
-# checks; a couple of concrete, generically-useful ones are included)
+# COLREG compliance axis (compliance-rebuild STAP 3, 2026-09-23)
 # ---------------------------------------------------------------------
-def compliance_axis(own, violation_checks, llm_compliance_score=None):
-    """violation_checks: list of callables(own_trajectory) -> list[str] (each returns a
-    list of human-readable violation descriptions, empty if none found) -- kept only to
-    surface violation text for display; the actual SCORE now comes directly from
-    `llm_compliance_score` (Claude's own 0-1 audit judgement, see app.evaluation.
-    llm_compliance_check) instead of a local `1 - 0.34*count` decay, because a bare
-    violation COUNT can't tell a technical lateness apart from a violation that caused an
-    actual near-miss or collision -- Claude's score is asked to weigh severity, not just
-    tally rule numbers.
+# One weighted deduction PER OCCURRENCE of a code, starting from 1.0, clipped to [0,1] --
+# no other numbers live in compliance_axis() itself. checkpoint-level codes: measurement.
+# py's A_fabricated_risk/B_wrong_direction/C_degrees_over_limit/D_no_action_when_required,
+# plus app.evaluation's auditor codes (E_encounter_mismatch/E_role_fabrication/
+# E_unclassified_encounter/B_17c/E_8c/P_port_toward_contact), all computed against
+# app.evaluation._ground_truth_at_checkpoint()'s STAP-2 dict, never real_risk() alone.
+# run-level codes: P_wrong_side_pass (per offending contact) and cpa_violation (once, if
+# min separation anywhere in the run fell below safe_distance_m without an actual
+# collision) -- "collision" is a separate hard gate, not a weighted deduction (see below).
+COMPLIANCE_WEIGHTS = {
+    "B_wrong_direction": 0.15,
+    "P_port_toward_contact": 0.15,
+    "E_role_fabrication": 0.15,
+    "D_no_action_when_required": 0.15,
+    "E_encounter_mismatch": 0.05,
+    "E_unclassified_encounter": 0.05,
+    "A_fabricated_risk": 0.03,
+    "C_degrees_over_limit": 0.03,
+    "B_17c": 0.15,
+    "E_8c": 0.05,
+    "P_wrong_side_pass": 0.30,
+    "cpa_violation": 0.30,
+}
 
-    Score = 0.0 (NOT innocent-until-proven -- unaudited) until `llm_compliance_score` is
-    given, i.e. until the on-demand Claude COLREG audit has actually been run once for this
-    trajectory and its result passed in here."""
-    violations = []
-    for check in violation_checks:
-        violations.extend(check(own))
-    score = 0.0 if llm_compliance_score is None else max(0.0, min(1.0, llm_compliance_score))
-    return violations, score
 
+def compliance_axis(checkpoint_codes, run_level_codes, collided=False):
+    """Deterministic compliance score -- no LLM call, always computable.
 
-def check_gave_way_to_port_when_should_be_starboard(own_role_by_time):
-    """Example concrete check: flags any interval where own-ship was the
-    give-way vessel in a crossing/head-on situation and her heading moved
-    to PORT (negative delta) rather than starboard. own_role_by_time:
-    list of (t, role, heading) tuples you supply from your own encounter
-    classification, not reconstructed here from x/y alone."""
-    violations = []
-    for i in range(1, len(own_role_by_time)):
-        t0, role0, h0 = own_role_by_time[i - 1]
-        t1, role1, h1 = own_role_by_time[i]
-        if role1 == "give_way" and heading_delta(h1, h0) < -2.0:
-            violations.append(f"t={t1:.0f}s: altered to port while give-way "
-                              f"(heading {h0:.1f} -> {h1:.1f})")
-    return violations
+    checkpoint_codes: list of (step_label, [code, ...]) -- one entry per audited
+    checkpoint, each code in COMPLIANCE_WEIGHTS deducted once per occurrence.
+    run_level_codes: list of (code, detail) -- trajectory-level findings (detail is
+    typically a contact name or None), same deduction table.
+    collided=True is a HARD GATE: returns (0.0, [("collision", None, -1.0)]) regardless
+    of every other input -- an actual collision makes the rest of the audit moot, exactly
+    like safety_axis()'s own gate on the composite score.
+
+    Returns (score: float in [0,1], breakdown: list of (code, step_or_detail, deduction))
+    -- breakdown's deductions always sum to score - 1.0 (before the final clip), so every
+    score is traceable back to the specific findings that produced it."""
+    if collided:
+        return 0.0, [("collision", None, -1.0)]
+    breakdown = []
+    score = 1.0
+    for step, codes in checkpoint_codes:
+        for code in codes:
+            weight = COMPLIANCE_WEIGHTS.get(code)
+            if weight:
+                score -= weight
+                breakdown.append((code, step, -weight))
+    for code, detail in run_level_codes:
+        weight = COMPLIANCE_WEIGHTS.get(code)
+        if weight:
+            score -= weight
+            breakdown.append((code, detail, -weight))
+    return max(0.0, min(1.0, score)), breakdown
 
 
 # ---------------------------------------------------------------------
@@ -325,7 +345,13 @@ def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
             weights["manoeuvre"] * man["manoeuvre_score"] +
             weights["smoothness"] * man["smoothness_score"]
         )
-        verdict = "PASS"
+        # No literal collision and the goal was reached, but a genuine COLREG-relevant
+        # near-miss (min separation below this mission's own safe_distance_m, just not
+        # close enough to be a hull-to-hull collision) must never be silently absorbed
+        # into a bare "PASS" -- found via 2026-09-23 audit: 2 runs at 359-395m min
+        # separation (safe_distance 500m) were labelled plain PASS with no safety flag
+        # anywhere in the record.
+        verdict = "PASS" if min_cpa >= safe_distance_m else "PASS_WITH_CPA_VIOLATION"
 
     result = {
         "verdict": verdict, "composite_score": round(composite, 3),
