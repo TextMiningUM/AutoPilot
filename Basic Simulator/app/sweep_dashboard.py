@@ -18,7 +18,9 @@ Run (separate terminal/port from the main app):
     streamlit run app/sweep_dashboard.py --server.port 8510
 """
 from __future__ import annotations
+import hashlib
 import json
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -36,23 +38,24 @@ from app.evaluation import score_trajectory
 from app.llm_runs import parse_run_filename
 from app.missions import list_mission_ids, load_mission
 from app.simulation import VesselConstraints
+from core import review_path, safe_write_jsonl
 
 # Kept as a plain literal (matching app.agents.MODEL_CONFIGS's keys) instead of importing
 # app.agents itself -- that module pulls in torch/transformers/sentence-transformers at
 # import time, which this read-only dashboard has no need for. Must be kept in sync by
-# hand whenever a new config is added to app.agents.MODEL_CONFIGS (2026-09-23: was
-# missing v7_super_rag/v8_super_cot_pg/v9_super_all -- those runs existed on disk but
-# never showed up here).
+# hand whenever a new config is added to app.agents.MODEL_CONFIGS.
 CONFIG_NAMES = [
     "bare_qwen", "v0_base", "v1_rag", "v2_cot", "v3_rag_cot",
     "v4_pg", "v5_pg_incident", "v6_pg_scenario",
     "v7_super_rag", "v8_super_cot_pg", "v9_super_all",
-    "v1_rag_simple", "v7_simple_rag",
 ]
 
 RUNS_DIR = ROOT / "Data" / "missions" / "_llm_runs"
 STATUS_FILE = RUNS_DIR / "_sweep_status.json"
 _DEFAULT_MIN_CPA_M = VesselConstraints().min_cpa_m
+
+AUDIT_SCRIPT = ROOT / "_analysis" / "audit_runs.py"
+AUDIT_OUT_DIR = ROOT / "_analysis" / "audit"
 
 st.set_page_config(page_title="LLM sweep dashboard", layout="wide")
 title_cols = st.columns([5, 1])
@@ -435,4 +438,239 @@ def _render() -> None:
                     st.markdown(_describe_run(r))
 
 
-_render()
+# ─────────────────────────────────────────────────────────────────────────────
+# Audit tab -- thin read-only front-end for _analysis/audit_runs.py. ALL audit logic
+# (schema detection, every BLOCKER/ERROR/WARN check, aggregation) lives there and only
+# there -- this file just lets the user pick a tag/config/mission subset, runs that
+# script as a subprocess, and renders the JSON it writes to _analysis/audit/<tag>/.
+# ─────────────────────────────────────────────────────────────────────────────
+def _available_tags() -> list[str]:
+    """Tags are read from the FILENAME (parse_run_filename), not by opening every run's
+    JSON -- same fast, read-only convention _scan_mission_runs already relies on."""
+    tags = {parse_run_filename(p)["tag"] for p in RUNS_DIR.glob("*.json")
+           if not p.name.startswith("_sweep_")}
+    return sorted(tags)
+
+
+def _tag_run_files(tag: str, configs: list[str], missions: list[str]) -> list[Path]:
+    files = []
+    for path in RUNS_DIR.glob("*.json"):
+        if path.name.startswith("_sweep_"):
+            continue
+        parsed = parse_run_filename(path)
+        if parsed["tag"] != tag:
+            continue
+        if configs and parsed["config"] not in configs:
+            continue
+        if missions and parsed["mission_id"] not in missions:
+            continue
+        files.append(path)
+    return sorted(files)
+
+
+def _cache_key(files: list[Path], configs: list[str], missions: list[str], baseline_tag: str | None) -> str:
+    h = hashlib.sha256()
+    h.update(json.dumps([sorted(configs), sorted(missions), baseline_tag], sort_keys=True).encode())
+    for p in files:
+        h.update(f"{p.name}:{p.stat().st_mtime}".encode())
+    return h.hexdigest()[:16]
+
+
+def _meta_path(out_dir: Path) -> Path:
+    return out_dir / "_dashboard_meta.json"
+
+
+def _load_json(path: Path) -> dict | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _run_audit_subprocess(tag: str, configs: list[str], missions: list[str],
+                          out_dir: Path, baseline_tag: str | None) -> tuple[int, str, str]:
+    args = [sys.executable, str(AUDIT_SCRIPT), "--tag", tag, "--out-dir", str(out_dir)]
+    if configs:
+        args += ["--configs", *configs]
+    if missions:
+        args += ["--missions", *missions]
+    if baseline_tag:
+        args += ["--baseline-tag", baseline_tag]
+    proc = subprocess.run(args, capture_output=True, text=True, cwd=str(ROOT))
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def _render_audit_tab() -> None:
+    st.subheader("\U0001F50D Run auditor")
+    st.caption("Deterministic, read-only checks (BLOCKER/ERROR/WARN) over precomputed run "
+              "logs -- see _analysis/audit_runs.py. This tab only triggers it and shows its "
+              "output; no checks run in Streamlit itself.")
+
+    tags = _available_tags()
+    if not tags:
+        st.info("Geen runs gevonden in Data/missions/_llm_runs -- niets te auditen.")
+        return
+
+    sel_cols = st.columns([2, 2, 2, 2])
+    with sel_cols[0]:
+        tag = st.selectbox("Tag", tags, key="audit_tag")
+    with sel_cols[1]:
+        configs = st.multiselect("Configs (leeg = alle)", CONFIGS, key="audit_configs")
+    with sel_cols[2]:
+        missions = st.multiselect("Missions (leeg = alle)", MISSIONS, key="audit_missions")
+    with sel_cols[3]:
+        baseline_choices = ["(geen)"] + [t for t in tags if t != tag]
+        baseline_pick = st.selectbox("Baseline-tag", baseline_choices, key="audit_baseline_tag")
+        baseline_tag = None if baseline_pick == "(geen)" else baseline_pick
+
+    out_dir = AUDIT_OUT_DIR / tag
+    files = _tag_run_files(tag, configs, missions)
+    current_key = _cache_key(files, configs, missions, baseline_tag)
+    meta = _load_json(_meta_path(out_dir))
+    summary_path = out_dir / "audit_summary.json"
+    is_cached = meta is not None and meta.get("cache_key") == current_key and summary_path.exists()
+
+    run_clicked = st.button("\u25B6\uFE0F Audit draaien", type="primary")
+    if run_clicked or (not is_cached and not summary_path.exists()):
+        if not files:
+            st.warning("Geen runs voor deze tag/selectie.")
+            out_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            with st.spinner(f"Audit draait over {len(files)} run(s)..."):
+                code, out, err = _run_audit_subprocess(tag, configs, missions, out_dir, baseline_tag)
+            _meta_path(out_dir).write_text(json.dumps({
+                "cache_key": current_key, "audited_at": datetime.now().isoformat(),
+                "exit_code": code,
+            }), encoding="utf-8")
+            with st.expander("stdout / stderr", expanded=(code != 0 and bool(files))):
+                st.code(out or "(geen stdout)")
+                if err:
+                    st.code(err)
+            meta = _load_json(_meta_path(out_dir))
+
+    summary = _load_json(summary_path)
+    if summary is None:
+        st.info("Nog niet geaudit -- klik op 'Audit draaien'.")
+        return
+    if summary.get("n_runs", 0) == 0:
+        st.info("Geen runs voor deze tag.")
+        return
+
+    audited_at = (meta or {}).get("audited_at") or summary.get("generated_at")
+    st.caption(f"Laatst geaudit: {audited_at}, {summary['n_runs']} runs \u2014 schema's: "
+              f"{summary.get('schema_versions')}")
+
+    # 1. BLOCKER banner
+    blockers = summary.get("blockers") or []
+    if blockers:
+        st.error(f"\U0001F6D1 {len(blockers)} BLOCKER(s)")
+        for b in blockers[:50]:
+            st.markdown(f"- `{b['code']}` step={b['step']}: {b['message']}")
+    else:
+        st.success("\u2705 Geen blockers")
+
+    # 2. Primary metrics per config x weights
+    st.markdown("### Primaire metrieken per config \u00d7 weights")
+    by_config_rows = [{"config::weights": k, **v} for k, v in (summary.get("by_config") or {}).items()]
+    if by_config_rows:
+        st.dataframe(by_config_rows, width="stretch", hide_index=True)
+
+    # 3. Same table per mission-type, canary highlighted
+    st.markdown("### Per mission-type")
+    by_type_rows = [{"type": k, **v} for k, v in (summary.get("by_mission_type") or {}).items()]
+    if by_type_rows:
+        st.dataframe(by_type_rows, width="stretch", hide_index=True)
+    if summary.get("canary"):
+        c = summary["canary"]
+        st.metric("\U0001F426 Kanarie (UM01/UM02) A-rate -- hoort ~0 te zijn", f"{c['A_rate']:.2%}")
+
+    # 4. Filters + filtered checkpoints (from audit_summary.json's own embedded
+    # checkpoint_findings -- no per-run copy files are written into the audit folder)
+    st.markdown("### Checkpoints")
+    all_rows = summary.get("checkpoint_findings") or []
+    if not all_rows:
+        st.caption("Geen checkpoint-bevindingen.")
+    else:
+        f_cols = st.columns(3)
+        with f_cols[0]:
+            f_config = st.selectbox("Config", ["(alle)"] + sorted({r["config"] for r in all_rows}),
+                                    key="audit_filter_config")
+        with f_cols[1]:
+            f_mission = st.selectbox("Mission", ["(alle)"] + sorted({r["mission_id"] for r in all_rows}),
+                                     key="audit_filter_mission")
+        with f_cols[2]:
+            f_code = st.selectbox("Code", ["(alle)"] + sorted({r["code"] for r in all_rows}),
+                                  key="audit_filter_code")
+        filtered = [r for r in all_rows
+                   if (f_config == "(alle)" or r["config"] == f_config)
+                   and (f_mission == "(alle)" or r["mission_id"] == f_mission)
+                   and (f_code == "(alle)" or r["code"] == f_code)]
+        st.caption(f"{len(filtered)} bevinding(en)")
+        by_checkpoint: dict[tuple[str, int], list[dict]] = {}
+        for r in filtered:
+            by_checkpoint.setdefault((r["run_path"], r["step"]), []).append(r)
+        for (run_path, step), fs in list(by_checkpoint.items())[:200]:
+            run = _load_json(Path(run_path))
+            cp = next((c for c in (run or {}).get("checkpoints", []) if c["step"] == step), None)
+            codes = ", ".join(f"`{r['code']}`" for r in fs)
+            with st.expander(f"{fs[0]['mission_id']} / {fs[0]['config']} / step={step} \u2014 {codes}"):
+                st.code(run_path, language=None)
+                if cp:
+                    st.text_area("situation_report", cp.get("situation_report", ""),
+                                height=150, key=f"sr_{run_path}_{step}")
+                    st.json(cp.get("decision") or {})
+                for r in fs:
+                    st.markdown(f"- **{r['severity']}** `{r['code']}`: {r['message']}")
+                    if r["details"]:
+                        st.json(r["details"])
+
+    # 5. Top-10 worst checkpoints + DPO-rejected export
+    st.markdown("### Top-10 slechtste checkpoints")
+    top_worst = summary.get("top_worst") or []
+    for w in top_worst:
+        st.markdown(f"- weight={w['weight']} `{Path(w['path']).name}` step={w['step']}: {w['codes']}")
+    if top_worst and st.button("\U0001F4E4 Exporteer als DPO-rejected-kandidaten"):
+        rows = []
+        for w in top_worst:
+            run = _load_json(Path(w["path"]))
+            if not run:
+                continue
+            cp = next((c for c in run.get("checkpoints", []) if c["step"] == w["step"]), None)
+            if not cp:
+                continue
+            rows.append({
+                "mission_id": run.get("mission_id"), "config": run.get("config"),
+                "weights": run.get("weights"), "tag": run.get("tag"), "step": w["step"],
+                "codes": w["codes"], "situation_report": cp.get("situation_report"),
+                "decision": cp.get("decision"),
+            })
+        target = review_path(RUNS_DIR / f"dpo_rejected_candidates_{tag}.jsonl")
+        safe_write_jsonl(rows, target, overwrite=True)
+        st.success(f"{len(rows)} kandidaten geschreven naar {target}")
+
+    # 6. Baseline comparison
+    st.markdown("### Baseline-vergelijking")
+    if baseline_tag is None:
+        st.caption("Geen baseline-tag geselecteerd.")
+    elif summary.get("baseline_reason"):
+        st.warning(f"niet vergelijkbaar: {summary['baseline_reason']}")
+    elif summary.get("baseline"):
+        base = summary["baseline"]
+        diff_rows = []
+        for key, m in (summary.get("by_config") or {}).items():
+            bm = (base.get("by_config") or {}).get(key)
+            if bm:
+                diff_rows.append({"config::weights": key, "A-rate nu": m["A_rate"],
+                                 "A-rate baseline": bm["A_rate"],
+                                 "delta": m["A_rate"] - bm["A_rate"]})
+        if diff_rows:
+            st.dataframe(diff_rows, width="stretch", hide_index=True)
+    else:
+        st.caption("Nog niet vergeleken -- klik op 'Audit draaien'.")
+
+
+tab_sweep, tab_audit = st.tabs(["Sweep", "Audit"])
+with tab_sweep:
+    _render()
+with tab_audit:
+    _render_audit_tab()
