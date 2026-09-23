@@ -69,9 +69,15 @@ REFL_FILES   = {
     ],
     "OOW": [
         CACHE / "oow_reflection.jsonl",
-        # Real accident-report reflection triples (build_reflection.py run against
-        # oow_incident_reasoning_traces.jsonl -- see extract_incident_reasoning.py).
-        CACHE / "oow_incident_reflection.jsonl",        # Track 2 -- applied helm/engine-order decisions (build_reflection.py run against
+        # Real accident-report FULL TEXT reflection triples (Fase C1 -- build_reflection.py
+        # run against oow_incident_reasoning_traces_fulltext.jsonl, see
+        # extract_incident_reasoning.py --full-text). Supersedes the earlier excerpt-based
+        # extraction (same filename).
+        CACHE / "oow_incident_reflection.jsonl",
+        # CHIRP collision-relevant newsletter article reflection triples (Fase C1 --
+        # extract_chirp_reasoning.py -> build_reflection.py).
+        CACHE / "oow_chirp_reflection.jsonl",
+        # Track 2 -- applied helm/engine-order decisions (build_reflection.py run against
         # the deterministic MOOS-scenario reasoning traces, notebook § 6.5).
         CACHE / "oow_scenario_reflection.jsonl",
         # Track 2 (continued) -- Leo MOOS-trajectory sample (notebook § 6.5.1),

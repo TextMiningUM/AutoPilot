@@ -115,12 +115,18 @@ SFT_DATASETS = {
         CACHE / "oow_sft_cot.jsonl",
         CACHE / "oow_sft_rag.jsonl",
         CACHE / "oow_multihop.jsonl",
-        # Real accident-report excerpts (screen_incidents.py -> build_incident_excerpts.py ->
-        # extract_incident_reasoning.py -> build_sft.py), same rule-text schema, kept as its
-        # own file for traceability like VHF's Track 1/Track 2 split.
+        # Real accident-report FULL TEXT (Fase C1, RAG-rebuild-v2 plan -- screen_incidents.py's
+        # incidents_text_cache -> extract_incident_reasoning.py --full-text -> build_sft.py),
+        # same rule-text schema, kept as its own file for traceability like VHF's Track 1/
+        # Track 2 split. Supersedes the earlier excerpt-based extraction (same filenames).
         CACHE / "oow_incident_sft_direct.jsonl",
         CACHE / "oow_incident_sft_cot.jsonl",
         CACHE / "oow_incident_sft_rag.jsonl",
+        # CHIRP collision-relevant newsletter articles (Fase C1 -- extract_chirp_reasoning.py
+        # -> build_sft.py), same rule-text schema, own file for traceability.
+        CACHE / "oow_chirp_sft_direct.jsonl",
+        CACHE / "oow_chirp_sft_cot.jsonl",
+        CACHE / "oow_chirp_sft_rag.jsonl",
         # Track 2 -- applied helm/engine-order decisions, mined from the deterministic
         # MOOS-scenario reasoning traces (build_oow_scenarios.py), own file for
         # traceability like VHF's Track 1/Track 2 split (notebook § 6.5). No _rag

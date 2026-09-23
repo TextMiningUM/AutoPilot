@@ -41,6 +41,7 @@ import argparse
 import json
 import os
 import re
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -56,6 +57,20 @@ CACHE = paths.cache_dir
 _PFX = paths.domain.lower()
 
 OUT_FILE = CACHE / f"{_PFX}_incident_reasoning_traces.jsonl"
+# Fase C1 (RAG-rebuild-v2 plan): the ORIGINAL extraction above ran against
+# build_incident_excerpts.py's TRIMMED 2-section excerpts, not the full report text the
+# plan calls for -- kept as a SEPARATE output file (never silently overwrites the already-
+# reviewed excerpt-based traces) so both can be compared before deciding to promote this
+# one to production.
+OUT_FILE_FULLTEXT = CACHE / f"{_PFX}_incident_reasoning_traces_fulltext.jsonl"
+TEXT_CACHE_DIR = CACHE / "incidents_text_cache"
+SCREENING_FILE = CACHE / "incident_screening.json"
+FULLTEXT_NET_SCORE_MIN = 15
+# Generous char budget (~55k tokens, well inside gpt-4o-mini's 128k context) -- only a
+# defensive cap against a pathological outlier, not a deliberate trim (that's exactly what
+# this full-text mode exists to avoid). 150k comfortably covers all but the very longest
+# reports (measured: 73 net_score>=15 reports average ~36k chars, max seen ~190k).
+FULLTEXT_MAX_CHARS = 150_000
 
 MAX_WORKERS = 4
 MODEL = "gpt-4o-mini"
@@ -108,11 +123,14 @@ Rules:
 
 
 def user_prompt(doc: dict) -> str:
-    text_parts = []
-    for ch in doc.get("chapters", []):
-        for sec in ch.get("sections", []):
-            text_parts.append(f"[{sec['title']}]\n{sec['text']}")
-    full_text = "\n\n".join(text_parts)
+    if "full_text" in doc:
+        full_text = doc["full_text"]
+    else:
+        text_parts = []
+        for ch in doc.get("chapters", []):
+            for sec in ch.get("sections", []):
+                text_parts.append(f"[{sec['title']}]\n{sec['text']}")
+        full_text = "\n\n".join(text_parts)
     return (
         f"Source report: {doc['source_file']}\n"
         f"Screening relevance score: {doc.get('screening_net_score')}\n\n"
@@ -131,7 +149,11 @@ def chunk_concepts_for(doc: dict) -> list[str]:
     """Union of the tag_text() concept tags already computed per-section in
     build_incident_excerpts.py -- same CONCEPT_KEYWORDS vocabulary as the COLREG rule-text
     parser, so build_multihop.py's concept_signature() can pair an incident excerpt with a
-    rule-text chunk (different source documents, shared concept)."""
+    rule-text chunk (different source documents, shared concept). Full-text docs have no
+    per-section concept tags (screen_incidents.py never computed them) -- fall back to the
+    screening's own matched COLREG keyword hits instead, same purpose (a rough topical tag)."""
+    if "full_text" in doc:
+        return sorted(doc.get("colreg_hits", {}).keys())
     concepts: set[str] = set()
     for ch in doc.get("chapters", []):
         for sec in ch.get("sections", []):
@@ -197,9 +219,42 @@ def load_incident_docs(limit: int | None) -> list[dict]:
     return docs
 
 
+def load_incident_docs_full_text(limit: int | None) -> list[dict]:
+    """Fase C1: the 73 net_score>=FULLTEXT_NET_SCORE_MIN incidents, each doc's FULL PDF
+    text (every page screen_incidents.py already cached, not build_incident_excerpts.py's
+    trimmed 2-section excerpt) joined into one string, capped at FULLTEXT_MAX_CHARS as a
+    defensive outlier guard only."""
+    screening = json.loads(SCREENING_FILE.read_text(encoding="utf-8"))
+    relevant = [r for r in screening if r["net_score"] >= FULLTEXT_NET_SCORE_MIN]
+    docs = []
+    for r in relevant:
+        cache_path = TEXT_CACHE_DIR / Path(r["path"]).with_suffix(".json")
+        if not cache_path.exists():
+            print(f"  [warn] no cached text for {r['path']}, skipping", file=sys.stderr)
+            continue
+        pages = json.loads(cache_path.read_text(encoding="utf-8"))
+        full_text = "\n\n".join(pages)
+        truncated = len(full_text) > FULLTEXT_MAX_CHARS
+        if truncated:
+            full_text = full_text[:FULLTEXT_MAX_CHARS]
+        docs.append({
+            "document_id": f"incident_fulltext_{Path(r['path']).stem}",
+            "source_file": r["path"], "screening_net_score": r["net_score"],
+            "full_text": full_text, "truncated": truncated, "colreg_hits": r.get("colreg_hits", {}),
+        })
+    if limit:
+        docs = docs[:limit]
+    return docs
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=None, help="Only process the first N incident docs (smoke-testing).")
+    ap.add_argument("--full-text", action="store_true",
+                    help="Fase C1: re-extract against the FULL incidents_text_cache text "
+                         "(not build_incident_excerpts.py's trimmed 2-section excerpt) -- "
+                         "writes to a SEPARATE oow_incident_reasoning_traces_fulltext.jsonl, "
+                         "never touches the already-reviewed excerpt-based production file.")
     args = ap.parse_args()
 
     load_env(W / ".env")
@@ -207,10 +262,11 @@ def main() -> None:
         raise SystemExit("OPENAI_API_KEY missing from .env")
     client = OpenAI()
 
-    docs = load_incident_docs(args.limit)
+    out_file = OUT_FILE_FULLTEXT if args.full_text else OUT_FILE
+    docs = load_incident_docs_full_text(args.limit) if args.full_text else load_incident_docs(args.limit)
     print(f"Incident documents found: {len(docs)}")
 
-    done = load_done_ids(OUT_FILE)
+    done = load_done_ids(out_file)
     todo = [d for d in docs if d["document_id"] not in done]
     print(f"Already done: {len(done)}   Todo: {len(todo)}")
 
@@ -221,7 +277,7 @@ def main() -> None:
     print(f"Extracting with {MODEL}, workers={MAX_WORKERS}...")
     t0 = time.time()
     errs = skipped = written = 0
-    with OUT_FILE.open("a", encoding="utf-8") as f_out:
+    with out_file.open("a", encoding="utf-8") as f_out:
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
             futures = {ex.submit(process_doc, client, d): d for d in todo}
             for i, fut in enumerate(as_completed(futures), 1):
@@ -257,7 +313,7 @@ def main() -> None:
                     print(f"  {i}/{len(todo)}  ({rate:.2f}/s)  written={written} skipped={skipped} errs={errs}")
 
     print(f"\nDone in {time.time()-t0:.0f}s. written={written} skipped={skipped} errs={errs}")
-    print(f"Saved: {OUT_FILE}")
+    print(f"Saved: {out_file}")
 
 
 if __name__ == "__main__":

@@ -111,9 +111,15 @@ DPO_FILES   = {
     ],
     "OOW": [
         CACHE / "oow_dpo_pairs.jsonl",
-        # Real accident-report chosen/rejected pairs (build_rlhf.py run against
-        # oow_incident_reasoning_traces.jsonl -- see extract_incident_reasoning.py).
-        CACHE / "oow_incident_dpo_pairs.jsonl",        # Track 2 -- applied helm/engine-order decisions (build_rlhf.py run against
+        # Real accident-report FULL TEXT chosen/rejected pairs (Fase C1 -- build_rlhf.py run
+        # against oow_incident_reasoning_traces_fulltext.jsonl, see
+        # extract_incident_reasoning.py --full-text). Supersedes the earlier excerpt-based
+        # extraction (same filename).
+        CACHE / "oow_incident_dpo_pairs.jsonl",
+        # CHIRP collision-relevant newsletter article pairs (Fase C1 -- extract_chirp_
+        # reasoning.py -> build_rlhf.py).
+        CACHE / "oow_chirp_dpo_pairs.jsonl",
+        # Track 2 -- applied helm/engine-order decisions (build_rlhf.py run against
         # the deterministic MOOS-scenario reasoning traces, notebook § 6.5).
         CACHE / "oow_scenario_dpo_pairs.jsonl",
         # Track 2 (continued) -- Leo MOOS-trajectory sample (notebook § 6.5.1),
