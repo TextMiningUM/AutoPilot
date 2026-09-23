@@ -43,7 +43,7 @@ curl -sSL https://raw.githubusercontent.com/TextMiningUM/AutoPilot/main/cloud/bo
 This does:
 - clones the AutoPilot repo
 - creates a venv
-- installs torch (cu124) + transformers + peft + trl + bitsandbytes
+- installs torch (cu128) + transformers + peft + trl + bitsandbytes
 - downloads Qwen3-8B to `_models/hf_cache/`
 
 Takes ~5 min.

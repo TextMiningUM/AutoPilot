@@ -31,8 +31,9 @@ source .venv/bin/activate
 pip install --upgrade pip -q
 
 echo ""
-echo "=== 3/5 Install torch (cu124) ==="
-pip install -q torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+echo "=== 3/5 Install torch (cu128 -- backward-compatible with older GPU archs too, and"
+echo "    required for Blackwell (sm_120); cu124 has NO Blackwell kernel support at all) ==="
+pip install -q torch==2.11.0+cu128 torchvision==0.26.0+cu128 torchaudio==2.11.0+cu128 --index-url https://download.pytorch.org/whl/cu128
 
 echo ""
 echo "=== 4/5 Install rest ==="
