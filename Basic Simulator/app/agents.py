@@ -92,27 +92,39 @@ MODEL_CONFIGS: dict[str, str] = {
     "v7_super_rag":    "v7 super RAG -- full retrieval stack on corpus v2 (dense + reranker + KG), no CoT/PG",
     "v8_super_cot_pg": "v8 super CoT+PG -- CoT + procedure guidance from scenario+incident graphs, no retrieval",
     "v9_super_all":    "v9 super all -- v7_super_rag + v8_super_cot_pg combined",
+    # Screening candidates (2026-09-23) -- same retrieval mechanism as v1_rag/v7_super_rag,
+    # corpus restricted to ONLY simple_colreg.json's plain-language chunks (see the
+    # `corpus` spec key below), to test whether the plain-language rewrite alone helps a
+    # basic RAG config and the full super-stack config, independent of retrieval depth/rerank.
+    "v1_rag_simple":  "v1 RAG (simple_colreg corpus only) -- plain-language COLREG excerpts only",
+    "v7_simple_rag":  "v7 super RAG (simple_colreg corpus only) -- full retrieval stack, plain-language corpus only",
 }
 
 # Every entry carries the SAME keys so build_oow_prompt() never has to .get() with a
 # default -- a missing key would silently no-op that ingredient instead of raising.
+# `corpus`: None retrieves from the full RAG corpus; a document_id string (e.g.
+# "simple_colreg") restricts the dense retrieval pool to chunks from ONLY that source file.
 _CONFIG_SPECS = {
-    "bare_qwen":      dict(bare=True,  rag=False, rerank=False, cot=False, pg=None),
-    "v0_base":        dict(bare=False, rag=False, rerank=False, cot=False, pg=None),
+    "bare_qwen":      dict(bare=True,  rag=False, rerank=False, cot=False, pg=None, corpus=None),
+    "v0_base":        dict(bare=False, rag=False, rerank=False, cot=False, pg=None, corpus=None),
     # v1_rag..v6_pg_scenario: archived ablation arm, no longer in the standard sweep;
     # 147 archived runs depend on these exact definitions -- never redefine.
-    "v1_rag":         dict(bare=False, rag=True,  rerank=False, cot=False, pg=None),
-    "v2_cot":         dict(bare=False, rag=False, rerank=False, cot=True,  pg=None),
-    "v3_rag_cot":     dict(bare=False, rag=True,  rerank=False, cot=True,  pg=None),
-    "v4_pg":          dict(bare=False, rag=False, rerank=False, cot=False, pg="merged"),
-    "v5_pg_incident": dict(bare=False, rag=False, rerank=False, cot=False, pg="incident"),
-    "v6_pg_scenario": dict(bare=False, rag=False, rerank=False, cot=False, pg="scenario"),
+    "v1_rag":         dict(bare=False, rag=True,  rerank=False, cot=False, pg=None, corpus=None),
+    "v2_cot":         dict(bare=False, rag=False, rerank=False, cot=True,  pg=None, corpus=None),
+    "v3_rag_cot":     dict(bare=False, rag=True,  rerank=False, cot=True,  pg=None, corpus=None),
+    "v4_pg":          dict(bare=False, rag=False, rerank=False, cot=False, pg="merged", corpus=None),
+    "v5_pg_incident": dict(bare=False, rag=False, rerank=False, cot=False, pg="incident", corpus=None),
+    "v6_pg_scenario": dict(bare=False, rag=False, rerank=False, cot=False, pg="scenario", corpus=None),
     # The actual experiment-matrix prompt columns (2026-09-22, redefined in place over the
     # never-run v7_rerank/v8_rerank_cot/v9_fewshot/v10_dpo_contrast/v11_reflect prototype
     # slots -- confirmed via grep that zero result files ever used those 5 names).
-    "v7_super_rag":    dict(bare=False, rag=True,  rerank=True,  cot=False, pg=None),
-    "v8_super_cot_pg": dict(bare=False, rag=False, rerank=False, cot=True,  pg="scenario+incident"),
-    "v9_super_all":    dict(bare=False, rag=True,  rerank=True,  cot=True,  pg="scenario+incident"),
+    "v7_super_rag":    dict(bare=False, rag=True,  rerank=True,  cot=False, pg=None, corpus=None),
+    "v8_super_cot_pg": dict(bare=False, rag=False, rerank=False, cot=True,  pg="scenario+incident", corpus=None),
+    "v9_super_all":    dict(bare=False, rag=True,  rerank=True,  cot=True,  pg="scenario+incident", corpus=None),
+    # Screening candidates (2026-09-23): same rag/rerank flags as v1_rag/v7_super_rag,
+    # corpus restricted to simple_colreg.json only -- see the MODEL_CONFIGS description above.
+    "v1_rag_simple":  dict(bare=False, rag=True,  rerank=False, cot=False, pg=None, corpus="simple_colreg"),
+    "v7_simple_rag":  dict(bare=False, rag=True,  rerank=True,  cot=False, pg=None, corpus="simple_colreg"),
 }
 
 # Truly bare -- no COLREG rules-of-thumb, just told to answer in the required JSON shape.
@@ -335,11 +347,21 @@ def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], confi
 
     hits, q_cons, expanded, ctx = [], [], [], None
     if spec["rag"]:
+        # corpus filter (screening candidates v1_rag_simple/v7_simple_rag): restrict the
+        # dense pool to chunks from one source file only, BEFORE calling kg_retrieve --
+        # kg_retrieve's concept-graph boosting still works unchanged since it just skips
+        # any concept-matched chunk_id that isn't in this narrower ids/embs subset
+        # (`id_to_idx.get(cid)` returns None for those, already handled there).
+        rag_embs, rag_ids = embs, ids
+        if spec["corpus"]:
+            mask = [chunk_by_id[cid]["document_id"] == spec["corpus"] for cid in ids]
+            rag_embs = embs[np.asarray(mask, dtype=bool)]
+            rag_ids = [cid for cid, keep in zip(ids, mask) if keep]
         # rerank configs retrieve a WIDER pool (dense_n instead of k) so the cross-encoder has
         # real candidates to promote/demote -- reranking a k-sized pool can only reshuffle what
         # kg_retrieve already decided to keep, never recover a chunk it dropped.
         pool_k = dense_n if (spec["rerank"] and reranker is not None) else k
-        hits, q_cons, expanded = kg_retrieve(situation, embedder, embs, ids, kg, k=pool_k, dense_n=dense_n)
+        hits, q_cons, expanded = kg_retrieve(situation, embedder, rag_embs, rag_ids, kg, k=pool_k, dense_n=dense_n)
         if spec["rerank"] and reranker is not None:
             hits = rerank_hits(situation, hits, chunk_by_id, reranker, k=k)
         ctx = format_context(hits, chunk_by_id)

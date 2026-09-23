@@ -39,10 +39,15 @@ from app.simulation import VesselConstraints
 
 # Kept as a plain literal (matching app.agents.MODEL_CONFIGS's keys) instead of importing
 # app.agents itself -- that module pulls in torch/transformers/sentence-transformers at
-# import time, which this read-only dashboard has no need for.
+# import time, which this read-only dashboard has no need for. Must be kept in sync by
+# hand whenever a new config is added to app.agents.MODEL_CONFIGS (2026-09-23: was
+# missing v7_super_rag/v8_super_cot_pg/v9_super_all -- those runs existed on disk but
+# never showed up here).
 CONFIG_NAMES = [
     "bare_qwen", "v0_base", "v1_rag", "v2_cot", "v3_rag_cot",
     "v4_pg", "v5_pg_incident", "v6_pg_scenario",
+    "v7_super_rag", "v8_super_cot_pg", "v9_super_all",
+    "v1_rag_simple", "v7_simple_rag",
 ]
 
 RUNS_DIR = ROOT / "Data" / "missions" / "_llm_runs"
