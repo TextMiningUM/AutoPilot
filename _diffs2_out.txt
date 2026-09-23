@@ -1,0 +1,403 @@
+﻿============================== cloud/run_all_oow.sh
+--- cloud's uncommitted change (vs its own HEAD) ---
+diff --git a/cloud/run_all_oow.sh b/cloud/run_all_oow.sh
+index e88570b..db83ff2 100644
+--- a/cloud/run_all_oow.sh
++++ b/cloud/run_all_oow.sh
+@@ -1,15 +1,16 @@
+ #!/bin/bash
+-# Full OOW pipeline chain for a cloud pod, SMOKE-MODE ONLY -- exactly mirrors every
+-# executable cell of OOW_Agent_Training_Pipeline.ipynb (both Track 1 -- COLREG
+-# rules & knowledge -- and Track 2 -- applied helm/engine-order decisions), in the
+-# same order, with the notebook's SMOKE_TEST=True defaults (n=2, --tag smoke,
+-# --max_steps 3, small calibration counts) hardcoded so this can be run headlessly
+-# to sanity-check the whole chain before committing to a real 24h run. See
+-# cloud/run_all.sh for the VHF equivalent / full-run conventions this mirrors.
++# Full OOW pipeline chain for a cloud pod -- exactly mirrors every executable cell
++# of OOW_Agent_Training_Pipeline.ipynb (both Track 1 -- COLREG rules & knowledge --
++# and Track 2 -- applied helm/engine-order decisions), in the same order. Sample
++# size, file tag and how far to run are all configurable via env vars so the same
++# script covers a tiny smoke test AND a bigger sanity-check pass (e.g. n=50 through
++# the error analysis, stopping before fine-tuning). See cloud/run_all.sh for the
++# VHF equivalent / full-run conventions this mirrors.
+ #
+ # Usage:
+ #   cd ~/AutoPilot && source .venv/bin/activate && bash cloud/run_all_oow.sh
+-#   RESUME_FROM=24 bash cloud/run_all_oow.sh   # skip stages < 24 (e.g. after a reboot mid-chain)
++#   RESUME_FROM=24 bash cloud/run_all_oow.sh          # skip stages < 24 (e.g. after a reboot mid-chain)
++#   N=50 TAG=n50 MAX_STAGE=33 bash cloud/run_all_oow.sh  # n=50 through ┬º12 error analysis, no training
+ 
+ set -uo pipefail
+ 
+@@ -19,18 +20,21 @@ WORKSPACE="$HOME/AutoPilot"
+ CACHE_DIR="Data/OOW/OOW_Agents_Training"
+ MODELS_DIR="_models/OOW"
+ LOG_DIR="$WORKSPACE/$CACHE_DIR/overnight_logs"
+-MASTER="$LOG_DIR/_master_oow_smoke.log"
++N="${N:-2}"                 # gold-sample size for baseline/ablation stages (┬º10-┬º11)
++TAG="${TAG:-smoke}"         # suffix for every eval/ablation/model file this run produces
++MAX_STAGE="${MAX_STAGE:-999}"  # stages > this are skipped -- e.g. 33 to stop before ┬º13 training
++MASTER="$LOG_DIR/_master_oow_${TAG}.log"
+ NORM_FILE="Data/OOW/OOW_Eval/colreg_qa_500_normalised.json"
+ NORM_CLAIMS="Data/OOW/OOW_Eval/colreg_qa_500_normalised_claims.json"
+ RESUME_FROM="${RESUME_FROM:-1}"
+ 
+-SFT_DIR="$MODELS_DIR/oow_qwen_sft_lora_smoke"
+-DPO_DIR="$MODELS_DIR/oow_qwen_dpo_lora_smoke"
+-REFLECT_DIR="$MODELS_DIR/oow_qwen_reflect_lora_smoke"
+-MERGED_DIR="$MODELS_DIR/OOW-QWEN_smoke"
+-AWQ_DIR="$MODELS_DIR/OOW-QWEN-awq-int4_smoke"
+-PRUNED_DIR="$MODELS_DIR/OOW-QWEN-pruned_smoke"
+-DISTILL_DIR="$MODELS_DIR/DistillOOW-QWEN_smoke"
++SFT_DIR="$MODELS_DIR/oow_qwen_sft_lora_${TAG}"
++DPO_DIR="$MODELS_DIR/oow_qwen_dpo_lora_${TAG}"
++REFLECT_DIR="$MODELS_DIR/oow_qwen_reflect_lora_${TAG}"
++MERGED_DIR="$MODELS_DIR/OOW-QWEN_${TAG}"
++AWQ_DIR="$MODELS_DIR/OOW-QWEN-awq-int4_${TAG}"
++PRUNED_DIR="$MODELS_DIR/OOW-QWEN-pruned_${TAG}"
++DISTILL_DIR="$MODELS_DIR/DistillOOW-QWEN_${TAG}"
+ 
+ cd "$WORKSPACE"
+ mkdir -p "$LOG_DIR"
+@@ -53,6 +57,10 @@ run_stage() {
+         log "STAGE $tag  skipped (RESUME_FROM=$RESUME_FROM)"
+         return 0
+     fi
++    if [ "$idx" -gt "$MAX_STAGE" ]; then
++        log "STAGE $tag  skipped (MAX_STAGE=$MAX_STAGE)"
++        return 0
++    fi
+ 
+     log "================================================================================"
+     log "STAGE $tag  required=$required"
+@@ -77,7 +85,7 @@ run_stage() {
+     fi
+ }
+ 
+-log "===== OOW SMOKE CHAIN START ====="
++log "===== OOW CHAIN START (N=$N TAG=$TAG MAX_STAGE=$MAX_STAGE) ====="
+ log "workspace: $WORKSPACE"
+ log "python:    $(which python)"
+ log "gpu:      $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader)"
+@@ -150,70 +158,80 @@ if [ "$RESUME_FROM" -le 23 ]; then
+         || log "STAGE 23_pg_sft_incident  skipped (oow_pg_incident.json not found)"
+ fi
+ 
+-log "--- ┬º 10 / ┬º 10.1: base-Qwen baseli
+
+============================== pipeline/compress/compress_distill.py
+--- cloud's uncommitted change (vs its own HEAD) ---
+diff --git a/pipeline/compress/compress_distill.py b/pipeline/compress/compress_distill.py
+index 6761441..2810ffe 100644
+--- a/pipeline/compress/compress_distill.py
++++ b/pipeline/compress/compress_distill.py
+@@ -194,10 +194,23 @@ def train(args: argparse.Namespace) -> None:
+             with torch.no_grad():
+                 t_out = teacher(input_ids=batch["input_ids"],
+                                 attention_mask=batch["attention_mask"])
+-                t_logits = t_out.logits.float()
++                # Keep logits in bf16 (the models' native dtype) instead of upcasting to
++                # float32 -- with a ~152k vocab these tensors are the single biggest VRAM
++                # consumer in the whole loop (teacher + student + the KD intermediate all
++                # scale with vocab size), and bf16 log-softmax/kl_div is standard/stable
++                # enough for this use. This alone roughly halves peak VRAM on the A30.
++                t_logits = t_out.logits
+             s_out = student(input_ids=batch["input_ids"],
+                             attention_mask=batch["attention_mask"])
+-            s_logits = s_out.logits.float()
++            s_logits = s_out.logits
++            # Defensive: a NaN/Inf logit at even one position (bf16 overflow, or a
++            # position the attention mask fully excludes) will otherwise poison every
++            # downstream reduction -- "NaN * 0" from a mask multiply is still NaN, not 0,
++            # which is exactly what kept happening on the cloud run (2026-09-20) even
++            # after upcasting to float32 for the CE call alone. Sanitize both logit
++            # tensors right after the forward pass, before either loss uses them.
++            t_logits = torch.nan_to_num(t_logits, nan=0.0, posinf=1e4, neginf=-1e4)
++            s_logits = torch.nan_to_num(s_logits, nan=0.0, posinf=1e4, neginf=-1e4)
+ 
+             # Mask: only positions where label != -100 contribute
+             mask = (batch["labels"] != -100).float()
+@@ -214,12 +227,23 @@ def train(args: argparse.Namespace) -> None:
+             ).sum(-1)   # sum over vocab -> per-token
+             kd = (kd * mask).sum() / mask.sum().clamp_min(1) * (T * T)
+ 
+-            # Hard-label CE
+-            ce_all = F.cross_entropy(
+-                s_logits.view(-1, s_logits.size(-1)),
+-                batch["labels"].view(-1),
+-                ignore_index=-100, reduction="mean",
+-            )
++            # Hard-label CE -- computed manually with the SAME safe mask-then-normalize
++            # pattern as kd above, instead of relying on F.cross_entropy's built-in
++            # ignore_index handling: that internally computes the loss at EVERY position
++            # first and only zeroes out ignored ones afterward, so a NaN/Inf logit at an
++            # ignored (e.g. padded) position still produces "NaN * 0 = NaN" and poisons
++            # the whole reduction -- this was silently happening every few steps on the
++            # cloud run (2026-09-20) even after casting to float32. Labels are clamped to
++            # a valid class index before the per-token loss so -100 never reaches
++            # cross_entropy at all; ce_mask (from the ORIGINAL labels) is what actually
++            # decides which positions count.
++            ce_mask = (batch["labels"] != -100).float()
++            ce_per_tok = F.cross_entropy(
++                s_logits.view(-1, s_logits.size(-1)).float(),
++                batch["labels"].clamp(min=0).view(-1),
++                reduction="none",
++            ).view_as(batch["labels"])
++            ce_all = (ce_per_tok * ce_mask).sum() / ce_mask.sum().clamp_min(1)
+ 
+             loss = alpha * ce_all + (1 - alpha) * kd
+             (loss / args.grad_accum).backward()
+
+
+============================== pipeline/eval/eval_finetuned.py
+--- cloud's uncommitted change (vs its own HEAD) ---
+diff --git a/pipeline/eval/eval_finetuned.py b/pipeline/eval/eval_finetuned.py
+index a390c2a..1647485 100644
+--- a/pipeline/eval/eval_finetuned.py
++++ b/pipeline/eval/eval_finetuned.py
+@@ -54,6 +54,7 @@ from sentence_transformers import SentenceTransformer
+ from openai import OpenAI
+ 
+ from core import AgentPaths, load_env, EMBEDDER_MODEL
++from core.io import load_jsonl_keyed
+ 
+ paths = AgentPaths.from_env()
+ W = paths.workspace
+@@ -152,6 +153,10 @@ def load_lm(model_dir: str, force_4bit: bool = False):
+     tok = AutoTokenizer.from_pretrained(model_dir)
+     if tok.pad_token is None:
+         tok.pad_token = tok.eos_token
++    # Left-padding is required for batched decoder-only generation: every sequence's real
++    # content must end at the same index so new tokens are appended in the same position
++    # across the batch.
++    tok.padding_side = "left"
+     print(f"  VRAM: {torch.cuda.memory_allocated()/1024**3:.2f} GB")
+     return tok, model
+ 
+@@ -176,6 +181,30 @@ def generate(tok, model, question: str, max_new_tokens: int = 512) -> tuple[str,
+     return ans, dt
+ 
+ 
++@torch.inference_mode()
++def generate_batch(tok, model, questions: list[str], max_new_tokens: int = 512) -> tuple[list[str], float]:
++    """Greedy-decode a BATCH of plain-prompt questions in one model.generate() call
++    (left-padded); returns (answer_texts, total_batch_latency_seconds). Autoregressive
++    decoding is memory-bandwidth-bound, not compute-bound, so batching gives close to
++    linear throughput scaling until VRAM runs out -- see run_ablation.py's generate_batch."""
++    texts = [tok.apply_chat_template(
++                [{"role": "system", "content": SYSTEM_PLAIN}, {"role": "user", "content": q}],
++                tokenize=False, add_generation_prompt=True)
++             for q in questions]
++    inp = tok(texts, return_tensors="pt", padding=True, truncation=True, max_length=2048).to(model.device)
++    t0 = time.time()
++    out = model.generate(
++        **inp, max_new_tokens=max_new_tokens,
++        do_sample=False, temperature=1.0, top_p=1.0,
++        pad_token_id=tok.pad_token_id,
++    )
++    dt = time.time() - t0
++    prompt_len = inp["input_ids"].shape[1]
++    answers = [tok.decode(out[i, prompt_len:], skip_special_tokens=True).strip()
++              for i in range(len(questions))]
++    return answers, dt
++
++
+ # ΓöÇΓöÇ Metrics (Tutorial 13 ┬º 7.9) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+ NUMBER_RE  = re.compile(r"\b\d+[A-Za-z]?\b")
+ PROWORDS   = ["MAYDAY", "PAN PAN", "PAN-PAN", "SECURITE", "SECURIT├ë",
+@@ -326,6 +355,8 @@ def main() -> None:
+                          "the summary from whatever rows are currently in eval_{tag}.jsonl. Use "
+                          "this to check progress (or final results) after killing a long run early "
+                          "or after a crash, without waiting for or triggering more generation.")
++    ap.add_argument("--batch-size", type=int, default=8,
++                    help="how many questions to generate per model.generate() call. Lower this if you hit OOM.")
+     args = ap.parse_args()
+ 
+     tag = args.tag or Path(args.model).name.replace("/", "_")
+@@ -356,19 +387,23 @@ def main() -> None:
+     pending = [g for g in gold if str(g["id"]) not in done_gen]
+     if pending:
+         tok, model = load_lm(args.model, force_4bit=args.force_4bit)
++        bs = args.batch_size
+         with gen_file.open("a", encoding="utf-8") as gf:
+-            for i, g in enumerate(pending, 1):
+-                print(f"  [gen {i}/{len(pending)}] {g['id']}: {g['question'][:80]!r}", flush=True)
++            for start in range(0, len(pending), bs):
++                batch = pending[start:start + bs]
++                print(f"  [gen {start+1}-{start+len(batch)}/{len(pending)}] batch of {len(batch)}...", flush=True)
+                 try:
+-                    ans, dt = generate(tok, model, g["question"])
++                    answers, dt = generate_batch(tok, model, [g["question"] for g in batch])
+                 except Exc
+
+============================== pipeline/eval/eval_oow_scenarios.py
+--- cloud's uncommitted change (vs its own HEAD) ---
+diff --git a/pipeline/eval/eval_oow_scenarios.py b/pipeline/eval/eval_oow_scenarios.py
+index 2920f00..7b04ae0 100644
+--- a/pipeline/eval/eval_oow_scenarios.py
++++ b/pipeline/eval/eval_oow_scenarios.py
+@@ -56,6 +56,7 @@ from openai import OpenAI
+ 
+ from pipeline.eval.eval_finetuned import load_env, load_lm, _latency_stats
+ from core import AgentPaths, EMBEDDER_MODEL
++from core.io import load_jsonl_keyed
+ 
+ paths = AgentPaths.oow()
+ W = paths.workspace
+@@ -105,6 +106,31 @@ def generate_oow(tok, model, situation_report: str, question: str, max_new_token
+     return ans, dt
+ 
+ 
++@torch.inference_mode()
++def generate_oow_batch(tok, model, situation_reports: list[str], questions: list[str],
++                       max_new_tokens: int = 300) -> tuple[list[str], float]:
++    """Greedy-decode a BATCH of OOW Track 2 scenarios in one model.generate() call
++    (left-padded); returns (answer_texts, total_batch_latency_seconds). See
++    run_ablation.py's generate_batch / eval_finetuned.py's generate_batch."""
++    texts = [tok.apply_chat_template(
++                [{"role": "system", "content": SYSTEM_OOW},
++                 {"role": "user", "content": f"{sr}\n\n{q}"}],
++                tokenize=False, add_generation_prompt=True)
++             for sr, q in zip(situation_reports, questions)]
++    inp = tok(texts, return_tensors="pt", padding=True, truncation=True, max_length=2048).to(model.device)
++    t0 = time.time()
++    out = model.generate(
++        **inp, max_new_tokens=max_new_tokens,
++        do_sample=False, temperature=1.0, top_p=1.0,
++        pad_token_id=tok.pad_token_id,
++    )
++    dt = time.time() - t0
++    prompt_len = inp["input_ids"].shape[1]
++    answers = [tok.decode(out[i, prompt_len:], skip_special_tokens=True).strip()
++              for i in range(len(situation_reports))]
++    return answers, dt
++
++
+ def parse_action(answer: str) -> str | None:
+     """Best-effort extraction of the FIRST action the model claims to take. Checked in an
+     order that resolves overlaps sensibly (e.g. "alter_course" wording beats a stray
+@@ -158,10 +184,13 @@ def main() -> None:
+                     help="skip the bf16 attempt and load directly in 4-bit NF4")
+     ap.add_argument("--legacy", action="store_true",
+                     help="skip the RAGAS suite v2 -- rule-based metrics only (no judge/embedder needed)")
++    ap.add_argument("--batch-size", type=int, default=8,
++                    help="how many scenarios to generate per model.generate() call. Lower this if you hit OOM.")
+     args = ap.parse_args()
+ 
+     tag = args.tag or Path(args.model).name.replace("/", "_")
+     out_file    = CACHE / f"eval_{tag}_colreg.jsonl"
++    gen_file    = CACHE / f"eval_{tag}_colreg_gen.jsonl"
+     summary_out = CACHE / f"eval_{tag}_colreg_summary.json"
+ 
+     scenarios = json.loads(SCENARIOS_FILE.read_text(encoding="utf-8"))
+@@ -169,22 +198,41 @@ def main() -> None:
+         scenarios = scenarios[:args.n]
+     print(f"Evaluating {len(scenarios)} OOW scenarios (Track 2: applied helm/engine-order decisions)")
+ 
+-    # --- 1) Generation phase (only LM in VRAM) ---
++    # --- 1) Generation phase (only LM in VRAM) -- resume-safe: rows already in gen_file
++    # (from a prior crash/interrupt) are reused instead of re-generated.
+     log_every = 1 if len(scenarios) <= 20 else 20
+-    tok, model = load_lm(args.model, force_4bit=args.force_4bit)
+-    gen_records = []
+-    for i, s in enumerate(scenarios, 1):
+-        print(f"  [gen {i}/{len(scenarios)}] {s['id']}: {s['category']}", flush=True)
+-        try:
+-            ans, dt = generate_oow(tok, model, s["situation_report"], s["question"])
+-        except Exception as e:
+-            ans, dt = f"[ERROR:{e}]", 0.0
+-        gen_records.append({**s, "answer": ans, "latency_s": round(dt, 2)})
+-        if i % log_every == 0 or i == len(scenarios):
+-            print(f"  gen {i}/{len(scenarios)} done  last {dt:.1f}s", flush=True)
+-
+-    del model
+-    torch.cuda.empty_cache()
++    done_gen = load_jsonl_ke
+
+============================== pipeline/eval/run_ablation.py
+--- cloud's uncommitted change (vs its own HEAD) ---
+diff --git a/pipeline/eval/run_ablation.py b/pipeline/eval/run_ablation.py
+index 9c3c296..d5a2545 100644
+--- a/pipeline/eval/run_ablation.py
++++ b/pipeline/eval/run_ablation.py
+@@ -5,6 +5,18 @@ Loads ONLY Qwen. The embedder / KG / sentence-transformer are NOT loaded here
+ 
+ Resume-safe: skips (config, q_id) pairs already present in the output file.
+ 
++Two speed-ups on top of the naive one-prompt-at-a-time loop:
++  1. Prompt dedup: v4_pg/v5_pg_incident/v6_pg_scenario fall back to the exact
++     v0_base prompt for questions with no renderable PG guidance path (see
++     prep_ablation.py). A fallback prompt is byte-identical to v0_base's, so
++     greedy-decoding it again always reproduces the same answer -- we cache
++     answers by prompt content and reuse them instead of re-generating.
++  2. Batched generation: prompts for a config are grouped into batches (left
++     padding) and generated in one model.generate() call instead of one at a
++     time -- autoregressive decoding is memory-bandwidth-bound, not compute-
++     bound, so batching gives close to linear throughput scaling until VRAM
++     runs out.
++
+ Writes _cache/ablation_answers.jsonl (one line per (config, q_id)).
+ """
+ from __future__ import annotations
+@@ -37,6 +49,12 @@ def load_qwen():
+         bnb_4bit_use_double_quant=True,
+     )
+     tok = AutoTokenizer.from_pretrained(MODEL_ID)
++    if tok.pad_token is None:
++        tok.pad_token = tok.eos_token
++    # Left-padding is required for batched decoder-only generation: every
++    # sequence's real content must end at the same index so new tokens are
++    # appended in the same position across the batch.
++    tok.padding_side = "left"
+     mdl = AutoModelForCausalLM.from_pretrained(
+         MODEL_ID,
+         quantization_config=bnb,
+@@ -50,10 +68,14 @@ def load_qwen():
+ 
+ 
+ @torch.inference_mode()
+-def generate(tok, mdl, messages: list[dict], max_new_tokens: int = 512) -> tuple[str, float]:
+-    """Greedy-decode one answer from a chat-formatted message list; returns (answer_text, latency_seconds)."""
+-    text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+-    inp = tok(text, return_tensors="pt", truncation=True, max_length=4096).to(mdl.device)
++def generate_batch(tok, mdl, messages_list: list[list[dict]],
++                   max_new_tokens: int = 512) -> tuple[list[str], float]:
++    """Greedy-decode a BATCH of chat-formatted message lists in one model.generate()
++    call; returns (answer_texts, total_batch_latency_seconds)."""
++    texts = [tok.apply_chat_template(m, tokenize=False, add_generation_prompt=True)
++             for m in messages_list]
++    inp = tok(texts, return_tensors="pt", padding=True, truncation=True,
++              max_length=4096).to(mdl.device)
+     t0 = time.time()
+     out = mdl.generate(
+         **inp,
+@@ -61,25 +83,26 @@ def generate(tok, mdl, messages: list[dict], max_new_tokens: int = 512) -> tuple
+         do_sample=False,
+         temperature=1.0,
+         top_p=1.0,
+-        pad_token_id=tok.eos_token_id,
++        pad_token_id=tok.pad_token_id,
+     )
+     dt = time.time() - t0
+-    new_tokens = out[0, inp["input_ids"].shape[1]:]
+-    ans = tok.decode(new_tokens, skip_special_tokens=True).strip()
+-    return ans, dt
++    prompt_len = inp["input_ids"].shape[1]
++    answers = [tok.decode(out[i, prompt_len:], skip_special_tokens=True).strip()
++              for i in range(len(messages_list))]
++    return answers, dt
+ 
+ 
+-def load_done() -> set[tuple[str, str]]:
+-    """Read already-completed (config, q_id) pairs from ANSWERS_FILE, for resume support."""
++def load_done() -> dict[tuple[str, str], dict]:
++    """Read already-completed (config, q_id) -> row from ANSWERS_FILE, for resume support."""
+     if not ANSWERS_FILE.exists():
+-        return set()
+-    done: set[tuple[str, str]] = set()
++        return {}
++    done: dict[tuple[str, str], dict] = {}
+     skipped = 0
+     with ANSWERS_FILE.open("r", encoding="utf-8") as f:
+         for line in
+
