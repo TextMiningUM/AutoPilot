@@ -82,6 +82,13 @@ from app.simulation import VesselConstraints
 
 MODEL_ID = "Qwen/Qwen3-8B"
 
+# `leo_moos_cases` (case-based RAG, numeric/geometric MOOS-narrative style -- same
+# vocabulary as a live situation-report query) otherwise dominates dense retrieval
+# regardless of real relevance; see kg_retrieve()'s max_per_document docstring
+# (pipeline/ingest/build_kg.py) for the measured evidence. Caps pool COMPOSITION only,
+# never the query text (that would fight the reranker's own training distribution).
+RAG_MAX_PER_DOCUMENT = 3
+
 # Ordered so a UI selectbox lists them exactly like the notebook's §11 table (plus bare_qwen first).
 MODEL_CONFIGS: dict[str, str] = {
     "bare_qwen":      "Bare Qwen3-8B -- no COLREG framing, no RAG/CoT/PG",
@@ -375,7 +382,8 @@ def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], confi
         # real candidates to promote/demote -- reranking a k-sized pool can only reshuffle what
         # kg_retrieve already decided to keep, never recover a chunk it dropped.
         pool_k = dense_n if (spec["rerank"] and reranker is not None) else k
-        hits, q_cons, expanded = kg_retrieve(situation, embedder, embs, ids, kg, k=pool_k, dense_n=dense_n)
+        hits, q_cons, expanded = kg_retrieve(situation, embedder, embs, ids, kg, k=pool_k, dense_n=dense_n,
+                                            max_per_document=RAG_MAX_PER_DOCUMENT)
         if spec["rerank"] and reranker is not None:
             hits = rerank_hits(situation, hits, chunk_by_id, reranker, k=k)
         ctx = format_context(hits, chunk_by_id)
@@ -456,7 +464,8 @@ def rag_context_preview(mission: Mission, own: Vessel, targets: list[Vessel],
         return {"chars": 0, "chunks": 0}
     embedder, embs, ids, kg, chunk_by_id, _, _ = _load_retrieval()
     situation = narrate(mission, own, targets)
-    hits, _, _ = kg_retrieve(situation, embedder, embs, ids, kg, k=k, dense_n=dense_n)
+    hits, _, _ = kg_retrieve(situation, embedder, embs, ids, kg, k=k, dense_n=dense_n,
+                             max_per_document=RAG_MAX_PER_DOCUMENT)
     ctx = format_context(hits, chunk_by_id)
     return {"chars": len(ctx), "chunks": len(hits)}
 

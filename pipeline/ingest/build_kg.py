@@ -237,14 +237,52 @@ def query_concepts(query: str, kg: dict) -> list[str]:
 def kg_retrieve(query: str, model, embs: np.ndarray, ids: list[str], kg: dict,
                 k: int = 5, dense_n: int = 20,
                 concept_boost: float = 0.15,
-                cooccur_boost: float = 0.08) -> tuple[list[dict], list[str], list[str]]:
+                cooccur_boost: float = 0.08,
+                max_per_document: int | None = None) -> tuple[list[dict], list[str], list[str]]:
     """Hybrid dense + concept-graph retrieval: dense top-`dense_n` pool, boosted by
-    concept and co-occurring-concept matches, then truncated to the top `k`."""
+    concept and co-occurring-concept matches, then truncated to the top `k`.
+
+    `max_per_document` (default None = unchanged behaviour, every existing caller/test):
+    caps how many of the FINAL top-`k` results a single `document_id` may occupy, backfilling
+    with the next-best chunks from OTHER documents once a document hits its cap -- enforced at
+    final selection, not just the initial dense pool, since the SEPARATE concept-boost step
+    below adds candidates from `kg["concept_chunks"]` unconditionally (bypassing any dense-pool-
+    only cap). Added 2026-09-24 for Basic Simulator's live OOW agent -- `leo_moos_cases`
+    (case-based RAG built from terse numeric MOOS-narrative templates, see
+    build_moos_case_rag.py) has the SAME numeric/geometric vocabulary as a live situation-report
+    query AND is densely tagged with common encounter concepts (e.g. "crossing"), so it
+    systematically out-scores actual prose regulation-text chunks on both dense similarity and
+    concept-boost regardless of real relevance (confirmed: with no cap, ALL top-6 dense hits
+    across 3 unrelated queries were `leo_moos_cases`, zero regulation chunks even reached the
+    pool). Deliberately NOT the default and NOT applied by changing the query text itself (the
+    fine-tuned reranker, see pipeline/ingest/build_reranker_pairs.py, was trained on raw
+    numeric-query -> rule-chunk pairs -- rewording the query would push it out of that training
+    distribution); this caps result COMPOSITION only, leaving the query and every other caller
+    (build_sft.py, prep_ablation.py, the VHF notebook -- none of which have this document at
+    all) unaffected."""
     qe = model.encode([QUERY_PREFIX + query], normalize_embeddings=True)[0]
     dense_scores = embs @ qe  # cosine (unit-norm)
 
-    # 1) Dense pool
-    dense_top = np.argsort(-dense_scores)[:dense_n]
+    # 1) Dense pool -- ALSO capped here (not just at final selection below), otherwise a
+    # document with enough near-duplicate-scoring chunks (leo_moos_cases: hundreds of
+    # canonicalized cases, many scoring within a hair of each other) can fill every one of
+    # the dense_n slots by itself, leaving nothing else in `pool` for the final-selection
+    # cap to backfill WITH -- confirmed empirically: capping only at final selection still
+    # returned zero non-leo_moos_cases results whenever query_concepts() was empty (no
+    # concept-boost candidates to fall back on either).
+    if max_per_document is None:
+        dense_top = np.argsort(-dense_scores)[:dense_n]
+    else:
+        per_doc_dense_count: dict[str, int] = defaultdict(int)
+        dense_top = []
+        for i in np.argsort(-dense_scores):
+            doc_id = kg["chunk_meta"][ids[i]]["document_id"]
+            if per_doc_dense_count[doc_id] >= max_per_document:
+                continue
+            per_doc_dense_count[doc_id] += 1
+            dense_top.append(i)
+            if len(dense_top) >= dense_n:
+                break
     pool: dict[str, float] = {ids[i]: float(dense_scores[i]) for i in dense_top}
 
     # 2) Concept expansion
@@ -272,7 +310,20 @@ def kg_retrieve(query: str, model, embs: np.ndarray, ids: list[str], kg: dict,
             base = float(dense_scores[i])
             pool[cid] = max(pool.get(cid, 0.0), base) + cooccur_boost
 
-    ranked = sorted(pool.items(), key=lambda kv: -kv[1])[:k]
+    ranked_all = sorted(pool.items(), key=lambda kv: -kv[1])
+    if max_per_document is None:
+        ranked = ranked_all[:k]
+    else:
+        per_doc_count: dict[str, int] = defaultdict(int)
+        ranked = []
+        for cid, score in ranked_all:
+            doc_id = kg["chunk_meta"][cid]["document_id"]
+            if per_doc_count[doc_id] >= max_per_document:
+                continue
+            per_doc_count[doc_id] += 1
+            ranked.append((cid, score))
+            if len(ranked) >= k:
+                break
     out = []
     for cid, score in ranked:
         meta = kg["chunk_meta"][cid]
