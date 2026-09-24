@@ -501,6 +501,49 @@ def goal_course_check_line(own_x: float, own_y: float, own_heading: float,
     return line
 
 
+def _cpa_tcpa(ox: float, oy: float, ohdg: float, ospd: float,
+             tx: float, ty: float, thdg: float, tspd: float) -> tuple[float, float]:
+    """Same formula as Basic Simulator/app/narrate.py's cpa_tcpa() -- duplicated, not
+    imported, per this module's dependency-free-by-design docstring (that module pulls in
+    app.missions/app.units)."""
+    oh, th = math.radians(ohdg), math.radians(thdg)
+    vox, voy = ospd * math.sin(oh), ospd * math.cos(oh)
+    vtx, vty = tspd * math.sin(th), tspd * math.cos(th)
+    dx, dy = tx - ox, ty - oy
+    dvx, dvy = vtx - vox, vty - voy
+    rel_sq = dvx ** 2 + dvy ** 2
+    if rel_sq < 1e-6:
+        return math.hypot(dx, dy), 0.0
+    t = max(0.0, -(dx * dvx + dy * dvy) / rel_sq)
+    return math.hypot(dx + dvx * t, dy + dvy * t), t
+
+
+def goal_course_cpa_after_turn(own_x: float, own_y: float, own_heading: float, own_speed: float,
+                               goal_x: float, goal_y: float,
+                               tgt_x: float, tgt_y: float, tgt_heading: float, tgt_speed: float
+                               ) -> tuple[float, float, float] | None:
+    """FACT (2026-09-24, root-caused from live sweep data -- see basic_simulator.md): what
+    this contact's CPA/TCPA would become if own-ship adopted the GOAL COURSE CHECK heading
+    right now, holding speed. Returns None when GOAL COURSE CHECK itself recommends
+    hold_course (current heading already matches, so nothing new to report) -- otherwise
+    (new_heading_deg, cpa_m, tcpa_s).
+
+    WHY THIS EXISTS: goal_course_check_line()'s recommended turn is computed purely from
+    the goal bearing -- it has no way to know that turning onto it changes EVERY contact's
+    CPA/TCPA too, and the per-contact CPA/TCPA line is computed purely from the CURRENT
+    heading -- neither number, alone, ever tells the model what its own about-to-be-issued
+    turn does to a contact it is not currently reacting to. This closes exactly that gap,
+    as a plain computed fact (no verdict, no instruction) -- same category as
+    goal_course_check_line() itself already being a pre-computed fact instead of leaving
+    the arithmetic to the model."""
+    action, degrees = goal_course_action(own_x, own_y, own_heading, goal_x, goal_y)
+    if action == "hold_course":
+        return None
+    new_heading = (own_heading + degrees) % 360.0 if action == "turn_right" else (own_heading - degrees) % 360.0
+    cpa, tcpa = _cpa_tcpa(own_x, own_y, new_heading, own_speed, tgt_x, tgt_y, tgt_heading, tgt_speed)
+    return new_heading, cpa, tcpa
+
+
 # Fase B4 (RAG-rebuild-v2 plan): a "previous decisions" history preamble, prepended to a
 # SUBSET of training rows' user turns, teaching the model not to reverse/re-derive an
 # already-established decision from scratch every single step (the measured zigzag

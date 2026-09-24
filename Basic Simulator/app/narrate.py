@@ -25,7 +25,7 @@ from app.units import m_to_nm, mps_to_kn
 # drifts -- see that module's docstring.
 from pipeline.oow_agent_spec import (
     bearing_and_range, relative_bearing, classify_encounter, goal_course_check_line,
-    real_risk, derive_risk_horizon_s,
+    real_risk, derive_risk_horizon_s, goal_course_cpa_after_turn,
 )
 
 # app/simulation.py's speed_up()/slow_down() fixed per-command target-speed step -- owned
@@ -290,4 +290,19 @@ def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_m
                 f"{mps_to_kn(c['speed']):.2f} kt, CPA {m_to_nm(c['cpa_m']):.3f} NM, "
                 f"TCPA {c['tcpa_s']:.0f}s{tcpa_note}"
             )
+            # FACT (2026-09-24, see goal_course_cpa_after_turn()'s docstring): what THIS
+            # contact's CPA/TCPA would become if own-ship adopted the GOAL COURSE CHECK
+            # heading right now -- root-caused live sweep failures where the model turned
+            # onto the goal bearing precisely because a contact's CURRENT CPA/TCPA looked
+            # clear, never seeing that its own turn was about to close a much shorter CPA
+            # with that same contact.
+            after = goal_course_cpa_after_turn(own.x, own.y, own.heading, own.speed,
+                                               gx, gy, tgt.x, tgt.y, tgt.heading, tgt.speed)
+            if after is not None:
+                new_heading, new_cpa, new_tcpa = after
+                lines.append(
+                    f"    If own-ship turned to the GOAL COURSE CHECK heading "
+                    f"({new_heading:.1f} deg) now, this contact's CPA would become "
+                    f"{m_to_nm(new_cpa):.3f} NM, TCPA {new_tcpa:.0f}s."
+                )
     return "\n".join(lines)
