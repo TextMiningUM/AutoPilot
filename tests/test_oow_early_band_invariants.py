@@ -86,3 +86,21 @@ def test_full_synthetic_dataset_satisfies_i1_i2_i5() -> None:
                         has_encounter, violations, rec.get("category", "?"))
     for code, bad in violations.items():
         assert bad == [], f"{code} violated in {len(bad)} synthetic rows: {bad[:5]}"
+
+
+def test_pass_criteria_covers_every_bucket_leo_choose_action_can_return() -> None:
+    """Regression guard for the exact class of bug this fix's own review run hit live:
+    PASS_CRITERIA missing "early_give_way" crashed build_oow_scenarios_leo.py's --b3-
+    review-sample with a bare KeyError (same class as the earlier missing "stationary"
+    key). Every bucket leo_choose_action() can return across the full 7928-frame
+    dataset must have a PASS_CRITERIA entry."""
+    from pipeline.track2.build_oow_scenarios_leo import PASS_CRITERIA
+
+    all_recs = [json.loads(l) for l in LEO_FILE.read_text(encoding="utf-8").splitlines()]
+    buckets = set()
+    for r in all_recs:
+        limits = limits_for_leo_record(r)
+        d = leo_choose_action(r["state"], limits)
+        buckets.add(d["bucket"])
+    missing = buckets - set(PASS_CRITERIA) - {"paused", "excluded"}
+    assert missing == set(), f"PASS_CRITERIA is missing bucket(s): {missing}"
