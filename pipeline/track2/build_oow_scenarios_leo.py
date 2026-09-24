@@ -67,6 +67,7 @@ from pipeline.oow_agent_spec import (
     SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, goal_course_check_line, goal_course_action,
     classify_rules, render_previous_decisions, real_risk, risk_band, STAND_ON_TCPA_S,
     classify_encounter, sample_row_limits, constraint_line, bearing_and_range, relative_bearing,
+    goal_course_cpa_after_turn,
 )
 
 paths = AgentPaths.oow()
@@ -223,6 +224,21 @@ def render_leo_narrative(state: dict, limits: dict | None = None) -> str:
             f"{c['heading']:.1f}, speed {c['speed']:.2f}, closing speed {c['closing_speed']:.2f}"
             f"{cpa_txt}.{track_txt}"
         )
+        # FACT (2026-09-24, matches Basic Simulator/app/narrate.py -- see
+        # goal_course_cpa_after_turn()'s docstring): what THIS contact's CPA/TCPA would
+        # become if own-ship adopted the GOAL COURSE CHECK heading right now. Keeps live
+        # eval and this training narration on the same task.
+        true_brg = math.radians((own["heading"] + c["relative_bearing_deg"]) % 360.0)
+        cx = ox + c["range_m"] * math.sin(true_brg)
+        cy = oy + c["range_m"] * math.cos(true_brg)
+        after = goal_course_cpa_after_turn(ox, oy, own["heading"], own["speed"], mx, my,
+                                          cx, cy, c["heading"], c["speed"])
+        if after is not None:
+            new_heading, new_cpa, new_tcpa = after
+            lines.append(
+                f"    If own-ship turned to the GOAL COURSE CHECK heading ({new_heading:.1f} deg) "
+                f"now, this contact's CPA would become {new_cpa:.0f} m, TCPA {new_tcpa:.0f}s."
+            )
     vis = cond.get("visibility_condition", "clear")
     vis_range = cond.get("visibility_range_m")
     cond_line = f"Conditions: visibility is {vis}"

@@ -133,6 +133,7 @@ from pipeline.oow_agent_spec import (
     SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, classify_rules,
     bearing_and_range, relative_bearing, goal_course_action, goal_course_check_line,
     render_previous_decisions, real_risk, risk_band, sample_row_limits, fixed_limits, constraint_line,
+    goal_course_cpa_after_turn,
 )
 
 paths = AgentPaths.oow()
@@ -554,6 +555,21 @@ def render_scenario_situation(rec: dict, limits: dict | None = None) -> str:
             f"{rel_brg:.1f} deg, heading {t['heading_deg']:.1f}, speed {t['speed']:.2f}, "
             f"closing speed {closing:.2f}{cpa_txt}."
         )
+        # FACT (2026-09-24, matches Basic Simulator/app/narrate.py -- see
+        # goal_course_cpa_after_turn()'s docstring): what THIS contact's CPA/TCPA would
+        # become if own-ship adopted the GOAL COURSE CHECK heading right now. Own-ship
+        # sits on the goal bearing by construction here (see this function's docstring),
+        # so GOAL COURSE CHECK always recommends hold_course and this never actually fires
+        # -- included anyway to keep this renderer structurally parallel to the other two.
+        tx, ty = t["start_xy_m"]
+        after = goal_course_cpa_after_turn(0.0, 0.0, 0.0, own_speed, wx, wy,
+                                          tx, ty, t["heading_deg"], t["speed"])
+        if after is not None:
+            new_heading, new_cpa, new_tcpa = after
+            lines.append(
+                f"    If own-ship turned to the GOAL COURSE CHECK heading ({new_heading:.1f} deg) "
+                f"now, this contact's CPA would become {new_cpa:.0f} m, TCPA {new_tcpa / 60.0:.1f} min."
+            )
     lines.append("Conditions: visibility is clear, assessed visibility range is 10000 m, "
                  "narrow-channel context is not indicated, traffic-separation context is not indicated.")
     return "\n".join(lines)
