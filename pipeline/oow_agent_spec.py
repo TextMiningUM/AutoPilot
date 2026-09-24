@@ -427,17 +427,20 @@ def classify_encounter(own_x: float, own_y: float, own_hdg: float,
     return "crossing_target_on_port", ["Rule 15", "Rule 17"], rel_from_own
 
 
+GOAL_DEADBAND_DEG = 5.0
+
+
 def goal_course_action(own_x: float, own_y: float, own_heading: float,
                        goal_x: float, goal_y: float) -> tuple[str, float | None]:
     """The action/degrees GOAL COURSE CHECK recommends -- ("hold_course", None) if already
-    on the goal bearing (within a 10 deg deadband), else ("turn_left"/"turn_right", degrees).
+    on the goal bearing (within GOAL_DEADBAND_DEG), else ("turn_left"/"turn_right", degrees).
     Used BOTH to render the check's text line (below) and as the actual ground-truth
     action a training-data generator picks when no real collision risk exists (SYSTEM_OOW_
     AGENT's decision procedure step 3) -- so the rendered text and the label a model is
     trained on can never silently disagree."""
     goal_brg, _ = bearing_and_range(own_x, own_y, goal_x, goal_y)
     off_course = relative_bearing(own_heading, goal_brg)
-    if abs(off_course) <= 10:
+    if abs(off_course) <= GOAL_DEADBAND_DEG:
         return "hold_course", None
     return ("turn_right" if off_course > 0 else "turn_left"), round(abs(off_course), 1)
 
@@ -458,8 +461,8 @@ def goal_course_check_line(own_x: float, own_y: float, own_heading: float,
     reason from the stated cap and its own kinematics facts same as any other action)."""
     action, degrees = goal_course_action(own_x, own_y, own_heading, goal_x, goal_y)
     if action == "hold_course":
-        return ("GOAL COURSE CHECK: heading is ALREADY on the goal bearing (within "
-                "10 deg) -- no turn needed for the goal.")
+        return (f"GOAL COURSE CHECK: heading is ALREADY on the goal bearing (within "
+                f"{GOAL_DEADBAND_DEG:.0f} deg) -- no turn needed for the goal.")
     goal_brg, _ = bearing_and_range(own_x, own_y, goal_x, goal_y)
     off_course = relative_bearing(own_heading, goal_brg)
     side = "starboard" if off_course > 0 else "port"
