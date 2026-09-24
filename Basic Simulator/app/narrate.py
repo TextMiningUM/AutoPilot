@@ -146,10 +146,21 @@ def contact_line(own: Vessel, tgt: Vessel, safe_distance_m: float = 500.0,
     enc, rules, rel = classify_encounter(own.x, own.y, own.heading, tgt.x, tgt.y, tgt.heading)
     risk_horizon_s = derive_risk_horizon_s(safe_distance_m, max_turn_deg, own.speed)
     quiet = not real_risk(cpa, tcpa, safe_distance_m, risk_horizon_s)
+    # Stand-on-vessel escalation deadline (2026-09-24, matches constraint_line()'s new
+    # sentence, pipeline/oow_agent_spec.py) -- PRE-COMPUTED here rather than left for the
+    # model to compare TCPA against the stated threshold itself: confirmed live
+    # (Imazu07/v7_super_rag, post-fix) the model correctly recalled and quoted the exact
+    # threshold every checkpoint ("we must hold course until the TCPA drops below 340s")
+    # but got the inequality backwards at the critical moment (TCPA=200s, said "not yet
+    # the case" -- 200 < 340 was already true). Same lesson as the existing "already past
+    # closest point" annotation just below: state the fact, don't make the model do the
+    # arithmetic.
+    stand_on_deadline_passed = not quiet and tcpa is not None and tcpa < risk_horizon_s * 0.6
     return {
         "name": tgt.name, "range_m": rng, "rel_bearing_deg": rel,
         "heading": tgt.heading, "speed": tgt.speed,
         "cpa_m": cpa, "tcpa_s": tcpa, "closing": closing, "encounter": enc, "rules": rules, "quiet": quiet,
+        "stand_on_deadline_passed": stand_on_deadline_passed,
     }
 
 
@@ -211,7 +222,13 @@ def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_m
         lines.append(f"{n} other ship{'s' if n != 1 else ''}:")
         for tgt in targets:
             c = contact_line(own, tgt, safe_distance_m, max_turn_deg)
-            tcpa_note = "" if c["closing"] else " (already past closest point, ranges now increasing)"
+            if not c["closing"]:
+                tcpa_note = " (already past closest point, ranges now increasing)"
+            elif c["stand_on_deadline_passed"]:
+                tcpa_note = (" (TCPA is now below this contact's own hold-course deadline -- "
+                            "an avoiding action is required NOW, not later)")
+            else:
+                tcpa_note = ""
             lines.append(
                 f'  - Ship named "{c["name"]}": range {m_to_nm(c["range_m"]):.3f} NM, rel.bearing '
                 f"{c['rel_bearing_deg']:.1f} deg, heading {c['heading']:.1f}, speed "
