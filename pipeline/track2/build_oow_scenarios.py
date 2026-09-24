@@ -1477,7 +1477,14 @@ def to_trace_record(rec: dict, idx: int) -> dict:
             "prowords_used": [rec["role"]],
             "channels": rec["rules"],
             "regulations": ["COLREG 1972"],
-            "warnings": [c for c in rec["pass_criteria"] if "not" in c.lower() or "avoid" in c.lower()],
+            # 2026-09-24 bugfix: pass_criteria are SUCCESS conditions -- even ones phrased with
+            # a clarifying negative (e.g. "alters course to starboard (not port)") describe the
+            # REQUIRED action, never a pitfall. A "not"/"avoid" substring filter here previously
+            # misrouted several required actions into build_pg.py's pitfalls/"Avoid:" rendering,
+            # telling the model to avoid the correct manoeuvre. Matches build_oow_scenarios_leo.py's
+            # own convention (always []) -- no reliable heuristic separates "positive requirement
+            # worded with 'not'" from "genuine warning" here, so don't try to derive one.
+            "warnings": [],
             "outcomes": [f"Action taken: {rec['action_params_text']}."],
             "key_facts": [f"Own-ship speed {rec['own_speed']}.",
                          f"Chosen action: {rec['action']}."],

@@ -138,8 +138,8 @@ BARE_SYSTEM = """You are an AI assistant helping a ship's navigation system deci
 change. Reply with ONLY a JSON object, no other text:
 {"action": "turn_left|turn_right|hold_course|speed_up|slow_down|stop",
  "degrees": <float, only for turn_left/turn_right>,
- "encounter_rule": "<Rule 13, Rule 14, Rule 15, or 'none' if no encounter poses real risk>",
- "conduct_rule": "<Rule 8, Rule 13, Rule 14, Rule 16, Rule 17, Rule 19, or 'none'>",
+ "encounter_rule": "<'Rule <N>' citing the applicable COLREG rule, or 'none' if no contact poses real risk>",
+ "conduct_rule": "<'Rule <N>' citing the applicable COLREG rule, or 'none' if no real risk>",
  "reasoning": "<one or two sentences>"}"""
 
 # SYSTEM_OOW_AGENT (the v0-v9 system prompt) lives in pipeline/oow_agent_spec.py -- the

@@ -89,6 +89,10 @@ REFL_FILES   = {
         # units_v1 missions (build_measurement_reflection.py against app/measurement.py's
         # Check A/B/C hits), replacing the old "too vague, add parameters" pattern.
         CACHE / "oow_measurement_reflection.jsonl",
+        # RUN-VERDICT-DRIVEN reflection triples (build_outcome_reflection.py) -- same
+        # collision/CPA-violation/goal-not-reached mining as train_dpo.py's
+        # oow_outcome_dpo_pairs.jsonl, reused here as draft/critique/refined triples.
+        CACHE / "oow_outcome_reflection.jsonl",
         # Track 2 -- applied helm/engine-order decisions (build_reflection.py run against
         # the deterministic MOOS-scenario reasoning traces, notebook § 6.5).
         CACHE / "oow_scenario_reflection.jsonl",

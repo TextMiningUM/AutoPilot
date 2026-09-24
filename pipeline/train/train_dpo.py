@@ -138,6 +138,12 @@ DPO_FILES   = {
         # from real model mistakes in the archived units_v1 mission checkpoints
         # (build_measurement_dpo.py against app/measurement.py's Check A hits).
         CACHE / "oow_measurement_dpo_pairs.jsonl",
+        # RUN-VERDICT-DRIVEN pairs (build_outcome_dpo.py) -- mined from precomputed mission
+        # sweeps whose ACTUAL outcome was a collision, a CPA-safety-distance violation, or
+        # a failure to reach the goal (not just a suspicious per-decision reasoning check
+        # like the measurement pairs above), so the model sees real mistakes that were
+        # confirmed to matter for the mission's actual result.
+        CACHE / "oow_outcome_dpo_pairs.jsonl",
     ],
 }[paths.domain]
 
