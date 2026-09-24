@@ -85,7 +85,7 @@ def test_narrate_uses_the_shared_goal_course_check_function() -> None:
     mission = Mission(id="t", name="t", rule_refs=[], own_ship_role="none", description="",
                       pass_criteria=[], own_ship=own, goal=(1000.0, 1000.0))
     report = narrate(mission, own, [])
-    expected = goal_course_check_line(own.x, own.y, own.heading, *mission.goal)
+    expected = goal_course_check_line(own.x, own.y, own.heading, *mission.goal, max_turn_deg=30.0)
     goal_check_lines = [ln for ln in report.splitlines() if ln.startswith("GOAL COURSE CHECK")]
     assert len(goal_check_lines) == 1
     assert goal_check_lines[0] == expected

@@ -531,7 +531,7 @@ def render_scenario_situation(rec: dict, limits: dict | None = None) -> str:
         f"Own-ship is underway at (0.0, 0.0), heading 0.0 degrees, speed {own_speed:.2f}. "
         f"Target cruise speed is {cruise:.1f}.",
         f"Mission waypoint is at ({wx:.1f}, {wy:.1f}).",
-        goal_course_check_line(0.0, 0.0, 0.0, wx, wy),
+        goal_course_check_line(0.0, 0.0, 0.0, wx, wy, limits["max_turn_deg"]),
         constraint_line(limits["safe_distance_m"], limits["max_turn_deg"], limits["risk_horizon_s"]),
         f"{n} other ship{'s' if n != 1 else ''}:" if n else "No other ships tracked.",
     ]

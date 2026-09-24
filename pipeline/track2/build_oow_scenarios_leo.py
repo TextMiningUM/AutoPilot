@@ -103,6 +103,25 @@ PASS_CRITERIA = {
                   "non-vessel object, scaled to how far CPA falls under the safe passing distance.",
                   "Own-ship does not simply hold course while a stationary object poses a real risk.",
                   "Own-ship does not cite a COLREG encounter rule for a non-vessel object (Rule 8 only)."],
+    # Quality-review STOP-1-blocking-bug fix (2026-09-23): early-band buckets -- CPA below
+    # the safe distance but TCPA beyond the horizon. Still a real encounter that must be
+    # NAMED and, for give-way/stationary, acted on now -- never "stop" (that stays acute-only).
+    "early_give_way": ["Own-ship takes early, substantial action to keep clear as the give-way "
+                       "vessel, scaled to how far CPA falls under the safe passing distance, even "
+                       "though the encounter is not yet acute (TCPA beyond the risk horizon).",
+                       "Own-ship names the applicable encounter/steering rule even though action "
+                       "is only just becoming necessary, not yet mandatory.",
+                       "Own-ship does not stop -- that action is reserved for a genuinely acute, "
+                       "close-range encounter."],
+    "early_stand_on": ["Own-ship holds course and speed as the stand-on vessel, even though the "
+                       "encounter is not yet acute (TCPA beyond the risk horizon).",
+                       "Own-ship names the applicable encounter/steering rule (Rule 17) even though "
+                       "her own 17(a)(ii)/(b) proactive action is not yet warranted."],
+    "early_stationary": ["Own-ship takes early, substantial action to keep clear of a real-risk "
+                         "stationary/non-vessel object, even though the encounter is not yet acute "
+                         "(TCPA beyond the risk horizon).",
+                         "Own-ship does not cite a COLREG encounter rule for a non-vessel object "
+                         "(Rule 8 only)."],
 }
 
 SAFE_CPA_M = 500.0        # matches Basic Simulator VesselConstraints' default min_cpa_m
@@ -178,7 +197,7 @@ def render_leo_narrative(state: dict, limits: dict | None = None) -> str:
         f"degrees, speed {own['speed']:.2f}. Target cruise speed is {own['target_speed']:.1f}.",
         f"Own-ship vessel type is {own['colregs_vessel_type'].replace('_', ' ')}.",
         f"Mission waypoint is at ({mx:.1f}, {my:.1f}), {dist:.0f} m away, bearing {bearing:.1f} deg.",
-        goal_course_check_line(ox, oy, own["heading"], mx, my),
+        goal_course_check_line(ox, oy, own["heading"], mx, my, limits["max_turn_deg"]),
         constraint_line(limits["safe_distance_m"], limits["max_turn_deg"], limits["risk_horizon_s"]),
         f"{n} other ship{'s' if n != 1 else ''}:" if n else "No other ships tracked.",
     ]

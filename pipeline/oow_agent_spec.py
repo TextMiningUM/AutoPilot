@@ -335,7 +335,11 @@ DECISION PROCEDURE -- follow in order:
 5. Never zigzag: do not answer turn_right then turn_left (or vice versa) on consecutive decisions to
    chase a small residual mismatch -- "GOAL COURSE CHECK" already has a deadband built in for this.
 6. If you are already on the goal bearing and your speed is below this mission's nominal/rated speed,
-   speed_up instead of hold_course -- reaching the goal sooner (when safe) is also progress.
+   speed_up instead of hold_course -- reaching the goal sooner (when safe) is also progress. Speed
+   changes ramp gradually (see your acceleration limit above), exactly like a turn is capped per
+   command: ONE speed_up does NOT jump straight to nominal speed. If you are still below nominal
+   after issuing it, keep issuing speed_up on every following step until you reach nominal -- do
+   not treat a single speed_up as having already fixed it.
 
 Ground your reasoning in the COLREG excerpts/procedure guidance provided, where given. Reply with
 ONLY a JSON object, no other text:
@@ -506,12 +510,27 @@ def goal_course_action(own_x: float, own_y: float, own_heading: float,
 
 
 def goal_course_check_line(own_x: float, own_y: float, own_heading: float,
-                           goal_x: float, goal_y: float) -> str:
+                           goal_x: float, goal_y: float,
+                           max_turn_deg: float | None = None) -> str:
     """The exact 'GOAL COURSE CHECK: ...' situation-report line -- computed identically
     regardless of caller (Basic Simulator's live narrate(), or a Track-2 training-data
     generator's deterministic narrative). See this module's docstring for why a SECOND,
     independently-drifting implementation of this exact calculation is the same bug class
-    already found and fixed once for `mission.targets` vs the simulator's live contacts."""
+    already found and fixed once for `mission.targets` vs the simulator's live contacts.
+
+    `max_turn_deg` (2026-09-24 addition, optional -- None preserves old behaviour for any
+    caller not yet updated): confirmed live (Imazu07/v0_base) the model let a real
+    off-course drift grow to 75 deg before finally acting, then requested one turn_right
+    75 -- own-ship's kinematics only apply the first {max_turn_deg} deg of that per
+    command (the rest is silently capped, per SYSTEM_OOW_AGENT's own physical-limits
+    sentence), so the ship kept sailing forward the WHOLE time it was still mid-turn,
+    overshooting the goal's latitude and making the remaining error WORSE (150+ deg) by
+    the next step -- yet the model then answered hold_course again, as if one turn
+    command had already resolved a correction more than double its own per-command max.
+    When given and the needed correction exceeds it, states that fact explicitly (the
+    same "don't make the model do arithmetic it can get wrong" pattern as
+    stand_on_deadline_passed/already-past-closest-point) so it can't mistake "I turned
+    once" for "I'm now on course"."""
     action, degrees = goal_course_action(own_x, own_y, own_heading, goal_x, goal_y)
     if action == "hold_course":
         return ("GOAL COURSE CHECK: heading is ALREADY on the goal bearing (within "
@@ -519,10 +538,17 @@ def goal_course_check_line(own_x: float, own_y: float, own_heading: float,
     goal_brg, _ = bearing_and_range(own_x, own_y, goal_x, goal_y)
     off_course = relative_bearing(own_heading, goal_brg)
     side = "starboard" if off_course > 0 else "port"
-    return (f"GOAL COURSE CHECK: heading is {abs(off_course):.0f} deg off the goal "
+    line = (f"GOAL COURSE CHECK: heading is {abs(off_course):.0f} deg off the goal "
            f"bearing, to {side} -- to correct, use action \"{action}\" with "
            f"degrees={degrees:.0f} (unless a target poses a real collision "
            f"risk, which takes precedence).")
+    if max_turn_deg is not None and degrees > max_turn_deg:
+        line += (f" This is MORE than your per-command max of {max_turn_deg:.0f} deg -- "
+                f"a single command cannot complete it. Issue {action} {max_turn_deg:.0f} "
+                f"now regardless, and expect to issue {action} again on the following "
+                "steps (this line recomputes fresh each time) until it reads within 10 "
+                "deg -- one turn command does NOT mean you are back on course.")
+    return line
 
 
 # Fase B4 (RAG-rebuild-v2 plan): a "previous decisions" history preamble, prepended to a

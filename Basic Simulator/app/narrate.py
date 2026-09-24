@@ -195,9 +195,20 @@ def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_m
     gx, gy = mission.goal
     goal_brg, goal_rng = bearing_and_range(own.x, own.y, gx, gy)
     nominal_speed = cruise_speed_mps if cruise_speed_mps is not None else mission.own_ship.speed
+    # 2026-09-24: speed_up is rate-limited (max_acceleration_mps2) exactly like a turn is
+    # rate-limited (max_turn_deg) -- confirmed live (Imazu07/v7_super_rag) the model issued
+    # ONE speed_up after a stop, reached only 3.89 of 12.00 kt nominal, then held that speed
+    # for the ENTIRE rest of the mission (28 checkpoints) without ever issuing speed_up
+    # again, despite step 6 already saying to speed_up when below nominal -- same "one
+    # command = fully resolved" mistake as the goal-course-check bug. State the shortfall
+    # explicitly rather than trust the model to keep noticing it turn after turn.
+    speed_note = ""
+    if own.speed < nominal_speed - 0.05:
+        speed_note = (f" This is BELOW nominal -- issue speed_up again on this and following "
+                     "steps (one command only ramps partway) until back at nominal.")
     lines = [f"Own-ship at ({m_to_nm(own.x):.3f}, {m_to_nm(own.y):.3f}) NM, heading "
              f"{own.heading:.1f}, speed {mps_to_kn(own.speed):.2f} kt (nominal/rated speed "
-             f"for this mission: {mps_to_kn(nominal_speed):.2f} kt)."]
+             f"for this mission: {mps_to_kn(nominal_speed):.2f} kt).{speed_note}"]
     lines.append(f"Mission goal at ({m_to_nm(gx):.3f}, {m_to_nm(gy):.3f}) NM, "
                 f"{m_to_nm(goal_rng):.3f} NM away, bearing {goal_brg:.1f} deg.")
     # A separate, unmistakable line for the ONE number that drives the goal-correction
@@ -209,7 +220,7 @@ def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_m
     # never about a contact, and spells out the exact action to copy when off course.
     # goal_course_check_line() (pipeline/oow_agent_spec.py) is the SAME function the
     # Track-2 training-data generators call -- never a second, independently-drifting copy.
-    lines.append(goal_course_check_line(own.x, own.y, own.heading, gx, gy))
+    lines.append(goal_course_check_line(own.x, own.y, own.heading, gx, gy, max_turn_deg))
     if own.speed > 0:
         eta = goal_rng / own.speed
         lines.append(f"At current speed, ETA to goal \u2248 {eta:.0f}s if heading straight there.")
