@@ -102,12 +102,16 @@ def test_v2_eval_record_situation_is_byte_identical_to_what_a_training_row_would
     Screening-set-B audit follow-up (2026-09-23): constraint_line() was reworded again
     (encounter-identification vs action-is-mandatory split into two explicit sentences,
     replacing the single "BOTH...AND..." conjunction sentence) -- same situation, same
-    skip-not-fail policy, gated on a phrase unique to the NEW wording."""
+    skip-not-fail policy, gated on a phrase unique to the NEW wording.
+
+    Stand-on-vessel-escalation fix (2026-09-24): constraint_line() gained one more
+    sentence (the stand_on_tcpa_s deadline) -- same situation again, extended gate."""
     if not V2_FILE.exists():
         return
     v2 = json.loads(V2_FILE.read_text(encoding="utf-8"))
     if ("may request at most" not in v2[0]["situation"]
-            or "you must identify the encounter and the applicable steering rule" not in v2[0]["situation"]):
+            or "you must identify the encounter and the applicable steering rule" not in v2[0]["situation"]
+            or "some avoiding action then becomes required" not in v2[0]["situation"]):
         pytest.skip("oow_colreg_scenarios_v2.json predates the current constraint_line() "
                    "wording -- pending its own regeneration")
     eval_recs, _ = _fresh_pop(seed=0)

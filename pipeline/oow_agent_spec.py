@@ -238,7 +238,22 @@ def constraint_line(safe_distance_m: float, max_turn_deg: float, risk_horizon_s:
     all"), reproduced on v7/screening_standard_cloud: TCPA outside the horizon (1400s >
     567s) reasoned into citing encounter_rule 'none' on a CPA-0 contact. No rule numbers
     here -- this module states geometry/physics only, never rule knowledge (see the
-    module docstring)."""
+    module docstring).
+
+    2026-09-24 addition (stand-on-vessel escalation, Rule 17(a)(ii)/(b)): a stand-on
+    vessel holding course indefinitely while a real-risk contact's CPA/TCPA both run down
+    to zero -- confirmed live (Imazu07/v7_super_rag): the model correctly cited Rule 15/17
+    every checkpoint, reasoned "must maintain course", and held straight through to
+    collision, since nothing ever told it that "stand-on" has a time limit. `STAND_ON_TCPA_S`
+    (module-level 180.0) / `stand_on_tcpa_s` (the per-row/per-mission 0.6x-of-horizon
+    variable, see sample_row_limits()) already existed as the intended threshold for this,
+    but was computed and never actually rendered anywhere -- this sentence is the first
+    place it reaches either the live prompt or a training row's text. Deliberately stated
+    WITHOUT naming Rule 17 or "stand-on"/"give-way vessel" (first attempt used those words
+    and broke this module's own no-leakage tests/design -- see the module docstring; SYSTEM_
+    OOW_AGENT's DECISION PROCEDURE is where the rule-specific instruction belongs, since
+    that text is generic/situation-independent, unlike this per-contact rendering)."""
+    stand_on_tcpa_s = risk_horizon_s * 0.6
     return (
         f"This mission's safe passing distance is {safe_distance_m:.0f}m and its risk "
         f"horizon is {risk_horizon_s:.0f}s. "
@@ -246,6 +261,10 @@ def constraint_line(safe_distance_m: float, max_turn_deg: float, risk_horizon_s:
         "the encounter and the applicable steering rule, even if action is not yet "
         "required. Action becomes mandatory when that contact's TCPA is within the risk "
         "horizon; outside it you may act early but must at least name the encounter. "
+        f"If a contact's CPA stays below the safe passing distance while its TCPA keeps "
+        f"falling, holding course stops being an acceptable action for EITHER vessel once "
+        f"that contact's TCPA drops below {stand_on_tcpa_s:.0f}s -- some avoiding action "
+        "then becomes required regardless of which vessel would otherwise act first. "
         f"A single turn_left/turn_right command may request at most {max_turn_deg:.0f} degrees."
     )
 
@@ -291,7 +310,13 @@ DECISION PROCEDURE -- follow in order:
    AND its TCPA is within the horizon. If no contact meets both, there is no real collision risk
    right now -- go to step 3.
 2. If any contact meets both conditions, pick the ONE action that satisfies the applicable COLREG
-   rule for that contact. This step overrides everything below it.
+   rule for that contact. This step overrides everything below it. IMPORTANT for a stand-on
+   encounter (conduct_rule Rule 17): "hold_course" is the correct action ONLY while that contact's
+   TCPA is still ABOVE the stand-on time limit stated further below. Once its TCPA drops below that
+   limit AND it is still below the safe passing distance, Rule 17(a)(ii)/(b) makes hold_course the
+   WRONG action -- you must instead pick a real avoiding manoeuvre (turn_left/turn_right/slow_down/
+   stop), exactly as if you were the give-way vessel. Being the stand-on vessel is a temporary
+   status, never a permanent reason to hold course all the way to collision.
 3. Otherwise, before resuming: if your last helm decision (given further below, when present) names
    a contact that posed real risk THEN, and that SAME contact's line in THIS situation report does
    NOT say "(already past closest point, ranges now increasing)" -- i.e. it is still closing -- you

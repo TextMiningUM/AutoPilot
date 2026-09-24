@@ -79,6 +79,7 @@ from pipeline.oow_agent_spec import (
 from app.missions import Mission, Vessel
 from app.narrate import contact_line, narrate
 from app.simulation import VesselConstraints
+from app.units import m_to_nm, mps_to_kn
 
 MODEL_ID = "Qwen/Qwen3-8B"
 
@@ -427,10 +428,20 @@ def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], confi
             f"deg/s (~{per_step:.0f} deg per {constraints.time_step_s:.0f}s step) -- a larger turn "
             "request will be silently capped, so a course change bigger than the per-command max "
             "needs several separate turn commands across multiple steps, not one big one. "
-            f"Speed is capped at {constraints.max_speed_mps:.1f} m/s, changing gradually "
-            f"({constraints.max_acceleration_mps2:.2f} m/s\u00b2 up / {constraints.max_deceleration_mps2:.2f} "
-            "m/s\u00b2 down) -- speed_up/slow_down are not instant. "
+            f"Speed is capped at {constraints.max_speed_mps:.1f} m/s ({mps_to_kn(constraints.max_speed_mps):.1f} "
+            f"kt), changing gradually ({constraints.max_acceleration_mps2:.2f} m/s\u00b2 up / "
+            f"{constraints.max_deceleration_mps2:.2f} m/s\u00b2 down) -- speed_up/slow_down are not "
+            "instant. "
             + constraint_line(constraints.min_cpa_m, constraints.max_rudder_angle_deg, risk_horizon_s)
+            # Every contact/CPA/range number in the "Situation:" section below (narrate())
+            # is in NM/knots, but constraint_line() above (shared byte-identical with
+            # Track-2 training text -- never rewritten in NM/kt, see that function's own
+            # docstring) states the safe distance in metres -- confirmed live
+            # (Imazu07/v7_super_rag) the model has to silently convert one against the
+            # other to judge risk. This restates the SAME number in NM so nothing needs
+            # converting; the metres number above is left untouched (still needed for
+            # train/live parity).
+            + f" In NM/kt terms: safe passing distance {m_to_nm(constraints.min_cpa_m):.3f} NM."
         )
     if pg_text:
         user_parts.append(f"Procedure guidance:\n{pg_text}")
