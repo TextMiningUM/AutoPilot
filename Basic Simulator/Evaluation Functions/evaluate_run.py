@@ -271,7 +271,7 @@ COMPLIANCE_WEIGHTS = {
 COMPLIANCE_LABELS = {
     "A_fabricated_risk": "Hallucinated Risk",
     "B_wrong_direction": "Wrong Turn Direction",
-    "C_degrees_over_limit": "Turn Exceeds Physical Limit",
+    "C_degrees_over_limit": "Implausibly Large Turn Order",
     "D_no_action_when_required": "No Action Despite Risk",
     "E_encounter_mismatch": "Wrong Rule Cited",
     "E_role_fabrication": "Rule Cited Without Real Encounter",

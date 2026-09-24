@@ -289,7 +289,7 @@ _CHECK_LABELS = {
     "B_wrong_direction": "\u26a0\ufe0f Check B -- wrong turn direction: a give-way turn went "
                         "to port instead of starboard.",
     "C_degrees_over_limit": "\u26a0\ufe0f Check C -- degrees over limit: the requested turn "
-                            "exceeded what's physically achievable in one decision step.",
+                            "was implausibly large (over the sanity bound, not a physical limit).",
 }
 
 
@@ -317,7 +317,7 @@ def _describe_measurement(measurement: dict | None) -> str:
                      f"action {b.get('action', '?')}.")
     if "C_degrees_over_limit" in checks_fired:
         c = details.get("C", {})
-        lines.append(f"  requested {c.get('requested_degrees', '?')}\u00b0, physical limit "
+        lines.append(f"  requested {c.get('requested_degrees', '?')}\u00b0, sanity bound "
                      f"{c.get('limit_degrees', '?')}\u00b0.")
     return "\n\n".join(lines)
 
@@ -325,8 +325,12 @@ def _describe_measurement(measurement: dict | None) -> str:
 def _describe_params(params: dict) -> str:
     """Human-readable rendering of a precomputed run's `params` block (decision_interval,
     dt, max_steps, enable_thinking, max_new_tokens, k, use_rag, ...) instead of raw JSON."""
+    cadence_mode = params.get("decision_interval_mode")
+    cadence_desc = (f"initial {params.get('decision_interval', '?')} step(s), adaptive after"
+                   if cadence_mode == "adaptive" else
+                   f"every {params.get('decision_interval', '?')} step(s)")
     lines = [
-        f"**Decisions:** every {params.get('decision_interval', '?')} step(s), "
+        f"**Decisions:** {cadence_desc}, "
         f"dt={params.get('dt', '?')}s, max {params.get('max_steps', '?')} steps total",
         f"**Thinking:** {'on' if params.get('enable_thinking') else 'off'}  \u2022  "
         f"**Max new tokens:** {params.get('max_new_tokens', '?')}",

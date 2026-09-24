@@ -160,9 +160,10 @@ def main() -> None:
                          "app.narrate.recommended_max_steps); set explicitly to force the same "
                          "budget across every mission in the sweep")
     ap.add_argument("--decision-interval", type=int, default=None,
-                    help="steps between LLM decisions -- default: per-mission recommendation "
-                         "(see app.narrate.recommended_decision_interval); set explicitly to "
-                         "force the same cadence across every mission in the sweep")
+                    help="steps between LLM decisions -- default: ADAPTIVE, recomputed every "
+                         "checkpoint from the live encounter (see app.narrate."
+                         "live_decision_interval); set explicitly to force one FIXED cadence "
+                         "across every mission in the sweep")
     ap.add_argument("--enable-thinking", action="store_true")
     ap.add_argument("--max-new-tokens", type=int, default=256)
     ap.add_argument("--k", type=int, default=2)

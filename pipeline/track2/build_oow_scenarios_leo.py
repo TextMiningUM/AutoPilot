@@ -161,7 +161,8 @@ def _row_gets_history_text(leo_id: str, fraction: float = HISTORY_TEXT_FRACTION)
 # explicit per-row `limits` dict (existing tests, ad-hoc scripts) -- the historical fixed
 # 500/30/300 values, so nothing that doesn't opt in to sampling changes behaviour.
 _DEFAULT_LIMITS = {"safe_distance_m": SAFE_CPA_M, "max_turn_deg": MAX_TURN_DEG,
-                   "risk_horizon_s": STAND_ON_TCPA_S / 0.6, "stand_on_tcpa_s": STAND_ON_TCPA_S}
+                   "risk_horizon_s": STAND_ON_TCPA_S / 0.6, "stand_on_tcpa_s": STAND_ON_TCPA_S,
+                   "decision_interval_s": 200.0}
 
 
 def limits_for_leo_record(r: dict) -> dict:
@@ -198,7 +199,8 @@ def render_leo_narrative(state: dict, limits: dict | None = None) -> str:
         f"Own-ship vessel type is {own['colregs_vessel_type'].replace('_', ' ')}.",
         f"Mission waypoint is at ({mx:.1f}, {my:.1f}), {dist:.0f} m away, bearing {bearing:.1f} deg.",
         goal_course_check_line(ox, oy, own["heading"], mx, my, limits["max_turn_deg"]),
-        constraint_line(limits["safe_distance_m"], limits["max_turn_deg"], limits["risk_horizon_s"]),
+        constraint_line(limits["safe_distance_m"], limits["max_turn_deg"], limits["risk_horizon_s"],
+                        limits["decision_interval_s"]),
         f"{n} other ship{'s' if n != 1 else ''}:" if n else "No other ships tracked.",
     ]
     for i, c in enumerate(contacts, start=1):

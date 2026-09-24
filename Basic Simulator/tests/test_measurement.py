@@ -224,18 +224,19 @@ def test_b_does_not_fire_on_turn_right() -> None:
     assert "B_wrong_direction" not in result["checks_fired"]
 
 
-# ── Check C: physically impossible turn request ───────────────────────────
+# ── Check C: implausibly large turn request (sanity bound, not a physical limit) ──
 def test_c_fires_over_limit_and_logs_both_values() -> None:
-    # limit_degrees = turn_rate_deg_s(3.0) * time_step_s(10.0) = 30.0
-    decision = {"action": "turn_right", "degrees": 90.0, "encounter_rule": "Rule 14",
+    # 2026-09-24: turn_left/turn_right have no per-command cap any more -- Check C is now
+    # a fixed MAX_SANE_TURN_DEG=120.0 sanity bound, never derived from constraints.
+    decision = {"action": "turn_right", "degrees": 150.0, "encounter_rule": "Rule 14",
                "conduct_rule": "Rule 14", "reasoning": "..."}
     result = measure_decision_quality(decision, [contact(100.0)], CONSTRAINTS)
     assert "C_degrees_over_limit" in result["checks_fired"]
-    assert result["details"]["C"] == {"requested_degrees": 90.0, "limit_degrees": 30.0}
+    assert result["details"]["C"] == {"requested_degrees": 150.0, "limit_degrees": 120.0}
 
 
 def test_c_does_not_fire_at_or_below_limit() -> None:
-    decision = {"action": "turn_right", "degrees": 30.0, "encounter_rule": "Rule 14",
+    decision = {"action": "turn_right", "degrees": 90.0, "encounter_rule": "Rule 14",
                "conduct_rule": "Rule 14", "reasoning": "..."}
     result = measure_decision_quality(decision, [contact(100.0)], CONSTRAINTS)
     assert "C_degrees_over_limit" not in result["checks_fired"]
@@ -248,13 +249,14 @@ def test_c_ignores_non_turn_actions() -> None:
     assert result["checks_fired"] == []
 
 
-def test_c_uses_constraints_not_a_hardcoded_limit() -> None:
-    tight = VesselConstraints(turn_rate_deg_s=1.0, time_step_s=10.0)  # limit=10 deg
+def test_c_uses_fixed_sanity_bound_not_constraints() -> None:
+    # A "tight" turn_rate_deg_s no longer changes Check C's threshold -- it's a fixed
+    # sanity bound now, independent of any per-mission physical constraints.
+    tight = VesselConstraints(turn_rate_deg_s=1.0, time_step_s=10.0)
     decision = {"action": "turn_left", "degrees": 15.0, "encounter_rule": "none",
                "conduct_rule": "none", "reasoning": "..."}
     result = measure_decision_quality(decision, [], tight)
-    assert "C_degrees_over_limit" in result["checks_fired"]
-    assert result["details"]["C"]["limit_degrees"] == 10.0
+    assert "C_degrees_over_limit" not in result["checks_fired"]
 
 
 # ── Fully correct decision -> nothing fires ───────────────────────────────

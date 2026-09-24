@@ -142,6 +142,12 @@ MAX_TURN_DEG_WEIGHTS: dict[float, float] = {20.0: 0.15, 25.0: 0.20, 30.0: 0.50, 
 # Applied as a MULTIPLIER of the per-row geometry-derived risk_horizon_s default (see
 # derive_risk_horizon_s()), never sampled as an absolute second independent number.
 HORIZON_MULTIPLIER_WEIGHTS: dict[float, float] = {0.6: 0.15, 0.8: 0.20, 1.0: 0.40, 1.3: 0.15, 1.6: 0.10}
+# 2026-09-24: matches the LIVE simulator's adaptive decision cadence (app.narrate.
+# live_decision_interval), which lands on 30s (acute-risk floor), 100/150s (10/15-step
+# mid bands), or 200s (20-step calm band) at the live default dt=10s -- sampled here
+# (never derived from a real TCPA trajectory, training rows are static snapshots) so the
+# model sees the SAME range of "next decision in Ns" facts live eval will show it.
+DECISION_INTERVAL_S_WEIGHTS: dict[float, float] = {30.0: 0.25, 100.0: 0.25, 150.0: 0.25, 200.0: 0.25}
 # t_manoeuvre = safe_distance_m / (v_own * sin(max_turn_deg)) is roughly how long own-ship
 # takes to physically open the safe distance by turning at its per-command max; K is a
 # safety multiple of that so the horizon covers deciding, executing, AND confirming
@@ -180,14 +186,14 @@ def _weighted_choice(rnd: random.Random, weights: dict[float, float]) -> float:
 
 
 def sample_row_limits(row_id: str, own_speed_mps: float | None) -> dict:
-    """Deterministic per-row sample of the three STAP-2 training-variable limits -- a
+    """Deterministic per-row sample of the STAP-2 training-variable limits -- a
     FIXED seed derived from `row_id` (never the module's global RNG) so the exact same
     row always samples the exact same limits across separate regeneration runs. Returns
     {safe_distance_m, max_turn_deg, risk_horizon_s, risk_horizon_default_s,
-    risk_horizon_multiplier, stand_on_tcpa_s} -- the sampled values themselves are
-    METADATA (carried alongside a training row, never inside its `messages`), only their
-    rendered constraint_line() text and their effect on the derived label are ever shown
-    to the model."""
+    risk_horizon_multiplier, stand_on_tcpa_s, decision_interval_s} -- the sampled values
+    themselves are METADATA (carried alongside a training row, never inside its
+    `messages`), only their rendered constraint_line() text and their effect on the
+    derived label are ever shown to the model."""
     seed = int(hashlib.sha256(str(row_id).encode("utf-8")).hexdigest()[:16], 16)
     rnd = random.Random(seed)
     safe_distance_m = _weighted_choice(rnd, SAFE_DISTANCE_WEIGHTS)
@@ -195,53 +201,74 @@ def sample_row_limits(row_id: str, own_speed_mps: float | None) -> dict:
     horizon_default = derive_risk_horizon_s(safe_distance_m, max_turn_deg, own_speed_mps)
     multiplier = _weighted_choice(rnd, HORIZON_MULTIPLIER_WEIGHTS)
     risk_horizon_s = horizon_default * multiplier
+    decision_interval_s = _weighted_choice(rnd, DECISION_INTERVAL_S_WEIGHTS)
     return {
         "safe_distance_m": safe_distance_m, "max_turn_deg": max_turn_deg,
         "risk_horizon_s": risk_horizon_s, "risk_horizon_default_s": horizon_default,
         "risk_horizon_multiplier": multiplier, "stand_on_tcpa_s": risk_horizon_s * 0.6,
+        "decision_interval_s": decision_interval_s,
     }
 
 
 def fixed_limits(safe_distance_m: float, max_turn_deg: float, own_speed_mps: float | None,
-                horizon_multiplier: float = 1.0) -> dict:
+                horizon_multiplier: float = 1.0, decision_interval_s: float = 200.0) -> dict:
     """Non-sampled limits at an EXPLICIT (safe_distance_m, max_turn_deg) pair, with the
     risk horizon at its geometry-derived default (or an explicit multiple of it) -- for
     oow_colreg_scenarios_v2.json (500/30/derived-default) and its probe_{300,926} files
     (ONLY safe_distance_m changed; max_turn_deg and the horizon stay at each scenario's
     OWN derived default), as opposed to sample_row_limits()'s full per-row weighted
-    sampling used for training data."""
+    sampling used for training data. decision_interval_s defaults to 200.0 (the live
+    cadence's calm-band value) since these fixed-limits scenarios have no per-row sample."""
     horizon_default = derive_risk_horizon_s(safe_distance_m, max_turn_deg, own_speed_mps)
     risk_horizon_s = horizon_default * horizon_multiplier
     return {
         "safe_distance_m": safe_distance_m, "max_turn_deg": max_turn_deg,
         "risk_horizon_s": risk_horizon_s, "risk_horizon_default_s": horizon_default,
         "risk_horizon_multiplier": horizon_multiplier, "stand_on_tcpa_s": risk_horizon_s * 0.6,
+        "decision_interval_s": decision_interval_s,
     }
 
 
-def constraint_line(safe_distance_m: float, max_turn_deg: float, risk_horizon_s: float) -> str:
-    """Single-source rendering of the per-row safe-distance/turn-cap FACTS -- used by BOTH
-    Track-2 generators' situation-text renderers AND Basic Simulator/app/agents.py's live
-    prompt, so a training row and a live simulator step given the SAME settings render
+def constraint_line(safe_distance_m: float, max_turn_deg: float, risk_horizon_s: float,
+                    decision_interval_s: float) -> str:
+    """Single-source rendering of the per-row safe-distance/turn-reference FACTS -- used by
+    BOTH Track-2 generators' situation-text renderers AND Basic Simulator/app/agents.py's
+    live prompt, so a training row and a live simulator step given the SAME settings render
     byte-identical constraint text (see the parity test). Rendered in NM (`_NM_TO_M`,
     matching every other number in the live situation report).
 
     2026-09-24 simplification: states facts only (safe distance, the CPA+TCPA definition
-    of real risk, the turn cap) -- no COLREG rule names, no "you must"/"becomes required"
-    instructions on what to do about it. An earlier version also spelled out a stand-on-
-    vessel escalation deadline and several imperatives here; that judgement is exactly the
-    kind of situational reasoning meant to come from RAG/PG-retrieved COLREG text and
-    eventual SFT/DPO/Reflection fine-tuning, not a hand-written rule buried in a shared
-    prose function -- see SYSTEM_OOW_AGENT's DECISION PROCEDURE for the (now much
-    shorter) high-level procedure that replaces it."""
+    of real risk, the turn reference angle) -- no COLREG rule names, no "you must"/
+    "becomes required" instructions on what to do about it. An earlier version also
+    spelled out a stand-on-vessel escalation deadline and several imperatives here; that
+    judgement is exactly the kind of situational reasoning meant to come from RAG/PG-
+    retrieved COLREG text and eventual SFT/DPO/Reflection fine-tuning, not a hand-written
+    rule buried in a shared prose function -- see SYSTEM_OOW_AGENT's DECISION PROCEDURE
+    for the (now much shorter) high-level procedure that replaces it.
+
+    2026-09-24 uncapping: `max_turn_deg` is no longer a per-command cap (turn_left/
+    turn_right accept any size order, see Basic Simulator/app/simulation.py) -- it now
+    only sizes the manoeuvre-time estimate this horizon is derived from, and the sentence
+    below states exactly that instead of the old (now false) "may request at most"
+    wording.
+
+    2026-09-24 decision_interval_s: replaces the old "~X deg per Ys step" phrasing (which
+    used the physics tick dt, not the actual gap until the next LLM call -- wrong by 15-
+    20x once the live decision cadence stopped being a fixed ~10s). States the gap as its
+    OWN fact instead of leaving the model to (mis-)infer it from dt. No "or sooner if the
+    situation changes" claim -- the live cadence (app.narrate.live_decision_interval) is
+    adaptive PER CHECKPOINT, not event-triggered; it does not re-poll early between
+    checkpoints, so stating otherwise would not be a fact."""
     safe_distance_nm = safe_distance_m / _NM_TO_M
     return (
         f"This mission's safe passing distance is {safe_distance_nm:.3f} NM. A contact is "
         f"a real collision risk only when its CPA is below that distance AND its TCPA is "
         f"within this mission's risk horizon of {risk_horizon_s:.0f}s; beyond that horizon "
-        "it is one to monitor, not yet one to act on. A single turn_left/turn_right "
-        f"command may request at most {max_turn_deg:.0f} degrees."
+        "it is one to monitor, not yet one to act on. There is no cap on a single "
+        "turn_left/turn_right order; the reference turn used to size this horizon is "
+        f"{max_turn_deg:.0f} degrees. Your next decision point is in {decision_interval_s:.0f}s."
     )
+
 
 # Fixed response-format contract, byte-identical to what Basic Simulator/app/agents.py's
 # build_oow_prompt() has always sent for v0-v9 (only the USER turn varies across

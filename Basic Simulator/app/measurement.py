@@ -2,7 +2,7 @@
 
 Pure Python, zero GPU/LLM calls. Counts three specific, deterministically-detectable
 error patterns identified in OOW_Mission_Sim_Analysis_V1.md Sec.2 (#1 fabricated risk,
-#2 wrong turn direction, #4 physically-impossible turn requests) -- and does nothing else.
+#2 wrong turn direction, #4 implausibly large turn requests) -- and does nothing else.
 
 THIS LAYER NEVER CORRECTS, CLIPS, OR OVERRIDES A DECISION. The research goal is to see
 whether the model itself learns to derive the correct COLREG rule/action from the
@@ -32,6 +32,11 @@ from pipeline.oow_agent_spec import RISK_HORIZON_S, real_risk as _real_risk_fn
 _GIVE_WAY_TURN_CONDUCT_RULES = ("Rule 14", "Rule 16")
 _GIVE_WAY_TURN_ENCOUNTER_RULES = ("Rule 14", "Rule 15")
 
+# Check C sanity bound (2026-09-24) -- turn_left/turn_right have no per-command size cap
+# any more (app/simulation.py), so this no longer marks a physically-impossible request,
+# only an implausibly large one worth flagging for review.
+MAX_SANE_TURN_DEG = 120.0
+
 
 def measure_decision_quality(decision: dict, situation: list[dict],
                               constraints: VesselConstraints,
@@ -45,8 +50,8 @@ def measure_decision_quality(decision: dict, situation: list[dict],
         live contact this decision was made against -- each must carry at least "cpa_m"
         and "tcpa_s". Pass [] for a contact-free situation (no targets at all).
     constraints: the live VesselConstraints used for this mission/step -- supplies the
-        safe-passing-distance threshold (min_cpa_m) and the physical per-step turn limit
-        (turn_rate_deg_s * time_step_s).
+        safe-passing-distance threshold (min_cpa_m). Check C now uses the fixed
+        MAX_SANE_TURN_DEG bound above, not a value derived from constraints.
     ground_truth: compliance-rebuild STAP 3 (2026-09-23), optional -- app.evaluation.
         _ground_truth_at_checkpoint()'s structured band/encounter dict for this SAME
         instant. Only used for Check D below; every existing call site (and every
@@ -132,17 +137,18 @@ def measure_decision_quality(decision: dict, situation: list[dict],
                 details["B"] = {"cited_encounter_rule": encounter_rule,
                                 "cited_conduct_rule": conduct_rule, "action": action}
 
-    # Check C -- physically impossible turn request: degrees requested above what the
-    # ship can actually turn in one decision step (turn_rate_deg_s * time_step_s, read
-    # from the live constraints -- never hardcoded). Not clipped here -- the simulator
-    # already silently caps it elsewhere; measuring that the model ASKED for more than
-    # physically possible is the whole point.
+    # Check C -- suspiciously large turn request: 2026-09-24 change, no longer a
+    # physical-impossibility check. turn_left/turn_right (app/simulation.py) now accept
+    # ANY size request and set a persistent target_heading the sim swings toward at
+    # turn_rate_deg_s -- there is no longer a per-command size the ship "can't" do, only
+    # one it takes longer to complete. This check is now a pure SANITY bound (a request
+    # this large is much more likely a units/reasoning slip -- e.g. degrees confused with
+    # a bearing -- than a deliberate order) and is fixed, not derived from constraints.
     degrees = decision.get("degrees")
     if action in ("turn_left", "turn_right") and isinstance(degrees, (int, float)):
-        limit_degrees = constraints.turn_rate_deg_s * constraints.time_step_s
-        if degrees > limit_degrees:
+        if degrees > MAX_SANE_TURN_DEG:
             checks_fired.append("C_degrees_over_limit")
-            details["C"] = {"requested_degrees": degrees, "limit_degrees": limit_degrees}
+            details["C"] = {"requested_degrees": degrees, "limit_degrees": MAX_SANE_TURN_DEG}
 
     # Check D -- compliance-rebuild STAP 3 (2026-09-23): did nothing when action was
     # required. "acute" (real, imminent risk per real_risk() -- STAP 2's structured

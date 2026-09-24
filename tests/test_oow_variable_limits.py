@@ -18,7 +18,7 @@ import re
 from pipeline.oow_agent_spec import (
     real_risk, RISK_HORIZON_S, RISK_HORIZON_K, derive_risk_horizon_s, sample_row_limits,
     fixed_limits, constraint_line, SAFE_DISTANCE_WEIGHTS, MAX_TURN_DEG_WEIGHTS,
-    HORIZON_MULTIPLIER_WEIGHTS,
+    HORIZON_MULTIPLIER_WEIGHTS, DECISION_INTERVAL_S_WEIGHTS,
 )
 from pipeline.track2.build_oow_scenarios_leo import _turn_degrees as _leo_turn_degrees
 from pipeline.track2.build_oow_scenarios import _turn_degrees as _synth_turn_degrees
@@ -66,6 +66,7 @@ def test_sample_row_limits_only_ever_draws_from_the_declared_weight_keys() -> No
         assert limits["safe_distance_m"] in SAFE_DISTANCE_WEIGHTS
         assert limits["max_turn_deg"] in MAX_TURN_DEG_WEIGHTS
         assert limits["risk_horizon_multiplier"] in HORIZON_MULTIPLIER_WEIGHTS
+        assert limits["decision_interval_s"] in DECISION_INTERVAL_S_WEIGHTS
 
 
 def test_sample_row_limits_stand_on_tcpa_is_60_percent_of_its_own_horizon() -> None:
@@ -109,10 +110,11 @@ def test_synthetic_turn_degrees_never_exceeds_the_rows_own_sampled_max() -> None
 
 # ── constraint_line() contains EXACTLY the row's own sampled values ────────────────────
 def test_constraint_line_contains_exactly_the_given_values_not_hardcoded_defaults() -> None:
-    text = constraint_line(750.0, 20.0, 999.0)
+    text = constraint_line(750.0, 20.0, 999.0, 60.0)
     assert "0.405 NM" in text  # 750m / 1852 m/NM
     assert "20 degrees" in text
     assert "999s" in text
+    assert "60s" in text
     # Never the old hardcoded 500/30/300 defaults leaking through instead:
     assert "0.270 NM" not in text  # 500m / 1852
     assert "30 degrees" not in text
@@ -135,7 +137,7 @@ def test_simulator_and_training_constraint_line_are_byte_identical() -> None:
     construction (single source, no possible drift)."""
     safe_distance_m, max_turn_deg, speed = 500.0, 30.0, 10.0
     horizon = derive_risk_horizon_s(safe_distance_m, max_turn_deg, speed)
-    text = constraint_line(safe_distance_m, max_turn_deg, horizon)
+    text = constraint_line(safe_distance_m, max_turn_deg, horizon, 60.0)
     assert "CPA is below" in text and "TCPA" in text and "horizon" in text
 
 
@@ -150,7 +152,7 @@ def test_constraint_line_states_the_conjunction_not_cpa_alone() -> None:
     instructions -- that judgement now belongs to SYSTEM_OOW_AGENT's high-level
     DECISION PROCEDURE and to RAG/PG-retrieved COLREG text, not this shared prose
     function)."""
-    text = constraint_line(500.0, 30.0, 300.0)
+    text = constraint_line(500.0, 30.0, 300.0, 60.0)
     assert "CPA below that is a real collision risk" not in text
     assert "real collision risk only when its CPA is below that distance AND its TCPA is" in text
     assert "within this mission's risk horizon of 300s" in text

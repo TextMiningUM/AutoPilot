@@ -30,12 +30,14 @@ class VesselConstraints:
     those widgets' own `value=` so a Simulation built without an explicit
     constraints arg (e.g. in a script/test) still behaves sensibly.
 
-    max_rudder_angle_deg caps how many degrees any SINGLE turn_left/turn_right command may
-    request at once (see turn_left/turn_right below) -- independent of turn_rate_deg_s, which
-    caps how fast own-ship swings toward whatever target_heading is currently commanded. A
-    huge one-shot command (e.g. an LLM deciding "turn_left 103") previously still got
-    accepted in full, just spread slowly over many steps by the turn-rate limit; capping the
-    command itself is what actually keeps a single manoeuvre physically plausible.
+    max_rudder_angle_deg is NO LONGER a per-command cap (2026-09-24 change) -- a single
+    turn_left/turn_right command sets a persistent target_heading of any size, and
+    turn_rate_deg_s (3 deg/s) is the ONLY physical limiter, exactly like a real vessel's
+    continuous rudder command (matches Sawada et al.'s agent, which never one-shot-snaps
+    to a new heading either). This field is now used only (a) as the reference angle
+    derive_risk_horizon_s() sizes its manoeuvre-time estimate around, and (b) app/
+    measurement.py's Check C, which became a >120 deg SANITY bound (a suspiciously large
+    single order) rather than a physical-impossibility check.
     """
     max_speed_mps: float = 10.0
     max_rudder_angle_deg: float = 30.0
@@ -142,13 +144,15 @@ class Simulation:
     # TARGET heading (not the current actual heading), so stacking manoeuvre
     # commands while a turn is still catching up extends the turn further,
     # instead of the second command being silently absorbed because the ship
-    # hasn't visibly moved yet.
+    # hasn't visibly moved yet. No upper clamp here (2026-09-24) -- a turn_right 60
+    # sets target_heading = current target + 60 and the sim keeps swinging toward it
+    # across as many steps as turn_rate_deg_s needs; only a negative request is rejected.
     def turn_left(self, degrees: float = 10.0) -> None:
-        degrees = max(0.0, min(degrees, self.constraints.max_rudder_angle_deg))
+        degrees = max(0.0, degrees)
         self.target_heading = (self.target_heading - degrees) % 360
 
     def turn_right(self, degrees: float = 10.0) -> None:
-        degrees = max(0.0, min(degrees, self.constraints.max_rudder_angle_deg))
+        degrees = max(0.0, degrees)
         self.target_heading = (self.target_heading + degrees) % 360
 
     def set_speed(self, new_speed: float) -> None:

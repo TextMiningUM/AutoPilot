@@ -5,17 +5,22 @@ in between; the streamlit UI's "LLM driven" mode then just scrubs through the sa
 trajectory instead of calling the (slow) model live -- that per-step latency is why Full Run
 felt unusable interactively (see repo memory, Basic Simulator section).
 
-`decision_interval` defaults to a PER-MISSION recommendation (app.narrate.
-recommended_decision_interval -- short for a fast-closing encounter, long for a quiet/slow
-one) rather than one fixed value for every mission, since a slow mission with nothing
-urgent happening doesn't need the same (expensive) call cadence as a tight crossing --
-pass --decision-interval to override it. Comparability across configs is preserved because
-ALL configs run against the SAME mission still get the SAME interval (just not necessarily
-the same interval as some OTHER mission).
+2026-09-24: `decision_interval` is now ADAPTIVE by default -- recomputed at every
+checkpoint from the CURRENT encounter (app.narrate.live_decision_interval), not frozen
+from the mission's t=0 geometry for the whole run (the old approach was found to be
+"inversely adaptive": a mission whose encounter opened far off kept the SAME sparse
+cadence throughout, including once TCPA had fallen into the acute range). Pass
+--decision-interval to opt back into the old fixed-cadence behaviour for the whole run
+(e.g. for an apples-to-apples comparison against an older sweep). Comparability across
+configs is preserved either way because ALL configs run against the SAME mission see the
+SAME sequence of decisions (adaptive recompute is deterministic given the same mission/
+constraints/model decisions).
 
 Every agent parameter used (config, thinking, max_new_tokens, k, system prompt, dt,
 decision_interval) is stored alongside the trajectory, so multiple variations of the SAME
-mission can be run under different --tag values and compared side by side later.
+mission can be run under different --tag values and compared side by side later. Each
+checkpoint additionally logs its OWN decision_interval_steps/_s -- the adaptive value
+actually used for the gap to the NEXT checkpoint -- since that now varies within a run.
 
 Run one:
     python -m app.run_llm_scenario --missions s01_head_on --configs v3_rag_cot
@@ -46,8 +51,11 @@ from app.agents import ask_oow, MODEL_CONFIGS, SYSTEM_OOW_AGENT, effective_gener
 from app.evaluation import llm_compliance_check, score_trajectory
 from app.llm_runs import RUNS_DIR, run_log_path
 from app.measurement import measure_decision_quality
-from app.narrate import contact_line, recommended_decision_interval, recommended_max_steps
-from pipeline.oow_agent_spec import constraint_line
+from app.narrate import (
+    contact_line, recommended_decision_interval, recommended_max_steps,
+    live_decision_interval, transit_step_cap,
+)
+from pipeline.oow_agent_spec import constraint_line, derive_risk_horizon_s
 
 # Screening-set-B audit follow-up (2026-09-23): identifies which PROMPT VERSION a run was
 # generated under (SYSTEM_OOW_AGENT text + constraint_line()'s own source, which renders
@@ -58,6 +66,11 @@ from pipeline.oow_agent_spec import constraint_line
 # happens to sample.
 _PROMPT_HASH = hashlib.sha256(
     (SYSTEM_OOW_AGENT + inspect.getsource(constraint_line)).encode("utf-8")).hexdigest()
+# Human-readable companion to _PROMPT_HASH -- bump whenever SYSTEM_OOW_AGENT/
+# constraint_line() wording changes, so an audit report or a human skimming params can
+# tell runs apart without diffing hashes. 2026-09-24: uncapped turn orders (change 1) +
+# adaptive decision cadence's "next decision point" fact (change 3).
+PROMPT_VERSION = "2026-09-24-uncapped-turn-adaptive-cadence"
 
 
 def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "default",
@@ -71,8 +84,16 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
         return out_path
 
     mission = load_mission(mission_id)
-    effective_interval = (decision_interval if decision_interval is not None
-                          else recommended_decision_interval(mission, dt))
+    # Fixed-cadence override (opt-in via --decision-interval) vs. the 2026-09-24 default:
+    # ADAPTIVE recompute of the gap to the NEXT checkpoint from the live encounter, every
+    # checkpoint (see app.narrate.live_decision_interval's docstring). `cap` is computed
+    # ONCE from the mission's t=0 transit distance -- it never goes stale the way a live
+    # per-checkpoint recompute of the ENCOUNTER thresholds would if it used frozen mission
+    # positions instead of sim.own/sim.targets.
+    fixed_interval = decision_interval
+    cap = transit_step_cap(mission, dt)
+    next_interval_steps = fixed_interval if fixed_interval is not None else recommended_decision_interval(mission, dt)
+    initial_interval_steps = next_interval_steps  # logged in params -- see checkpoints for the per-step adaptive value
     max_steps = max_steps if max_steps is not None else recommended_max_steps(mission, dt)
     # time_step_s matches --dt (not VesselConstraints' own default) so the agent's per-step
     # turn-degrees estimate in the prompt (see agents.build_oow_prompt) stays accurate
@@ -88,6 +109,7 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
     effective_k = k if use_rag else 0
     outcome = "max_steps_reached"
     step = 0
+    next_decision_step = 0
     # What ask_oow() will ACTUALLY use once inside (it silently forces thinking+budget up
     # for CoT configs regardless of what's passed) -- log this instead of the raw args so
     # the dashboard doesn't show "Thinking: off" for a run that in fact had it forced on.
@@ -99,12 +121,24 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
         if sim.reached_goal():
             outcome = "reached_goal"
             break
-        if step % effective_interval == 0:
+        if step >= next_decision_step:
+            # Adaptive recompute (2026-09-24): decided BEFORE calling ask_oow (from the
+            # SAME live state about to be shown to the agent) so THIS call's own prompt
+            # can state the resulting gap as a fact (constraint_line()'s "next decision
+            # point"). A fixed --decision-interval override keeps next_interval_steps
+            # constant instead, and next_decision_in_s along with it.
+            if fixed_interval is None:
+                risk_horizon_s = derive_risk_horizon_s(
+                    constraints.min_cpa_m, constraints.max_rudder_angle_deg, sim.own.speed)
+                next_interval_steps = live_decision_interval(
+                    sim.own, sim.targets, cap, constraints.min_cpa_m, risk_horizon_s)
+            next_decision_in_s = next_interval_steps * dt
+
             _t_cp = time.time()
             decision, debug = ask_oow(
                 mission, sim.own, sim.targets, config=config, system_prompt=system_prompt,
                 max_new_tokens=max_new_tokens, enable_thinking=enable_thinking, k=effective_k,
-                constraints=constraints,
+                constraints=constraints, next_decision_in_s=next_decision_in_s,
             )
             cp_latency_s = time.time() - _t_cp
             # Per-checkpoint progress -- without this, a slow config (e.g. RAG+CoT combined,
@@ -131,8 +165,15 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
                 "reasoning_raw": debug.get("raw_response"),
                 "measurement": measure_decision_quality(decision, contacts_now, constraints),
                 "debug": {kk: vv for kk, vv in debug.items() if kk not in ("situation", "raw_response")},
+                # The gap to the NEXT checkpoint -- SAME value the prompt above was just
+                # told as a fact -- varies within a run now, so it's per-checkpoint, not
+                # just one params-level value (see params["decision_interval"] below for
+                # the run's INITIAL value).
+                "decision_interval_steps": next_interval_steps,
+                "decision_interval_s": next_decision_in_s,
             })
             sim.apply_action(decision)
+            next_decision_step = step + max(1, next_interval_steps)
         sim.step(dt)
         # Check the step JUST recorded (not a forward prediction -- see
         # Simulation.min_cpa_now()'s docstring for why a predictive check is unsafe here)
@@ -183,12 +224,15 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
         "evaluation": evaluation,
         "colreg_llm_check": colreg_llm_check,
         "params": {
-            "decision_interval": effective_interval, "dt": dt, "max_steps": max_steps,
+            "decision_interval": initial_interval_steps,
+            "decision_interval_mode": "fixed" if fixed_interval is not None else "adaptive",
+            "dt": dt, "max_steps": max_steps,
             "enable_thinking": effective_thinking, "max_new_tokens": effective_max_new_tokens,
             "k": k, "use_rag": use_rag,
             "system_prompt": system_prompt or SYSTEM_OOW_AGENT,
             "system_prompt_is_custom": system_prompt is not None,
             "prompt_hash": _PROMPT_HASH,
+            "prompt_version": PROMPT_VERSION,
         },
         "outcome": {"verdict": outcome, "final_step": step, "final_time_s": sim.t},
         "trajectory": sim.trajectory,
@@ -231,10 +275,10 @@ def main() -> None:
                          "app.narrate.recommended_max_steps); set explicitly to force the same "
                          "budget across every mission in this run")
     ap.add_argument("--decision-interval", type=int, default=None,
-                    help="simulation steps between LLM decision calls -- default: a per-mission "
-                         "recommendation (short for a fast-closing encounter, long for a quiet/slow "
-                         "one, see app.narrate.recommended_decision_interval); set explicitly to "
-                         "force the same cadence across every mission in this run")
+                    help="simulation steps between LLM decision calls -- default: ADAPTIVE, "
+                         "recomputed every checkpoint from the live encounter (see "
+                         "app.narrate.live_decision_interval); set explicitly to force one FIXED "
+                         "cadence for the whole run instead (e.g. to reproduce an older sweep)")
     ap.add_argument("--enable-thinking", action="store_true",
                     help="enable Qwen3's native hidden reasoning channel (slower)")
     ap.add_argument("--max-new-tokens", type=int, default=256)

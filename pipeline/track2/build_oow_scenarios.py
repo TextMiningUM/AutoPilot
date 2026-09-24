@@ -394,7 +394,8 @@ MAX_TURN_DEG = 30.0       # matches Basic Simulator VesselConstraints' max_rudde
 # the historical fixed 500/30/300 values, so nothing that doesn't opt in to sampling
 # changes behaviour.
 _LEGACY_LIMITS = {"safe_distance_m": SAFE_CPA_M, "max_turn_deg": MAX_TURN_DEG,
-                  "risk_horizon_s": 300.0, "stand_on_tcpa_s": 300.0 * 0.6}
+                  "risk_horizon_s": 300.0, "stand_on_tcpa_s": 300.0 * 0.6,
+                  "decision_interval_s": 200.0}
 
 
 def limits_for_scenario_record(r: dict) -> dict:
@@ -532,7 +533,8 @@ def render_scenario_situation(rec: dict, limits: dict | None = None) -> str:
         f"Target cruise speed is {cruise:.1f}.",
         f"Mission waypoint is at ({wx:.1f}, {wy:.1f}).",
         goal_course_check_line(0.0, 0.0, 0.0, wx, wy, limits["max_turn_deg"]),
-        constraint_line(limits["safe_distance_m"], limits["max_turn_deg"], limits["risk_horizon_s"]),
+        constraint_line(limits["safe_distance_m"], limits["max_turn_deg"], limits["risk_horizon_s"],
+                        limits["decision_interval_s"]),
         f"{n} other ship{'s' if n != 1 else ''}:" if n else "No other ships tracked.",
     ]
     for i, t in enumerate(rec["targets"]):

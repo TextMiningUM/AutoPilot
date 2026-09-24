@@ -410,23 +410,34 @@ def check_1_6_kinematics(run: dict, constraints: VesselConstraints) -> list[dict
 
 
 def check_1_7_cadence(run: dict) -> list[dict]:
+    """2026-09-24: decision cadence became ADAPTIVE (app.run_llm_scenario, live_decision_
+    interval) -- the gap between two checkpoints is decided by the EARLIER checkpoint's own
+    "decision_interval_steps" (logged per-checkpoint since that field exists), not one fixed
+    params.decision_interval for the whole run. Older archived logs (pre-2026-09-24, or any
+    run made with an explicit --decision-interval override, "decision_interval_mode":
+    "fixed") have no per-checkpoint field -- falls back to params.decision_interval for
+    those, unchanged behaviour."""
     findings: list[dict] = []
     checkpoints = run.get("checkpoints") or []
-    decision_interval = (run.get("params") or {}).get("decision_interval")
+    run_level_interval = (run.get("params") or {}).get("decision_interval")
     dt = (run.get("params") or {}).get("dt")
     final_step = (run.get("outcome") or {}).get("final_step")
     times = [cp["time"] for cp in checkpoints]
     if times != sorted(times):
         findings.append(_f("ERROR", "ERROR_1_7_cadence_violation", None,
                           "Checkpoint times are not monotonically increasing."))
-    if decision_interval and dt:
-        expected_gap = decision_interval * dt
+    if dt:
         for prev, cur in zip(checkpoints, checkpoints[1:]):
+            interval = prev.get("decision_interval_steps", run_level_interval)
+            if not interval:
+                continue
+            expected_gap = interval * dt
             gap = cur["time"] - prev["time"]
             if abs(gap - expected_gap) > 1e-6:
                 findings.append(_f("ERROR", "ERROR_1_7_cadence_violation", cur["step"],
                                   f"Gap between checkpoints is {gap:.1f}s, expected "
-                                  f"{expected_gap:.1f}s (decision_interval * dt).", gap=gap))
+                                  f"{expected_gap:.1f}s (this checkpoint's own decision_interval "
+                                  "* dt).", gap=gap))
     if checkpoints and final_step is not None and checkpoints[-1]["step"] > final_step:
         findings.append(_f("ERROR", "ERROR_1_7_cadence_violation", checkpoints[-1]["step"],
                           "A checkpoint exists beyond outcome.final_step.", final_step=final_step))

@@ -50,6 +50,22 @@ def cpa_tcpa(ox: float, oy: float, ohdg: float, ospd: float,
     return math.hypot(dx + dvx * t, dy + dvy * t), t
 
 
+def transit_step_cap(mission: Mission, dt: float) -> int:
+    """Shared by recommended_decision_interval() (mission-start estimate) and
+    live_decision_interval() (per-checkpoint recompute, see below) -- caps either from
+    getting sparser than the mission's own total transit time can afford, regardless of
+    how calm the encounter geometry looks. See recommended_decision_interval's docstring
+    for why this exists (Imazu-scale fast/short missions vs. the original slower ones).
+    Public (not `_`-prefixed) -- run_llm_scenario.py computes this ONCE per run and passes
+    it into every live_decision_interval() call, rather than recomputing it from
+    now-stale mission-start positions at every checkpoint."""
+    own = mission.own_ship
+    gx, gy = mission.goal
+    transit_s = math.hypot(gx - own.x, gy - own.y) / own.speed if own.speed > 0 else float("inf")
+    min_decisions_across_transit = 5
+    return max(1, math.floor(transit_s / min_decisions_across_transit / dt))
+
+
 def recommended_decision_interval(mission: Mission, dt: float = 10.0) -> int:
     """How many simulation steps should pass between LLM decision calls for this mission,
     based on how urgent its closest encounter is at t=0 -- a fast-closing contact (short
@@ -62,6 +78,16 @@ def recommended_decision_interval(mission: Mission, dt: float = 10.0) -> int:
     sparser decision cadence genuinely means fewer chances to react, not just fewer LLM calls
     with a safety net underneath. Callers should still let a user/CLI override this, never treat
     it as mandatory.
+
+    2026-09-24: superseded as the RUNNING cadence by live_decision_interval() below, which
+    recomputes every checkpoint from the CURRENT encounter instead of freezing this
+    estimate from t=0 for the whole run (the old behaviour was found to be "inversely
+    adaptive" -- a mission whose encounter opened far off, like every Imazu case at
+    TCPA=1800s, got the SAME sparse ~200s cadence throughout, including once TCPA had
+    fallen to the acute range). This function still supplies the run's INITIAL interval
+    (before the first checkpoint has live state to recompute from) and remains available
+    for any caller that still wants a single, non-adaptive number (e.g. a fixed
+    --decision-interval override).
 
     Additionally capped so the mission's own total transit time (start to goal, at own-ship's
     nominal speed) always gets at least a handful of decision points -- the TCPA-based
@@ -92,11 +118,41 @@ def recommended_decision_interval(mission: Mission, dt: float = 10.0) -> int:
             base = 15
         else:
             base = 20
-    own = mission.own_ship
-    gx, gy = mission.goal
-    transit_s = math.hypot(gx - own.x, gy - own.y) / own.speed if own.speed > 0 else float("inf")
-    min_decisions_across_transit = 5
-    transit_cap = max(1, math.floor(transit_s / min_decisions_across_transit / dt))
+    return max(1, min(base, transit_step_cap(mission, dt)))
+
+
+def live_decision_interval(own: Vessel, targets: list[Vessel], transit_cap: int,
+                          safe_distance_m: float, risk_horizon_s: float) -> int:
+    """Adaptive-polling cadence (2026-09-24), recomputed at EVERY checkpoint from the
+    CURRENT own-ship/target state -- replaces recommended_decision_interval() as the
+    RUNNING cadence (that function still supplies the initial interval, before there is
+    any live checkpoint to recompute from; see its docstring). Fixes the "inversely
+    adaptive" bug: cadence now actually TIGHTENS as an encounter's TCPA falls, instead of
+    staying at whatever base the OPENING geometry implied for the mission's entire
+    duration.
+
+    Same min_tcpa thresholds as recommended_decision_interval (10/15/20 steps at
+    <250s/<600s/otherwise), PLUS a floor of 3 steps once ANY contact is in real, acute
+    risk (real_risk()==True: CPA below safe_distance_m AND TCPA inside risk_horizon_s) --
+    the moments that most need tight polling, not just a shorter-TCPA bucket. `transit_cap`
+    (computed once at mission start by _transit_cap(), passed straight through here so it
+    is never recomputed from now-stale mission-start positions) still bounds the result,
+    same reasoning as recommended_decision_interval's own docstring."""
+    if not targets:
+        return max(1, min(20, transit_cap))
+    cpas_tcpas = [
+        cpa_tcpa(own.x, own.y, own.heading, own.speed, t.x, t.y, t.heading, t.speed)
+        for t in targets
+    ]
+    min_tcpa = min(tcpa for _, tcpa in cpas_tcpas)
+    if min_tcpa < 250:
+        base = 10
+    elif min_tcpa < 600:
+        base = 15
+    else:
+        base = 20
+    if any(real_risk(cpa, tcpa, safe_distance_m, risk_horizon_s) for cpa, tcpa in cpas_tcpas):
+        base = min(base, 3)
     return max(1, min(base, transit_cap))
 
 

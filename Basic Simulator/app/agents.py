@@ -341,7 +341,8 @@ def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], confi
                      system_prompt: str | None = None,
                      k: int = 6, dense_n: int = 40,
                      constraints: VesselConstraints | None = None,
-                     previous_decisions: list[dict] | None = None) -> tuple[list[dict], dict]:
+                     previous_decisions: list[dict] | None = None,
+                     next_decision_in_s: float | None = None) -> tuple[list[dict], dict]:
     """Returns (messages, debug_info) for the selected MODEL_CONFIGS key.
     `targets` MUST be the simulation's live, currently-moving contact list (Simulation.
     targets), passed straight through to narrate()/_pg_match_query() -- see their
@@ -352,16 +353,24 @@ def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], confi
     so a user can see WHY the agent decided what it decided.
     `constraints`, if given (the live simulator's VesselConstraints -- see
     app/simulation.py), tells the agent own-ship's ACTUAL physical envelope so it doesn't
-    recommend something the kinematics layer can't deliver: turn_rate_deg_s and
-    max_rudder_angle_deg (both hard-enforced -- a single turn command beyond the latter is
-    silently capped), max_speed_mps (a hard ceiling -- speed_up has no effect once already there) and
+    recommend something the kinematics layer can't deliver: turn_rate_deg_s (the only
+    hard limit on how fast own-ship swings toward a commanded heading -- a single
+    turn_left/turn_right may request ANY size turn as of 2026-09-24, it just takes longer
+    to complete; max_rudder_angle_deg is no longer a per-command cap, only the reference
+    angle derive_risk_horizon_s() sizes its manoeuvre-time estimate around), max_speed_mps
+    (a hard ceiling -- speed_up has no effect once already there) and
     max_acceleration_mps2/max_deceleration_mps2 (speed changes gradually, not instantly),
     and min_cpa_m (this mission's configured safe-passing distance -- without this the
     model has NO numeric anchor for what counts as a real collision risk; observed
     v0_base/v1_rag calling a 17m CPA "safe" and colliding as a direct result).
     cruise_speed_mps is threaded into narrate()'s nominal/rated-speed reference instead of
     a separate line here (see app/narrate.py). Never added for bare_qwen -- that config is
-    the deliberate zero-extra-framing ablation floor."""
+    the deliberate zero-extra-framing ablation floor.
+    `next_decision_in_s`, if given, is rendered as constraint_line()'s "next decision
+    point" fact -- the ACTUAL gap to the next LLM call (app.run_llm_scenario's adaptive
+    live_decision_interval, not the physics tick dt). Defaults to 200.0 (the live
+    cadence's own calm-band default) for callers with no run loop of their own (e.g. a
+    bare preview)."""
     if config not in _CONFIG_SPECS:
         raise ValueError(f"Unknown model config {config!r}; choose one of {list(MODEL_CONFIGS)}")
     spec = _CONFIG_SPECS[config]
@@ -409,7 +418,12 @@ def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], confi
         # get the same step template.
         user_parts.append(COT_INSTR)
     if constraints is not None:
-        per_step = constraints.turn_rate_deg_s * constraints.time_step_s
+        # Example-turn duration (2026-09-24): illustrates the ONLY physical limit left
+        # (turn_rate_deg_s) now that turn_left/turn_right accept any size order -- 90 deg
+        # is an arbitrary reference angle, not a cap, chosen only because it's a large,
+        # easy-to-picture turn.
+        example_turn_deg = 90.0
+        example_turn_s = example_turn_deg / constraints.turn_rate_deg_s
         # Risk horizon (quality-review STAP 2, 2026-09-23): geometry-derived from THIS
         # mission's own safe distance/max turn/own-ship speed via the SAME
         # derive_risk_horizon_s() the training generators sample around -- the live
@@ -426,14 +440,15 @@ def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], confi
         accel_kt_per_min = mps_to_kn(constraints.max_acceleration_mps2 * 60.0)
         decel_kt_per_min = mps_to_kn(constraints.max_deceleration_mps2 * 60.0)
         user_parts.append(
-            f"Own-ship's physical limits: heading changes at most {constraints.turn_rate_deg_s:.1f} "
-            f"deg/s (~{per_step:.0f} deg per {constraints.time_step_s:.0f}s step) -- a larger turn "
-            "request will be silently capped, so a course change bigger than the per-command max "
-            "needs several separate turn commands across multiple steps, not one big one. "
+            f"Own-ship's physical limits: heading changes at {constraints.turn_rate_deg_s:.1f} deg/s. "
+            f"There is no cap on how large a single turn order may be -- a bigger order just takes "
+            f"longer to complete (e.g. a {example_turn_deg:.0f} deg turn takes about "
+            f"{example_turn_s:.0f}s). "
             f"Speed is capped at {mps_to_kn(constraints.max_speed_mps):.1f} kt, changing gradually "
             f"(~{accel_kt_per_min:.2f} kt/min up / ~{decel_kt_per_min:.2f} kt/min down) -- "
             "speed_up/slow_down are not instant. "
-            + constraint_line(constraints.min_cpa_m, constraints.max_rudder_angle_deg, risk_horizon_s)
+            + constraint_line(constraints.min_cpa_m, constraints.max_rudder_angle_deg, risk_horizon_s,
+                             next_decision_in_s if next_decision_in_s is not None else 200.0)
         )
     if pg_text:
         user_parts.append(f"Procedure guidance:\n{pg_text}")
@@ -554,7 +569,8 @@ def effective_generation_params(config: str, enable_thinking: bool, max_new_toke
 def ask_oow(mission: Mission, own: Vessel, targets: list[Vessel], config: str = "v3_rag_cot",
            system_prompt: str | None = None, max_new_tokens: int = 256,
            enable_thinking: bool = False, k: int = 6,
-           constraints: VesselConstraints | None = None) -> tuple[dict, dict]:
+           constraints: VesselConstraints | None = None,
+           next_decision_in_s: float | None = None) -> tuple[dict, dict]:
     """Returns (decision_json, debug_info). `targets` MUST be the simulation's live,
     currently-moving contact list (Simulation.targets) -- NEVER mission.targets, see
     narrate()'s docstring for the bug this fixes. `config` is one of MODEL_CONFIGS's keys;
@@ -564,7 +580,8 @@ def ask_oow(mission: Mission, own: Vessel, targets: list[Vessel], config: str = 
     chunk adds ~500 tokens to the PROMPT (not the response), so this is the main knob
     for why those two configs are slower to first-token than the others: a longer
     prompt costs more prefill time even though max_new_tokens/generation is unchanged.
-    `constraints`, if given, is forwarded to build_oow_prompt() -- see its docstring."""
+    `constraints`/`next_decision_in_s`, if given, are forwarded to build_oow_prompt() --
+    see its docstring."""
     # CoT configs (v2_cot/v3_rag_cot) instruct the model to "think step by step... BEFORE
     # giving your final answer", but the JSON schema's "reasoning" field is capped at 1-2
     # sentences -- with enable_thinking=False (the default, since Qwen3's native <think>
@@ -581,7 +598,7 @@ def ask_oow(mission: Mission, own: Vessel, targets: list[Vessel], config: str = 
     # mode, reproduced on s01_head_on/v2_cot) -- bumped to 3072.
     enable_thinking, max_new_tokens = effective_generation_params(config, enable_thinking, max_new_tokens)
     messages, debug = build_oow_prompt(mission, own, targets, config=config, system_prompt=system_prompt, k=k,
-                                       constraints=constraints)
+                                       constraints=constraints, next_decision_in_s=next_decision_in_s)
     tok, mdl = _load_qwen()
     raw = _generate(tok, mdl, messages, max_new_tokens=max_new_tokens, enable_thinking=enable_thinking)
     parsed = _parse_json_action(raw)
