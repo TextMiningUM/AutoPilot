@@ -48,6 +48,7 @@ CONFIG_NAMES = [
     "bare_qwen", "v0_base", "v1_rag", "v2_cot", "v3_rag_cot",
     "v4_pg", "v5_pg_incident", "v6_pg_scenario",
     "v7_super_rag", "v8_super_cot_pg", "v9_super_all",
+    "v10_super_colreg_rag", "v11_super_colreg_rag_cot",
 ]
 
 RUNS_DIR = ROOT / "Data" / "missions" / "_llm_runs"

@@ -110,6 +110,8 @@ MODEL_CONFIGS: dict[str, str] = {
     "v7_super_rag":    "v7 super RAG -- full retrieval stack on corpus v2 (dense + reranker + KG), no CoT/PG",
     "v8_super_cot_pg": "v8 super CoT+PG -- CoT + procedure guidance from scenario+incident graphs, no retrieval",
     "v9_super_all":    "v9 super all -- v7_super_rag + v8_super_cot_pg combined",
+    "v10_super_colreg_rag":     "v10 Super COLREG RAG -- dense+KG+rerank restricted to COLREG rule text only (colreg_consolidated_2018+simple_colreg), no CoT/PG",
+    "v11_super_colreg_rag_cot": "v11 Super COLREG RAG and Super CoT -- v10_super_colreg_rag + v8_super_cot_pg combined",
 }
 
 # Every entry carries the SAME keys so build_oow_prompt() never has to .get() with a
@@ -131,6 +133,14 @@ _CONFIG_SPECS = {
     "v7_super_rag":    dict(bare=False, rag=True,  rerank=True,  cot=False, pg=None),
     "v8_super_cot_pg": dict(bare=False, rag=False, rerank=False, cot=True,  pg="scenario+incident"),
     "v9_super_all":    dict(bare=False, rag=True,  rerank=True,  cot=True,  pg="scenario+incident"),
+    # 2026-09-24: same full retrieval stack as v7/v9 (dense+KG+rerank), but scoped to ONLY
+    # colreg_consolidated_2018+simple_colreg (123 chunks, vs 3870 full) via corpus="colreg_only"
+    # -- see _load_retrieval()'s docstring for why (leo_moos_cases/incident chunks were
+    # systematically out-scoring real rule text regardless of relevance).
+    "v10_super_colreg_rag":     dict(bare=False, rag=True,  rerank=True,  cot=False, pg=None,
+                                     corpus="colreg_only"),
+    "v11_super_colreg_rag_cot": dict(bare=False, rag=True,  rerank=True,  cot=True,  pg="scenario+incident",
+                                     corpus="colreg_only"),
 }
 
 # Truly bare -- no COLREG rules-of-thumb, just told to answer in the required JSON shape.
@@ -171,6 +181,23 @@ def _load_retrieval():
     ids = json.loads((cache / f"{pfx}_rag_chunk_ids.json").read_text(encoding="utf-8"))
     kg = json.loads((cache / f"{pfx}_kg.json").read_text(encoding="utf-8"))
     chunk_by_id = {c["chunk_id"]: c for c in chunks}
+    # v10_colreg_rag/v11_colreg_rag_pg (2026-09-24): a SEPARATE, much smaller retrieval index
+    # scoped to ONLY colreg_consolidated_2018 + simple_colreg (123 chunks, vs 3870 in the full
+    # corpus) -- built once via a one-off script filtering the existing chunks/embeddings (no
+    # re-embedding needed) + a fresh build_kg() call so concept_chunks/concept_cooccur never
+    # reference an out-of-scope chunk_id. Fixes the leo_moos_cases/incident-report chunks
+    # systematically out-scoring real rule text (see kg_retrieve()'s own docstring on this).
+    # None if the one-off build script hasn't been run on this machine yet, same
+    # graceful-degradation pattern as `reranker` below.
+    colreg_only_file = cache / f"{pfx}_rag_chunks_colreg_only.json"
+    if colreg_only_file.exists():
+        chunks_co = json.loads(colreg_only_file.read_text(encoding="utf-8"))
+        embs_co = np.load(cache / f"{pfx}_rag_embeddings_colreg_only.npy")
+        ids_co = json.loads((cache / f"{pfx}_rag_chunk_ids_colreg_only.json").read_text(encoding="utf-8"))
+        kg_co = json.loads((cache / f"{pfx}_kg_colreg_only.json").read_text(encoding="utf-8"))
+        chunk_by_id_co = {c["chunk_id"]: c for c in chunks_co}
+    else:
+        embs_co, ids_co, kg_co, chunk_by_id_co = None, None, None, None
     # CPU embedder -- it's tiny (~100M params) and keeps the full 8 GB of VRAM free for Qwen.
     embedder = SentenceTransformer(EMBEDDER_MODEL, device="cpu")
     pg_graphs: dict[str, ProceduralGraph | None] = {}
@@ -187,9 +214,17 @@ def _load_retrieval():
     # v7_super_rag/v9_super_all only -- see pipeline/train/train_reranker.py. Also tiny (~22M
     # params), CPU-only, same rationale as `embedder` above. None if not yet trained, so
     # every OTHER config keeps working even before this prototype exists on a given machine.
+    # Reused UNCHANGED for v10/v11 (colreg-only corpus): its training pairs were ALWAYS
+    # (situation query, single-Rule-N-chunk) -- 76 of them, 47 from colreg_consolidated_2018
+    # + 29 from simple_colreg -- so it never saw a leo_moos_cases/incident chunk as a
+    # candidate in training either; restricting the candidate pool to colreg-only actually
+    # brings inference in line with its training distribution for the first time, no retrain
+    # needed.
     reranker_dir = paths.domain_models_dir / "oow_reranker"
     reranker = CrossEncoder(str(reranker_dir), device="cpu") if reranker_dir.exists() else None
-    return embedder, embs, ids, kg, chunk_by_id, pg_graphs, reranker
+    return (embedder, embs, ids, kg, chunk_by_id, pg_graphs, reranker,
+            embs_co, ids_co, kg_co, chunk_by_id_co)
+
 
 
 @st.cache_resource(show_spinner="Loading Qwen3-8B (4-bit NF4) -- first call only, ~1-2 min...")
@@ -391,19 +426,33 @@ def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], confi
                  "user_msg_chars": len(user_msg), "user_msg": user_msg}
         return messages, debug
 
-    embedder, embs, ids, kg, chunk_by_id, pg_graphs, reranker = _load_retrieval()
+    embedder, embs, ids, kg, chunk_by_id, pg_graphs, reranker, embs_co, ids_co, kg_co, chunk_by_id_co = _load_retrieval()
 
     hits, q_cons, expanded, ctx = [], [], [], None
     if spec["rag"]:
+        # v10_colreg_rag/v11_colreg_rag_cot: retrieve against the small COLREG-only index
+        # instead of the full corpus (see _load_retrieval()'s docstring) -- everything else
+        # about the call is unchanged, same kg_retrieve()/rerank_hits() functions.
+        if spec.get("corpus") == "colreg_only":
+            if embs_co is None:
+                raise RuntimeError(
+                    "corpus='colreg_only' requested but the colreg-only index files don't "
+                    "exist yet -- run the one-off build script to generate "
+                    "oow_rag_chunks_colreg_only.json/oow_rag_embeddings_colreg_only.npy/"
+                    "oow_rag_chunk_ids_colreg_only.json/oow_kg_colreg_only.json first."
+                )
+            use_embs, use_ids, use_kg, use_chunk_by_id = embs_co, ids_co, kg_co, chunk_by_id_co
+        else:
+            use_embs, use_ids, use_kg, use_chunk_by_id = embs, ids, kg, chunk_by_id
         # rerank configs retrieve a WIDER pool (dense_n instead of k) so the cross-encoder has
         # real candidates to promote/demote -- reranking a k-sized pool can only reshuffle what
         # kg_retrieve already decided to keep, never recover a chunk it dropped.
         pool_k = dense_n if (spec["rerank"] and reranker is not None) else k
-        hits, q_cons, expanded = kg_retrieve(situation, embedder, embs, ids, kg, k=pool_k, dense_n=dense_n,
-                                            max_per_document=RAG_MAX_PER_DOCUMENT)
+        hits, q_cons, expanded = kg_retrieve(situation, embedder, use_embs, use_ids, use_kg, k=pool_k,
+                                            dense_n=dense_n, max_per_document=RAG_MAX_PER_DOCUMENT)
         if spec["rerank"] and reranker is not None:
-            hits = rerank_hits(situation, hits, chunk_by_id, reranker, k=k)
-        ctx = format_context(hits, chunk_by_id)
+            hits = rerank_hits(situation, hits, use_chunk_by_id, reranker, k=k)
+        ctx = format_context(hits, use_chunk_by_id)
 
     pg_text = None
     if spec["pg"]:
@@ -487,7 +536,7 @@ def rag_context_preview(mission: Mission, own: Vessel, targets: list[Vessel],
     narrate()'s docstring."""
     if k <= 0:
         return {"chars": 0, "chunks": 0}
-    embedder, embs, ids, kg, chunk_by_id, _, _ = _load_retrieval()
+    embedder, embs, ids, kg, chunk_by_id, _, _, _, _, _, _ = _load_retrieval()
     situation = narrate(mission, own, targets)
     hits, _, _ = kg_retrieve(situation, embedder, embs, ids, kg, k=k, dense_n=dense_n,
                              max_per_document=RAG_MAX_PER_DOCUMENT)

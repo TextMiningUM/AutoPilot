@@ -1,0 +1,26 @@
+Add v10_super_colreg_rag/v11_super_colreg_rag_cot configs (COLREG-only RAG index)
+
+- Basic Simulator/app/agents.py: _load_retrieval() now also loads a small, separate
+  retrieval index (embeddings/ids/kg/chunk_by_id) scoped to ONLY
+  colreg_consolidated_2018 + simple_colreg (123 chunks vs 3870 in the full corpus) --
+  fixes leo_moos_cases/incident-report chunks systematically out-scoring real rule text
+  regardless of relevance (measured: ~80% of encounter_rule citations were "Rule 13"
+  with only 33% precision, largely traced to 2 stale MOOS-case chunks + 1 incident
+  excerpt dominating retrieval for every query). New configs:
+  - v10_super_colreg_rag: same full retrieval stack as v7 (dense+KG+rerank), scoped to
+    the COLREG-only index, no CoT/PG.
+  - v11_super_colreg_rag_cot: v10 + v8's CoT instruction + procedure guidance
+    (scenario+incident graphs).
+  Reranker reused UNCHANGED -- its training pairs were always (situation query,
+  single-Rule-N-chunk) pairs, 76 of them all from colreg_consolidated_2018/simple_colreg,
+  so it never saw a MOOS/incident chunk as a training candidate either; restricting the
+  candidate pool to COLREG-only brings inference in line with its training distribution
+  for the first time.
+- Data/OOW/OOW_Agents_Training/oow_{rag_chunks,rag_chunk_ids,rag_embeddings,kg}_colreg_only.*:
+  one-off build artifacts (filtered from the existing full corpus/embeddings, no
+  re-embedding needed, fresh build_kg() call on just the subset).
+- Basic Simulator/app/sweep_dashboard.py: CONFIG_NAMES updated to include the 2 new configs.
+- Basic Simulator/tests/test_agents_configs.py: EXPECTED_CONFIGS updated + 2 new tests
+  verifying v10/v11 retrieve ONLY from the COLREG-only corpus.
+- Also included: partial screening_v2_uncapped sweep run logs/audit output (stopped
+  mid-run, both local UM and cloud Imazu jobs, to free the GPU for v10/v11 testing).

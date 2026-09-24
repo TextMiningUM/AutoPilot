@@ -18,6 +18,7 @@ EXPECTED_CONFIGS = {
     "bare_qwen", "v0_base", "v1_rag", "v2_cot", "v3_rag_cot",
     "v4_pg", "v5_pg_incident", "v6_pg_scenario",
     "v7_super_rag", "v8_super_cot_pg", "v9_super_all",
+    "v10_super_colreg_rag", "v11_super_colreg_rag_cot",
 }
 
 
@@ -53,6 +54,35 @@ def test_v9_has_both_cot_and_rag() -> None:
     user_msg = messages[1]["content"]
     assert agents.COT_INSTR in user_msg
     assert "COLREG reference excerpts" in user_msg
+
+
+_COLREG_ONLY_DOCS = {"colreg_consolidated_2018", "simple_colreg"}
+
+
+def test_v10_rag_scoped_to_colreg_only_corpus() -> None:
+    m = load_mission("Imazu01")
+    messages, debug = agents.build_oow_prompt(m, m.own_ship, m.targets, config="v10_super_colreg_rag")
+    user_msg = messages[1]["content"]
+    assert agents.COT_INSTR not in user_msg
+    assert "Procedure guidance" not in user_msg
+    assert "COLREG reference excerpts" in user_msg
+    assert debug["retrieved_chunk_ids"], "expected at least one retrieved chunk"
+    _, _, _, _, _, _, _, _, _, _, chunk_by_id_co = agents._load_retrieval()
+    for cid in debug["retrieved_chunk_ids"]:
+        assert chunk_by_id_co[cid]["document_id"] in _COLREG_ONLY_DOCS
+
+
+def test_v11_has_cot_and_colreg_only_rag() -> None:
+    m = load_mission("Imazu01")
+    messages, debug = agents.build_oow_prompt(m, m.own_ship, m.targets, config="v11_super_colreg_rag_cot")
+    user_msg = messages[1]["content"]
+    assert agents.COT_INSTR in user_msg
+    assert "COLREG reference excerpts" in user_msg
+    _, _, _, _, _, _, _, _, _, _, chunk_by_id_co = agents._load_retrieval()
+    for cid in debug["retrieved_chunk_ids"]:
+        assert chunk_by_id_co[cid]["document_id"] in _COLREG_ONLY_DOCS
+    enable_thinking, max_new_tokens = agents.effective_generation_params("v11_super_colreg_rag_cot", False, 256)
+    assert enable_thinking is True and max_new_tokens >= 3072
     enable_thinking, max_new_tokens = agents.effective_generation_params("v9_super_all", False, 256)
     assert enable_thinking is True and max_new_tokens >= 3072
 
