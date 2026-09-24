@@ -32,6 +32,9 @@ import random
 
 ACTIONS = ("turn_left", "turn_right", "hold_course", "speed_up", "slow_down", "stop")
 _DEGREES_ONLY_FOR = ("turn_left", "turn_right")
+# Same 1852m/NM constant as Basic Simulator/app/units.py -- duplicated (not imported)
+# since this module must stay dependency-free/path-independent (see module docstring).
+_NM_TO_M = 1852.0
 
 # Quality-review STAP 1 (blocking bug, 2026-09-23): the ONE definition of "real collision
 # risk", shared by BOTH Track-2 generators' labelers (leo_choose_action/_real_risk,
@@ -217,55 +220,27 @@ def fixed_limits(safe_distance_m: float, max_turn_deg: float, own_speed_mps: flo
 
 
 def constraint_line(safe_distance_m: float, max_turn_deg: float, risk_horizon_s: float) -> str:
-    """Single-source rendering of the three STAP-2 per-row training-variable limits --
-    used by BOTH Track-2 generators' situation-text renderers AND Basic Simulator/app/
-    agents.py's live prompt, so a training row and a live simulator step given the SAME
-    settings render byte-identical constraint text (see the parity test).
+    """Single-source rendering of the per-row safe-distance/turn-cap FACTS -- used by BOTH
+    Track-2 generators' situation-text renderers AND Basic Simulator/app/agents.py's live
+    prompt, so a training row and a live simulator step given the SAME settings render
+    byte-identical constraint text (see the parity test). Rendered in NM (`_NM_TO_M`,
+    matching every other number in the live situation report).
 
-    Quality-review STOP-1/2-verification (2026-09-23): the wording states the SAME
-    conjunction real_risk() actually computes (CPA below the safe distance AND TCPA
-    within the horizon) -- an earlier version's first sentence read "CPA below that is a
-    real collision risk" as an unconditional, CPA-alone statement, which is the OLD,
-    already-fixed STAP-1 bug's definition, not what the labeler/live agent are actually
-    gated on. Never state "CPA below X is a risk" without the TCPA-within-horizon
-    qualifier in the same sentence.
-
-    Screening-set-B audit follow-up (2026-09-23): split into two explicit sentences --
-    (a) identifying the encounter/steering rule is required whenever CPA alone is below
-    the safe distance, regardless of TCPA; (b) only ACTING on it is gated on the
-    TCPA-within-horizon condition. The old single-sentence wording conflated these two
-    ("no immediate action is required" read by the model as "no encounter exists at
-    all"), reproduced on v7/screening_standard_cloud: TCPA outside the horizon (1400s >
-    567s) reasoned into citing encounter_rule 'none' on a CPA-0 contact. No rule numbers
-    here -- this module states geometry/physics only, never rule knowledge (see the
-    module docstring).
-
-    2026-09-24 addition (stand-on-vessel escalation, Rule 17(a)(ii)/(b)): a stand-on
-    vessel holding course indefinitely while a real-risk contact's CPA/TCPA both run down
-    to zero -- confirmed live (Imazu07/v7_super_rag): the model correctly cited Rule 15/17
-    every checkpoint, reasoned "must maintain course", and held straight through to
-    collision, since nothing ever told it that "stand-on" has a time limit. `STAND_ON_TCPA_S`
-    (module-level 180.0) / `stand_on_tcpa_s` (the per-row/per-mission 0.6x-of-horizon
-    variable, see sample_row_limits()) already existed as the intended threshold for this,
-    but was computed and never actually rendered anywhere -- this sentence is the first
-    place it reaches either the live prompt or a training row's text. Deliberately stated
-    WITHOUT naming Rule 17 or "stand-on"/"give-way vessel" (first attempt used those words
-    and broke this module's own no-leakage tests/design -- see the module docstring; SYSTEM_
-    OOW_AGENT's DECISION PROCEDURE is where the rule-specific instruction belongs, since
-    that text is generic/situation-independent, unlike this per-contact rendering)."""
-    stand_on_tcpa_s = risk_horizon_s * 0.6
+    2026-09-24 simplification: states facts only (safe distance, the CPA+TCPA definition
+    of real risk, the turn cap) -- no COLREG rule names, no "you must"/"becomes required"
+    instructions on what to do about it. An earlier version also spelled out a stand-on-
+    vessel escalation deadline and several imperatives here; that judgement is exactly the
+    kind of situational reasoning meant to come from RAG/PG-retrieved COLREG text and
+    eventual SFT/DPO/Reflection fine-tuning, not a hand-written rule buried in a shared
+    prose function -- see SYSTEM_OOW_AGENT's DECISION PROCEDURE for the (now much
+    shorter) high-level procedure that replaces it."""
+    safe_distance_nm = safe_distance_m / _NM_TO_M
     return (
-        f"This mission's safe passing distance is {safe_distance_m:.0f}m and its risk "
-        f"horizon is {risk_horizon_s:.0f}s. "
-        "Whenever a contact's CPA is below the safe passing distance, you must identify "
-        "the encounter and the applicable steering rule, even if action is not yet "
-        "required. Action becomes mandatory when that contact's TCPA is within the risk "
-        "horizon; outside it you may act early but must at least name the encounter. "
-        f"If a contact's CPA stays below the safe passing distance while its TCPA keeps "
-        f"falling, holding course stops being an acceptable action for EITHER vessel once "
-        f"that contact's TCPA drops below {stand_on_tcpa_s:.0f}s -- some avoiding action "
-        "then becomes required regardless of which vessel would otherwise act first. "
-        f"A single turn_left/turn_right command may request at most {max_turn_deg:.0f} degrees."
+        f"This mission's safe passing distance is {safe_distance_nm:.3f} NM. A contact is "
+        f"a real collision risk only when its CPA is below that distance AND its TCPA is "
+        f"within this mission's risk horizon of {risk_horizon_s:.0f}s; beyond that horizon "
+        "it is one to monitor, not yet one to act on. A single turn_left/turn_right "
+        f"command may request at most {max_turn_deg:.0f} degrees."
     )
 
 # Fixed response-format contract, byte-identical to what Basic Simulator/app/agents.py's
@@ -289,57 +264,29 @@ PRIORITY ORDER when these pull in different directions -- always in this order, 
 
 FACTS GIVEN TO YOU -- treat all of these as already correct; never recompute, re-derive, or
 second-guess them:
-- Positions/bearings/headings are in metres/degrees, heading 0=north, clockwise (compass convention).
+- Positions/ranges are in nautical miles, bearings/headings in degrees (heading 0=north, clockwise,
+  compass convention), speeds in knots.
 - rel.bearing is signed: positive=starboard (right), negative=port (left), 0=dead ahead, ~180/-180=astern.
 - CPA = the closest distance a contact will EVER come to you at current headings/speeds. TCPA = seconds
-  until that closest point.
-- A contact poses REAL collision risk only when BOTH hold: its CPA is below this mission's safe
-  passing distance, AND its TCPA is within the real-risk time horizon (both given further below) --
-  neither alone is enough. TCPA=0 does NOT always mean an imminent collision -- it also happens once
-  the closest point has already passed (the situation report says so explicitly when that's the
-  case, e.g. "already past closest point, ranges now increasing"); such a contact poses no real risk
-  regardless of how small its CPA was. A contact whose TCPA is beyond the horizon is one to monitor,
-  not yet one to act on.
+  until that closest point. TCPA=0 does NOT always mean an imminent collision -- it also happens once
+  the closest point has already passed (the situation report says so explicitly when that's the case,
+  e.g. "already past closest point, ranges now increasing").
 - The situation report's "GOAL COURSE CHECK:" line has ALREADY computed the goal-correction action and
   degrees for you. Never substitute a contact's rel.bearing for it -- that number describes the
   CONTACT, not the goal, even when the numbers look similar.
 
 DECISION PROCEDURE -- follow in order:
-1. Check every contact against this mission's safe passing distance AND real-risk time horizon
-   (given further below): a real risk exists only when a contact's CPA is below the safe distance
-   AND its TCPA is within the horizon. If no contact meets both, there is no real collision risk
-   right now -- go to step 3.
-2. If any contact meets both conditions, pick the ONE action that satisfies the applicable COLREG
-   rule for that contact. This step overrides everything below it. IMPORTANT for a stand-on
-   encounter (conduct_rule Rule 17): "hold_course" is the correct action ONLY while that contact's
-   TCPA is still ABOVE the stand-on time limit stated further below. Once its TCPA drops below that
-   limit AND it is still below the safe passing distance, Rule 17(a)(ii)/(b) makes hold_course the
-   WRONG action -- you must instead pick a real avoiding manoeuvre (turn_left/turn_right/slow_down/
-   stop), exactly as if you were the give-way vessel. Being the stand-on vessel is a temporary
-   status, never a permanent reason to hold course all the way to collision.
-3. Otherwise, before resuming: if your last helm decision (given further below, when present) names
-   a contact that posed real risk THEN, and that SAME contact's line in THIS situation report does
-   NOT say "(already past closest point, ranges now increasing)" -- i.e. it is still closing -- you
-   are not yet "finally past and clear" of it: hold_course, even though no contact meets both
-   real-risk conditions right now. A bare "TCPA 0s" alone does NOT keep this hold in force -- only
-   the ABSENCE of that "already past closest point" wording does; once it appears for that contact,
-   you are past and clear of it.
-4. Otherwise (no real risk right now, and past-and-clear per step 3): you MUST follow "GOAL COURSE
-   CHECK" EXACTLY as its own mandatory action, not a fallback -- reaching the goal is one of this
-   mission's REQUIRED outcomes (see MISSION REQUIREMENTS above), never optional once safe. Copy
-   its exact action and degrees if it names a turn (turn_left/turn_right) -- do NOT answer
-   hold_course in this case, that is a DIFFERENT, wrong action. Only answer hold_course here if
-   GOAL COURSE CHECK itself says you're already on the goal bearing. Do not recompute or replace
-   its values, and do not decide hold_course is "safer" -- it is not more correct than the turn
-   GOAL COURSE CHECK names.
-5. Never zigzag: do not answer turn_right then turn_left (or vice versa) on consecutive decisions to
+1. Check every contact's CPA and TCPA against this mission's safe passing distance and risk horizon
+   (given further below). If no contact poses a real risk right now, go to step 3.
+2. If any contact poses a real risk, pick the ONE action that satisfies the applicable COLREG rule
+   for that contact. This step overrides everything below it.
+3. Otherwise, follow "GOAL COURSE CHECK" exactly: hold_course if it says you're already on the goal
+   bearing, or copy its exact action and degrees if it names a turn -- do not recompute or replace
+   those values.
+4. Never zigzag: do not answer turn_right then turn_left (or vice versa) on consecutive decisions to
    chase a small residual mismatch -- "GOAL COURSE CHECK" already has a deadband built in for this.
-6. If you are already on the goal bearing and your speed is below this mission's nominal/rated speed,
-   speed_up instead of hold_course -- reaching the goal sooner (when safe) is also progress. Speed
-   changes ramp gradually (see your acceleration limit above), exactly like a turn is capped per
-   command: ONE speed_up does NOT jump straight to nominal speed. If you are still below nominal
-   after issuing it, keep issuing speed_up on every following step until you reach nominal -- do
-   not treat a single speed_up as having already fixed it.
+5. If you are already on the goal bearing and your speed is below this mission's nominal/rated speed,
+   speed_up instead of hold_course -- reaching the goal sooner (when safe) is also progress.
 
 Ground your reasoning in the COLREG excerpts/procedure guidance provided, where given. Reply with
 ONLY a JSON object, no other text:
@@ -347,22 +294,8 @@ ONLY a JSON object, no other text:
  "degrees": <float, only for turn_left/turn_right>,
  "encounter_rule": "<Rule 13, Rule 14, Rule 15, or 'none' if no encounter poses real risk>",
  "conduct_rule": "<Rule 8, Rule 13, Rule 14, Rule 16, Rule 17, Rule 19, or 'none' -- the rule that
-   governs YOUR specific action (see below), 'none' if no real risk>",
- "reasoning": "<one or two sentences>"}
-
-encounter_rule names which COLREG encounter you are in, from the geometry alone (Rule 13
-overtaking, Rule 14 head-on, Rule 15 crossing, or 'none' if no contact poses real risk).
-conduct_rule names the rule that governs the SPECIFIC action you are taking: Rule 16 for a
-give-way vessel's turn/speed change (except overtaking, which stays Rule 13), Rule 14 for a
-head-on turn, Rule 17 for a stand-on vessel (holding course, or its own 17(b) action), Rule 8
-for a give-way vessel's emergency stop OR for avoiding a stationary/non-vessel object (a
-verankerd/anchored ship, buoy, or other fixed obstruction is not a COLREG encounter, so
-encounter_rule stays 'none' even though conduct_rule is 'Rule 8' -- this is the ONE case where
-the two fields differ) (Rule 17(b) is for the STAND-ON vessel only, never a give-way vessel's
-own stop), Rule 19 in restricted visibility, or 'none' if no real risk. Both fields are whole
-rule numbers only (no sub-paragraphs like "17(b)" -- put that detail in reasoning instead), and
-both are 'none' together whenever no contact poses real risk -- standing rules (2/5/6/7/11) are
-never cited in either field, they always apply and are not what these fields are for."""
+   governs YOUR specific action, 'none' if no real risk>",
+ "reasoning": "<one or two sentences>"}"""
 
 
 # Fase B3 (RAG-rebuild-v2 plan, 2026-09-22): the ONE ground-truth mapping from (encounter role,
@@ -518,19 +451,11 @@ def goal_course_check_line(own_x: float, own_y: float, own_heading: float,
     independently-drifting implementation of this exact calculation is the same bug class
     already found and fixed once for `mission.targets` vs the simulator's live contacts.
 
-    `max_turn_deg` (2026-09-24 addition, optional -- None preserves old behaviour for any
-    caller not yet updated): confirmed live (Imazu07/v0_base) the model let a real
-    off-course drift grow to 75 deg before finally acting, then requested one turn_right
-    75 -- own-ship's kinematics only apply the first {max_turn_deg} deg of that per
-    command (the rest is silently capped, per SYSTEM_OOW_AGENT's own physical-limits
-    sentence), so the ship kept sailing forward the WHOLE time it was still mid-turn,
-    overshooting the goal's latitude and making the remaining error WORSE (150+ deg) by
-    the next step -- yet the model then answered hold_course again, as if one turn
-    command had already resolved a correction more than double its own per-command max.
-    When given and the needed correction exceeds it, states that fact explicitly (the
-    same "don't make the model do arithmetic it can get wrong" pattern as
-    stand_on_deadline_passed/already-past-closest-point) so it can't mistake "I turned
-    once" for "I'm now on course"."""
+    `max_turn_deg` (optional -- None preserves old behaviour for any caller not yet
+    updated): when given and the needed correction exceeds it, states that fact plainly
+    (2026-09-24 simplification: previously also instructed the model to "issue it now
+    regardless" and "expect to repeat" -- moved that decision back to the model, it can
+    reason from the stated cap and its own kinematics facts same as any other action)."""
     action, degrees = goal_course_action(own_x, own_y, own_heading, goal_x, goal_y)
     if action == "hold_course":
         return ("GOAL COURSE CHECK: heading is ALREADY on the goal bearing (within "
@@ -543,11 +468,7 @@ def goal_course_check_line(own_x: float, own_y: float, own_heading: float,
            f"degrees={degrees:.0f} (unless a target poses a real collision "
            f"risk, which takes precedence).")
     if max_turn_deg is not None and degrees > max_turn_deg:
-        line += (f" This is MORE than your per-command max of {max_turn_deg:.0f} deg -- "
-                f"a single command cannot complete it. Issue {action} {max_turn_deg:.0f} "
-                f"now regardless, and expect to issue {action} again on the following "
-                "steps (this line recomputes fresh each time) until it reads within 10 "
-                "deg -- one turn command does NOT mean you are back on course.")
+        line += f" This exceeds your per-command max of {max_turn_deg:.0f} deg."
     return line
 
 

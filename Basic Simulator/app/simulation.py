@@ -9,7 +9,7 @@ from collections import defaultdict
 from dataclasses import dataclass, replace
 
 from app.missions import Mission, Vessel
-from app.narrate import cpa_tcpa, relative_bearing
+from app.narrate import cpa_tcpa, relative_bearing, SPEED_CHANGE_INCREMENT_MPS
 from app.units import nm_to_m
 
 # Matches evaluate_run.py's default collision_radius_m -- keep in sync.
@@ -39,8 +39,10 @@ class VesselConstraints:
     """
     max_speed_mps: float = 10.0
     max_rudder_angle_deg: float = 30.0
-    max_acceleration_mps2: float = 0.2
-    max_deceleration_mps2: float = 0.2
+    # 0.01/0.02 kt/s (large commercial vessels accelerate/crash-stop far slower than the
+    # old 0.2 m/s² -- that reached full speed in under a minute).
+    max_acceleration_mps2: float = 0.005
+    max_deceleration_mps2: float = 0.01
     turn_rate_deg_s: float = 3.0
     cruise_speed_mps: float = 10.0
     min_cpa_m: float = 500.0
@@ -152,10 +154,10 @@ class Simulation:
     def set_speed(self, new_speed: float) -> None:
         self.target_speed = max(0.0, min(new_speed, self.constraints.max_speed_mps))
 
-    def speed_up(self, delta: float = 2.0) -> None:
+    def speed_up(self, delta: float = SPEED_CHANGE_INCREMENT_MPS) -> None:
         self.set_speed(self.target_speed + delta)
 
-    def slow_down(self, delta: float = 2.0) -> None:
+    def slow_down(self, delta: float = SPEED_CHANGE_INCREMENT_MPS) -> None:
         self.set_speed(self.target_speed - delta)
 
     def stop_vessel(self) -> None:

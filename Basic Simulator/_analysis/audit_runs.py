@@ -52,7 +52,7 @@ from app.llm_runs import RUNS_DIR, parse_run_filename
 from app.measurement import measure_decision_quality
 from app.narrate import cpa_tcpa
 from app.simulation import VesselConstraints
-from app.units import m_to_nm, nm_to_m
+from app.units import kn_to_mps, m_to_nm, nm_to_m
 from pipeline.oow_agent_spec import (
     ACTIONS, RISK_HORIZON_S, STAND_ON_TCPA_S, bearing_and_range, classify_encounter,
     classify_rules, goal_course_action, goal_course_check_line, real_risk,
@@ -127,11 +127,11 @@ def _nearest(series: dict[float, dict], t: float) -> dict | None:
 # be 500m/30deg. Falls back to VesselConstraints() defaults (flagged INFO, not BLOCKER)
 # for configs (e.g. bare_qwen) whose prompt never states them.
 # ─────────────────────────────────────────────────────────────────────────────
-_RE_SAFE_DIST = re.compile(r"safe passing distance is (\d+(?:\.\d+)?)\s*m\b")
-_RE_MAX_RUDDER = re.compile(r"request AT MOST (\d+(?:\.\d+)?) degrees")
+_RE_SAFE_DIST = re.compile(r"safe passing distance is ([\d.]+)\s*NM\b")
+_RE_MAX_RUDDER = re.compile(r"may request at most (\d+(?:\.\d+)?) degrees")
 _RE_TURN_RATE = re.compile(r"heading changes at most (\d+(?:\.\d+)?) deg/s")
-_RE_MAX_SPEED = re.compile(r"Speed is capped at (\d+(?:\.\d+)?)\s*m/s")
-_RE_ACCEL = re.compile(r"\(([\d.]+)\s*m/s² up / ([\d.]+)\s*m/s² down\)")
+_RE_MAX_SPEED = re.compile(r"Speed is capped at ([\d.]+)\s*kt\b")
+_RE_ACCEL = re.compile(r"\(~?([\d.]+)\s*kt/min up / ~?([\d.]+)\s*kt/min down\)")
 
 
 def _extract_constraints_from_text(user_msg: str) -> dict | None:
@@ -143,12 +143,12 @@ def _extract_constraints_from_text(user_msg: str) -> dict | None:
     m_speed = _RE_MAX_SPEED.search(user_msg)
     m_accel = _RE_ACCEL.search(user_msg)
     return {
-        "min_cpa_m": float(m_safe.group(1)),
+        "min_cpa_m": nm_to_m(float(m_safe.group(1))),
         "max_rudder_angle_deg": float(m_rudder.group(1)),
         "turn_rate_deg_s": float(m_rate.group(1)),
-        "max_speed_mps": float(m_speed.group(1)) if m_speed else None,
-        "max_acceleration_mps2": float(m_accel.group(1)) if m_accel else None,
-        "max_deceleration_mps2": float(m_accel.group(2)) if m_accel else None,
+        "max_speed_mps": kn_to_mps(float(m_speed.group(1))) if m_speed else None,
+        "max_acceleration_mps2": kn_to_mps(float(m_accel.group(1))) / 60.0 if m_accel else None,
+        "max_deceleration_mps2": kn_to_mps(float(m_accel.group(2))) / 60.0 if m_accel else None,
     }
 
 

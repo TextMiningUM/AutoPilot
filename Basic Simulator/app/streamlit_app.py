@@ -197,8 +197,8 @@ def build_vessel_constraints(mission: Mission) -> VesselConstraints:
     return VesselConstraints(
         max_speed_mps=kn_to_mps(g("ship_max_speed_kn", 19.4)),
         max_rudder_angle_deg=g("ship_max_turn_rate_pct", 30.0),
-        max_acceleration_mps2=kn_to_mps(g("ship_max_accel_kn_s", 0.4)),
-        max_deceleration_mps2=kn_to_mps(g("ship_max_decel_kn_s", 0.4)),
+        max_acceleration_mps2=kn_to_mps(g("ship_max_accel_kn_s", 0.01)),
+        max_deceleration_mps2=kn_to_mps(g("ship_max_decel_kn_s", 0.02)),
         turn_rate_deg_s=g("ship_turn_rate_deg_s", 3.0),
         cruise_speed_mps=mission.own_ship.speed,
         min_cpa_m=nm_to_m(g("mission_min_cpa_nm", 0.27)),
@@ -698,8 +698,10 @@ with st.sidebar:
                           "turn_rate_deg_s below is the one actual limit on how fast heading "
                           "can change per step.")
     sp3, sp4 = st.columns(2)
-    sp3.number_input("Max acceleration (kt/s)", min_value=0.0, value=0.4, step=0.1, key="ship_max_accel_kn_s")
-    sp4.number_input("Max deceleration (kt/s)", min_value=0.0, value=0.4, step=0.1, key="ship_max_decel_kn_s")
+    sp3.number_input("Max acceleration (kt/s)", min_value=0.0, value=0.01, step=0.01, key="ship_max_accel_kn_s",
+                     format="%.3f")
+    sp4.number_input("Max deceleration (kt/s)", min_value=0.0, value=0.02, step=0.01, key="ship_max_decel_kn_s",
+                     format="%.3f")
     st.number_input("Turn rate (deg/s)", min_value=0.0, value=3.0, step=0.5, key="ship_turn_rate_deg_s",
                     help="The only actively-enforced limit on how many degrees own-ship's "
                          "heading may change per simulation step.")

@@ -110,11 +110,11 @@ def test_synthetic_turn_degrees_never_exceeds_the_rows_own_sampled_max() -> None
 # ── constraint_line() contains EXACTLY the row's own sampled values ────────────────────
 def test_constraint_line_contains_exactly_the_given_values_not_hardcoded_defaults() -> None:
     text = constraint_line(750.0, 20.0, 999.0)
-    assert "750m" in text
+    assert "0.405 NM" in text  # 750m / 1852 m/NM
     assert "20 degrees" in text
     assert "999s" in text
     # Never the old hardcoded 500/30/300 defaults leaking through instead:
-    assert "500m" not in text
+    assert "0.270 NM" not in text  # 500m / 1852
     assert "30 degrees" not in text
     assert "300s" not in text
 
@@ -144,18 +144,15 @@ def test_constraint_line_states_the_conjunction_not_cpa_alone() -> None:
     that is a real collision risk") stated the ALREADY-FIXED STAP-1 CPA-alone bug's own
     (wrong) definition as an unconditional fact -- must never reappear.
 
-    Screening-set-B audit follow-up (2026-09-23): the single-sentence "BOTH...AND..."
-    conjunction was ITSELF later found to conflate "is this a real encounter" with "is
-    action mandatory yet" -- a model reading "no immediate action is required" (TCPA
-    outside horizon) concluded encounter_rule 'none' on a genuine CPA-0 collision course.
-    Replaced by two explicit sentences: identifying the encounter/rule is gated on CPA
-    alone; only ACTING on it is gated on the TCPA-within-horizon condition. No rule
-    numbers -- this module states geometry/physics only."""
+    2026-09-24 simplification: constraint_line() was trimmed back to a single fact
+    sentence stating the real CPA-AND-TCPA conjunction (no separate encounter-vs-
+    mandatory-action split, no rule numbers, no "you must"/"becomes required"
+    instructions -- that judgement now belongs to SYSTEM_OOW_AGENT's high-level
+    DECISION PROCEDURE and to RAG/PG-retrieved COLREG text, not this shared prose
+    function)."""
     text = constraint_line(500.0, 30.0, 300.0)
     assert "CPA below that is a real collision risk" not in text
-    assert ("you must identify the encounter and the applicable steering rule"
-           in text)
-    assert "Action becomes mandatory when that contact's TCPA is within the risk horizon" in text
-    assert "you may act early but must at least name the encounter" in text
+    assert "real collision risk only when its CPA is below that distance AND its TCPA is" in text
+    assert "within this mission's risk horizon of 300s" in text
     assert not re.search(r"\bRule\s*\d+", text)
 

@@ -28,6 +28,11 @@ from pipeline.oow_agent_spec import (
     real_risk, derive_risk_horizon_s,
 )
 
+# app/simulation.py's speed_up()/slow_down() fixed per-command target-speed step -- owned
+# HERE (not there) since simulation.py already imports FROM narrate.py (avoids a circular
+# import).
+SPEED_CHANGE_INCREMENT_MPS = 2.0
+
 
 def cpa_tcpa(ox: float, oy: float, ohdg: float, ospd: float,
              tx: float, ty: float, thdg: float, tspd: float) -> tuple[float, float]:
@@ -195,20 +200,9 @@ def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_m
     gx, gy = mission.goal
     goal_brg, goal_rng = bearing_and_range(own.x, own.y, gx, gy)
     nominal_speed = cruise_speed_mps if cruise_speed_mps is not None else mission.own_ship.speed
-    # 2026-09-24: speed_up is rate-limited (max_acceleration_mps2) exactly like a turn is
-    # rate-limited (max_turn_deg) -- confirmed live (Imazu07/v7_super_rag) the model issued
-    # ONE speed_up after a stop, reached only 3.89 of 12.00 kt nominal, then held that speed
-    # for the ENTIRE rest of the mission (28 checkpoints) without ever issuing speed_up
-    # again, despite step 6 already saying to speed_up when below nominal -- same "one
-    # command = fully resolved" mistake as the goal-course-check bug. State the shortfall
-    # explicitly rather than trust the model to keep noticing it turn after turn.
-    speed_note = ""
-    if own.speed < nominal_speed - 0.05:
-        speed_note = (f" This is BELOW nominal -- issue speed_up again on this and following "
-                     "steps (one command only ramps partway) until back at nominal.")
     lines = [f"Own-ship at ({m_to_nm(own.x):.3f}, {m_to_nm(own.y):.3f}) NM, heading "
              f"{own.heading:.1f}, speed {mps_to_kn(own.speed):.2f} kt (nominal/rated speed "
-             f"for this mission: {mps_to_kn(nominal_speed):.2f} kt).{speed_note}"]
+             f"for this mission: {mps_to_kn(nominal_speed):.2f} kt)."]
     lines.append(f"Mission goal at ({m_to_nm(gx):.3f}, {m_to_nm(gy):.3f}) NM, "
                 f"{m_to_nm(goal_rng):.3f} NM away, bearing {goal_brg:.1f} deg.")
     # A separate, unmistakable line for the ONE number that drives the goal-correction
@@ -233,13 +227,7 @@ def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_m
         lines.append(f"{n} other ship{'s' if n != 1 else ''}:")
         for tgt in targets:
             c = contact_line(own, tgt, safe_distance_m, max_turn_deg)
-            if not c["closing"]:
-                tcpa_note = " (already past closest point, ranges now increasing)"
-            elif c["stand_on_deadline_passed"]:
-                tcpa_note = (" (TCPA is now below this contact's own hold-course deadline -- "
-                            "an avoiding action is required NOW, not later)")
-            else:
-                tcpa_note = ""
+            tcpa_note = " (already past closest point, ranges now increasing)" if not c["closing"] else ""
             lines.append(
                 f'  - Ship named "{c["name"]}": range {m_to_nm(c["range_m"]):.3f} NM, rel.bearing '
                 f"{c['rel_bearing_deg']:.1f} deg, heading {c['heading']:.1f}, speed "
