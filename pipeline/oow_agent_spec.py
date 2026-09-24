@@ -266,13 +266,13 @@ FACTS GIVEN TO YOU -- treat all of these as already correct; never recompute, re
 second-guess them:
 - Positions/ranges are in nautical miles, bearings/headings in degrees (heading 0=north, clockwise,
   compass convention), speeds in knots.
-- rel.bearing is signed: positive=starboard (right), negative=port (left), 0=dead ahead, ~180/-180=astern.
+- relative bearing is signed: positive=starboard (right), negative=port (left), 0=dead ahead, ~180/-180=astern.
 - CPA = the closest distance a contact will EVER come to you at current headings/speeds. TCPA = seconds
   until that closest point. TCPA=0 does NOT always mean an imminent collision -- it also happens once
   the closest point has already passed (the situation report says so explicitly when that's the case,
   e.g. "already past closest point, ranges now increasing").
 - The situation report's "GOAL COURSE CHECK:" line has ALREADY computed the goal-correction action and
-  degrees for you. Never substitute a contact's rel.bearing for it -- that number describes the
+  degrees for you. Never substitute a contact's relative bearing for it -- that number describes the
   CONTACT, not the goal, even when the numbers look similar.
 
 DECISION PROCEDURE -- follow in order:

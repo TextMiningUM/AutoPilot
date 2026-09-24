@@ -548,9 +548,9 @@ def render_scenario_situation(rec: dict, limits: dict | None = None) -> str:
         else:
             cpa_txt = f", CPA {t['_cpa_m']:.0f} m (already past closest point, ranges now increasing)"
         lines.append(
-            f'  - Ship named "{name}": range {range_m:.0f} m, rel.bearing {rel_brg:.1f} deg, '
-            f"heading {t['heading_deg']:.1f}, speed {t['speed']:.2f}, closing speed {closing:.2f}"
-            f"{cpa_txt}."
+            f'  - Other ship {i + 1}: named "{name}", range {range_m:.0f} m, relative bearing '
+            f"{rel_brg:.1f} deg, heading {t['heading_deg']:.1f}, speed {t['speed']:.2f}, "
+            f"closing speed {closing:.2f}{cpa_txt}."
         )
     lines.append("Conditions: visibility is clear, assessed visibility range is 10000 m, "
                  "narrow-channel context is not indicated, traffic-separation context is not indicated.")

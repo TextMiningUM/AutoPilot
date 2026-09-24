@@ -199,7 +199,7 @@ def extract_constraints(run: dict) -> tuple[VesselConstraints, list[dict]]:
 _RE_OWN_LINE = re.compile(
     r"Own-ship at \((-?[\d.]+), (-?[\d.]+)\) NM, heading ([\d.]+), speed ([\d.]+) kt")
 _RE_CONTACT_LINE = re.compile(
-    r'Ship named "([^"]+)": range ([\d.]+) NM, rel\.bearing (-?[\d.]+) deg, '
+    r'Other ship \d+: named "([^"]+)", range ([\d.]+) NM, relative bearing (-?[\d.]+) deg, '
     r'heading ([\d.]+), speed ([\d.]+) kt, CPA ([\d.]+) NM, TCPA (-?[\d.]+)s')
 _RE_GOAL_LINE = re.compile(r"^GOAL COURSE CHECK: .*$", re.M)
 

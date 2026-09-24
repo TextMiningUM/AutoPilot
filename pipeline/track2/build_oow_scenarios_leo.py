@@ -201,7 +201,7 @@ def render_leo_narrative(state: dict, limits: dict | None = None) -> str:
         constraint_line(limits["safe_distance_m"], limits["max_turn_deg"], limits["risk_horizon_s"]),
         f"{n} other ship{'s' if n != 1 else ''}:" if n else "No other ships tracked.",
     ]
-    for c in contacts:
+    for i, c in enumerate(contacts, start=1):
         if c.get("cpa_distance_m") is not None and c.get("tcpa_s") is not None:
             cpa_txt = f", CPA {c['cpa_distance_m']:.0f} m, TCPA {c['tcpa_s']:.0f}s"
             if (c.get("closing_speed") or 0) <= 0:
@@ -216,8 +216,8 @@ def render_leo_narrative(state: dict, limits: dict | None = None) -> str:
             track_txt = (f" Track on this contact is {c.get('track_quality', 'unreliable')}{age_txt} "
                         "-- treat its numbers with caution.")
         lines.append(
-            f'  - Ship named "{c["name"]}" ({c["colregs_vessel_type"].replace("_", " ")}): range '
-            f"{c['range_m']:.0f} m, rel.bearing {c['relative_bearing_deg']:.1f} deg, heading "
+            f'  - Other ship {i}: named "{c["name"]}" ({c["colregs_vessel_type"].replace("_", " ")}), '
+            f"range {c['range_m']:.0f} m, relative bearing {c['relative_bearing_deg']:.1f} deg, heading "
             f"{c['heading']:.1f}, speed {c['speed']:.2f}, closing speed {c['closing_speed']:.2f}"
             f"{cpa_txt}.{track_txt}"
         )

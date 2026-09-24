@@ -225,12 +225,12 @@ def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_m
     else:
         n = len(targets)
         lines.append(f"{n} other ship{'s' if n != 1 else ''}:")
-        for tgt in targets:
+        for i, tgt in enumerate(targets, start=1):
             c = contact_line(own, tgt, safe_distance_m, max_turn_deg)
             tcpa_note = " (already past closest point, ranges now increasing)" if not c["closing"] else ""
             lines.append(
-                f'  - Ship named "{c["name"]}": range {m_to_nm(c["range_m"]):.3f} NM, rel.bearing '
-                f"{c['rel_bearing_deg']:.1f} deg, heading {c['heading']:.1f}, speed "
+                f'  - Other ship {i}: named "{c["name"]}", range {m_to_nm(c["range_m"]):.3f} NM, '
+                f"relative bearing {c['rel_bearing_deg']:.1f} deg, heading {c['heading']:.1f}, speed "
                 f"{mps_to_kn(c['speed']):.2f} kt, CPA {m_to_nm(c['cpa_m']):.3f} NM, "
                 f"TCPA {c['tcpa_s']:.0f}s{tcpa_note}"
             )

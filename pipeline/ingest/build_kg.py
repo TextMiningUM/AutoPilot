@@ -93,7 +93,7 @@ _VHF_ALIASES: dict[str, list[str]] = {
 }
 
 # OOW-specific aliases. narrate()'s situation reports are almost entirely NUMERIC
-# (e.g. "CPA 0m, TCPA 206s", "rel.bearing 20.0 deg") and never use the qualitative
+# (e.g. "CPA 0m, TCPA 206s", "relative bearing 20.0 deg") and never use the qualitative
 # COLREG vocabulary (crossing/give-way/risk of collision) that CONCEPT_KEYWORDS tags
 # chunks with in build_oow_json.py -- confirmed query_concepts("CPA 0m, TCPA 206s")
 # returned [] with no OOW aliases defined, meaning the concept-graph boost was
