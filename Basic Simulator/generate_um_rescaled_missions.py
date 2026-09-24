@@ -54,7 +54,7 @@ def rescale_target(heading_deg: float, ratio: float, quiet: bool, orig_bearing_d
 
 
 def rescale_mission(mission_num: int) -> dict:
-    src_path = MISSIONS_DIR / f"UM{mission_num:02d}.json"
+    src_path = MISSIONS_DIR / "Old_Misisons" / f"UM{mission_num:02d}.json"
     d = json.loads(src_path.read_text(encoding="utf-8"))
     own_speed_orig = d["own_ship"]["speed_kn"]
     quiet = mission_num in QUIET_MISSIONS
@@ -71,6 +71,11 @@ def rescale_mission(mission_num: int) -> dict:
                      "heading_deg": 0.0, "speed_kn": OWN_SPEED_KT}
     d["goal"] = {"x_nm": GOAL_NM[0], "y_nm": GOAL_NM[1]}
     d["targets"] = new_targets
+    # Mission.id is read from THIS field (app/missions.py), never the filename -- must match
+    # the UM{nn}_rescaled.json filename or run-log lookups silently match the OLD mission's
+    # (small-scale, pre-rescale) run logs instead of this one's (confirmed live: the Play
+    # Agent Mission picker showed a stale "UM07" run plotted against UM07_rescaled's axes).
+    d["id"] = f"UM{mission_num:02d}_rescaled"
     d["description"] = (d["description"] + "\n\nRescaled 2026-09-24 to Imazu scale (12 kt "
                         "own-ship, 6 NM/30 min construction) -- the original small-craft "
                         "scale (own speed ~2.5 m/s, 600-1100 m target range) left no "
