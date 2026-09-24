@@ -176,6 +176,14 @@ def _compliance_findings(trajectory_rows: list[dict], checkpoints: list[dict] | 
         measured = measure_decision_quality(decision, situation, constraints, ground_truth=gt)
         codes = [c for c in measured["checks_fired"] if c in scored_measurement_codes]
         codes.extend(_auditor_codes_at_checkpoint(decision, gt))
+        # 2026-09-24: measurement.py's A_fabricated_risk (CPA-only gate) and this module's
+        # own E_role_fabrication (STAP-2-band-aware "counterpart", see
+        # _auditor_codes_at_checkpoint()'s docstring) detect the SAME underlying mistake --
+        # a rule cited with no real encounter at all -- via two independently-written
+        # checks that fire together every time in practice. Counting both double-penalizes
+        # one error; keep only the more specific E_role_fabrication when they co-occur.
+        if "E_role_fabrication" in codes and "A_fabricated_risk" in codes:
+            codes = [c for c in codes if c != "A_fabricated_risk"]
         if not codes:
             continue
 

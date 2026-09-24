@@ -15,8 +15,10 @@ _spec = importlib.util.spec_from_file_location("evaluate_run", _EVAL_RUN_PATH)
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 compliance_axis = _mod.compliance_axis
+explanation_axis = _mod.explanation_axis
 COMPLIANCE_WEIGHTS = _mod.COMPLIANCE_WEIGHTS
 COMPLIANCE_LABELS = _mod.COMPLIANCE_LABELS
+COMPLIANCE_CATEGORY = _mod.COMPLIANCE_CATEGORY
 
 from app.evaluation import _check_wrong_side_pass  # noqa: E402
 
@@ -44,14 +46,15 @@ def test_wrong_side_pass_does_not_fire_on_port_to_port_head_on() -> None:
 
 
 def test_collision_gates_score_to_zero_regardless_of_findings() -> None:
-    """collided=True must force 0.0 no matter what other codes are present."""
-    score, breakdown = compliance_axis(
-        checkpoint_codes=[(0.0, ["B_wrong_direction", "E_role_fabrication"])],
-        run_level_codes=[("P_wrong_side_pass", "ts1"), ("cpa_violation", None)],
-        collided=True,
-    )
+    """collided=True must force 0.0 no matter what other codes are present, for BOTH axes."""
+    checkpoint_codes = [(0.0, ["B_wrong_direction", "E_role_fabrication"])]
+    run_level_codes = [("P_wrong_side_pass", "ts1"), ("cpa_violation", None)]
+    score, breakdown = compliance_axis(checkpoint_codes, run_level_codes, collided=True)
     assert score == 0.0
     assert breakdown == [{"code": "collision", "label": "Collision", "at": None, "deduction": -1.0}]
+    expl_score, expl_breakdown = explanation_axis(checkpoint_codes, run_level_codes, collided=True)
+    assert expl_score == 0.0
+    assert expl_breakdown == [{"code": "collision", "label": "Collision", "at": None, "deduction": -1.0}]
 
 
 def test_breakdown_sums_to_the_score() -> None:
@@ -61,7 +64,28 @@ def test_breakdown_sums_to_the_score() -> None:
     score, breakdown = compliance_axis(checkpoint_codes, run_level_codes, collided=False)
     total_deduction = sum(f["deduction"] for f in breakdown)
     assert round(1.0 + total_deduction, 6) == round(score, 6)
-    assert len(breakdown) == 4  # one entry per code occurrence, none merged/dropped
+    # A_fabricated_risk is an "explanation"-category code -- compliance_axis() (manoeuvre
+    # only) must not count it; only B_wrong_direction/C_degrees_over_limit/P_wrong_side_pass.
+    assert len(breakdown) == 3
+    assert {f["code"] for f in breakdown} == {"B_wrong_direction", "C_degrees_over_limit", "P_wrong_side_pass"}
+
+
+def test_explanation_axis_scores_only_explanation_codes() -> None:
+    """explanation_axis() is compliance_axis()'s counterpart -- same input shape, but only
+    deducts "explanation"-category codes (citation/reasoning accuracy), ignoring manoeuvre
+    codes entirely."""
+    checkpoint_codes = [(0.0, ["B_wrong_direction"]), (10.0, ["A_fabricated_risk", "C_degrees_over_limit"])]
+    run_level_codes = [("P_wrong_side_pass", "ts1")]
+    score, breakdown = explanation_axis(checkpoint_codes, run_level_codes, collided=False)
+    assert len(breakdown) == 1
+    assert breakdown[0]["code"] == "A_fabricated_risk"
+    assert round(score, 6) == round(1.0 - COMPLIANCE_WEIGHTS["A_fabricated_risk"], 6)
+
+
+def test_every_weighted_code_has_a_category() -> None:
+    for code in COMPLIANCE_WEIGHTS:
+        assert code in COMPLIANCE_CATEGORY, f"{code} is weighted but has no COMPLIANCE_CATEGORY entry"
+        assert COMPLIANCE_CATEGORY[code] in ("manoeuvre", "explanation")
 
 
 def test_breakdown_entries_carry_a_human_label() -> None:

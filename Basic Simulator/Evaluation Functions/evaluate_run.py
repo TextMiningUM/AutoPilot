@@ -284,9 +284,67 @@ COMPLIANCE_LABELS = {
     "collision": "Collision",
 }
 
+# 2026-09-24 split: every weighted code is either about what the ship physically DID
+# ("manoeuvre" -- was the actual turn/hold/stop COLREG-correct and safe, recomputed
+# purely from the recorded trajectory) or about what the model SAID about it
+# ("explanation" -- does the self-reported encounter_rule/conduct_rule/"real risk" claim
+# match the geometric ground truth). These used to be blended into one "compliance"
+# number, which let citation/labelling mistakes alone (e.g. a benign, safe manoeuvre
+# mislabelled with a fabricated rule) crash the score to 0.0 exactly as hard as an actual
+# wrong-direction turn into a contact -- see compliance_axis()/explanation_axis() below.
+COMPLIANCE_CATEGORY = {
+    "B_wrong_direction": "manoeuvre",
+    "C_degrees_over_limit": "manoeuvre",
+    "D_no_action_when_required": "manoeuvre",
+    "B_17c": "manoeuvre",
+    "P_port_toward_contact": "manoeuvre",
+    "P_wrong_side_pass": "manoeuvre",
+    "cpa_violation": "manoeuvre",
+    "A_fabricated_risk": "explanation",
+    "E_encounter_mismatch": "explanation",
+    "E_role_fabrication": "explanation",
+    "E_unclassified_encounter": "explanation",
+    "E_8c": "explanation",
+}
+
+
+def _scored_axis(checkpoint_codes, run_level_codes, collided, category):
+    """Shared implementation for compliance_axis()/explanation_axis() -- identical
+    deduction mechanics (one weighted deduction per occurrence, starting from 1.0,
+    clipped to [0,1]), differing only in which codes' category is being scored."""
+    if collided:
+        return 0.0, [{"code": "collision", "label": COMPLIANCE_LABELS["collision"],
+                      "at": None, "deduction": -1.0}]
+    breakdown = []
+    score = 1.0
+    for step, codes in checkpoint_codes:
+        for code in codes:
+            if COMPLIANCE_CATEGORY.get(code) != category:
+                continue
+            weight = COMPLIANCE_WEIGHTS.get(code)
+            if weight:
+                score -= weight
+                breakdown.append({"code": code, "label": COMPLIANCE_LABELS.get(code, code),
+                                 "at": step, "deduction": -weight})
+    for code, detail in run_level_codes:
+        if COMPLIANCE_CATEGORY.get(code) != category:
+            continue
+        weight = COMPLIANCE_WEIGHTS.get(code)
+        if weight:
+            score -= weight
+            breakdown.append({"code": code, "label": COMPLIANCE_LABELS.get(code, code),
+                             "at": detail, "deduction": -weight})
+    return max(0.0, min(1.0, score)), breakdown
+
 
 def compliance_axis(checkpoint_codes, run_level_codes, collided=False):
-    """Deterministic compliance score -- no LLM call, always computable.
+    """Deterministic MANOEUVRE-compliance score -- no LLM call, always computable.
+    Answers "was the physical action own-ship took COLREG-correct and safe", using only
+    the "manoeuvre"-category codes (B_wrong_direction, C_degrees_over_limit,
+    D_no_action_when_required, B_17c, P_port_toward_contact, P_wrong_side_pass,
+    cpa_violation) -- see COMPLIANCE_CATEGORY. Citation/labelling accuracy is scored
+    separately by explanation_axis(), never blended in here (2026-09-24 split -- see its
+    own comment above COMPLIANCE_CATEGORY for why).
 
     checkpoint_codes: list of (step_label, [code, ...]) -- one entry per audited
     checkpoint, each code in COMPLIANCE_WEIGHTS deducted once per occurrence.
@@ -300,25 +358,21 @@ def compliance_axis(checkpoint_codes, run_level_codes, collided=False):
     (step_or_detail), "deduction"} dicts) -- breakdown's deductions always sum to
     score - 1.0 (before the final clip), so every score is traceable back to the specific
     findings that produced it."""
-    if collided:
-        return 0.0, [{"code": "collision", "label": COMPLIANCE_LABELS["collision"],
-                      "at": None, "deduction": -1.0}]
-    breakdown = []
-    score = 1.0
-    for step, codes in checkpoint_codes:
-        for code in codes:
-            weight = COMPLIANCE_WEIGHTS.get(code)
-            if weight:
-                score -= weight
-                breakdown.append({"code": code, "label": COMPLIANCE_LABELS.get(code, code),
-                                 "at": step, "deduction": -weight})
-    for code, detail in run_level_codes:
-        weight = COMPLIANCE_WEIGHTS.get(code)
-        if weight:
-            score -= weight
-            breakdown.append({"code": code, "label": COMPLIANCE_LABELS.get(code, code),
-                             "at": detail, "deduction": -weight})
-    return max(0.0, min(1.0, score)), breakdown
+    return _scored_axis(checkpoint_codes, run_level_codes, collided, "manoeuvre")
+
+
+def explanation_axis(checkpoint_codes, run_level_codes, collided=False):
+    """Deterministic EXPLANATION-compliance score -- the counterpart to compliance_axis().
+    Answers "did the model's own stated encounter_rule/conduct_rule/'real risk' claim
+    match the geometric ground truth", using only the "explanation"-category codes
+    (A_fabricated_risk, E_encounter_mismatch, E_role_fabrication, E_unclassified_encounter,
+    E_8c) -- see COMPLIANCE_CATEGORY. Deliberately independent of whether the physical
+    manoeuvre itself was safe: a benign, safe hold_course mislabelled with a fabricated
+    rule scores badly HERE, not on compliance_axis(), and vice versa. Same signature/
+    mechanics as compliance_axis() (see its docstring) -- same collision hard-gate too,
+    since there is no meaningful citation-accuracy story left to tell once a run has
+    actually collided."""
+    return _scored_axis(checkpoint_codes, run_level_codes, collided, "explanation")
 
 
 # ---------------------------------------------------------------------
@@ -351,6 +405,13 @@ def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
     if passed and min_cpa < safe_distance_m:
         all_run_level_codes.append(("cpa_violation", None))
     compliance_score, compliance_breakdown = compliance_axis(
+        checkpoint_codes, all_run_level_codes, collided=not passed)
+    # 2026-09-24 split (see COMPLIANCE_CATEGORY's comment): explanation_score never feeds
+    # the composite/verdict below -- it's reported alongside compliance purely as a
+    # SEPARATE signal (was the model's stated reasoning/rule-citation accurate), so a run
+    # with a perfectly safe, COLREG-correct manoeuvre but sloppy self-reported labelling
+    # no longer gets its PASS/FAIL and composite score dragged down for that alone.
+    explanation_score, explanation_breakdown = explanation_axis(
         checkpoint_codes, all_run_level_codes, collided=not passed)
 
     if not passed:
@@ -393,6 +454,7 @@ def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
         "safety": {"passed": passed, "min_cpa_m": round(min_cpa, 1) if min_cpa != float("inf") else None,
                    "score": round(safety_score, 3)},
         "compliance": {"breakdown": compliance_breakdown, "score": round(compliance_score, 3)},
+        "explanation_compliance": {"breakdown": explanation_breakdown, "score": round(explanation_score, 3)},
         "temporal": {k: (round(v, 3) if isinstance(v, float) else v) for k, v in eff.items()
                      if k in ("arrived", "time_actual_s", "time_ratio", "temporal_score")},
         "spatial": {k: (round(v, 3) if isinstance(v, float) else v) for k, v in eff.items()
@@ -403,6 +465,7 @@ def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
         print(f"Verdict: {result['verdict']}   Composite score: {result['composite_score']}")
         print(f"  Safety:     min CPA {result['safety']['min_cpa_m']} m -> score {result['safety']['score']}")
         print(f"  Compliance: {len(compliance_breakdown)} finding(s) -> score {result['compliance']['score']}")
+        print(f"  Explanation: {len(explanation_breakdown)} finding(s) -> score {result['explanation_compliance']['score']}")
         print(f"  Temporal:   arrived={eff['arrived']}, ratio={eff.get('time_ratio')} -> score {eff['temporal_score']:.3f}")
         print(f"  Spatial:    ratio={eff.get('path_ratio')} -> score {eff['spatial_score']:.3f}")
         print(f"  Manoeuvre:  count={man['manoeuvre_count']} -> score {man['manoeuvre_score']:.3f}")
