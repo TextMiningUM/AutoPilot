@@ -1118,20 +1118,31 @@ with plot_col:
             f'<span style="font-size:1.1rem; font-weight:700;"> composite = {result["composite_score"]:.3f}</span>',
             unsafe_allow_html=True,
         )
-        e1, e2, e3, e4, e5 = st.columns(5)
+        e1, e2, e3, e4, e5, e6 = st.columns(6)
         e1.metric("Safety", result["safety"]["score"],
                   help=f"min CPA {m_to_nm(result['safety']['min_cpa_m']):.3f} NM, "
                        f"passed={result['safety']['passed']}")
         e2.metric("Compl.", result["compliance"]["score"],
                   help=f"{len(result['compliance']['breakdown'])} deterministic finding(s) -- "
-                       "always computed, no API call needed (see the breakdown below).")
-        e3.metric("Temp.", result["temporal"].get("temporal_score"))
-        e4.metric("Spatial", result["spatial"].get("spatial_score"))
-        e5.metric("Man.", result["manoeuvre"].get("manoeuvre_score"),
+                       "physical manoeuvre safety/COLREG-correctness only, no API call needed "
+                       "(see the breakdown below).")
+        explanation = result.get("explanation_compliance") or {"score": None, "breakdown": []}
+        e3.metric("Explan.", explanation["score"],
+                  help=f"{len(explanation['breakdown'])} deterministic finding(s) -- did the "
+                       "model's own stated encounter_rule/conduct_rule/risk claim match ground "
+                       "truth (independent of whether the manoeuvre itself was safe).")
+        e4.metric("Temp.", result["temporal"].get("temporal_score"))
+        e5.metric("Spatial", result["spatial"].get("spatial_score"))
+        e6.metric("Man.", result["manoeuvre"].get("manoeuvre_score"),
                   help=f"count={result['manoeuvre'].get('manoeuvre_count')}")
         if result["compliance"]["breakdown"]:
             with st.expander(f"Compliance breakdown ({len(result['compliance']['breakdown'])})"):
                 for entry in result["compliance"]["breakdown"]:
+                    code, label, at, deduction = compliance_finding_parts(entry)
+                    st.write(f"- **{label}** (`{code}`) @ {at}: {deduction:+.2f}")
+        if explanation["breakdown"]:
+            with st.expander(f"Explanation breakdown ({len(explanation['breakdown'])})"):
+                for entry in explanation["breakdown"]:
                     code, label, at, deduction = compliance_finding_parts(entry)
                     st.write(f"- **{label}** (`{code}`) @ {at}: {deduction:+.2f}")
         with st.expander("Full result JSON"):
