@@ -87,7 +87,14 @@ MODEL_ID = "Qwen/Qwen3-8B"
 # regardless of real relevance; see kg_retrieve()'s max_per_document docstring
 # (pipeline/ingest/build_kg.py) for the measured evidence. Caps pool COMPOSITION only,
 # never the query text (that would fight the reranker's own training distribution).
-RAG_MAX_PER_DOCUMENT = 3
+# MUST be < the smallest `k` actually used in production (sweep_llm_params.py's own
+# --k default is 2) -- a cap >= k never engages at all, since it only limits EXCESS
+# beyond the cap, not which candidates win the top-k positions by raw score (moos_cases
+# chunks still legitimately score highest by raw cosine similarity; the cap's only job
+# is to guarantee at least (k - max_per_document) slots for something else). Verified
+# empirically: max_per_document=3 with the real production k=2 changed nothing (moos
+# chunks still filled both slots); max_per_document=1 is the correct, effective value.
+RAG_MAX_PER_DOCUMENT = 1
 
 # Ordered so a UI selectbox lists them exactly like the notebook's §11 table (plus bare_qwen first).
 MODEL_CONFIGS: dict[str, str] = {
