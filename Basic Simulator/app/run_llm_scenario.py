@@ -75,7 +75,8 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
            dt: float = 10.0, max_steps: int | None = None, enable_thinking: bool = False,
            max_new_tokens: int = 256, k: int = 2, use_rag: bool = True,
            system_prompt: str | None = None, force: bool = False,
-           decision_interval: int | None = None, explain: bool = False) -> Path:
+           decision_interval: int | None = None, explain: bool = False,
+           kinematics_model: str = "kinematics") -> Path:
     # The FILENAME always carries the clean, filesystem-safe model-variant id (never the
     # raw `weights` string -- "+"/":" break on Windows, see model_variants.py's docstring),
     # resolved via a reverse lookup so this stays correct even for an ad-hoc weights combo
@@ -106,7 +107,8 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
     # narrate()'s nominal-speed reference with a mismatched constant would just be wrong
     # (reproduced: told the model s01_head_on's nominal speed was 10 m/s when the mission
     # actually runs at 2.5 m/s).
-    constraints = VesselConstraints(time_step_s=dt, cruise_speed_mps=mission.own_ship.speed)
+    constraints = VesselConstraints(time_step_s=dt, cruise_speed_mps=mission.own_ship.speed,
+                                    kinematics_model=kinematics_model)
     sim = Simulation(mission, constraints)
     checkpoints: list[dict] = []
     effective_k = k if use_rag else 0
@@ -301,6 +303,10 @@ def main() -> None:
                     help="path to a text file with a custom system prompt override "
                          "(default: agents.SYSTEM_OOW_AGENT)")
     ap.add_argument("--force", action="store_true", help="overwrite existing logs")
+    ap.add_argument("--kinematics-model", default="kinematics", choices=["kinematics", "nomoto"],
+                    help="own-ship heading dynamics: legacy turn-rate slew (default, "
+                         "unchanged) or Sawada et al. (2021)'s Nomoto model (opt-in, see "
+                         "app.simulation.VesselConstraints)")
     ap.add_argument("--explain", action="store_true",
                     help="also ask Anthropic Claude for a plain-language explanation of the "
                          "deterministic compliance findings (one network call + latency per run, "
@@ -315,7 +321,7 @@ def main() -> None:
 
     jobs = [(m, c) for m in missions for c in args.configs]
     print(f"Queued {len(jobs)} run(s): {len(missions)} mission(s) x {len(args.configs)} config(s), "
-         f"tag={args.tag!r}")
+         f"tag={args.tag!r}, kinematics_model={args.kinematics_model!r}")
     for i, (mission_id, config) in enumerate(jobs, 1):
         print(f"[{i}/{len(jobs)}] {mission_id} / {config}")
         t0 = time.time()
@@ -325,7 +331,7 @@ def main() -> None:
             max_new_tokens=args.max_new_tokens, k=args.k, use_rag=not args.no_rag,
             system_prompt=system_prompt, force=args.force,
             decision_interval=args.decision_interval,
-            explain=args.explain,
+            explain=args.explain, kinematics_model=args.kinematics_model,
         )
         print(f"  took {time.time() - t0:.1f}s")
 
