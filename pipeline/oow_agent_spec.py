@@ -15,7 +15,8 @@ exactly what this project's second core principle forbids.
 
 DEPENDENCY-FREE BY DESIGN
 --------------------------
-stdlib only (just `math`) so this can be imported from BOTH the data pipeline
+stdlib only (just `math`, plus the also-stdlib-only pipeline.nomoto for
+derive_risk_horizon_s_nomoto()) so this can be imported from BOTH the data pipeline
 (pipeline/, plain CPU scripts) and the Streamlit app ("Basic Simulator/app/agents.py",
 which pulls in torch/streamlit/transformers) without EITHER side inheriting the other's
 dependency stack. Deliberately NOT in core/ (core/__init__.py's own docstring reserves
@@ -29,6 +30,8 @@ from __future__ import annotations
 import hashlib
 import math
 import random
+
+from pipeline.nomoto import NomotoParams as _NomotoParams, manoeuvre_time_s as _nomoto_manoeuvre_time_s
 
 ACTIONS = ("turn_left", "turn_right", "hold_course", "speed_up", "slow_down", "stop")
 _DEGREES_ONLY_FOR = ("turn_left", "turn_right")
@@ -180,6 +183,29 @@ def derive_risk_horizon_s(safe_distance_m: float, max_turn_deg: float, own_speed
     return RISK_HORIZON_K * t_manoeuvre
 
 
+def derive_risk_horizon_s_nomoto(safe_distance_m: float, max_turn_deg: float,
+                                own_speed_mps: float | None,
+                                nomoto_params: "_NomotoParams | None" = None) -> float:
+    """Nomoto-physics variant of derive_risk_horizon_s() -- opt-in, used only when
+    constraints.kinematics_model=="nomoto" (see Basic Simulator/app/simulation.py's own
+    "kinematics"/"nomoto" flag). Replaces the analytic instant-turn estimate
+    (safe_distance_m/(v*sin(angle))) with the REAL simulated time for the Nomoto +
+    rudder-servo model (pipeline/nomoto.py) to actually complete a max_turn_deg turn from
+    rest -- e.g. ~155s for a 60deg turn at the paper's own defaults, matching Sawada et
+    al. (2021)'s own cited "~2.5-3 min" figure. RISK_HORIZON_K still applies afterward,
+    unchanged: its own docstring already states its job is covering "deciding,
+    executing, AND confirming separation -- not just the bare manoeuvre time", so it
+    continues to play that role on top of this more realistic manoeuvre-time estimate.
+    Falls back to RISK_HORIZON_S when own_speed_mps is missing/zero/negative, same as
+    derive_risk_horizon_s() (own_speed_mps is unused by the Nomoto manoeuvre-time
+    calculation itself, kept as a parameter only for call-site symmetry with
+    derive_risk_horizon_s() and to preserve this same no-speed fallback)."""
+    if not own_speed_mps or own_speed_mps <= 0:
+        return RISK_HORIZON_S
+    t_manoeuvre = _nomoto_manoeuvre_time_s(max_turn_deg, nomoto_params)
+    return RISK_HORIZON_K * t_manoeuvre
+
+
 def _weighted_choice(rnd: random.Random, weights: dict[float, float]) -> float:
     keys = list(weights.keys())
     return rnd.choices(keys, weights=[weights[k] for k in keys], k=1)[0]
@@ -230,7 +256,7 @@ def fixed_limits(safe_distance_m: float, max_turn_deg: float, own_speed_mps: flo
 
 
 def constraint_line(safe_distance_m: float, max_turn_deg: float, risk_horizon_s: float,
-                    decision_interval_s: float) -> str:
+                    decision_interval_s: float, manoeuvre_time_s: float | None = None) -> str:
     """Single-source rendering of the per-row safe-distance/turn-reference FACTS -- used by
     BOTH Track-2 generators' situation-text renderers AND Basic Simulator/app/agents.py's
     live prompt, so a training row and a live simulator step given the SAME settings render
@@ -258,9 +284,17 @@ def constraint_line(safe_distance_m: float, max_turn_deg: float, risk_horizon_s:
     OWN fact instead of leaving the model to (mis-)infer it from dt. No "or sooner if the
     situation changes" claim -- the live cadence (app.narrate.live_decision_interval) is
     adaptive PER CHECKPOINT, not event-triggered; it does not re-poll early between
-    checkpoints, so stating otherwise would not be a fact."""
+    checkpoints, so stating otherwise would not be a fact.
+
+    2026-09-25 manoeuvre_time_s: OPTIONAL, None by default (byte-identical to before for
+    every existing caller, none of which pass it yet -- Phase 3 step 1, not wired into
+    any live/training call site). When given (the "nomoto" kinematics model's simulated
+    time to complete the reference turn, see derive_risk_horizon_s_nomoto()), appends one
+    extra sentence stating it as a fact -- e.g. "A 30 degree turn takes about 91s to
+    complete." -- matching the user-requested wording ("een draai van 60 kost ongeveer
+    170s")."""
     safe_distance_nm = safe_distance_m / _NM_TO_M
-    return (
+    line = (
         f"This mission's safe passing distance is {safe_distance_nm:.3f} NM. A contact is "
         f"a real collision risk only when its CPA is below that distance AND its TCPA is "
         f"within this mission's risk horizon of {risk_horizon_s:.0f}s; beyond that horizon "
@@ -268,6 +302,9 @@ def constraint_line(safe_distance_m: float, max_turn_deg: float, risk_horizon_s:
         "turn_left/turn_right order; the reference turn used to size this horizon is "
         f"{max_turn_deg:.0f} degrees. Your next decision point is in {decision_interval_s:.0f}s."
     )
+    if manoeuvre_time_s is not None:
+        line += f" A {max_turn_deg:.0f} degree turn takes about {manoeuvre_time_s:.0f}s to complete."
+    return line
 
 
 # Fixed response-format contract, byte-identical to what Basic Simulator/app/agents.py's

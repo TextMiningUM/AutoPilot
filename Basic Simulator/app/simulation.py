@@ -11,6 +11,10 @@ from dataclasses import dataclass, replace
 from app.missions import Mission, Vessel
 from app.narrate import cpa_tcpa, relative_bearing, SPEED_CHANGE_INCREMENT_MPS
 from app.units import nm_to_m
+# pipeline.nomoto is the single shared home for this physics (also used by
+# pipeline.oow_agent_spec.derive_risk_horizon_s_nomoto()) -- importing app.narrate above
+# already inserted REPO_ROOT onto sys.path, so this resolves regardless of caller cwd.
+from pipeline.nomoto import NomotoParams, NomotoState, advance as nomoto_advance
 
 # Matches evaluate_run.py's default collision_radius_m -- keep in sync.
 COLLISION_RADIUS_M = 15.0
@@ -50,6 +54,19 @@ class VesselConstraints:
     min_cpa_m: float = 500.0
     time_step_s: float = 10.0
 
+    # "kinematics" (default) = the turn-rate slew model above, unchanged. "nomoto" =
+    # Sawada et al. (2021)'s 2nd-order Nomoto + rudder-servo model (app/nomoto.py) --
+    # opt-in only, own-ship heading dynamics ONLY (speed still uses max_acceleration_mps2/
+    # max_deceleration_mps2 above either way). Any value other than "nomoto" falls back
+    # to "kinematics", so an unrecognised/typo'd value never silently changes physics.
+    kinematics_model: str = "kinematics"
+    nomoto_K_per_s: float = 0.05
+    nomoto_T_s: float = 50.0
+    nomoto_T_E_s: float = 2.5
+    nomoto_rudder_limit_deg: float = 10.0
+    nomoto_autopilot_kp: float = 1.0
+    nomoto_substep_s: float = 1.0
+
 
 class Simulation:
     def __init__(self, mission: Mission, constraints: VesselConstraints | None = None):
@@ -64,6 +81,10 @@ class Simulation:
         self.target_heading: float = self.own.heading
         self.target_speed: float = self.own.speed
         self.status: str = "CRUISING"  # deterministic AVOIDING/CRUISING, see _update_behaviour_status()
+        # Only consulted when constraints.kinematics_model == "nomoto" -- see
+        # _advance_own_kinematics_nomoto(). Kept even when unused so switching models
+        # mid-run (e.g. a UI toggle) doesn't need a fresh Simulation instance.
+        self._nomoto_state = NomotoState(rudder_deg=0.0, yaw_rate_deg_s=0.0, heading_deg=self.own.heading)
         self.trajectory: list[dict] = []
         self.agent_log: list[dict] = []  # {t, narration, oow_decision}
         self._record()
@@ -97,6 +118,9 @@ class Simulation:
         by at most this step's turn-rate/acceleration allowance -- never jumps
         straight to the target unless the target is already closer than one
         step's limit (in which case it snaps there exactly, no overshoot)."""
+        if self.constraints.kinematics_model == "nomoto":
+            self._advance_own_kinematics_nomoto(dt)
+            return
         c = self.constraints
         max_turn = c.turn_rate_deg_s * dt
         diff = relative_bearing(self.own.heading, self.target_heading)  # shortest signed path, [-180, 180]
@@ -104,6 +128,26 @@ class Simulation:
             self.own.heading = self.target_heading % 360
         else:
             self.own.heading = (self.own.heading + math.copysign(max_turn, diff)) % 360
+
+        target_speed = max(0.0, min(self.target_speed, c.max_speed_mps))
+        diff_s = target_speed - self.own.speed
+        if diff_s > 0:
+            self.own.speed = min(target_speed, self.own.speed + c.max_acceleration_mps2 * dt)
+        elif diff_s < 0:
+            self.own.speed = max(target_speed, self.own.speed - c.max_deceleration_mps2 * dt)
+
+    def _advance_own_kinematics_nomoto(self, dt: float) -> None:
+        """Sawada et al. (2021)'s Nomoto + rudder-servo heading dynamics (app/nomoto.py),
+        opt-in via constraints.kinematics_model=="nomoto". Speed still uses the SAME
+        accel/decel rate-limiting as the legacy "kinematics" model above -- Nomoto only
+        replaces the heading/rudder dynamics, not the speed dynamics."""
+        c = self.constraints
+        params = NomotoParams(K_per_s=c.nomoto_K_per_s, T_s=c.nomoto_T_s, T_E_s=c.nomoto_T_E_s,
+                              rudder_limit_deg=c.nomoto_rudder_limit_deg,
+                              autopilot_kp=c.nomoto_autopilot_kp)
+        self._nomoto_state = nomoto_advance(self._nomoto_state, self.target_heading, params,
+                                           dt, substep_s=c.nomoto_substep_s)
+        self.own.heading = self._nomoto_state.heading_deg
 
         target_speed = max(0.0, min(self.target_speed, c.max_speed_mps))
         diff_s = target_speed - self.own.speed
