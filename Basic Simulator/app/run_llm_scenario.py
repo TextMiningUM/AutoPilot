@@ -135,7 +135,7 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
             decision, debug = ask_oow(
                 mission, sim.own, sim.targets, config=config, system_prompt=system_prompt,
                 max_new_tokens=max_new_tokens, enable_thinking=enable_thinking, k=effective_k,
-                constraints=constraints, next_decision_in_s=next_decision_in_s,
+                constraints=constraints, next_decision_in_s=next_decision_in_s, weights=weights,
             )
             cp_latency_s = time.time() - _t_cp
             # Per-checkpoint progress -- without this, a slow config (e.g. RAG+CoT combined,

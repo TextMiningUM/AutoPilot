@@ -64,6 +64,7 @@ import streamlit as st
 import torch
 from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TextStreamer
+from peft import PeftModel
 
 from sentence_transformers import CrossEncoder
 
@@ -228,7 +229,12 @@ def _load_retrieval():
 
 
 @st.cache_resource(show_spinner="Loading Qwen3-8B (4-bit NF4) -- first call only, ~1-2 min...")
-def _load_qwen():
+def _load_qwen(weights: str = "W0_base"):
+    """`weights="W0_base"` loads bare Qwen3-8B (default, unchanged). Any other value is
+    treated as the name of a LoRA adapter directory under this domain's models dir (e.g.
+    "oow_qwen_sft_lora_v2", produced by pipeline/train/train_sft.py) and applied on top via
+    PEFT -- `st.cache_resource` keys its cache on the argument value, so base and each
+    adapter tag get their own cached (tok, mdl) pair, never conflated."""
     bnb = BitsAndBytesConfig(
         load_in_4bit=True, bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
@@ -244,6 +250,11 @@ def _load_qwen():
         MODEL_ID, quantization_config=bnb, device_map=device_map,
         torch_dtype=torch.bfloat16, attn_implementation="sdpa",
     )
+    if weights != "W0_base":
+        adapter_dir = AgentPaths.oow().domain_models_dir / weights
+        if not adapter_dir.exists():
+            raise FileNotFoundError(f"No adapter directory at {adapter_dir} for weights={weights!r}")
+        mdl = PeftModel.from_pretrained(mdl, str(adapter_dir))
     mdl.eval()
     return tok, mdl
 
@@ -619,7 +630,7 @@ def ask_oow(mission: Mission, own: Vessel, targets: list[Vessel], config: str = 
            system_prompt: str | None = None, max_new_tokens: int = 256,
            enable_thinking: bool = False, k: int = 6,
            constraints: VesselConstraints | None = None,
-           next_decision_in_s: float | None = None) -> tuple[dict, dict]:
+           next_decision_in_s: float | None = None, weights: str = "W0_base") -> tuple[dict, dict]:
     """Returns (decision_json, debug_info). `targets` MUST be the simulation's live,
     currently-moving contact list (Simulation.targets) -- NEVER mission.targets, see
     narrate()'s docstring for the bug this fixes. `config` is one of MODEL_CONFIGS's keys;
@@ -630,7 +641,8 @@ def ask_oow(mission: Mission, own: Vessel, targets: list[Vessel], config: str = 
     for why those two configs are slower to first-token than the others: a longer
     prompt costs more prefill time even though max_new_tokens/generation is unchanged.
     `constraints`/`next_decision_in_s`, if given, are forwarded to build_oow_prompt() --
-    see its docstring."""
+    see its docstring. `weights` selects base Qwen ("W0_base", default) or a fine-tuned
+    LoRA adapter directory name under this domain's models dir -- see _load_qwen()."""
     # CoT configs (v2_cot/v3_rag_cot) instruct the model to "think step by step... BEFORE
     # giving your final answer", but the JSON schema's "reasoning" field is capped at 1-2
     # sentences -- with enable_thinking=False (the default, since Qwen3's native <think>
@@ -648,7 +660,7 @@ def ask_oow(mission: Mission, own: Vessel, targets: list[Vessel], config: str = 
     enable_thinking, max_new_tokens = effective_generation_params(config, enable_thinking, max_new_tokens)
     messages, debug = build_oow_prompt(mission, own, targets, config=config, system_prompt=system_prompt, k=k,
                                        constraints=constraints, next_decision_in_s=next_decision_in_s)
-    tok, mdl = _load_qwen()
+    tok, mdl = _load_qwen(weights)
     raw = _generate(tok, mdl, messages, max_new_tokens=max_new_tokens, enable_thinking=enable_thinking)
     parsed = _parse_json_action(raw)
     decision = parsed["decision"]
