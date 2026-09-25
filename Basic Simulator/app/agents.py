@@ -1,12 +1,12 @@
 """ask_oow(): the OOW navigation agent.
 
-Runs base Qwen3-8B (the merged SFT+DPO+Reflection OOW-QWEN checkpoint exists and has been
-evaluated -- see eval_oow_qwen_full_summary.json -- but currently scores WORSE than base on
-Track 1 gold Q&A, Composite 0.375 vs 0.551; not yet wired into this app pending that
-regression being understood, see repo memory notes) under one of the selectable prompt
-configurations that mirror the notebook's §11 prompt ablation study (prep_ablation.py's
-V0-V6), plus an extra 'bare' baseline and 3 "super" configs (v7-v9) that combine the full
-retrieval stack and CoT+PG guidance into the experiment matrix's actual prompt columns:
+Runs base Qwen3-8B, or a fine-tuned checkpoint selected via `weights` (see
+app.model_variants.MODEL_VARIANTS -- "qwen_base"/"qwen_sftdpo" -- and
+_load_qwen()'s "W0_base"/adapter-chain/"MERGED:<dir>" conventions), under one of
+the selectable prompt configurations that mirror the notebook's §11 prompt
+ablation study (prep_ablation.py's V0-V6), plus an extra 'bare' baseline and 3
+"super" configs (v7-v9) that combine the full retrieval stack and CoT+PG
+guidance into the experiment matrix's actual prompt columns:
 
   bare_qwen      -- minimal system prompt, no COLREG framing, no RAG/CoT/PG
   v0_base        -- OOW framing (rules-of-thumb + JSON contract), no extras
