@@ -263,8 +263,10 @@ def main() -> None:
                          "default, then compare both logs for the same mission")
     ap.add_argument("--weights", default="W0_base",
                     help="which checkpoint answered (a SEPARATE axis from --configs, which "
-                         "selects the PROMPT) -- always W0_base (base Qwen3-8B) for now; "
-                         "no fine-tuned-checkpoint loading path exists yet, see main plan phase F4")
+                         "selects the PROMPT) -- 'W0_base' (base Qwen3-8B), a '+'-joined LoRA "
+                         "adapter-directory chain (e.g. 'oow_qwen_sft_lora_v2+oow_qwen_dpo_lora_v2'), "
+                         "or 'MERGED:<dir>' for a standalone already-merged model directory "
+                         "(e.g. 'MERGED:OOW-QWEN_v2_sftdpo') -- see app.agents._load_qwen()")
     ap.add_argument("--dt", type=float, default=10.0, help="simulation time step (s)")
     ap.add_argument("--max-steps", type=int, default=None,
                     help="total step budget -- default: a per-mission recommendation sized "

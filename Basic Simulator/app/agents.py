@@ -230,20 +230,33 @@ def _load_retrieval():
 
 @st.cache_resource(show_spinner="Loading Qwen3-8B (4-bit NF4) -- first call only, ~1-2 min...")
 def _load_qwen(weights: str = "W0_base"):
-    """`weights="W0_base"` loads bare Qwen3-8B (default, unchanged). Any other value is a
-    "+"-joined chain of LoRA adapter directory names under this domain's models dir (e.g.
-    "oow_qwen_sft_lora_v2" or "oow_qwen_sft_lora_v2+oow_qwen_dpo_lora_v2") applied in order
-    via PEFT, merging each into the base weights before applying the next -- this MUST match
-    how the corresponding train_*.py stage itself builds on the previous one (train_dpo.py's
-    load_model_with_sft_merged(): SFT adapter merged in BEFORE the DPO adapter trains on top),
-    otherwise the DPO/reflection adapter would be applied to the wrong base distribution.
-    `st.cache_resource` keys its cache on the argument value, so base and each weights chain
-    get their own cached (tok, mdl) pair, never conflated."""
+    """`weights="W0_base"` loads bare Qwen3-8B (default, unchanged). `weights="MERGED:<dir>"`
+    loads a standalone already-merged model directory (produced by pipeline/train/
+    merge_adapter.py, e.g. "MERGED:OOW-QWEN_v2_sftdpo") directly as the base -- no adapters
+    applied, still 4-bit-quantized on load same as every other path, so this isolates
+    "properly merged" vs "chained adapters" purely as a weights-loading difference (same
+    effective weights either way -- merge_and_unload() is mathematically exact -- the only
+    thing this changes is removing the PEFT dispatch overhead at inference time). Any other
+    value is a "+"-joined chain of LoRA adapter directory names under this domain's models
+    dir (e.g. "oow_qwen_sft_lora_v2" or "oow_qwen_sft_lora_v2+oow_qwen_dpo_lora_v2") applied
+    in order via PEFT, merging each into the base weights before applying the next -- this
+    MUST match how the corresponding train_*.py stage itself builds on the previous one
+    (train_dpo.py's load_model_with_sft_merged(): SFT adapter merged in BEFORE the DPO
+    adapter trains on top), otherwise the DPO/reflection adapter would be applied to the
+    wrong base distribution. `st.cache_resource` keys its cache on the argument value, so
+    base and each weights chain get their own cached (tok, mdl) pair, never conflated."""
     bnb = BitsAndBytesConfig(
         load_in_4bit=True, bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
     )
-    tok = AutoTokenizer.from_pretrained(MODEL_ID)
+    if weights.startswith("MERGED:"):
+        merged_dir = AgentPaths.oow().domain_models_dir / weights[len("MERGED:"):]
+        if not merged_dir.exists():
+            raise FileNotFoundError(f"No merged model directory at {merged_dir} for weights={weights!r}")
+        model_source = str(merged_dir)
+    else:
+        model_source = MODEL_ID
+    tok = AutoTokenizer.from_pretrained(model_source)
     # Pin the whole (4-bit) model onto the single GPU instead of device_map="auto": accelerate's
     # auto-placement can decide to offload a few layers to CPU/disk when it under-estimates free
     # VRAM, and bitsandbytes 4-bit refuses that combination outright ("Some modules are dispatched
@@ -251,10 +264,10 @@ def _load_qwen(weights: str = "W0_base"):
     # model fits comfortably in ~5-6 GB on this 8 GB card, so there's no need for CPU offload at all.
     device_map = {"": 0} if torch.cuda.is_available() else "cpu"
     mdl = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID, quantization_config=bnb, device_map=device_map,
+        model_source, quantization_config=bnb, device_map=device_map,
         torch_dtype=torch.bfloat16, attn_implementation="sdpa",
     )
-    if weights != "W0_base":
+    if weights != "W0_base" and not weights.startswith("MERGED:"):
         adapter_names = weights.split("+")
         models_dir = AgentPaths.oow().domain_models_dir
         for i, name in enumerate(adapter_names):
