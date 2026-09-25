@@ -1424,7 +1424,9 @@ def write_scenario_reflection_file(recs: list[dict], cache_dir: Path, mode: str 
     """Draft/Critique/Refined triples, same convention as build_reflection.py's output
     (see oow_reflection.jsonl): draft = the bare action name with no parameters or rule
     citation (deliberately vague, not wrong), critique = fixed text pointing out exactly
-    that gap, refined = the unified JSON object with the full B3 reasoning text."""
+    that gap, refined = the unified JSON object with the full B3 reasoning text.
+    Draft+critique are wrapped in a <think> block; the visible completion is bare JSON
+    (refined) only -- see build_reflection.py's module docstring for why."""
     out_path = cache_dir / "oow_scenario_reflection.jsonl"
     n = 0
     with out_path.open(mode, encoding="utf-8") as f:
@@ -1442,8 +1444,8 @@ def write_scenario_reflection_file(recs: list[dict], cache_dir: Path, mode: str 
                 "messages": [
                     {"role": "system", "content": SYSTEM_OOW_AGENT},
                     {"role": "user", "content": user_message_for(r, limits)},
-                    {"role": "assistant", "content": f"Draft: {draft}\n\nCritique: {critique}\n\n"
-                                                      f"Refined: {refined}"},
+                    {"role": "assistant", "content": f"<think>\nDraft: {draft}\n\n{critique}\n</think>\n\n"
+                                                      f"{refined}"},
                 ],
             }
             f.write(json.dumps(row, ensure_ascii=False) + "\n")

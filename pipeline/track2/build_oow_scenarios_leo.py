@@ -1249,8 +1249,8 @@ def main() -> None:
             "messages": [
                 {"role": "system", "content": SYSTEM_OOW_AGENT},
                 {"role": "user", "content": user_msg},
-                {"role": "assistant", "content": f"Draft: {draft}\n\nCritique: {critique}\n\n"
-                                                  f"Refined: {json.dumps(assistant_json, ensure_ascii=False)}"},
+                {"role": "assistant", "content": f"<think>\nDraft: {draft}\n\n{critique}\n</think>\n\n"
+                                                  f"{json.dumps(assistant_json, ensure_ascii=False)}"},
             ],
         })
         trace_rows.append({

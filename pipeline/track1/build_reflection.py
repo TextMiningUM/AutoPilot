@@ -9,10 +9,19 @@ For each trace with >=2 procedure steps or >=3 key_facts, build a triple:
 
 The reflection message format is a single turn where the assistant produces:
 
+  <think>
   Draft: <partial answer>
-  Critique: The draft omits <expected_point>. It should also address <constraint>.
-  Refined: <full answer>
+  The draft omits <expected_point>. It should also address <constraint>.
+  </think>
 
+  <full answer>
+
+Draft/critique reasoning lives INSIDE the <think> block so the VISIBLE completion is
+always just the plain refined answer -- matching what live inference actually expects
+(enable_thinking=False prefixes an empty closed <think></think> before generation;
+enable_thinking=True lets the model fill it itself) -- see 2026-09-25 regression notes
+in repo memory (raw Draft/Critique/Refined text as the visible output caused 100%
+parse failures at live inference).
 This teaches the model to self-check and repair its own output.
 Contamination filter against 540 gold questions.
 
@@ -245,7 +254,7 @@ def main() -> None:
         q = (seeds[0].get("text") or "").strip()
         if len(q) < 8: continue
 
-        assistant_msg = f"Draft: {draft}\n\nCritique: {critique(dropped)}\n\nRefined: {refined}"
+        assistant_msg = f"<think>\nDraft: {draft}\n\n{critique(dropped)}\n</think>\n\n{refined}"
         rows.append({
             "source_chunk_id": rec["chunk_id"],
             "source_file":     rec["source_file"],

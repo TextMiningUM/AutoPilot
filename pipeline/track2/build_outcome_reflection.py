@@ -94,8 +94,8 @@ def mine_rows() -> list[dict]:
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_msg},
-                    {"role": "assistant", "content": f"Draft: {draft_text}\n\nCritique: {critique}\n\n"
-                                                      f"Refined: {refined_json}"},
+                    {"role": "assistant", "content": f"<think>\nDraft: {draft_text}\n\n{critique}\n</think>\n\n"
+                                                      f"{refined_json}"},
                 ],
             })
     print(f"Scanned {n_scanned} run logs ({n_stale} predate the current prompt, skipped)")

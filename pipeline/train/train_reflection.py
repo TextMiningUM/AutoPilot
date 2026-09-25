@@ -8,13 +8,20 @@ WHAT THIS SCRIPT DOES
 A short SFT pass on the reflection dataset (295 rows).  Each assistant reply
 has the schema:
 
+    <think>
     Draft:    <plausible but incomplete answer>
-    Critique: <names the missing element: step, channel, warning, proword>
-    Refined: <complete answer>
+    <names the missing element: step, channel, warning, proword>
+    </think>
 
-This teaches the model to check its own output against safety-critical
-requirements before finalizing — analogous to Self-Refine / Reflexion but
-learned rather than prompted.
+    <complete answer>
+
+Draft/critique reasoning lives INSIDE the <think> block (2026-09-25 fix) so the
+VISIBLE completion is always just the plain refined answer -- the live inference
+task never asks for a Draft/Critique/Refined scaffold, only bare JSON/prose, and
+training on that raw scaffold as the visible output caused 100% parse failures at
+inference (see repo memory). This teaches the model to check its own output against
+safety-critical requirements before finalizing — analogous to Self-Refine / Reflexion
+but learned rather than prompted.
 
 WHY A SEPARATE STAGE?
 ---------------------

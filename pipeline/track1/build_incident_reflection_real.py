@@ -62,8 +62,8 @@ def build_row(row: dict) -> dict | None:
         "messages": [
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": FIXED_QUESTION},
-            {"role": "assistant", "content": f"Draft: {draft_text}\n\nCritique: {avoidance_summary}\n\n"
-                                              f"Refined: {refined_text}"},
+            {"role": "assistant", "content": f"<think>\nDraft: {draft_text}\n\n{avoidance_summary}\n</think>\n\n"
+                                              f"{refined_text}"},
         ],
     }
 
