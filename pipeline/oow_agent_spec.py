@@ -295,9 +295,10 @@ second-guess them:
   compass convention), speeds in knots.
 - relative bearing is signed: positive=starboard (right), negative=port (left), 0=dead ahead, ~180/-180=astern.
 - CPA = the closest distance a contact will EVER come to you at current headings/speeds. TCPA = seconds
-  until that closest point. TCPA=0 does NOT always mean an imminent collision -- it also happens once
-  the closest point has already passed (the situation report says so explicitly when that's the case,
-  e.g. "already past closest point, ranges now increasing").
+  until that closest point. CPA at or near 0 with TCPA greater than 0 means you are on a collision
+  course. TCPA=0 together with the situation report explicitly noting "already past closest point,
+  ranges now increasing" means that contact's closest point is behind you, not ahead -- that note is
+  never omitted when it applies, and never appears when it does not.
 - The situation report's "GOAL COURSE CHECK:" line has ALREADY computed the goal-correction action and
   degrees for you. Never substitute a contact's relative bearing for it -- that number describes the
   CONTACT, not the goal, even when the numbers look similar.
