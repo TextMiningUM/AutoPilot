@@ -230,11 +230,15 @@ def _load_retrieval():
 
 @st.cache_resource(show_spinner="Loading Qwen3-8B (4-bit NF4) -- first call only, ~1-2 min...")
 def _load_qwen(weights: str = "W0_base"):
-    """`weights="W0_base"` loads bare Qwen3-8B (default, unchanged). Any other value is
-    treated as the name of a LoRA adapter directory under this domain's models dir (e.g.
-    "oow_qwen_sft_lora_v2", produced by pipeline/train/train_sft.py) and applied on top via
-    PEFT -- `st.cache_resource` keys its cache on the argument value, so base and each
-    adapter tag get their own cached (tok, mdl) pair, never conflated."""
+    """`weights="W0_base"` loads bare Qwen3-8B (default, unchanged). Any other value is a
+    "+"-joined chain of LoRA adapter directory names under this domain's models dir (e.g.
+    "oow_qwen_sft_lora_v2" or "oow_qwen_sft_lora_v2+oow_qwen_dpo_lora_v2") applied in order
+    via PEFT, merging each into the base weights before applying the next -- this MUST match
+    how the corresponding train_*.py stage itself builds on the previous one (train_dpo.py's
+    load_model_with_sft_merged(): SFT adapter merged in BEFORE the DPO adapter trains on top),
+    otherwise the DPO/reflection adapter would be applied to the wrong base distribution.
+    `st.cache_resource` keys its cache on the argument value, so base and each weights chain
+    get their own cached (tok, mdl) pair, never conflated."""
     bnb = BitsAndBytesConfig(
         load_in_4bit=True, bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
@@ -251,10 +255,15 @@ def _load_qwen(weights: str = "W0_base"):
         torch_dtype=torch.bfloat16, attn_implementation="sdpa",
     )
     if weights != "W0_base":
-        adapter_dir = AgentPaths.oow().domain_models_dir / weights
-        if not adapter_dir.exists():
-            raise FileNotFoundError(f"No adapter directory at {adapter_dir} for weights={weights!r}")
-        mdl = PeftModel.from_pretrained(mdl, str(adapter_dir))
+        adapter_names = weights.split("+")
+        models_dir = AgentPaths.oow().domain_models_dir
+        for i, name in enumerate(adapter_names):
+            adapter_dir = models_dir / name
+            if not adapter_dir.exists():
+                raise FileNotFoundError(f"No adapter directory at {adapter_dir} for weights={weights!r}")
+            mdl = PeftModel.from_pretrained(mdl, str(adapter_dir))
+            if i < len(adapter_names) - 1:
+                mdl = mdl.merge_and_unload()  # fold in before the NEXT adapter trains/applies on top
     mdl.eval()
     return tok, mdl
 
