@@ -162,7 +162,9 @@ change. Reply with ONLY a JSON object, no other text:
 
 COT_INSTR = (
     "Before answering, write your reasoning as EXACTLY these 4 steps, one short sentence each -- "
-    "no more steps, no re-deriving bearings/CPA/TCPA (they are already given -- just quote them):\n"
+    "no more steps, no re-deriving bearings/CPA/TCPA (they are already given -- just quote them). "
+    "State each step ONCE and move on -- never hedge or backtrack with words like 'wait', "
+    "'actually', 'hmm', or 'let me reconsider'; commit to your first answer for each step:\n"
     "1. Contacts: name each contact and say whether its CPA is below or above the safe passing "
     "distance.\n"
     "2. Rule: for any contact below it, name the applicable COLREG rule and the action it requires.\n"
@@ -577,6 +579,38 @@ def rag_context_preview(mission: Mission, own: Vessel, targets: list[Vessel],
     return {"chars": len(ctx), "chunks": len(hits)}
 
 
+# Fase (2026-09-25): a targeted, cached generation-time bias against hedging/self-correction
+# tokens ("wait"/"actually"/"hmm" in any casing/leading-space variant) -- audit_runs.py's
+# W_deliberation_loop check found these words firing >4x in one <think> block on 29% (base)
+# to 37% (SFT-DPO) of CoT-config (v11) checkpoints, correlating with worse/less decisive
+# final decisions even when the JSON itself still parses. Deliberately NOT `no_repeat_ngram_
+# size` (already tried and reverted for CONTENT repetition -- see _generate()'s own comment,
+# that blocked legitimate repeated numbers) -- this instead targets only these specific
+# discourse-marker tokens with a strong-but-finite negative bias (not literal -inf), so a
+# hedge word becomes very unlikely without being physically impossible in some odd context.
+_HEDGE_WORDS = ["wait", "Wait", "WAIT", "actually", "Actually", "hmm", "Hmm", "Hmm,"]
+_hedge_sequence_bias_cache: dict[int, dict] = {}
+
+
+def _hedge_sequence_bias(tok) -> dict:
+    """{token_id_tuple: bias} for every hedge word above, in both its bare and
+    leading-space-prefixed BPE encodings (most tokenizers encode " wait" as a different
+    token/sequence than "wait") -- cached per tokenizer instance (id()) since this never
+    changes for a given tokenizer and recomputing it on every _generate() call would be
+    wasted work on the hot path."""
+    cache_key = id(tok)
+    if cache_key in _hedge_sequence_bias_cache:
+        return _hedge_sequence_bias_cache[cache_key]
+    bias: dict[tuple[int, ...], float] = {}
+    for word in _HEDGE_WORDS:
+        for variant in (word, f" {word}"):
+            ids = tuple(tok.encode(variant, add_special_tokens=False))
+            if ids:
+                bias[ids] = -6.0
+    _hedge_sequence_bias_cache[cache_key] = bias
+    return bias
+
+
 @torch.inference_mode()
 def _generate(tok, mdl, messages: list[dict], max_new_tokens: int = 256,
              enable_thinking: bool = False) -> str:
@@ -617,6 +651,7 @@ def _generate(tok, mdl, messages: list[dict], max_new_tokens: int = 256,
                        temperature=1.0, top_p=1.0, pad_token_id=tok.eos_token_id,
                        stop_strings="\"}", tokenizer=tok,
                        repetition_penalty=1.15,
+                       sequence_bias=_hedge_sequence_bias(tok),
                        streamer=streamer)
     result = tok.decode(out[0][inp["input_ids"].shape[1]:], skip_special_tokens=True)
     # Free this call's KV-cache/activation buffers back to the free-VRAM pool immediately
