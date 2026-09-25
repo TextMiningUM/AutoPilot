@@ -50,6 +50,7 @@ from app.simulation import Simulation, VesselConstraints, find_collision
 from app.agents import ask_oow, MODEL_CONFIGS, SYSTEM_OOW_AGENT, effective_generation_params
 from app.evaluation import llm_compliance_check, score_trajectory
 from app.llm_runs import RUNS_DIR, run_log_path
+from app.model_variants import MODEL_VARIANTS, resolve_weights, variant_for_weights
 from app.measurement import measure_decision_quality
 from app.narrate import (
     contact_line, recommended_decision_interval, recommended_max_steps,
@@ -75,7 +76,12 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
            max_new_tokens: int = 256, k: int = 2, use_rag: bool = True,
            system_prompt: str | None = None, force: bool = False,
            decision_interval: int | None = None, explain: bool = False) -> Path:
-    out_path = run_log_path(mission_id, config, weights, tag)
+    # The FILENAME always carries the clean, filesystem-safe model-variant id (never the
+    # raw `weights` string -- "+"/":" break on Windows, see model_variants.py's docstring),
+    # resolved via a reverse lookup so this stays correct even for an ad-hoc weights combo
+    # with no registry entry yet. Model LOADING (ask_oow below) still gets the real `weights`.
+    model_variant = variant_for_weights(weights)
+    out_path = run_log_path(mission_id, config, model_variant, tag)
     if out_path.exists() and not force:
         print(f"  [skip] {out_path.name} already exists (use --force to overwrite)")
         return out_path
@@ -209,7 +215,8 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
             colreg_llm_check["error"] = str(exc)
 
     log = {
-        "mission_id": mission_id, "config": config, "weights": weights, "tag": tag,
+        "mission_id": mission_id, "config": config, "weights": weights,
+        "model_variant": model_variant, "tag": tag,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "latency_s": latency_s,
         # Both embedded in full (not just mission_id, a lookup key into a SEPARATE file)
@@ -261,12 +268,19 @@ def main() -> None:
                     help="distinguishes variations of the same mission+config -- e.g. run the "
                          "same config twice with --tag thinking_on --enable-thinking vs the "
                          "default, then compare both logs for the same mission")
+    ap.add_argument("--model", default=None, choices=list(MODEL_VARIANTS),
+                    help="which model VARIANT answered, by registry id (see "
+                         "app.model_variants.MODEL_VARIANTS) -- resolves to the right "
+                         "--weights automatically and names the run log with this clean id "
+                         "instead of the raw weights string. Takes priority over --weights "
+                         "if both are given.")
     ap.add_argument("--weights", default="W0_base",
                     help="which checkpoint answered (a SEPARATE axis from --configs, which "
                          "selects the PROMPT) -- 'W0_base' (base Qwen3-8B), a '+'-joined LoRA "
                          "adapter-directory chain (e.g. 'oow_qwen_sft_lora_v2+oow_qwen_dpo_lora_v2'), "
                          "or 'MERGED:<dir>' for a standalone already-merged model directory "
-                         "(e.g. 'MERGED:OOW-QWEN_v2_sftdpo') -- see app.agents._load_qwen()")
+                         "(e.g. 'MERGED:OOW-QWEN_v2_sftdpo') -- see app.agents._load_qwen(). "
+                         "Prefer --model for anything with a registered variant id.")
     ap.add_argument("--dt", type=float, default=10.0, help="simulation time step (s)")
     ap.add_argument("--max-steps", type=int, default=None,
                     help="total step budget -- default: a per-mission recommendation sized "
@@ -293,6 +307,7 @@ def main() -> None:
                          "needs ANTHROPIC_API_KEY in .env) -- never affects the score itself, off "
                          "by default in a sweep")
     args = ap.parse_args()
+    weights = resolve_weights(args.model) if args.model else args.weights
 
     missions = args.missions or list_mission_ids()
     system_prompt = (args.system_prompt_file.read_text(encoding="utf-8")
@@ -305,7 +320,7 @@ def main() -> None:
         print(f"[{i}/{len(jobs)}] {mission_id} / {config}")
         t0 = time.time()
         run_one(
-            mission_id, config, weights=args.weights, tag=args.tag,
+            mission_id, config, weights=weights, tag=args.tag,
             dt=args.dt, max_steps=args.max_steps, enable_thinking=args.enable_thinking,
             max_new_tokens=args.max_new_tokens, k=args.k, use_rag=not args.no_rag,
             system_prompt=system_prompt, force=args.force,

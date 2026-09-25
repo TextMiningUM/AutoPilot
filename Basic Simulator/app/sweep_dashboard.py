@@ -37,6 +37,7 @@ for p in (ROOT, ROOT.parent):
 from app.evaluation import compliance_finding_parts, score_trajectory
 from app.llm_runs import parse_run_filename
 from app.missions import list_mission_ids, load_mission
+from app.model_variants import MODEL_VARIANTS, variant_label
 from app.simulation import VesselConstraints
 from core import review_path, safe_write_jsonl
 
@@ -67,6 +68,10 @@ with title_cols[1]:
 
 MISSIONS = list_mission_ids()
 CONFIGS = CONFIG_NAMES
+# Total jobs assumes ONE model variant (qwen_base, the only one with full history); a
+# second variant doubles the real total, but this is only used for a rough top-of-page
+# progress bar, not for anything score-bearing -- see the model-variant multiselect below
+# for the real per-variant breakdown.
 TOTAL_JOBS = len(MISSIONS) * len(CONFIGS)
 MISSION_OBJS = {m: load_mission(m) for m in MISSIONS}  # cheap: just json + dataclasses
 
@@ -133,8 +138,11 @@ def _score_log(mission_id: str, log: dict, tag: str, path: Path,
     latency_is_estimate = latency_s is None
     if latency_is_estimate:
         latency_s = _estimate_latency(path, gen_at_index)
+    weights_value = log.get("weights") or weights
+    model_variant = log.get("model_variant") or weights_value
     return {
-        "config": log.get("config"), "weights": log.get("weights") or weights,
+        "config": log.get("config"), "weights": weights_value,
+        "model_variant": model_variant, "model_label": variant_label(model_variant),
         "tag": log.get("tag", tag),
         "composite_score": result["composite_score"], "verdict": result["verdict"],
         "safety": result["safety"], "compliance": result["compliance"],
@@ -146,31 +154,37 @@ def _score_log(mission_id: str, log: dict, tag: str, path: Path,
     }
 
 
-def _scan_mission_runs(mission_id: str, gen_at_index: list[tuple[datetime, Path]]) -> dict[str, dict]:
+def _scan_mission_runs(mission_id: str, gen_at_index: list[tuple[datetime, Path]]) -> dict[tuple[str, str], dict]:
     """Globs RUNS_DIR for every {mission_id}__*.json and scores each file directly -- the
     single source of truth for what's actually on disk RIGHT NOW, instead of
     _sweep_summary.json's append-only cache. Filenames are parsed via
     app.llm_runs.parse_run_filename(), which understands both the current
     {mission}__{config}__{weights}__{tag}.json form and the older 2/3-segment forms
-    written before the weights axis existed. When more than one tag produced a log for the
-    same config, the most recently modified file wins (whatever's actually current)."""
+    written before the weights axis existed. Keyed by (config, model_variant) -- NOT just
+    config -- so two different model variants sharing a config never silently overwrite
+    each other (the old config-only keying did exactly that, discarding whichever variant
+    wasn't most-recently-modified). When more than one tag produced a log for the SAME
+    (config, model_variant) pair, the most recently modified file wins (whatever's actually
+    current)."""
     prefix = f"{mission_id}__"
-    latest_mtime: dict[str, float] = {}
-    rows: dict[str, dict] = {}
+    latest_mtime: dict[tuple[str, str], float] = {}
+    rows: dict[tuple[str, str], dict] = {}
     for path in RUNS_DIR.glob(f"{prefix}*.json"):
         parsed = parse_run_filename(path)
         config, weights, tag = parsed["config"], parsed["weights"], parsed["tag"]
         if config not in CONFIGS:
             continue
         mtime = path.stat().st_mtime
-        if config in latest_mtime and latest_mtime[config] >= mtime:
-            continue
         try:
             log = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             continue
-        latest_mtime[config] = mtime
-        rows[config] = _score_log(mission_id, log, tag, path, gen_at_index, weights)
+        model_variant = log.get("model_variant") or weights
+        key = (config, model_variant)
+        if key in latest_mtime and latest_mtime[key] >= mtime:
+            continue
+        latest_mtime[key] = mtime
+        rows[key] = _score_log(mission_id, log, tag, path, gen_at_index, weights)
     return rows
 
 
@@ -337,15 +351,67 @@ def _render() -> None:
               "{mission}__{config}[__{tag}].json \u2022 read-only \u2022 click Refresh "
               "above for the latest state")
 
+    # Model-variant axis: every (config, model_variant) key seen anywhere in the current
+    # data, not just the registered ones -- an ad-hoc weights combo still shows up (labeled
+    # via variant_label()'s unregistered fallback) instead of silently vanishing.
+    all_variants = sorted({key[1] for rows in rows_by_mission.values() for key in rows},
+                          key=lambda v: (v not in MODEL_VARIANTS, v))
+    filt_cols = st.columns([2, 2])
+    with filt_cols[0]:
+        picked_variants = st.multiselect(
+            "Model variant(s)", options=all_variants,
+            default=all_variants, format_func=variant_label, key="variant_filter",
+            help="Which model checkpoint(s) answered -- see app.model_variants.MODEL_VARIANTS. "
+                 "A run's filename/'model_variant' field carries this; unregistered ad-hoc "
+                 "weights combos still show up here (labeled as-is).")
+    with filt_cols[1]:
+        picked_setup = st.selectbox(
+            "Setup variant (config) for the comparison grid", ["(best across configs)"] + CONFIGS,
+            key="config_for_grid",
+            help="The comparison grid below is mission \u00d7 model-variant -- pick ONE prompt "
+                 "config to see that config's score in every cell, or '(best across configs)' "
+                 "to see each (mission, variant)'s own best-scoring config instead.")
+
     st.divider()
-    st.subheader("Leaderboard (best config per mission so far)")
+    st.subheader("\U0001F4CA Comparison grid: mission \u00d7 model variant")
+    if not picked_variants:
+        st.info("Selecteer minstens \u00e9\u00e9n model variant hierboven.")
+    else:
+        grid_rows = []
+        for mission_id in MISSIONS:
+            rows = rows_by_mission[mission_id]
+            row_out = {"mission": mission_id}
+            for variant in picked_variants:
+                if picked_setup == "(best across configs)":
+                    candidates = [r for (cfg, v), r in rows.items() if v == variant]
+                    cell = max(candidates, key=lambda r: r["composite_score"]) if candidates else None
+                else:
+                    cell = rows.get((picked_setup, variant))
+                label = variant_label(variant)
+                if cell is None:
+                    row_out[label] = "\u2014"
+                else:
+                    cfg_suffix = f" ({cell['config']})" if picked_setup == "(best across configs)" else ""
+                    row_out[label] = f"{cell['composite_score']:.3f}{cfg_suffix}"
+            grid_rows.append(row_out)
+        st.dataframe(grid_rows, width="stretch", hide_index=True)
+        st.caption("Cel = composite score" +
+                  (" van de best-scorende config voor die (missie, variant)-combinatie."
+                   if picked_setup == "(best across configs)"
+                   else f" voor config={picked_setup!r}.") +
+                  " \u2014 zie de per-missie detail-tabellen hieronder voor de volledige "
+                  "per-config/per-variant breakdown.")
+
+    st.divider()
+    st.subheader("Leaderboard (best config \u00d7 variant per mission so far)")
     leaderboard = []
     best_row_by_mission: dict[str, dict] = {}
     for mission_id in MISSIONS:
-        rows = rows_by_mission[mission_id]
+        rows = {k: r for k, r in rows_by_mission[mission_id].items() if k[1] in picked_variants}
         if not rows:
             leaderboard.append({
-                "mission": mission_id, "done": "0/8", "best_config": "\u2014",
+                "mission": mission_id, "done": f"0/{len(CONFIGS) * max(len(picked_variants), 1)}",
+                "best_config": "\u2014", "best_variant": "\u2014",
                 "composite": None, "verdict": "\u2014", "safety": None, "compliance": None,
                 "explanation": None, "temporal": None, "spatial": None, "manoeuvre": None,
                 "latency": None, "colreg": "\u2014",
@@ -354,8 +420,9 @@ def _render() -> None:
         best = max(rows.values(), key=lambda r: r["composite_score"])
         best_row_by_mission[mission_id] = best
         leaderboard.append({
-            "mission": mission_id, "done": f"{len(rows)}/{len(CONFIGS)}",
-            "best_config": best["config"], "composite": best["composite_score"],
+            "mission": mission_id, "done": f"{len(rows)}/{len(CONFIGS) * len(picked_variants)}",
+            "best_config": best["config"], "best_variant": best["model_label"],
+            "composite": best["composite_score"],
             "verdict": best["verdict"], **_axis_cols(best),
         })
     st.dataframe(leaderboard, width="stretch", hide_index=True)
@@ -385,12 +452,13 @@ def _render() -> None:
     st.divider()
     st.subheader("Per-mission detail (all variations)")
     for mission_id in MISSIONS:
-        rows = rows_by_mission[mission_id]
+        rows = {k: r for k, r in rows_by_mission[mission_id].items() if k[1] in picked_variants}
+        n_expected = len(CONFIGS) * max(len(picked_variants), 1)
         # Explicit `key=` (stable across reruns) instead of relying on the auto-key derived
         # from the label -- the label's "(done/8)" count changes as jobs complete, which
         # would otherwise make Streamlit treat it as a brand-new expander each time and
         # collapse it back shut.
-        with st.expander(f"{mission_id}  ({len(rows)}/{len(CONFIGS)} configs done)",
+        with st.expander(f"{mission_id}  ({len(rows)}/{n_expected} config\u00d7variant done)",
                          expanded=False, key=f"exp_{mission_id}"):
             # Nested st.expander isn't allowed inside another expander, so mission brief and
             # per-config detail below use a checkbox/selectbox to reveal on click instead.
@@ -399,30 +467,33 @@ def _render() -> None:
             st.divider()
             table = []
             for config in CONFIGS:
-                r = rows.get(config)
-                is_current = current_job == (mission_id, config)
-                if r is None:
-                    status = "\U0001F504 running" if is_current else "\u23F3 pending"
-                    table.append({
-                        "config": config, "status": status, "composite": None,
-                        "verdict": None, "safety": None, "compliance": None,
-                        "explanation": None, "temporal": None, "spatial": None,
-                        "manoeuvre": None, "latency": None, "colreg": "\u2014",
-                    })
-                else:
-                    table.append({
-                        "config": config, "status": "\u2705 done",
-                        "composite": r["composite_score"], "verdict": r["verdict"],
-                        **_axis_cols(r),
-                    })
+                for variant in picked_variants:
+                    r = rows.get((config, variant))
+                    is_current = current_job == (mission_id, config)
+                    if r is None:
+                        status = "\U0001F504 running" if is_current else "\u23F3 pending"
+                        table.append({
+                            "config": config, "variant": variant_label(variant),
+                            "status": status, "composite": None,
+                            "verdict": None, "safety": None, "compliance": None,
+                            "explanation": None, "temporal": None, "spatial": None,
+                            "manoeuvre": None, "latency": None, "colreg": "\u2014",
+                        })
+                    else:
+                        table.append({
+                            "config": config, "variant": r["model_label"], "status": "\u2705 done",
+                            "composite": r["composite_score"], "verdict": r["verdict"],
+                            **_axis_cols(r),
+                        })
             st.dataframe(table, width="stretch", hide_index=True)
 
-            done_configs = [c for c in CONFIGS if rows.get(c) is not None]
-            if done_configs:
-                picked = st.selectbox("View details for:", done_configs,
+            done_keys = [k for k in rows if rows.get(k) is not None]
+            if done_keys:
+                key_labels = {k: f"{k[0]} / {variant_label(k[1])}" for k in done_keys}
+                picked = st.selectbox("View details for:", done_keys, format_func=lambda k: key_labels[k],
                                       key=f"detail_pick_{mission_id}")
                 r = rows[picked]
-                with st.popover(f"\U0001F4C4 {picked} \u2014 details"):
+                with st.popover(f"\U0001F4C4 {key_labels[picked]} \u2014 details"):
                     m_cols = st.columns(8)
                     m_cols[0].metric("Safety", r["safety"]["score"])
                     m_cols[1].metric("Compliance", r["compliance"]["score"])

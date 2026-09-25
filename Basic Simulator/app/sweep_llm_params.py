@@ -40,6 +40,7 @@ from app.missions import list_mission_ids, load_mission
 from app.agents import MODEL_CONFIGS
 from app.run_llm_scenario import run_one
 from app.llm_runs import RUNS_DIR, load_run
+from app.model_variants import MODEL_VARIANTS, resolve_weights
 from app.evaluation import score_trajectory
 from app.simulation import VesselConstraints
 
@@ -85,6 +86,7 @@ def score_one(mission, log: dict) -> dict:
     )
     return {
         "config": log["config"], "tag": log["tag"],
+        "model_variant": log.get("model_variant"),
         "composite_score": result["composite_score"], "verdict": result["verdict"],
         "safety": result["safety"], "compliance": result["compliance"],
         "temporal": result["temporal"], "spatial": result["spatial"],
@@ -168,6 +170,13 @@ def main() -> None:
     ap.add_argument("--max-new-tokens", type=int, default=256)
     ap.add_argument("--k", type=int, default=2)
     ap.add_argument("--no-rag", action="store_true")
+    ap.add_argument("--model", default=None, choices=list(MODEL_VARIANTS),
+                    help="which model VARIANT to sweep, by registry id (see "
+                         "app.model_variants.MODEL_VARIANTS) -- resolves to the right "
+                         "--weights automatically. Takes priority over --weights.")
+    ap.add_argument("--weights", default="W0_base",
+                    help="raw --weights value if no registered --model variant applies -- "
+                         "see app.run_llm_scenario's --weights help")
     ap.add_argument("--force", action="store_true", help="recompute even if a log already exists")
     ap.add_argument("--explain", action="store_true",
                     help="also ask Anthropic Claude for a plain-language explanation of the "
@@ -175,6 +184,7 @@ def main() -> None:
                          "network call + latency per job, needs ANTHROPIC_API_KEY in .env) -- "
                          "never affects the score itself, off by default")
     args = ap.parse_args()
+    weights = resolve_weights(args.model) if args.model else args.weights
 
     missions = args.missions or list_mission_ids()
     # sweep() saves each job's full result to SUMMARY_FILE as it completes -- `summary` here
@@ -183,7 +193,7 @@ def main() -> None:
     summary = sweep(
         missions, args.configs, tag=args.tag, dt=args.dt, max_steps=args.max_steps,
         enable_thinking=args.enable_thinking, max_new_tokens=args.max_new_tokens,
-        k=args.k, use_rag=not args.no_rag, force=args.force,
+        k=args.k, use_rag=not args.no_rag, force=args.force, weights=weights,
         decision_interval=args.decision_interval,
         explain=args.explain,
     )

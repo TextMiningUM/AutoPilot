@@ -69,10 +69,14 @@ def list_run_sets() -> list[str]:
 
 
 def list_runs_for_mission(mission_id: str, runs_dir: Path = RUNS_DIR) -> list[dict]:
-    """Returns [{"config","weights","tag","path","generated_at","outcome"}] for every
-    precomputed run available for this mission, newest first. Corrupt/unreadable files are
-    skipped. `weights` falls back to parse_run_filename() for older logs written before
-    that field existed in the JSON body (all implicitly "W0_base")."""
+    """Returns [{"config","weights","model_variant","tag","path","generated_at","outcome"}]
+    for every precomputed run available for this mission, newest first. Corrupt/unreadable
+    files are skipped. `weights` falls back to parse_run_filename() for older logs written
+    before that field existed in the JSON body (all implicitly "W0_base"); `model_variant`
+    falls back to the filename's 3rd segment for logs written before that field existed
+    (see app.model_variants -- the filename segment IS the variant id going forward, but
+    used to be the raw weights string, which app.model_variants.variant_label() also
+    accepts directly)."""
     if not runs_dir.exists():
         return []
     out = []
@@ -84,6 +88,7 @@ def list_runs_for_mission(mission_id: str, runs_dir: Path = RUNS_DIR) -> list[di
         out.append({
             "config": log.get("config"),
             "weights": log.get("weights") or parse_run_filename(p)["weights"],
+            "model_variant": log.get("model_variant") or parse_run_filename(p)["weights"],
             "tag": log.get("tag", "default"),
             "path": p, "generated_at": log.get("generated_at"),
             "outcome": log.get("outcome", {}),

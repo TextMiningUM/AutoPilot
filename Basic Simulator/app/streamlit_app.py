@@ -143,6 +143,7 @@ if not st.session_state.splash_dismissed:
 # on the very first run) -- re-importing here is a cheap sys.modules lookup, not a reload.
 from app.agents import MODEL_CONFIGS, SYSTEM_OOW_AGENT, ask_oow
 from app.llm_runs import list_runs_for_mission, load_run, checkpoint_at_or_before, list_run_sets, BASE_RUNS_DIR
+from app.model_variants import MODEL_VARIANTS, variant_label
 
 # ── UI preference persistence ─────────────────────────────────────────────
 # Ship-performance/Mission sidebar values persist across app restarts (new browser tab,
@@ -152,7 +153,7 @@ from app.llm_runs import list_runs_for_mission, load_run, checkpoint_at_or_befor
 _UI_PREFS_PATH = ROOT / "Data" / "_ui_prefs.json"
 _UI_PREFS_KEYS = [
     "ship_max_speed_kn", "ship_max_turn_rate_pct", "ship_max_accel_kn_s", "ship_max_decel_kn_s",
-    "ship_turn_rate_deg_s", "mission_min_cpa_nm",
+    "ship_turn_rate_deg_s",
 ]
 
 
@@ -181,6 +182,11 @@ if "_ui_prefs_loaded" not in st.session_state:
     st.session_state._ui_prefs_loaded = True
 
 # ── Session state ─────────────────────────────────────────────────────────
+# Fixed, not user-configurable -- the safe-passing-distance threshold every mission,
+# check, and prompt is built against (see build_vessel_constraints() below).
+MISSION_MIN_CPA_NM = 0.27
+
+
 def build_vessel_constraints(mission: Mission) -> VesselConstraints:
     """Reads the sidebar's Ship performance/Mission widgets straight out of session_state
     (same one-render-lag pattern as wide_plot elsewhere in this file -- on the very first
@@ -201,7 +207,7 @@ def build_vessel_constraints(mission: Mission) -> VesselConstraints:
         max_deceleration_mps2=kn_to_mps(g("ship_max_decel_kn_s", 0.02)),
         turn_rate_deg_s=g("ship_turn_rate_deg_s", 3.0),
         cruise_speed_mps=mission.own_ship.speed,
-        min_cpa_m=nm_to_m(g("mission_min_cpa_nm", 0.27)),
+        min_cpa_m=nm_to_m(MISSION_MIN_CPA_NM),
         time_step_s=10.0,
     )
 
@@ -640,7 +646,22 @@ with plot_col:
                 f"`python -m app.run_llm_scenario --missions {mission.id} --configs v3_rag_cot`"
             )
         else:
-            run_labels = {i: f"{r['config']} / tag={r['tag']} -- {r['outcome'].get('verdict', '?')}"
+            # Model-variant filter FIRST: as more variants accumulate for the same
+            # mission/config/tag, the run-picker dropdown below would otherwise become
+            # ambiguous (two entries with an identical label) -- see app.model_variants.
+            variants_here = sorted({r["model_variant"] for r in available_runs},
+                                   key=lambda v: (v not in MODEL_VARIANTS, v))
+            picked_variant = st.selectbox(
+                "Model variant", options=["(all)"] + variants_here,
+                format_func=lambda v: "(all)" if v == "(all)" else variant_label(v),
+                key=f"llm_variant_picker__{picked_run_set}__{mission.id}",
+                help="Filters the 'Precomputed run' list below by which checkpoint answered "
+                     "-- see app.model_variants.MODEL_VARIANTS.",
+            )
+            if picked_variant != "(all)":
+                available_runs = [r for r in available_runs if r["model_variant"] == picked_variant]
+            run_labels = {i: f"{r['config']} / {variant_label(r['model_variant'])} / tag={r['tag']} "
+                             f"-- {r['outcome'].get('verdict', '?')}"
                          for i, r in enumerate(available_runs)}
             picked_run_i = st.selectbox(
                 "Precomputed run", options=list(run_labels), format_func=lambda i: run_labels[i],
@@ -712,7 +733,7 @@ with st.sidebar:
     st.divider()
 
     st.header("Mission")
-    st.number_input("Minimal CPA (NM)", min_value=0.0, value=0.27, step=0.05, key="mission_min_cpa_nm")
+    st.caption(f"Minimal CPA is set at {MISSION_MIN_CPA_NM} NM ({nm_to_m(MISSION_MIN_CPA_NM):.0f} meter).")
     all_missions = {mid: load_mission(mid) for mid in mission_ids}
     labels = {mid: f"{mid.split('_')[0].upper()} \u2014 {m.name}  ({mid})" for mid, m in all_missions.items()}
     picked = st.selectbox("Scenario", options=mission_ids, format_func=lambda m: labels[m],
