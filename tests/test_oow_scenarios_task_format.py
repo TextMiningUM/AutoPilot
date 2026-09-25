@@ -105,13 +105,17 @@ def test_v2_eval_record_situation_is_byte_identical_to_what_a_training_row_would
     skip-not-fail policy, gated on a phrase unique to the NEW wording.
 
     Stand-on-vessel-escalation fix (2026-09-24): constraint_line() gained one more
-    sentence (the stand_on_tcpa_s deadline) -- same situation again, extended gate."""
+    sentence (the stand_on_tcpa_s deadline) -- same situation again, extended gate.
+
+    2026-09-25 simplification + decision_interval_s: constraint_line() was rewritten to
+    state facts only (NM units, no rule imperatives, no per-command turn cap, an explicit
+    "next decision point in Ns" fact) -- v2 regenerated same day against this wording,
+    gate updated to match; see git history for the superseded phrase list."""
     if not V2_FILE.exists():
         return
     v2 = json.loads(V2_FILE.read_text(encoding="utf-8"))
-    if ("may request at most" not in v2[0]["situation"]
-            or "you must identify the encounter and the applicable steering rule" not in v2[0]["situation"]
-            or "some avoiding action then becomes required" not in v2[0]["situation"]):
+    if ("Your next decision point is in" not in v2[0]["situation"]
+            or "There is no cap on a single turn_left/turn_right order" not in v2[0]["situation"]):
         pytest.skip("oow_colreg_scenarios_v2.json predates the current constraint_line() "
                    "wording -- pending its own regeneration")
     eval_recs, _ = _fresh_pop(seed=0)

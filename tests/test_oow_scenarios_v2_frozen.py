@@ -18,23 +18,22 @@ V2_FILE = paths.eval_dir / "oow_colreg_scenarios_v2.json"
 PROBE_300_FILE = paths.eval_dir / "oow_colreg_scenarios_v2_probe_300.json"
 PROBE_926_FILE = paths.eval_dir / "oow_colreg_scenarios_v2_probe_926.json"
 
-# Computed 2026-09-23 immediately after `build_oow_scenarios.py --build-v2 --overwrite`
-# (RE-computed AGAIN the same day, TWICE more: once after the give-way real_risk fix
-# (41/325 changed), then again after the STOP-1 blocking-bug fix -- risk_band()'s
-# early/acute split means a target whose CPA is below the safe distance but whose TCPA
-# sits beyond the horizon is a real encounter, not "no risk" -- 52/325 v2 gold labels
-# changed as a direct result (all encounter_rule 'none'->a real rule, 0 speed_up cases
-# in this eval set). An intentional, approved re-generation per the user's own explicit
-# direction, not a drift; the 325 geometries/v1_id linkage are unchanged.)
-V2_SHA256 = "d671efac6fbae584ca841fa078210d78f5d0d4636e20bab6bf36a727b98daa2b"
+# Computed 2026-09-25, RE-computed ONE MORE TIME after constraint_line() gained
+# decision_interval_s + the wider prompt rework (uncapped turns, NM units, facts-only
+# phrasing -- see oow_agent_spec.py's own docstring) -- 0/325 gold labels changed (this
+# rework only touches RENDERED WORDING, never to_unified_action()'s own classification),
+# but the file's byte content differs (new situation text), hence a new hash. An
+# intentional, approved re-generation, not a drift; the 325 geometries/v1_id linkage are
+# unchanged. (Prior history: give-way real_risk fix 41/325 changed; STOP-1 early-band fix
+# 52/325 changed -- see git blame for those hashes.)
+V2_SHA256 = "ae25e1c7f6ed8aa2a57b8aba80db6016751a58bc5b4bede0de8e7df079223178"
 
-# STAP 4 (2026-09-23): the two safe_distance_m probes (ONLY safe_distance_m changed vs
-# v2 -- max_turn_deg stays 30, risk horizon stays each scenario's own derived default),
-# first-time-frozen the same way v1/v2 are (recomputed alongside the same STOP-1 fix --
-# probe_300 106/325 changed, probe_926 18/325 changed; smaller safe_distance_m ->
-# proportionally MORE early-band cases relative to a given risk horizon).
-PROBE_300_SHA256 = "ed4d095a93dca859da4a8abbc9fbe0cada4a6a170867a4837b57a0058dfd8a59"
-PROBE_926_SHA256 = "14c447de06cdd8c51df5ff3d0e38d56c81980b16d2e12dfb5600c6c814851bf2"
+# STAP 4: the two safe_distance_m probes (ONLY safe_distance_m changed vs v2 -- max_turn_deg
+# stays 30, risk horizon stays each scenario's own derived default), recomputed alongside
+# the same 2026-09-25 wording rework -- 0/325 gold labels changed on both, new hash from
+# the rendered text only.
+PROBE_300_SHA256 = "98861a9fd429ae602abffe5f131e5c3b0e8f53b7131339a14fd1b680653831d8"
+PROBE_926_SHA256 = "f219614c5bb925e407da0285585db408e46882f160ce3ce7bea5aef677e18143"
 
 
 def test_v2_scenarios_file_is_byte_for_byte_frozen() -> None:

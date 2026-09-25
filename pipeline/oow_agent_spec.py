@@ -324,6 +324,18 @@ ONLY a JSON object, no other text:
  "conduct_rule": "<'Rule <N>' citing the applicable COLREG rule, or 'none' if no real risk>",
  "reasoning": "<one or two sentences>"}"""
 
+# Human-readable version tag for SYSTEM_OOW_AGENT/constraint_line() as a PAIR -- bump only when
+# a change is meaningful enough that a run generated under the OLD wording is no longer
+# comparable/minable (schema, action vocabulary, or what counts as a correct answer changed).
+# A pure prose clarification (e.g. rewording the CPA/TCPA explanation without changing any of
+# that) does NOT need a bump -- this is a coarser, hand-judged compatibility signal, distinct
+# from run_llm_scenario.py's byte-exact _PROMPT_HASH (which DOES change on every wording edit
+# and is used there for strict same-tag audit aggregation, a different, stricter need).
+# Single source of truth (moved here from Basic Simulator/app/run_llm_scenario.py so pipeline
+# training-data consumers, e.g. pipeline/track2/build_outcome_dpo.py, can import it without
+# pulling in torch/transformers via that module).
+PROMPT_VERSION = "2026-09-24-uncapped-turn-adaptive-cadence"
+
 
 # Fase B3 (RAG-rebuild-v2 plan, 2026-09-22): the ONE ground-truth mapping from (encounter role,
 # action) to (encounter_rule, conduct_rule), shared by BOTH Track-2 generators' deterministic
