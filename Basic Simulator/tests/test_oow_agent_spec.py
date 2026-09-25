@@ -12,7 +12,7 @@ import app.agents as agents  # noqa: E402
 from app.missions import Mission, Vessel  # noqa: E402
 from app.narrate import narrate  # noqa: E402
 from pipeline import oow_agent_spec  # noqa: E402
-from pipeline.oow_agent_spec import goal_course_check_line  # noqa: E402
+from pipeline.oow_agent_spec import goal_course_action, goal_course_check_line  # noqa: E402
 
 
 def test_agents_py_shares_the_same_system_prompt_object() -> None:
@@ -89,6 +89,45 @@ def test_narrate_uses_the_shared_goal_course_check_function() -> None:
     goal_check_lines = [ln for ln in report.splitlines() if ln.startswith("GOAL COURSE CHECK")]
     assert len(goal_check_lines) == 1
     assert goal_check_lines[0] == expected
+
+
+def test_goal_course_action_uses_target_heading_to_avoid_runaway_under_slow_kinematics() -> None:
+    """2026-09-26 bugfix regression test. Root cause (found via a real Nomoto smoke test,
+    see repo memory basic_simulator.md): under a slow-responding kinematics model (Nomoto,
+    ~8-18x slower to complete a turn than the legacy slew, see app/nomoto.py), own.heading
+    lags Simulation.target_heading for MANY decisions in a row (unlike the legacy model,
+    where it catches up within ~1 decision interval). goal_course_action() used to compare
+    against own_heading ONLY -- recomputing a fresh, large correction from the still-
+    lagging heading every decision, then applying it via turn_left/turn_right, which ADDS
+    to target_heading (by design, so genuinely new avoidance orders stack instead of being
+    silently absorbed mid-turn). That combination double-counted the same not-yet-complete
+    turn every decision, driving target_heading further from the goal bearing forever --
+    reproduced empirically: Imazu07 under kinematics_model="nomoto" drifted from 22.2km to
+    164km from the goal over 3000 steps, never converging.
+
+    This test reproduces the exact lagging-heading state (own.heading far from the goal
+    bearing, target_heading ALREADY aimed at it) and confirms the fix: passing
+    target_heading now correctly reports "on course, hold" instead of recommending yet
+    another large turn."""
+    own_x, own_y = 0.0, 0.0
+    goal_x, goal_y = 0.0, 1000.0  # goal bearing 0 deg (due north)
+    lagging_own_heading = 60.0  # ship's actual heading, still mid-turn, far from the goal bearing
+    already_commanded_target_heading = 2.0  # target_heading is already aimed at the goal (within deadband)
+
+    # OLD behaviour (target_heading omitted): still recommends turning, based on the
+    # stale/lagging own_heading -- this is the exact call shape that caused the runaway.
+    stale_action, stale_degrees = goal_course_action(own_x, own_y, lagging_own_heading, goal_x, goal_y)
+    assert stale_action == "turn_left"
+    assert stale_degrees == 60.0
+
+    # FIXED behaviour: comparing against the already-commanded target_heading (which is
+    # already within GOAL_DEADBAND_DEG of the goal bearing) correctly reports "hold" --
+    # no new correction is stacked on top of the turn already in progress.
+    fixed_action, fixed_degrees = goal_course_action(
+        own_x, own_y, lagging_own_heading, goal_x, goal_y,
+        target_heading=already_commanded_target_heading)
+    assert fixed_action == "hold_course"
+    assert fixed_degrees is None
 
 
 # ── Fase B3 (RAG-rebuild-v2 plan, 2026-09-22): classify_rules() single-source mapping ──

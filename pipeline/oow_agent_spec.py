@@ -507,23 +507,44 @@ GOAL_DEADBAND_DEG = 5.0
 
 
 def goal_course_action(own_x: float, own_y: float, own_heading: float,
-                       goal_x: float, goal_y: float) -> tuple[str, float | None]:
+                       goal_x: float, goal_y: float,
+                       target_heading: float | None = None) -> tuple[str, float | None]:
     """The action/degrees GOAL COURSE CHECK recommends -- ("hold_course", None) if already
     on the goal bearing (within GOAL_DEADBAND_DEG), else ("turn_left"/"turn_right", degrees).
     Used BOTH to render the check's text line (below) and as the actual ground-truth
     action a training-data generator picks when no real collision risk exists (SYSTEM_OOW_
     AGENT's decision procedure step 3) -- so the rendered text and the label a model is
-    trained on can never silently disagree."""
+    trained on can never silently disagree.
+
+    `target_heading` (2026-09-26, opt-in -- None preserves old behaviour for every Track-2/
+    training-data caller, none of which pass it): the ship's already-COMMANDED heading
+    (Basic Simulator's Simulation.target_heading, mirrored onto Vessel.target_heading),
+    used INSTEAD of `own_heading` as the reference to compare against the goal bearing when
+    given. Fixes a real heading-runaway bug found empirically under a slow-responding
+    kinematics model (Nomoto, ~8-18x slower to complete a turn than the legacy turn-rate
+    slew -- see app/nomoto.py): under FAST kinematics, `own_heading` catches up to
+    `target_heading` within one decision interval, so comparing against either gives the
+    same answer. Under SLOW kinematics, `own_heading` lags `target_heading` for many
+    decisions in a row -- repeatedly computing a fresh correction from the still-lagging
+    `own_heading` and applying it via turn_left/turn_right (which ADDS to `target_heading`,
+    by design, so genuinely new avoidance commands stack instead of being silently
+    absorbed while a turn is in progress) double-counts the same not-yet-completed turn
+    every decision, driving `target_heading` further away from the goal bearing forever.
+    Comparing against `target_heading` instead makes "follow the goal course" idempotent:
+    once the ship is ALREADY commanded toward the goal bearing, a repeat decision correctly
+    sees "on course, hold" instead of re-deriving a stale, escalating correction."""
     goal_brg, _ = bearing_and_range(own_x, own_y, goal_x, goal_y)
-    off_course = relative_bearing(own_heading, goal_brg)
+    reference_heading = target_heading if target_heading is not None else own_heading
+    off_course = relative_bearing(reference_heading, goal_brg)
     if abs(off_course) <= GOAL_DEADBAND_DEG:
         return "hold_course", None
     return ("turn_right" if off_course > 0 else "turn_left"), round(abs(off_course), 1)
 
 
 def goal_course_check_line(own_x: float, own_y: float, own_heading: float,
-                           goal_x: float, goal_y: float,
-                           max_turn_deg: float | None = None) -> str:
+                          goal_x: float, goal_y: float,
+                          max_turn_deg: float | None = None,
+                          target_heading: float | None = None) -> str:
     """The exact 'GOAL COURSE CHECK: ...' situation-report line -- computed identically
     regardless of caller (Basic Simulator's live narrate(), or a Track-2 training-data
     generator's deterministic narrative). See this module's docstring for why a SECOND,
@@ -534,13 +555,19 @@ def goal_course_check_line(own_x: float, own_y: float, own_heading: float,
     updated): when given and the needed correction exceeds it, states that fact plainly
     (2026-09-24 simplification: previously also instructed the model to "issue it now
     regardless" and "expect to repeat" -- moved that decision back to the model, it can
-    reason from the stated cap and its own kinematics facts same as any other action)."""
-    action, degrees = goal_course_action(own_x, own_y, own_heading, goal_x, goal_y)
+    reason from the stated cap and its own kinematics facts same as any other action).
+
+    `target_heading` (2026-09-26, opt-in): forwarded to goal_course_action() -- see its own
+    docstring for the heading-runaway bug this fixes under slow-responding kinematics
+    models. None (every existing Track-2/training-data caller) preserves old behaviour
+    byte-for-byte."""
+    action, degrees = goal_course_action(own_x, own_y, own_heading, goal_x, goal_y, target_heading)
     if action == "hold_course":
         return (f"GOAL COURSE CHECK: heading is ALREADY on the goal bearing (within "
                 f"{GOAL_DEADBAND_DEG:.0f} deg) -- no turn needed for the goal.")
     goal_brg, _ = bearing_and_range(own_x, own_y, goal_x, goal_y)
-    off_course = relative_bearing(own_heading, goal_brg)
+    reference_heading = target_heading if target_heading is not None else own_heading
+    off_course = relative_bearing(reference_heading, goal_brg)
     side = "starboard" if off_course > 0 else "port"
     line = (f"GOAL COURSE CHECK: heading is {abs(off_course):.0f} deg off the goal "
            f"bearing, to {side} -- to correct, use action \"{action}\" with "

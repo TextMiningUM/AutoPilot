@@ -46,7 +46,8 @@ def decide_action(mission: Mission, own: Vessel, targets: list[Vessel],
     decisive = at_risk[0] if at_risk else None
 
     if decisive is None:
-        action, degrees = goal_course_action(own.x, own.y, own.heading, mission.goal[0], mission.goal[1])
+        action, degrees = goal_course_action(own.x, own.y, own.heading, mission.goal[0], mission.goal[1],
+                                            target_heading=own.target_heading)
         encounter_rule, conduct_rule = "none", "none"
         reasoning = ("No contact meets real_risk() (CPA below safe distance AND TCPA "
                     "inside the risk horizon) -- following GOAL COURSE CHECK.")

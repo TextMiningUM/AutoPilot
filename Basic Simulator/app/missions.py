@@ -27,6 +27,12 @@ class Vessel:
     y: float
     heading: float
     speed: float
+    # Live-simulation-only bookkeeping (mirrors Simulation.target_heading, see its own
+    # docstring for why goal_course_action()/goal_course_check_line() need this to avoid
+    # a heading-runaway bug under slow-responding kinematics models) -- always None for
+    # a Vessel built directly from mission JSON (Track-2 generators, tests), so every
+    # existing static caller is completely unaffected.
+    target_heading: float | None = None
 
 
 @dataclass

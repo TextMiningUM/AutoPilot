@@ -80,6 +80,7 @@ class Simulation:
         # command (or the first CRUISING-status goal-tracking, see step()).
         self.target_heading: float = self.own.heading
         self.target_speed: float = self.own.speed
+        self.own.target_heading = self.target_heading  # see Vessel.target_heading's own docstring
         self.status: str = "CRUISING"  # deterministic AVOIDING/CRUISING, see _update_behaviour_status()
         # Only consulted when constraints.kinematics_model == "nomoto" -- see
         # _advance_own_kinematics_nomoto(). Kept even when unused so switching models
@@ -194,10 +195,12 @@ class Simulation:
     def turn_left(self, degrees: float = 10.0) -> None:
         degrees = max(0.0, degrees)
         self.target_heading = (self.target_heading - degrees) % 360
+        self.own.target_heading = self.target_heading
 
     def turn_right(self, degrees: float = 10.0) -> None:
         degrees = max(0.0, degrees)
         self.target_heading = (self.target_heading + degrees) % 360
+        self.own.target_heading = self.target_heading
 
     def set_speed(self, new_speed: float) -> None:
         self.target_speed = max(0.0, min(new_speed, self.constraints.max_speed_mps))

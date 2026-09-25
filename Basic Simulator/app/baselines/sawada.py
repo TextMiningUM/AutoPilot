@@ -72,7 +72,8 @@ def decide(mission: Mission, own: Vessel, targets: list[Vessel],
     decisive, cri = scored[0] if scored else (None, 0.0)
 
     if decisive is None or cri < CRI_ACT_THRESHOLD:
-        action, degrees = goal_course_action(own.x, own.y, own.heading, mission.goal[0], mission.goal[1])
+        action, degrees = goal_course_action(own.x, own.y, own.heading, mission.goal[0], mission.goal[1],
+                                            target_heading=own.target_heading)
         encounter_rule, conduct_rule = "none", "none"
         reasoning = (f"Collision Risk Index below the acting threshold ({cri:.2f} < "
                     f"{CRI_ACT_THRESHOLD}) -- following GOAL COURSE CHECK.")

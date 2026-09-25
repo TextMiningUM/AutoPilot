@@ -270,7 +270,11 @@ def narrate(mission: Mission, own: Vessel, targets: list[Vessel], cruise_speed_m
     # never about a contact, and spells out the exact action to copy when off course.
     # goal_course_check_line() (pipeline/oow_agent_spec.py) is the SAME function the
     # Track-2 training-data generators call -- never a second, independently-drifting copy.
-    lines.append(goal_course_check_line(own.x, own.y, own.heading, gx, gy, max_turn_deg))
+    # target_heading (own.target_heading, None for a static/non-simulated Vessel): fixes a
+    # heading-runaway bug under slow kinematics models (Nomoto) -- see that function's
+    # own docstring.
+    lines.append(goal_course_check_line(own.x, own.y, own.heading, gx, gy, max_turn_deg,
+                                        target_heading=own.target_heading))
     if own.speed > 0:
         eta = goal_rng / own.speed
         lines.append(f"At current speed, ETA to goal \u2248 {eta:.0f}s if heading straight there.")
