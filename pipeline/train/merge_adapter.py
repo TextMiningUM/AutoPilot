@@ -23,12 +23,22 @@ weights so the deployment stack is minimal.
 The trade-off: after merging you can't easily undo the adapter or swap it
 for a different one.  Keep the adapter directories around if you might.
 
-MEMORY NOTE
------------
-Merging dequantizes the base weights to fp16 briefly.  Qwen3-8B in fp16
-is about 16 GB.  This will spill into shared GPU/CPU memory on an 8 GB VRAM
-laptop; it works but is slow.  For faster merging, do it on a bigger GPU or
-in the cloud, then copy the merged directory to your laptop.
+QUANTIZATION-MATCHING NOTE (2026-09-25 fix)
+--------------------------------------------
+train_sft.py/train_dpo.py/train_reflection.py (and the live inference path in
+Basic Simulator/app/agents.py's _load_qwen()) ALL load the base model 4-bit
+NF4-quantized (BitsAndBytesConfig below) before training/applying any adapter --
+so every LoRA delta was learned as a correction on top of the QUANTIZED
+(dequantize(quantize_nf4(W))), not the true full-precision, base weights.
+Merging onto a full-precision bf16 base (the old behaviour here) silently
+merges the delta onto the WRONG reference point, since NF4 quantization is
+lossy -- confirmed empirically: a merge done that way produced a model that
+held normal general-chat ability but consistently failed the trained JSON-
+response-format task (100% parse errors) even though the untouched live
+adapter-chain path with the identical adapters worked correctly. Loading the
+base in the SAME 4-bit config here (then merge_and_unload(), which PEFT
+handles by dequantizing/merging/producing plain bf16 tensors) reproduces
+exactly what the live chain path does, just once instead of on every load.
 
 USAGE
 -----
@@ -42,7 +52,7 @@ import os, argparse, shutil
 from pathlib import Path
 
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import PeftModel
 
 from core import AgentPaths, add_dry_run_arg, write_stub_output
@@ -110,33 +120,36 @@ def main() -> None:
         shutil.rmtree(out)
     out.mkdir(parents=True)
 
-    # --- Load base in fp16 (needed for merging; 4-bit doesn't merge cleanly) ---
-    print(f"Loading base {MODEL_ID} in bf16 (this uses ~14 GB — spill into shared memory OK)...")
-    offload_dir = W / "_offload"
-    offload_dir.mkdir(exist_ok=True)
+    # --- Load base 4-bit NF4-quantized: MUST match training's BitsAndBytesConfig (see
+    # QUANTIZATION-MATCHING NOTE above) so each adapter merges onto the same reference
+    # point it was actually trained against. merge_and_unload() dequantizes+merges+
+    # returns plain bf16 tensors, so the FINAL saved model is still full bf16 precision --
+    # only the merge computation itself now matches training.
+    print(f"Loading base {MODEL_ID} 4-bit NF4-quantized (matches training)...")
+    bnb = BitsAndBytesConfig(
+        load_in_4bit=True, bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
+    )
     model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID,
-        torch_dtype=torch.bfloat16,
-        device_map="auto",
-        low_cpu_mem_usage=True,
-        offload_folder=str(offload_dir),
+        MODEL_ID, quantization_config=bnb, device_map={"": 0} if torch.cuda.is_available() else "cpu",
+        torch_dtype=torch.bfloat16, attn_implementation="sdpa",
     )
     tok = AutoTokenizer.from_pretrained(MODEL_ID)
 
     # --- Apply adapters in training order ---
     if args.sft:
         print(f"Applying SFT adapter: {SFT_ADAPTER}")
-        model = PeftModel.from_pretrained(model, str(SFT_ADAPTER), offload_folder=str(offload_dir))
+        model = PeftModel.from_pretrained(model, str(SFT_ADAPTER))
         model = model.merge_and_unload()
         print("  merged.")
     if args.dpo:
         print(f"Applying DPO adapter: {DPO_ADAPTER}")
-        model = PeftModel.from_pretrained(model, str(DPO_ADAPTER), offload_folder=str(offload_dir))
+        model = PeftModel.from_pretrained(model, str(DPO_ADAPTER))
         model = model.merge_and_unload()
         print("  merged.")
     if args.reflect:
         print(f"Applying reflection adapter: {REFL_ADAPTER}")
-        model = PeftModel.from_pretrained(model, str(REFL_ADAPTER), offload_folder=str(offload_dir))
+        model = PeftModel.from_pretrained(model, str(REFL_ADAPTER))
         model = model.merge_and_unload()
         print("  merged.")
 
