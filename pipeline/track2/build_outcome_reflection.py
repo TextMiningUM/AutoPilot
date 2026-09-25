@@ -4,9 +4,10 @@ build_outcome_reflection.py -- Track 2 outcome-tied reflection triples
 ================================================================================
 
 Same outcome-driven mining as build_outcome_dpo.py (collision / CPA-violation / goal-
-not-reached run verdicts -- see that module's docstring for the full rationale and the
-deterministic ground-truth machinery both scripts share), reused here for reflection
-instead of preference pairs:
+not-reached run verdicts, PLUS the verdict-independent "rule13_mislabel" citation-bias
+category -- see that module's docstring for the full rationale and the deterministic
+ground-truth machinery both scripts share), reused here for reflection instead of
+preference pairs:
 
   draft    = the model's own REAL wrong decision from a mined checkpoint.
   critique = states the same two check questions every time (does a real collision risk
@@ -26,7 +27,7 @@ import json
 
 from core import AgentPaths, CONTAM_THRESH, EMBEDDER_MODEL
 from pipeline.track2.build_measurement_dpo import FIXED_QUESTION, build_rejected, load_gold_texts
-from pipeline.track2.build_outcome_dpo import iter_run_paths, mined_events, CURRENT_PROMPT_HASH
+from pipeline.track2.build_outcome_dpo import iter_run_paths, mined_events, CURRENT_PROMPT_VERSION
 
 paths = AgentPaths.oow()
 CACHE = paths.cache_dir
@@ -40,6 +41,15 @@ def build_critique(event: dict) -> str:
             "Check 1 (does a real collision risk exist?): NO -- no contact is below the safe "
             "passing distance. Check 2 (does the action address the situation?): NO -- the draft "
             f"does not correct heading toward the goal the way GOAL COURSE CHECK requires."
+        )
+    if outcome == "rule13_mislabel":
+        true_kind = "head-on" if decisive["expected_encounter_rule"] == "Rule 14" else "crossing"
+        return (
+            f"Check 1 (does a real collision risk exist?): YES -- the closest contact's CPA is "
+            f"{decisive['cpa_m']:.0f} m with TCPA {decisive['tcpa_s']:.0f} s. Check 2 (is the cited "
+            f"rule correct?): NO -- the draft cites Rule 13 (overtaking), but this is actually a "
+            f"{true_kind} encounter -- {decisive['expected_encounter_rule']}/"
+            f"{decisive['expected_conduct_rule']} applies instead."
         )
     return (
         f"Check 1 (does a real collision risk exist?): YES -- the closest contact's CPA is "
@@ -61,7 +71,7 @@ def mine_rows() -> list[dict]:
         if "checkpoints" not in data or "evaluation" not in data:
             continue
         n_scanned += 1
-        if data.get("params", {}).get("prompt_hash") != CURRENT_PROMPT_HASH:
+        if data.get("params", {}).get("prompt_version") != CURRENT_PROMPT_VERSION:
             n_stale += 1
             continue
         system_prompt = data.get("params", {}).get("system_prompt", "")

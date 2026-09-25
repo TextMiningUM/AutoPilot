@@ -54,6 +54,46 @@ SYSTEM = {
 }[paths.domain]
 
 
+def _channels_sentence(channels: list[str]) -> str:
+    """Renders trace["channels"] -- VHF channel numbers, but for OOW this field instead
+    holds COLREG rule citations already formatted like "Rule 15" (see extract_reasoning.py's
+    own docstring) -- rendering those with a "Channel " prefix produced nonsensical
+    "Channel Rule 15" text, so this is domain-aware rather than always assuming VHF."""
+    if not channels:
+        return ""
+    if paths.domain == "OOW":
+        joined = channels[0] if len(channels) == 1 else ", ".join(channels[:-1]) + f" and {channels[-1]}"
+        return f"This involves {joined}."
+    chs = [c if c.lower().startswith("channel") else f"Channel {c}" for c in channels]
+    joined = chs[0] if len(chs) == 1 else ", ".join(chs[:-1]) + f" and {chs[-1]}"
+    return f"Use {joined}."
+
+
+def _prowords_sentence(prowords: list[str]) -> str:
+    """Renders trace["prowords_used"] -- VHF prowords (MAYDAY, OVER, ...), but for OOW this
+    field instead holds vessel-role/situational tags like "give-way vessel" (see
+    extract_reasoning.py's own docstring) -- those are not prowords, so "Use the prowords
+    give-way vessel" is nonsensical; domain-aware rendering avoids that."""
+    if not prowords:
+        return ""
+    if paths.domain == "OOW":
+        joined = prowords[0] if len(prowords) == 1 else ", ".join(prowords[:-1]) + f" and {prowords[-1]}"
+        return f"This concerns the {joined} obligations."
+    return f"Use the prowords {', '.join(prowords)} as appropriate."
+
+
+def _channels_dropped_desc(channels: list[str]) -> str:
+    if paths.domain == "OOW":
+        return f"the applicable COLREG rule citations ({', '.join(channels)})"
+    return f"the channel numbers ({', '.join(channels)})"
+
+
+def _prowords_dropped_desc(prowords: list[str]) -> str:
+    if paths.domain == "OOW":
+        return f"the applicable vessel-role context ({', '.join(prowords)})"
+    return f"the required prowords ({', '.join(prowords)})"
+
+
 def full_answer(trace: dict) -> str:
     """Fluent, natural-language answer (no 'Label: value.' dumps)."""
     sentences: list[str] = []
@@ -66,14 +106,14 @@ def full_answer(trace: dict) -> str:
         sentences.append(steps_sentence)
 
     channels = [str(c) for c in (trace.get("channels") or [])]
-    if channels:
-        chs = [c if c.lower().startswith("channel") else f"Channel {c}" for c in channels]
-        joined = chs[0] if len(chs) == 1 else ", ".join(chs[:-1]) + f" and {chs[-1]}"
-        sentences.append(f"Use {joined}.")
+    channels_sentence = _channels_sentence(channels)
+    if channels_sentence:
+        sentences.append(channels_sentence)
 
     prowords = trace.get("prowords_used") or []
-    if prowords:
-        sentences.append(f"Use the prowords {', '.join(prowords)} as appropriate.")
+    prowords_sentence = _prowords_sentence(prowords)
+    if prowords_sentence:
+        sentences.append(prowords_sentence)
 
     warnings = trace.get("warnings") or []
     if warnings:
@@ -109,30 +149,33 @@ def draft_answer(trace: dict, mode: str) -> tuple[str, str]:
         dropped_p = procs[drop_idx]
         sentences.append(_steps_sentence(kept))
         dropped = f"the step '{_clean(dropped_p.get('action', ''))}'"
-        if channels:
-            chs = [c if c.lower().startswith("channel") else f"Channel {c}" for c in channels]
-            sentences.append(f"Use {chs[0] if len(chs) == 1 else ', '.join(chs[:-1]) + f' and {chs[-1]}'}.")
-        if prowords:
-            sentences.append(f"Use the prowords {', '.join(prowords)} as appropriate.")
+        channels_sentence = _channels_sentence(channels)
+        if channels_sentence:
+            sentences.append(channels_sentence)
+        prowords_sentence = _prowords_sentence(prowords)
+        if prowords_sentence:
+            sentences.append(prowords_sentence)
     elif mode == "skip_channels" and channels and procs:
         sentences.append(_steps_sentence(procs))
-        dropped = f"the channel numbers ({', '.join(channels)})"
-        if prowords:
-            sentences.append(f"Use the prowords {', '.join(prowords)} as appropriate.")
+        dropped = _channels_dropped_desc(channels)
+        prowords_sentence = _prowords_sentence(prowords)
+        if prowords_sentence:
+            sentences.append(prowords_sentence)
     elif mode == "skip_warning" and warnings and procs:
         sentences.append(_steps_sentence(procs))
-        if channels:
-            chs = [c if c.lower().startswith("channel") else f"Channel {c}" for c in channels]
-            sentences.append(f"Use {chs[0] if len(chs) == 1 else ', '.join(chs[:-1]) + f' and {chs[-1]}'}.")
-        if prowords:
-            sentences.append(f"Use the prowords {', '.join(prowords)} as appropriate.")
+        channels_sentence = _channels_sentence(channels)
+        if channels_sentence:
+            sentences.append(channels_sentence)
+        prowords_sentence = _prowords_sentence(prowords)
+        if prowords_sentence:
+            sentences.append(prowords_sentence)
         dropped = f"the safety warning ('{_clean(warnings[0])}')"
     elif mode == "skip_proword" and prowords and procs:
         sentences.append(_steps_sentence(procs))
-        if channels:
-            chs = [c if c.lower().startswith("channel") else f"Channel {c}" for c in channels]
-            sentences.append(f"Use {chs[0] if len(chs) == 1 else ', '.join(chs[:-1]) + f' and {chs[-1]}'}.")
-        dropped = f"the required prowords ({', '.join(prowords)})"
+        channels_sentence = _channels_sentence(channels)
+        if channels_sentence:
+            sentences.append(channels_sentence)
+        dropped = _prowords_dropped_desc(prowords)
     else:
         return "", ""
     return " ".join(s for s in sentences if s).strip(), dropped

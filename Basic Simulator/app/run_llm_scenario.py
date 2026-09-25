@@ -55,7 +55,7 @@ from app.narrate import (
     contact_line, recommended_decision_interval, recommended_max_steps,
     live_decision_interval, transit_step_cap,
 )
-from pipeline.oow_agent_spec import constraint_line, derive_risk_horizon_s
+from pipeline.oow_agent_spec import PROMPT_VERSION, constraint_line, derive_risk_horizon_s
 
 # Screening-set-B audit follow-up (2026-09-23): identifies which PROMPT VERSION a run was
 # generated under (SYSTEM_OOW_AGENT text + constraint_line()'s own source, which renders
@@ -66,11 +66,8 @@ from pipeline.oow_agent_spec import constraint_line, derive_risk_horizon_s
 # happens to sample.
 _PROMPT_HASH = hashlib.sha256(
     (SYSTEM_OOW_AGENT + inspect.getsource(constraint_line)).encode("utf-8")).hexdigest()
-# Human-readable companion to _PROMPT_HASH -- bump whenever SYSTEM_OOW_AGENT/
-# constraint_line() wording changes, so an audit report or a human skimming params can
-# tell runs apart without diffing hashes. 2026-09-24: uncapped turn orders (change 1) +
-# adaptive decision cadence's "next decision point" fact (change 3).
-PROMPT_VERSION = "2026-09-24-uncapped-turn-adaptive-cadence"
+# PROMPT_VERSION itself now lives in pipeline/oow_agent_spec.py (single source of truth,
+# importable from training-data pipeline scripts without pulling in torch/transformers).
 
 
 def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "default",

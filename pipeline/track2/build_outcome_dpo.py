@@ -33,6 +33,15 @@ correct action can be derived (Rule 13 overtaking, where either side is acceptab
 skipped rather than guessed) -- fewer, trustworthy pairs are preferred over inventing a
 possibly-wrong "chosen" answer.
 
+A FOURTH, independent category (2026-09-25, user-requested option "b" -- data-side only,
+no live prompt change): "rule13_mislabel" -- scans EVERY checkpoint of EVERY run
+(regardless of verdict, unlike the 3 outcome classes above) for a decision that cites
+"Rule 13" while the true geometric encounter is actually head-on/crossing (Rule 14/15) --
+a real, measured citation bias (853 "Rule 13" vs 35 "Rule 14" citations across one full
+sweep, see repo memory). Complements rather than duplicates the outcome classes above:
+those already fix the citation whenever they ALSO fix a wrong action; this covers the
+remaining gap where the action was already fine but the citation alone was wrong.
+
 Ground truth is recomputed independently from the run's own saved trajectory (never
 trusts the model's self-reported encounter_rule/conduct_rule/cpa/tcpa), reusing
 app.evaluation._ground_truth_at_checkpoint -- the SAME machinery the live compliance
@@ -55,15 +64,12 @@ USAGE
 """
 from __future__ import annotations
 
-import hashlib
-import inspect
 import json
 import sys
 
 from core import AgentPaths
 from pipeline.oow_agent_spec import (
-    SYSTEM_OOW_AGENT, STAND_ON_TCPA_S, bearing_and_range, constraint_line,
-    goal_course_action, relative_bearing,
+    PROMPT_VERSION, STAND_ON_TCPA_S, bearing_and_range, goal_course_action, relative_bearing,
 )
 from pipeline.track2.build_measurement_dpo import (
     FIXED_QUESTION, build_rejected, filter_contamination, load_gold_texts,
@@ -88,11 +94,13 @@ FAIL_COLLISION = "FAIL -- collision occurred"
 CPA_VIOLATION = "PASS_WITH_CPA_VIOLATION"
 FAIL_GOAL = "FAIL -- did not reach the goal"
 
-# The SAME hash app/run_llm_scenario.py stamps into every log's params.prompt_hash --
-# recomputed here (rather than imported from run_llm_scenario.py/app.agents, which pull
-# in torch/transformers) since oow_agent_spec.py is deliberately dependency-free.
-CURRENT_PROMPT_HASH = hashlib.sha256(
-    (SYSTEM_OOW_AGENT + inspect.getsource(constraint_line)).encode("utf-8")).hexdigest()
+# Gate on the coarser, hand-maintained PROMPT_VERSION (pipeline.oow_agent_spec) rather than
+# run_llm_scenario.py's byte-exact prompt_hash -- a pure prose clarification bumps the hash
+# but NOT the version, and doesn't change the deterministic ground truth this script mines
+# against, so gating on the hash would silently discard perfectly good mistakes (confirmed:
+# it discarded an entire 144-run sweep over one CPA/TCPA wording tweak). Older logs written
+# before params.prompt_version existed at all (missing key -> None) are correctly excluded.
+CURRENT_PROMPT_VERSION = PROMPT_VERSION
 
 
 def iter_run_paths():
@@ -157,25 +165,78 @@ def build_goal_chosen(action: str, degrees: float | None, off_course_deg: float)
             "reasoning": reasoning}
 
 
+def _build_constraints(run: dict) -> VesselConstraints:
+    params = run.get("params", {})
+    own_ship = run.get("mission", {}).get("own_ship", {})
+    return VesselConstraints(time_step_s=params.get("dt", 10.0), cruise_speed_mps=own_ship.get("speed", 10.0))
+
+
+def build_rule13_chosen(decisive: dict, action: str, degrees: float | None) -> dict:
+    true_kind = "head-on" if decisive["expected_encounter_rule"] == "Rule 14" else "crossing"
+    reasoning = (
+        f"The closest contact's geometry is a {true_kind} encounter, not overtaking -- "
+        f"{decisive['expected_encounter_rule']}/{decisive['expected_conduct_rule']} applies, not Rule 13."
+    )
+    return {"action": action, "degrees": degrees,
+            "encounter_rule": decisive["expected_encounter_rule"],
+            "conduct_rule": decisive["expected_conduct_rule"], "reasoning": reasoning}
+
+
+def rule13_mislabel_events(run: dict, trajectory: list[dict], constraints: VesselConstraints) -> list[dict]:
+    """The 4th, verdict-INDEPENDENT category (see module docstring) -- every checkpoint in
+    EVERY run, regardless of outcome, where a wrongly-cited "Rule 13" can be swapped for the
+    true geometric rule."""
+    events = []
+    for cp in run.get("checkpoints", []):
+        decision = cp.get("decision") or {}
+        if decision.get("encounter_rule") != "Rule 13" and decision.get("conduct_rule") != "Rule 13":
+            continue
+        gt = _ground_truth_at_checkpoint(trajectory, cp["time"], "own_ship",
+                                         constraints.min_cpa_m, constraints.max_rudder_angle_deg)
+        contacts_by_name = {c["contact"]: c for c in gt["contacts"]}
+        decisive = contacts_by_name.get(gt["decisive_contact"]) if gt["decisive_contact"] else None
+        if decisive is None or decisive["band"] not in ("acute", "early"):
+            continue
+        if decisive["expected_encounter_rule"] not in ("Rule 14", "Rule 15"):
+            continue  # Rule 13 genuinely correct here (or unclassified) -- not a mislabel
+        if (decision.get("encounter_rule") == decisive["expected_encounter_rule"]
+                and decision.get("conduct_rule") == decisive["expected_conduct_rule"]):
+            continue  # already cited correctly elsewhere in the decision -- nothing to fix
+        # Keep the model's OWN action if it's already adequate for an acute contact -- only
+        # the citation was wrong; otherwise fall back to the same deterministic acute answer
+        # the collision/cpa_violation categories above use.
+        action, degrees = decision.get("action"), decision.get("degrees")
+        if decisive["band"] == "acute":
+            expected = expected_acute_response(decisive, constraints)
+            if expected is not None and action not in (expected[0], "stop"):
+                action, degrees = expected
+        chosen = build_rule13_chosen(decisive, action, degrees)
+        events.append({"cp": cp, "outcome": "rule13_mislabel", "chosen": chosen, "decisive": decisive})
+    return events
+
+
 def mined_events(run: dict) -> list[dict]:
     """Core mining logic shared by this script (DPO pairs) and
     build_outcome_reflection.py (reflection triples): one entry per checkpoint whose
-    actual decision is a confirmed, deterministically-detectable mistake given the run's
-    real outcome. Each entry: {"cp", "outcome" ("collision"/"cpa_violation"/
-    "goal_not_reached"), "chosen", "decisive" (contact ground truth, or None for the
-    goal-not-reached class)}."""
-    ev = run.get("evaluation")
-    if not ev or ev.get("verdict") not in (FAIL_COLLISION, CPA_VIOLATION, FAIL_GOAL):
-        return []
+    actual decision is a confirmed, deterministically-detectable mistake. Each entry:
+    {"cp", "outcome" ("collision"/"cpa_violation"/"goal_not_reached"/"rule13_mislabel"),
+    "chosen", "decisive" (contact ground truth, or None for the goal-not-reached class)}."""
     trajectory = run.get("trajectory") or []
     if not trajectory:
         return []
-    params = run.get("params", {})
+    constraints = _build_constraints(run)
+    events = _verdict_gated_events(run, trajectory, constraints)
+    events += rule13_mislabel_events(run, trajectory, constraints)
+    return events
+
+
+def _verdict_gated_events(run: dict, trajectory: list[dict], constraints: VesselConstraints) -> list[dict]:
+    """Outcome classes 1-3 (see module docstring) -- gated on the run's own verdict."""
+    ev = run.get("evaluation")
+    if not ev or ev.get("verdict") not in (FAIL_COLLISION, CPA_VIOLATION, FAIL_GOAL):
+        return []
     mission = run.get("mission", {})
-    own_ship = mission.get("own_ship", {})
     goal = mission.get("goal", {})
-    constraints = VesselConstraints(time_step_s=params.get("dt", 10.0),
-                                    cruise_speed_mps=own_ship.get("speed", 10.0))
     verdict = ev["verdict"]
     events = []
     for cp in run.get("checkpoints", []):
@@ -250,7 +311,7 @@ def mine_all() -> list[dict]:
         if "checkpoints" not in data or "evaluation" not in data:
             continue
         n_scanned += 1
-        if data.get("params", {}).get("prompt_hash") != CURRENT_PROMPT_HASH:
+        if data.get("params", {}).get("prompt_version") != CURRENT_PROMPT_VERSION:
             n_stale += 1
             continue
         all_pairs.extend(mine_run(data, p.name))
