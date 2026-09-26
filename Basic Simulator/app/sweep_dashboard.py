@@ -20,12 +20,14 @@ Run (separate terminal/port from the main app):
 from __future__ import annotations
 import hashlib
 import json
+import statistics
 import subprocess
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 APP_DIR = Path(__file__).resolve().parent
@@ -39,6 +41,7 @@ from app.llm_runs import parse_run_filename
 from app.missions import list_mission_ids, load_mission
 from app.model_variants import MODEL_VARIANTS, variant_label
 from app.simulation import VesselConstraints
+from app.baselines import BASELINE_CONFIGS
 from core import review_path, safe_write_jsonl
 
 # Kept as a plain literal (matching app.agents.MODEL_CONFIGS's keys) instead of importing
@@ -762,8 +765,438 @@ def _render_audit_tab() -> None:
         st.caption("Nog niet vergeleken -- klik op 'Audit draaien'.")
 
 
-tab_sweep, tab_audit = st.tabs(["Sweep", "Audit"])
+# ─────────────────────────────────────────────────────────────────────────────
+# Comparison tab -- deterministic baselines (app/baselines/) vs. the best LLM-agent run
+# per mission, on the SAME missions, scored with the SAME evaluate_run.py composite as
+# every other tab here. Read-only: only scans+scores existing run logs, never runs
+# anything itself (unlike the Audit tab's subprocess call).
+# ─────────────────────────────────────────────────────────────────────────────
+def _available_baseline_tags() -> list[str]:
+    tags = {parse_run_filename(p)["tag"] for p in RUNS_DIR.glob("*.json")
+           if not p.name.startswith("_sweep_") and parse_run_filename(p)["config"] in BASELINE_CONFIGS}
+    return sorted(tags)
+
+
+def _scan_baseline_runs(mission_id: str, tag: str) -> dict[str, dict]:
+    """{config: scored_row} for every deterministic baseline run log matching this
+    mission_id + tag (see app.baselines.BASELINE_CONFIGS) -- same on-disk scan+scoring
+    convention as _scan_mission_runs(), just keyed by config alone since baselines have no
+    model-variant axis (weights is always the fixed literal "deterministic", see
+    app.run_baseline_scenario.WEIGHTS)."""
+    rows: dict[str, dict] = {}
+    for path in RUNS_DIR.glob(f"{mission_id}__*.json"):
+        parsed = parse_run_filename(path)
+        if parsed["config"] not in BASELINE_CONFIGS or parsed["tag"] != tag:
+            continue
+        try:
+            log = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        rows[parsed["config"]] = _score_log(mission_id, log, tag, path, [], parsed["weights"])
+    return rows
+
+
+_FULL_GREEN, _NEAR_GREEN = "#2ecc71", "#a9dfbf"
+_FULL_RED, _NEAR_RED = "#e74c3c", "#f5b7b1"
+
+
+def _tiered_highlight(s: pd.Series, band_frac: float = 0.05, higher_is_better: bool = True) -> list[str]:
+    """Per-row/column text-color tiers: the single BEST value gets full green, the single
+    WORST gets full red, and any OTHER value within `band_frac` (default 5%) of the
+    row/column's range (max-min) from either extreme gets a LIGHTER shade of the same
+    color -- so a near-tie for best/worst is visually distinguishable from the middle of
+    the pack, not just the single winner/loser. `higher_is_better=False` flips which
+    extreme counts as "best" -- e.g. for POINTS tables (regatta-style ranking below),
+    where a LOWER number is the better placing."""
+    vals = s.dropna()
+    if vals.empty:
+        return ["" for _ in s]
+    vmin, vmax = float(vals.min()), float(vals.max())
+    band = band_frac * (vmax - vmin)
+    styles = []
+    for v in s:
+        if pd.isna(v):
+            styles.append("")
+            continue
+        is_best = (v >= vmax) if higher_is_better else (v <= vmin)
+        is_worst = (v <= vmin) if higher_is_better else (v >= vmax)
+        near_best = (v >= vmax - band) if higher_is_better else (v <= vmin + band)
+        near_worst = (v <= vmin + band) if higher_is_better else (v >= vmax - band)
+        if is_best:
+            styles.append(f"color:{_FULL_GREEN};font-weight:700;")
+        elif is_worst:
+            styles.append(f"color:{_FULL_RED};font-weight:700;")
+        elif near_best:
+            styles.append(f"color:{_NEAR_GREEN};font-weight:600;")
+        elif near_worst:
+            styles.append(f"color:{_NEAR_RED};font-weight:600;")
+        else:
+            styles.append("")
+    return styles
+
+
+
+@st.cache_data(ttl=30, show_spinner="Scanning baseline + LLM run logs...")
+def _load_comparison_data(tag: str) -> tuple[list[dict], dict[tuple[str, str], dict], dict[str, str]]:
+    """Scans+scores every mission's baseline and LLM run logs ONCE, cached for 30s --
+    the per-mission grid used to re-run this full 35-mission scan on EVERY interaction
+    (including a slow, glitchy native cell-click selection), making even a slider drag
+    noticeably slow. A 30s TTL means new runs written while the dashboard is open still
+    show up within half a minute, without re-scanning on every widget interaction."""
+    gen_at_index = _generated_at_index()
+    baseline_configs = list(BASELINE_CONFIGS)
+    detail_lookup: dict[tuple[str, str], dict] = {}
+    best_llm_label: dict[str, str] = {}
+    table_rows = []
+    for mission_id in MISSIONS:
+        base_rows = _scan_baseline_runs(mission_id, tag)
+        llm_rows = _scan_mission_runs(mission_id, gen_at_index)
+        row_out = {"mission": mission_id}
+        for cfg in baseline_configs:
+            r = base_rows.get(cfg)
+            short = cfg.replace("baseline_", "")
+            row_out[short] = r["composite_score"] if r else None
+            if r:
+                detail_lookup[(mission_id, short)] = r
+        if llm_rows:
+            best = max(llm_rows.values(), key=lambda r: r["composite_score"])
+            row_out["best_llm"] = best["composite_score"]
+            detail_lookup[(mission_id, "best_llm")] = best
+            best_llm_label[mission_id] = f"{best['config']} / {best['model_label']}"
+        else:
+            row_out["best_llm"] = None
+        table_rows.append(row_out)
+    return table_rows, detail_lookup, best_llm_label
+
+
+def _render_comparison_tab() -> None:
+    st.subheader("\u2696\uFE0F Baselines vs. LLM agent")
+    st.caption("Compares the deterministic baselines (`app/baselines/` -- Rule tree, "
+              "Velocity Obstacle, Artificial Potential Field, Dynamic Window Approach, "
+              "MPC, Sawada et al. reconstruction) against the best LLM-agent run per "
+              "mission, on the same 35 missions and the same `evaluate_run.py` composite "
+              "score as the Sweep tab. Read-only -- runs nothing itself, only scans "
+              "existing run logs (see `app.run_baseline_scenario` to generate new "
+              "baseline runs). Pick a mission + system below the grid and click for its "
+              "full evaluation breakdown.")
+
+    baseline_tags = _available_baseline_tags()
+    if not baseline_tags:
+        st.info("No baseline runs found yet -- run e.g. `python -m "
+               "app.run_baseline_scenario` first (see Basic Simulator/app/baselines/).")
+        return
+    default_idx = baseline_tags.index("baseline") if "baseline" in baseline_tags else 0
+    tag = st.selectbox("Baseline tag", baseline_tags, index=default_idx, key="comparison_baseline_tag")
+
+    baseline_configs = list(BASELINE_CONFIGS)
+    system_keys = baseline_configs + ["best_llm"]
+    system_labels = {**BASELINE_CONFIGS, "best_llm": "Best LLM-agent run per mission (any config/variant)"}
+    short_to_system = {cfg.replace("baseline_", ""): cfg for cfg in baseline_configs}
+    short_to_system["best_llm"] = "best_llm"
+    axis_names = ["safety", "compliance", "explanation", "temporal", "spatial", "manoeuvre"]
+
+    table_rows, detail_lookup, best_llm_label = _load_comparison_data(tag)
+    # Per-system aggregates (n/reached/collision/composite/axes), derived from the SAME
+    # cached detail_lookup -- kept out of the cached function itself so a code change to
+    # this aggregation doesn't require waiting out the cache TTL to see effect.
+    agg = {k: {"n": 0, "reached": 0, "collision": 0, "composite": [], "axes": []} for k in system_keys}
+    for (mission_id, short), r in detail_lookup.items():
+        cfg = short_to_system.get(short)
+        if cfg is None:
+            continue
+        a = agg[cfg]
+        a["n"] += 1
+        a["composite"].append(r["composite_score"])
+        a["axes"].append(_axis_cols(r))
+        a["reached"] += int(bool(r["temporal"]["arrived"]))
+        a["collision"] += int(not r["safety"]["passed"])
+
+
+    st.markdown("### Summary")
+    summary_rows = []
+    for key in system_keys:
+        a = agg[key]
+        mean_c = sum(a["composite"]) / len(a["composite"]) if a["composite"] else None
+        std_c = statistics.pstdev(a["composite"]) if len(a["composite"]) > 1 else (0.0 if a["composite"] else None)
+        row = {
+            "system": system_labels[key], "n_missions": a["n"], "reached_goal": a["reached"],
+            "collision": a["collision"],
+            "mean_composite": round(mean_c, 3) if mean_c is not None else None,
+            "std_composite": round(std_c, 3) if std_c is not None else None,
+        }
+        for axis in axis_names:
+            vals = [ax[axis] for ax in a["axes"] if ax.get(axis) is not None]
+            row[f"mean_{axis}"] = round(sum(vals) / len(vals), 3) if vals else None
+        summary_rows.append(row)
+    summary_df = pd.DataFrame(summary_rows).set_index("system")
+    numeric_summary_cols = [c for c in summary_df.columns if c != "n_missions"]
+    count_cols = ["reached_goal", "collision"]
+    float_cols = [c for c in numeric_summary_cols if c not in count_cols]
+    summary_styler = (summary_df.style
+                      .format("{:.3f}", subset=float_cols, na_rep="\u2014")
+                      .format("{:.0f}", subset=count_cols, na_rep="\u2014")
+                      .apply(_tiered_highlight, axis=0, subset=numeric_summary_cols))
+    st.dataframe(summary_styler, width="stretch")
+    st.caption("Per column: greenest = highest, reddest = lowest (lighter shade = within "
+              "5% of that extreme) -- except \"collision\", where green means the MOST "
+              "collisions (worst), not best.")
+
+    st.markdown("### Strengths / weaknesses per algorithm (relative to the other techniques)")
+    # Per-axis MEAN per system, then RANK systems against each other on that SAME axis --
+    # a system's "strength" is the axis where it ranks best among the OTHER systems, not
+    # just the axis where it happens to score highest against its OWN other axes (the
+    # previous version compared each algorithm only to itself, e.g. "MPC is better at
+    # safety than at manoeuvre" -- true but useless for picking a technique, since it never
+    # said how MPC's safety compares to VO's or the LLM's safety).
+    axis_system_means: dict[str, dict[str, float]] = {axis: {} for axis in axis_names}
+    for key in system_keys:
+        a = agg[key]
+        for axis in axis_names:
+            vals = [ax[axis] for ax in a["axes"] if ax.get(axis) is not None]
+            if vals:
+                axis_system_means[axis][key] = sum(vals) / len(vals)
+    axis_ranks: dict[str, dict[str, int]] = {}
+    axis_field_avg: dict[str, float] = {}
+    for axis, means_by_system in axis_system_means.items():
+        if not means_by_system:
+            continue
+        ordered = sorted(means_by_system.items(), key=lambda kv: kv[1], reverse=True)
+        axis_ranks[axis] = {sys_key: rank + 1 for rank, (sys_key, _) in enumerate(ordered)}
+        axis_field_avg[axis] = sum(means_by_system.values()) / len(means_by_system)
+
+    for key in system_keys:
+        per_axis = {axis: (axis_ranks[axis][key], axis_system_means[axis][key])
+                   for axis in axis_names if axis in axis_ranks and key in axis_ranks[axis]}
+        if not per_axis:
+            continue
+        best_axis = min(per_axis, key=lambda ax: per_axis[ax][0])   # rank 1 = best
+        worst_axis = max(per_axis, key=lambda ax: per_axis[ax][0])  # highest rank = worst
+        best_rank, best_val = per_axis[best_axis]
+        worst_rank, worst_val = per_axis[worst_axis]
+        st.markdown(
+            f"- **{system_labels[key]}**: relatively strongest at *{best_axis}* "
+            f"(ranks #{best_rank}/{len(axis_ranks[best_axis])}, {best_val:.2f} vs. field "
+            f"average {axis_field_avg[best_axis]:.2f}), relatively weakest at *{worst_axis}* "
+            f"(ranks #{worst_rank}/{len(axis_ranks[worst_axis])}, {worst_val:.2f} vs. field "
+            f"average {axis_field_avg[worst_axis]:.2f}).")
+
+    st.markdown("### Per mission")
+    default_rows = min(len(table_rows), 20)
+    visible_rows = st.slider(
+        "Table height (visible rows)", min_value=5, max_value=len(table_rows),
+        value=default_rows, key="per_mission_table_rows",
+        help="Drag to show more missions at once, or shrink for a smaller screen.",
+    )
+    row_height_px, header_height_px = 35, 38  # Streamlit's default dataframe row/header height
+    per_mission_df = pd.DataFrame(table_rows).set_index("mission")
+    per_mission_styler = (per_mission_df.style
+                          .format("{:.3f}", na_rep="\u2014")
+                          .apply(_tiered_highlight, axis=1))
+    # Plain, non-interactive grid (no on_select) -- native cell-click selection was both
+    # slow (triggered a full script rerun+rescan per click) and glitchy (a second click on
+    # an already-selected cell could enter glide-data-grid's inline text-edit mode, even
+    # though this dataframe is read-only). A dedicated mission/system picker below is a
+    # faster, unambiguous replacement: no full-grid rerun, no accidental edit state.
+    st.dataframe(per_mission_styler, width="stretch", hide_index=False,
+                height=header_height_px + visible_rows * row_height_px)
+    st.caption("Per row (mission): greenest cell = best system for that mission, reddest = worst "
+              "(lighter shade = within 5% of that extreme) -- usually the LLM agent on the "
+              "green end.")
+
+    st.markdown("### Ranking (regatta-style: 1st place = 1 point, lower total = better)")
+    st.caption("Sailing/regatta \"low-point\" scoring using real World Sailing outcome "
+              "codes: finishers (reached the goal, no genuine right-of-way violation, no "
+              "collision) are ranked by composite score among themselves (1st = 1 point, "
+              "2nd = 2, ...; ties share the better rank). **DNF** (Did Not Finish), **DSQ** "
+              "(Disqualified -- a genuine give-way/passing-side violation, see below), and "
+              "**DNE** (Disqualification Not Excludable -- an actual collision) all score "
+              "the SAME fixed points value: (number of systems compared) + 1 -- always "
+              "worse than every finisher, matching the standard regatta convention that "
+              "non-finishers share one \"worse than the fleet\" score rather than an "
+              "escalating penalty. This is an EXPLICIT outcome-based tiering (never "
+              "trusting the raw composite score's own 0.0/\u22640.2 gates to sort these "
+              "correctly on their own). No run at all for a mission counts as a DNF too "
+              "(never attempted = never finished). Only a REAL manoeuvre violation counts "
+              "toward DSQ -- failing to give way (no action despite acute risk), cutting "
+              "across a contact's bow, or passing on the wrong side; a merely-mislabelled "
+              "rule citation or a bare CPA/safe-distance shortfall is ignored for this "
+              "purpose, and that run is scored as a normal finisher instead. Points are "
+              "summed across all missions -- LOWER total is better. The per-axis columns "
+              "(safety_points etc.) are NOT outcome-gated this way -- they rank purely by "
+              "that axis's own continuous score, since e.g. a DNF run's manoeuvre/temporal "
+              "scores are still meaningful to compare.")
+
+    def _regatta_points(values: dict[str, float | None]) -> dict[str, int]:
+        """Generic continuous-score low-point ranking -- used for the per-AXIS columns
+        only (see _regatta_points_overall below for the outcome-tiered "overall" column)."""
+        present = {k: v for k, v in values.items() if v is not None}
+        if not present:
+            return dict.fromkeys(values, len(values) + 1)
+        ranks = pd.Series(present).rank(ascending=False, method="min").astype(int).to_dict()
+        dnf_points = len(present) + 1
+        return {k: ranks.get(k, dnf_points) for k in values}
+
+    # Only these manoeuvre-category codes are a genuine give-way/passing-side violation
+    # (per user request) -- a wrong-direction turn, an oversized turn request, an early
+    # stand-on action, or a bare CPA/safe-distance shortfall are all left out: none of
+    # them means own-ship actually failed to give way or passed on the wrong side.
+    _REAL_VIOLATION_CODES = {"D_no_action_when_required", "P_port_toward_contact", "P_wrong_side_pass"}
+
+    def _classify_mission_outcomes(mission_id: str) -> tuple[dict[str, float], list[str], list[str], list[str]]:
+        """Classify every system's run for one mission into finisher/DNF/DSQ/DNE buckets,
+        using real World-Sailing-style codes: finisher = reached goal, no genuine
+        right-of-way violation, no collision; DNF (no run, or ran but never reached the
+        goal, otherwise clean); DSQ (a genuine give-way/passing-side violation logged --
+        see _REAL_VIOLATION_CODES -- but no actual collision); DNE (an actual collision,
+        the worst tier). Checked in this exact precedence order (collision first) so a run
+        that BOTH collided AND had other compliance findings logged is classified DNE, not
+        DSQ."""
+        finishers: dict[str, float] = {}
+        dnf: list[str] = []
+        dsq: list[str] = []
+        dne: list[str] = []
+        for short, cfg in short_to_system.items():
+            r = detail_lookup.get((mission_id, short))
+            real_violation = r is not None and any(
+                compliance_finding_parts(e)[0] in _REAL_VIOLATION_CODES
+                for e in r["compliance"]["breakdown"])
+            if r is None:
+                dnf.append(cfg)
+            elif not r["safety"]["passed"]:
+                dne.append(cfg)
+            elif real_violation:
+                dsq.append(cfg)
+            elif not r["temporal"]["arrived"]:
+                dnf.append(cfg)
+            else:
+                finishers[cfg] = r["composite_score"]
+        return finishers, dnf, dsq, dne
+
+    def _regatta_points_overall(mission_id: str) -> dict[str, int]:
+        """Outcome-tiered "overall" points for one mission: finishers ranked by composite
+        score among themselves; DNF/DSQ/DNE all share the SAME fixed points value
+        (len(system_keys) + 1) -- the standard regatta convention (non-finishers all score
+        one worse than the whole fleet, not an escalating per-tier penalty)."""
+        finishers, dnf, dsq, dne = _classify_mission_outcomes(mission_id)
+        points: dict[str, int] = {}
+        if finishers:
+            points.update(pd.Series(finishers).rank(ascending=False, method="min").astype(int).to_dict())
+        worst_points = len(system_keys) + 1
+        for cfg in dnf + dsq + dne:
+            points[cfg] = worst_points
+        return points
+
+    overall_points = {key: 0 for key in system_keys}
+    axis_points = {axis: {key: 0 for key in system_keys} for axis in axis_names}
+    for mission_id in MISSIONS:
+        for key, pts in _regatta_points_overall(mission_id).items():
+            overall_points[key] += pts
+        for axis in axis_names:
+            axis_values = {}
+            for short, cfg in short_to_system.items():
+                r = detail_lookup.get((mission_id, short))
+                axis_values[cfg] = _axis_cols(r)[axis] if r else None
+            for key, pts in _regatta_points(axis_values).items():
+                axis_points[axis][key] += pts
+
+    ranking_rows = []
+    for key in system_keys:
+        rrow = {"system": system_labels[key], "overall_points": overall_points[key]}
+        for axis in axis_names:
+            rrow[f"{axis}_points"] = axis_points[axis][key]
+        ranking_rows.append(rrow)
+    ranking_cols = ["overall_points"] + [f"{axis}_points" for axis in axis_names]
+    ranking_df = pd.DataFrame(ranking_rows).set_index("system").sort_values("overall_points")
+    ranking_styler = (ranking_df.style
+                      .format("{:.0f}", subset=ranking_cols)
+                      .apply(_tiered_highlight, axis=0, subset=ranking_cols, higher_is_better=False))
+    st.dataframe(ranking_styler, width="stretch")
+    st.caption("Lower = better in every column -- these are POINTS (regatta placings summed "
+              "over 35 missions), not scores, so greenest = fewest points.")
+
+    st.markdown("#### Per-mission points detail (where the DNF / DSQ / DNE outcomes were)")
+    default_detail_rows = min(len(MISSIONS), 20)
+    visible_detail_rows = st.slider(
+        "Table height (visible rows)", min_value=5, max_value=len(MISSIONS),
+        value=default_detail_rows, key="points_detail_table_rows",
+        help="Drag to show more missions at once, or shrink for a smaller screen.",
+    )
+    # Text-only colour (no background fill) for all three non-finisher tiers -- a solid
+    # fill for 30+ rows read as visually "loud"; a coloured number is enough to spot them.
+    _TIER_STYLE = {
+        "DNE": f"color:{_FULL_RED};", "DSQ": f"color:{_FULL_RED};", "DNF": f"color:{_FULL_RED};",
+    }
+    system_to_short = {cfg: short for short, cfg in short_to_system.items()}
+    points_rows, tier_rows = [], []
+    for mission_id in MISSIONS:
+        finishers, dnf, dsq, dne = _classify_mission_outcomes(mission_id)
+        pts = _regatta_points_overall(mission_id)
+        tier_by_cfg = {cfg: "DNF" for cfg in dnf}
+        tier_by_cfg.update({cfg: "DSQ" for cfg in dsq})
+        tier_by_cfg.update({cfg: "DNE" for cfg in dne})
+        prow, trow = {"mission": mission_id}, {"mission": mission_id}
+        for key in system_keys:
+            # Short column header (e.g. "ruletree", "best_llm") -- the full paper-reference
+            # labels used elsewhere are far too wide for a 7-column-wide grid like this one.
+            label = system_to_short[key]
+            tier = tier_by_cfg.get(key, "finisher")
+            prow[label] = f"{tier} ({pts[key]})" if tier != "finisher" else str(pts[key])
+            trow[label] = tier
+        points_rows.append(prow)
+        tier_rows.append(trow)
+    points_detail_df = pd.DataFrame(points_rows).set_index("mission")
+    tier_df = pd.DataFrame(tier_rows).set_index("mission")
+
+    def _style_points_detail(_: pd.DataFrame) -> pd.DataFrame:
+        return pd.DataFrame(
+            [[_TIER_STYLE.get(tier_df.loc[idx, col], f"color:{_FULL_GREEN};")
+              for col in points_detail_df.columns] for idx in points_detail_df.index],
+            index=points_detail_df.index, columns=points_detail_df.columns)
+
+    st.dataframe(
+        points_detail_df.style.apply(_style_points_detail, axis=None),
+        width="stretch", hide_index=False,
+        height=header_height_px + visible_detail_rows * row_height_px,
+        column_config={col: st.column_config.TextColumn(width="small")
+                      for col in points_detail_df.columns})
+    st.caption("One cell per mission x system (columns use the same short config names as "
+              "the tag/system pickers below): plain green number = that system's regatta "
+              "points for that mission (finisher, ranked by composite score); red **DNF** = "
+              "ran but never reached the goal; red **DSQ** = a genuine give-way/passing-side "
+              "violation was logged (no collision); red **DNE** = an actual collision. The "
+              "number in parentheses is the fixed points value non-finishers share for that "
+              "mission (number of systems compared + 1).")
+
+    st.markdown("#### Inspect one run")
+    pick_cols = st.columns([2, 3, 1])
+    with pick_cols[0]:
+        picked_mission = st.selectbox("Mission", MISSIONS, key="detail_pick_mission")
+    with pick_cols[1]:
+        picked_short = st.selectbox(
+            "System", list(short_to_system), key="detail_pick_system",
+            format_func=lambda short: system_labels[short_to_system[short]])
+    with pick_cols[2]:
+        st.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)  # align with the selectboxes
+        show_clicked = st.button("\U0001F50D Click for details", key="detail_pick_button")
+
+    if show_clicked:
+        r = detail_lookup.get((picked_mission, picked_short))
+        system_key = short_to_system[picked_short]
+        if r is None:
+            st.info(f"No run found for {picked_mission} / {system_labels[system_key]}.")
+        else:
+            @st.dialog(f"{picked_mission} \u2014 {system_labels[system_key]}", width="large")
+            def _show_picked_detail(picked_mission=picked_mission, system_key=system_key, r=r) -> None:
+                if system_key == "best_llm":
+                    st.caption(f"Winning run: {best_llm_label.get(picked_mission, '?')}")
+                st.markdown(_describe_run(r))
+            _show_picked_detail()
+
+
+tab_sweep, tab_audit, tab_comparison = st.tabs(["Sweep", "Audit", "Baseline"])
 with tab_sweep:
     _render()
 with tab_audit:
     _render_audit_tab()
+with tab_comparison:
+    _render_comparison_tab()
