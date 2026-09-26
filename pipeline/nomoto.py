@@ -110,3 +110,40 @@ def manoeuvre_time_s(turn_deg: float, params: NomotoParams | None = None,
         if state.heading_deg >= target - tolerance_deg:
             return elapsed
     return max_seconds
+
+
+# Ship-dynamics-agnostic training data (2026-09-26): training on ONLY Sawada et al.
+# (2021)'s exact vessel risks teaching the model to overfit to one ship's specific
+# response, rather than to reason FROM whatever manoeuvre-time facts it's given (the
+# same reasoning already applied to safe_distance_m/max_turn_deg in
+# pipeline/oow_agent_spec.py's STAP-2 sampling). Each profile below is a REAL, cited
+# literature value -- never an invented number -- spanning genuinely different vessel
+# scales:
+#   sawada2021    -- Sawada, Sato & Majima (2021), J. Mar. Sci. Technol. 26:509-524.
+#                    L=106m cargo-scale vessel (this project's own default/live config).
+#   xie2023_small -- Xie et al. (2023), J. Mar. Sci. Eng. 11(2):273, Table 3. L=52.5m
+#                    (much smaller/faster-responding vessel). Paper states max rudder
+#                    RATE (10 deg/s), not a servo time constant -- T_E_s below is an
+#                    APPROXIMATION (smaller/faster steering gear than Sawada's, since no
+#                    lag constant is given directly), flagged here rather than silently
+#                    invented as a "real" figure.
+#   yukun2023_large -- Wang et al. (2023), J. Mar. Sci. Eng. 11(11):2101, Table 6 ("YU
+#                    KUN" training vessel). L=105m -- similar scale to Sawada's own ship
+#                    but a markedly different (slower-responding, higher-gain) K/T pair,
+#                    confirming real ships of similar SIZE still vary substantially in
+#                    manoeuvring response. T_E_s/rudder_limit_deg not stated in this
+#                    paper -- inherited from sawada2021 as the nearest same-scale
+#                    reference, flagged as an approximation for the same reason as above.
+# xie2023_small is deliberately EXCLUDED from TRAINING_PROFILE_WEIGHTS (weight 0) and
+# reserved for held-out generalization EVAL only -- see sample_ship_profile()'s
+# docstring for why.
+SHIP_PROFILES: dict[str, NomotoParams] = {
+    "sawada2021": NomotoParams(K_per_s=0.05, T_s=50.0, T_E_s=2.5, rudder_limit_deg=10.0),
+    "xie2023_small": NomotoParams(K_per_s=0.085, T_s=4.2, T_E_s=1.5, rudder_limit_deg=15.0),
+    "yukun2023_large": NomotoParams(K_per_s=0.2257, T_s=86.815, T_E_s=2.5, rudder_limit_deg=10.0),
+}
+# Weight 0 = never sampled for TRAINING rows (xie2023_small held out for eval-only use).
+TRAINING_PROFILE_WEIGHTS: dict[str, float] = {
+    "sawada2021": 0.7, "yukun2023_large": 0.3, "xie2023_small": 0.0,
+}
+HELD_OUT_EVAL_PROFILE = "xie2023_small"

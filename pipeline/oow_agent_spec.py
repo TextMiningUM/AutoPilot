@@ -31,7 +31,10 @@ import hashlib
 import math
 import random
 
-from pipeline.nomoto import NomotoParams as _NomotoParams, manoeuvre_time_s as _nomoto_manoeuvre_time_s
+from pipeline.nomoto import (
+    NomotoParams as _NomotoParams, manoeuvre_time_s as _nomoto_manoeuvre_time_s,
+    SHIP_PROFILES, TRAINING_PROFILE_WEIGHTS, HELD_OUT_EVAL_PROFILE,
+)
 
 ACTIONS = ("turn_left", "turn_right", "hold_course", "speed_up", "slow_down", "stop")
 _DEGREES_ONLY_FOR = ("turn_left", "turn_right")
@@ -252,6 +255,59 @@ def fixed_limits(safe_distance_m: float, max_turn_deg: float, own_speed_mps: flo
         "risk_horizon_s": risk_horizon_s, "risk_horizon_default_s": horizon_default,
         "risk_horizon_multiplier": horizon_multiplier, "stand_on_tcpa_s": risk_horizon_s * 0.6,
         "decision_interval_s": decision_interval_s,
+    }
+
+
+def sample_ship_profile(row_id: str, allow_held_out: bool = False) -> str:
+    """Deterministic per-row sample of WHICH real ship's Nomoto parameters this row's
+    manoeuvre-time facts are computed from (see pipeline.nomoto.SHIP_PROFILES) -- same
+    fixed-seed-from-row_id pattern as sample_row_limits(), but with its OWN seed suffix
+    (a bare reuse of the exact same seed would correlate this choice with
+    safe_distance_m/max_turn_deg's sampling, e.g. always drawing the same profile
+    whenever the same safe_distance_m happens to be drawn). `allow_held_out=False`
+    (default, used for ALL training-data generation) draws ONLY from
+    TRAINING_PROFILE_WEIGHTS, which gives pipeline.nomoto.HELD_OUT_EVAL_PROFILE weight
+    0 -- that profile must never be seen during training so an eval against it is a
+    genuine generalization test, not in-distribution recall. `allow_held_out=True`
+    (eval-set construction only) draws uniformly across ALL profiles including the held-
+    out one."""
+    seed = int(hashlib.sha256(f"{row_id}::ship_profile".encode("utf-8")).hexdigest()[:16], 16)
+    rnd = random.Random(seed)
+    if allow_held_out:
+        return rnd.choice(list(SHIP_PROFILES))
+    names = [n for n in TRAINING_PROFILE_WEIGHTS if TRAINING_PROFILE_WEIGHTS[n] > 0]
+    weights = [TRAINING_PROFILE_WEIGHTS[n] for n in names]
+    return rnd.choices(names, weights=weights, k=1)[0]
+
+
+def sample_row_limits_nomoto(row_id: str, own_speed_mps: float | None,
+                             allow_held_out_profile: bool = False) -> dict:
+    """Nomoto-aware sibling of sample_row_limits() -- same safe_distance_m/max_turn_deg/
+    decision_interval_s sampling (reused verbatim, never duplicated), but the risk
+    horizon comes from derive_risk_horizon_s_nomoto() and a REAL per-row ship profile
+    (see sample_ship_profile()) instead of the analytic instant-turn formula, so
+    training data teaches the model to reason from STATED manoeuvre-time facts rather
+    than memorizing one fixed ship's response. Returns everything sample_row_limits()
+    does PLUS {"ship_profile", "manoeuvre_time_s"} -- the latter is the real simulated
+    time for a max_turn_deg turn under this row's own sampled profile, meant to be
+    passed straight to constraint_line()'s manoeuvre_time_s param."""
+    seed = int(hashlib.sha256(str(row_id).encode("utf-8")).hexdigest()[:16], 16)
+    rnd = random.Random(seed)
+    safe_distance_m = _weighted_choice(rnd, SAFE_DISTANCE_WEIGHTS)
+    max_turn_deg = _weighted_choice(rnd, MAX_TURN_DEG_WEIGHTS)
+    profile_name = sample_ship_profile(row_id, allow_held_out=allow_held_out_profile)
+    nomoto_params = SHIP_PROFILES[profile_name]
+    horizon_default = derive_risk_horizon_s_nomoto(safe_distance_m, max_turn_deg, own_speed_mps, nomoto_params)
+    multiplier = _weighted_choice(rnd, HORIZON_MULTIPLIER_WEIGHTS)
+    risk_horizon_s = horizon_default * multiplier
+    decision_interval_s = _weighted_choice(rnd, DECISION_INTERVAL_S_WEIGHTS)
+    manoeuvre_time = _nomoto_manoeuvre_time_s(max_turn_deg, nomoto_params)
+    return {
+        "safe_distance_m": safe_distance_m, "max_turn_deg": max_turn_deg,
+        "risk_horizon_s": risk_horizon_s, "risk_horizon_default_s": horizon_default,
+        "risk_horizon_multiplier": multiplier, "stand_on_tcpa_s": risk_horizon_s * 0.6,
+        "decision_interval_s": decision_interval_s,
+        "ship_profile": profile_name, "manoeuvre_time_s": manoeuvre_time,
     }
 
 
