@@ -262,97 +262,108 @@ MISSIONS = [
         ["Own-ship takes an immediate, large emergency manoeuvre.", "Own-ship avoids collision."],
         [("ts1_extremis", 5.0, 6.173, 70.0)],
     ),
-    # IMP11-13: "chaos at the windward mark" -- inspired by fleet dinghy racing, where
-    # boats converging on the windward mark from every tack all round it and bear away
-    # onto a new heading at roughly the same time/place. There is no "mark" in COLREG (the
-    # Racing Rules of Sailing govern real mark-roundings, not the Nav Rules), so this is
-    # deliberately reframed as pure COLREG chaos: a cluster of vessels converging on the
-    # SAME patch of water from many different bearings, several of them executing a sharp,
-    # non-reactive, staggered-timing "round and bear away" turn (in either direction) mid-
-    # encounter -- plus, per the classic real-world picture, one vessel sitting becalmed/
-    # dead-in-the-water right in the middle of it. No single-contact avoidance plan can
-    # work here; Rule 8's "due regard to all dangers" holistic-plan requirement is the
-    # actual test.
+    # IMP11-13: "chaos at the windward mark" -- inspired by fleet dinghy racing. Real
+    # windward-mark geometry (2026-09-26 correction, first attempt had targets converging
+    # from all bearings and bearing away in random/mixed directions -- wrong): the fleet
+    # beats upwind on port/starboard tacks, so boats approach the mark from a NARROW
+    # sector (roughly abeam-to-astern on one side -- "from the left and south"), all on
+    # roughly the SAME initial heading (close-hauled, upwind, here ~340-15 deg -- small
+    # tack-angle spread, not a fan of headings). Each rounds the mark at ITS OWN staggered
+    # moment (never reactive to own-ship) and turns the SAME rotational way (a mark is
+    # always rounded the same way by the whole fleet) onto a SHARED new heading of
+    # roughly south (~170-190 deg, "wind angle 140-170 deg" broad-reach/run), but at
+    # DIFFERENT POST-ROUNDING SPEEDS (a slow spinnaker hoist vs. a clean one) -- that's
+    # where "different speeds" belongs, not in the pre-mark approach. Plus, per the
+    # classic real-world picture, one vessel sitting becalmed/dead-in-the-water right at
+    # the mark itself. No single-contact avoidance plan can work here -- Rule 8's "due
+    # regard to all dangers" holistic-plan requirement is the actual test, since the
+    # "safe" bearing-away lane keeps closing as each boat rounds.
     build(
         "IMP11", "Chaos at the windward mark (5 vessels)",
-        ["Rule 8", "Rule 13", "Rule 14", "Rule 15", "Rule 17"], "mixed",
-        "Five vessels converge on the same patch of water own-ship must pass through: "
-        "four on assorted collision courses, each rounding and bearing away onto a new, "
-        "unpredictable heading at its own staggered moment (never reactive to own-ship), "
-        "plus one becalmed/dead-in-the-water vessel sitting in the middle of the "
-        "convergence zone. Correct: Rule 8 -- a single holistic plan with due regard to "
-        "ALL vessels present, re-checked as each one turns, not a per-contact reaction.",
+        ["Rule 8", "Rule 13", "Rule 15", "Rule 17"], "mixed",
+        "Four vessels beat upwind toward the same mark from a narrow, left/astern sector "
+        "(roughly the same close-hauled heading, only their tack angle/speed differ), "
+        "each rounding at its own staggered moment and bearing away onto the SAME new "
+        "heading (south, broad reach) but at a different post-rounding speed -- plus one "
+        "becalmed/dead-in-the-water vessel sitting at the mark itself. Correct: Rule 8 -- "
+        "a single holistic plan with due regard to ALL vessels present, re-checked as "
+        "each one rounds and the safe lane shifts, not a per-contact reaction.",
         ["Own-ship avoids collision with all 5 contacts.", "Reach the goal."],
-        [
-            ("ts1_port_bow", -40.0, 8.0, 200.0),
-            ("ts2_stbd_bow", 45.0, 9.0, 180.0),
-            ("ts3_port_beam", -100.0, 7.5, 220.0),
-            ("ts4_stbd_beam", 100.0, 10.0, 160.0),
+        [],
+        direct_targets=[
+            ("ts1_beat_west", -80.0, 1600.0, 15.0, 7.0),
+            ("ts2_beat_westsw", -110.0, 1900.0, 5.0, 8.0),
+            ("ts3_beat_sw", -140.0, 2200.0, 350.0, 6.5),
+            ("ts4_beat_south", -170.0, 2500.0, 340.0, 9.0),
+            ("ts5_becalmed", 5.0, 1900.0, 250.0, 0.3),
         ],
         maneuvers=[
-            ("ts1_port_bow", 130.0, 140.0, None),
-            ("ts2_stbd_bow", 110.0, -130.0, None),
-            ("ts3_port_beam", 150.0, 100.0, None),
-            ("ts4_stbd_beam", 90.0, -160.0, None),
+            ("ts1_beat_west", 220.0, 160.0, 10.0),
+            ("ts2_beat_westsw", 235.0, 170.0, 7.0),
+            ("ts3_beat_sw", 335.0, 185.0, 13.0),
+            ("ts4_beat_south", 275.0, 195.0, 6.0),
         ],
-        direct_targets=[("ts5_becalmed", 10.0, 1300.0, 250.0, 0.3)],
     ),
     build(
         "IMP12", "Chaos at the windward mark (6 vessels)",
-        ["Rule 8", "Rule 13", "Rule 14", "Rule 15", "Rule 17"], "mixed",
-        "Six vessels converge on the same patch of water own-ship must pass through: five "
-        "on assorted collision courses, each rounding and bearing away onto a new, "
-        "unpredictable heading at its own staggered moment (never reactive to own-ship), "
-        "plus one becalmed/dead-in-the-water vessel sitting in the middle of the "
-        "convergence zone. Busier than IMP11 -- an extra near-astern contact means the "
-        "'safe' direction to bear away in keeps shifting. Correct: Rule 8 -- a single "
-        "holistic plan re-checked as each vessel turns, not a per-contact reaction.",
+        ["Rule 8", "Rule 13", "Rule 15", "Rule 17"], "mixed",
+        "Five vessels beat upwind toward the same mark from a narrow, left/astern sector "
+        "(roughly the same close-hauled heading, only their tack angle/speed differ), "
+        "each rounding at its own staggered moment and bearing away onto the SAME new "
+        "heading (south, broad reach) but at a different post-rounding speed -- plus one "
+        "becalmed/dead-in-the-water vessel sitting at the mark itself. Busier than IMP11 "
+        "-- a 5th, faster boat closing from further abeam means the approach lane is "
+        "occupied for longer before any rounding even starts. Correct: Rule 8 -- a single "
+        "holistic plan re-checked as each vessel rounds, not a per-contact reaction.",
         ["Own-ship avoids collision with all 6 contacts.", "Reach the goal."],
-        [
-            ("ts1_port_bow", -40.0, 8.0, 200.0),
-            ("ts2_stbd_bow", 45.0, 9.0, 180.0),
-            ("ts3_port_beam", -100.0, 7.5, 220.0),
-            ("ts4_stbd_beam", 100.0, 10.0, 160.0),
-            ("ts5_near_astern", 165.0, 11.0, 240.0),
+        [],
+        direct_targets=[
+            ("ts1_beat_west", -80.0, 1600.0, 15.0, 7.0),
+            ("ts2_beat_westsw", -110.0, 1900.0, 5.0, 8.0),
+            ("ts3_beat_sw", -140.0, 2200.0, 350.0, 6.5),
+            ("ts4_beat_south", -170.0, 2500.0, 340.0, 9.0),
+            ("ts5_beat_farwest", -60.0, 1400.0, 25.0, 9.5),
+            ("ts6_becalmed", 5.0, 1900.0, 250.0, 0.3),
         ],
         maneuvers=[
-            ("ts1_port_bow", 130.0, 140.0, None),
-            ("ts2_stbd_bow", 110.0, -130.0, None),
-            ("ts3_port_beam", 150.0, 100.0, None),
-            ("ts4_stbd_beam", 90.0, -160.0, None),
-            ("ts5_near_astern", 170.0, 120.0, None),
+            ("ts1_beat_west", 220.0, 160.0, 10.0),
+            ("ts2_beat_westsw", 235.0, 170.0, 7.0),
+            ("ts3_beat_sw", 335.0, 185.0, 13.0),
+            ("ts4_beat_south", 275.0, 195.0, 6.0),
+            ("ts5_beat_farwest", 145.0, 150.0, 14.0),
         ],
-        direct_targets=[("ts6_becalmed", 10.0, 1300.0, 250.0, 0.3)],
     ),
     build(
         "IMP13", "Chaos at the windward mark (7 vessels)",
-        ["Rule 8", "Rule 13", "Rule 14", "Rule 15", "Rule 17"], "mixed",
-        "Seven vessels converge on the same patch of water own-ship must pass through: "
-        "six on assorted collision courses (bow, both bows, both beams, near-astern, and a "
-        "second near-head-on contact arriving late and fast), each rounding and bearing "
-        "away onto a new, unpredictable heading at its own staggered moment (never "
-        "reactive to own-ship), plus one becalmed/dead-in-the-water vessel sitting in the "
-        "middle of the convergence zone. The busiest of the three -- almost no heading is "
-        "safe for the whole encounter window. Correct: Rule 8 -- a single holistic plan "
-        "re-checked continuously as each vessel turns, not a per-contact reaction.",
+        ["Rule 8", "Rule 13", "Rule 15", "Rule 17"], "mixed",
+        "Six vessels beat upwind toward the same mark from a narrow, left/astern sector "
+        "(roughly the same close-hauled heading, only their tack angle/speed differ), "
+        "each rounding at its own staggered moment and bearing away onto the SAME new "
+        "heading (south, broad reach) but at a different post-rounding speed -- plus one "
+        "becalmed/dead-in-the-water vessel sitting at the mark itself. The busiest of the "
+        "three -- a 6th, wide-out straggler rounds last and long after the others are "
+        "already reaching away, so the 'clear' water behind the fleet fills in too. "
+        "Correct: Rule 8 -- a single holistic plan re-checked continuously as each vessel "
+        "rounds, not a per-contact reaction.",
         ["Own-ship avoids collision with all 7 contacts.", "Reach the goal."],
-        [
-            ("ts1_port_bow", -40.0, 8.0, 200.0),
-            ("ts2_stbd_bow", 45.0, 9.0, 180.0),
-            ("ts3_port_beam", -100.0, 7.5, 220.0),
-            ("ts4_stbd_beam", 100.0, 10.0, 160.0),
-            ("ts5_near_astern", 165.0, 11.0, 240.0),
-            ("ts6_late_fast", 15.0, 12.5, 130.0),
+        [],
+        direct_targets=[
+            ("ts1_beat_west", -80.0, 1600.0, 15.0, 7.0),
+            ("ts2_beat_westsw", -110.0, 1900.0, 5.0, 8.0),
+            ("ts3_beat_sw", -140.0, 2200.0, 350.0, 6.5),
+            ("ts4_beat_south", -170.0, 2500.0, 340.0, 9.0),
+            ("ts5_beat_farwest", -60.0, 1400.0, 25.0, 9.5),
+            ("ts6_beat_wide", -155.0, 2700.0, 345.0, 7.5),
+            ("ts7_becalmed", 5.0, 1900.0, 250.0, 0.3),
         ],
         maneuvers=[
-            ("ts1_port_bow", 130.0, 140.0, None),
-            ("ts2_stbd_bow", 110.0, -130.0, None),
-            ("ts3_port_beam", 150.0, 100.0, None),
-            ("ts4_stbd_beam", 90.0, -160.0, None),
-            ("ts5_near_astern", 170.0, 120.0, None),
-            ("ts6_late_fast", 80.0, -110.0, None),
+            ("ts1_beat_west", 220.0, 160.0, 10.0),
+            ("ts2_beat_westsw", 235.0, 170.0, 7.0),
+            ("ts3_beat_sw", 335.0, 185.0, 13.0),
+            ("ts4_beat_south", 275.0, 195.0, 6.0),
+            ("ts5_beat_farwest", 145.0, 150.0, 14.0),
+            ("ts6_beat_wide", 360.0, 180.0, 8.0),
         ],
-        direct_targets=[("ts7_becalmed", 10.0, 1300.0, 250.0, 0.3)],
     ),
 ]
 
