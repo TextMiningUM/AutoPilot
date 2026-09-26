@@ -1,0 +1,5197 @@
+{
+ "mission_id": "IMP06",
+ "config": "v0_base",
+ "weights": "W0_base",
+ "model_variant": "qwen_base",
+ "tag": "imp_qwen_base_v1",
+ "generated_at": "2026-09-26T12:32:47.458948+00:00",
+ "latency_s": 85.92810988426208,
+ "mission": {
+  "id": "IMP06",
+  "name": "Bearing near the Rule 13/15 boundary, wavering aspect",
+  "rule_refs": [
+   "Rule 13",
+   "Rule 15"
+  ],
+  "own_ship_role": "uncertain",
+  "description": "Target approaching at a bearing right at the 112.5 deg overtaking/crossing boundary, and its own heading wavers slightly over time (simulating yaw), flipping the encounter classification back and forth for a step-by-step oracle. Correct: Rule 13(c) -- when in doubt, assume overtaking (the more conservative obligation).",
+  "pass_criteria": [
+   "Own-ship's rule citation stays consistent (does not flip every step).",
+   "Reach the goal."
+  ],
+  "own_ship": {
+   "x": 0.0,
+   "y": 0.0,
+   "heading": 0.0,
+   "speed": 6.173333333333333
+  },
+  "goal": {
+   "x": 0.0,
+   "y": 14816.0
+  },
+  "targets": [
+   {
+    "name": "ts1_boundary",
+    "x": 789.8779999999999,
+    "y": -319.0996,
+    "heading": 337.7,
+    "speed": 7.999611111111112
+   }
+  ],
+  "target_maneuvers": [
+   {
+    "target": "ts1_boundary",
+    "trigger_time_s": 80.0,
+    "new_heading_deg": 352.7,
+    "new_speed_kn": null
+   },
+   {
+    "target": "ts1_boundary",
+    "trigger_time_s": 160.0,
+    "new_heading_deg": 322.7,
+    "new_speed_kn": null
+   }
+  ]
+ },
+ "evaluation": {
+  "verdict": "PASS_WITH_CPA_VIOLATION",
+  "composite_score": 0.542,
+  "safety": {
+   "passed": true,
+   "min_cpa_m": 60.4,
+   "score": 0.121
+  },
+  "compliance": {
+   "breakdown": [
+    {
+     "code": "B_wrong_direction",
+     "label": "Wrong Turn Direction",
+     "at": 90.0,
+     "deduction": -0.15
+    },
+    {
+     "code": "D_no_action_when_required",
+     "label": "No Action Despite Risk",
+     "at": 120.0,
+     "deduction": -0.15
+    },
+    {
+     "code": "B_wrong_direction",
+     "label": "Wrong Turn Direction",
+     "at": 180.0,
+     "deduction": -0.15
+    },
+    {
+     "code": "cpa_violation",
+     "label": "Safe-Distance Violation",
+     "at": null,
+     "deduction": -0.3
+    }
+   ],
+   "score": 0.25,
+   "findings": [
+    {
+     "code": "E_encounter_mismatch",
+     "step": 0.0,
+     "situation_report": "ts1_boundary rel_bearing=112deg cpa=0.000NM tcpa=260s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_right",
+      "degrees": 30.0,
+      "encounter_rule": "Rule 13",
+      "conduct_rule": "Rule 13",
+      "reasoning": "The contact 'ts1_boundary' presents a real collision risk due to its CPA being 0.000 NM and TCPA within the risk horizon of 368s. According to Rule 13, the give-way vessel must keep clear of the stand-on vessel by taking early and substantial action. Therefore, a turn_right maneuver is required."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "step": 30.0,
+     "situation_report": "ts1_boundary rel_bearing=109deg cpa=0.016NM tcpa=206s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 30,
+      "encounter_rule": "Rule 13",
+      "conduct_rule": "Rule 13",
+      "reasoning": "The contact 'ts1_boundary' presents a real collision risk due to its CPA being below the safe passing distance (0.016 NM) and TCPA within the risk horizon (206s). According to Rule 13, the give-way vessel must keep out of the way of the stand-on vessel by altering course to starboard. Since the contact is approaching from the port side (relative bearing 108.6°), the appropriate action is to turn left to avoid collision."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "step": 60.0,
+     "situation_report": "ts1_boundary rel_bearing=106deg cpa=0.025NM tcpa=158s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_right",
+      "degrees": 10.1,
+      "encounter_rule": "Rule 13",
+      "conduct_rule": "Rule 13",
+      "reasoning": "The contact 'ts1_boundary' presents a real collision risk since its CPA is below the safe passing distance (0.270 NM) and its TCPA is within the risk horizon (368s). According to Rule 13, the give-way vessel must keep clear of the stand-on vessel by altering course to port."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "B_wrong_direction",
+     "step": 90.0,
+     "situation_report": "ts1_boundary rel_bearing=105deg cpa=0.107NM tcpa=188s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 10,
+      "encounter_rule": "Rule 13",
+      "conduct_rule": "Rule 14",
+      "reasoning": "The contact 'ts1_boundary' currently presents a real collision risk with CPA 0.107 NM and TCPA 188s, both below the safe passing distance and within the risk horizon. Turning left by 10 degrees aligns with the goal course check and avoids the collision risk."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "step": 90.0,
+     "situation_report": "ts1_boundary rel_bearing=105deg cpa=0.107NM tcpa=188s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 10,
+      "encounter_rule": "Rule 13",
+      "conduct_rule": "Rule 14",
+      "reasoning": "The contact 'ts1_boundary' currently presents a real collision risk with CPA 0.107 NM and TCPA 188s, both below the safe passing distance and within the risk horizon. Turning left by 10 degrees aligns with the goal course check and avoids the collision risk."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "D_no_action_when_required",
+     "step": 120.0,
+     "situation_report": "ts1_boundary rel_bearing=102deg cpa=0.115NM tcpa=163s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "hold_course",
+      "degrees": 0,
+      "encounter_rule": "Rule 13",
+      "conduct_rule": "Rule 13",
+      "reasoning": "The contact 'ts1_boundary' currently presents a real collision risk since its CPA is below the safe passing distance (0.270 NM) and its TCPA is within the risk horizon (368s). According to Rule 13, we must keep clear of another vessel by altering our course and speed as necessary. Since turning to the goal bearing would still leave the contact within the risk zone, holding course is the appropriate maneuver."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "step": 120.0,
+     "situation_report": "ts1_boundary rel_bearing=102deg cpa=0.115NM tcpa=163s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "hold_course",
+      "degrees": 0,
+      "encounter_rule": "Rule 13",
+      "conduct_rule": "Rule 13",
+      "reasoning": "The contact 'ts1_boundary' currently presents a real collision risk since its CPA is below the safe passing distance (0.270 NM) and its TCPA is within the risk horizon (368s). According to Rule 13, we must keep clear of another vessel by altering our course and speed as necessary. Since turning to the goal bearing would still leave the contact within the risk zone, holding course is the appropriate maneuver."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "step": 150.0,
+     "situation_report": "ts1_boundary rel_bearing=102deg cpa=0.148NM tcpa=139s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_right",
+      "degrees": 15.0,
+      "encounter_rule": "Rule 13",
+      "conduct_rule": "Rule 14",
+      "reasoning": "The contact 'ts1_boundary' presents a real collision risk due to its CPA being below the safe passing distance (0.270 NM) and TCPA within the risk horizon (368s). According to Rule 13, the give-way vessel must keep out of the way of the stand-on vessel. Since our ship is the give-way vessel, we need to alter course to port (turn left) to avoid the collision risk. However, since the contact is approaching from starboard side (relative bearing 101.7°), we should turn right to increase the CPA."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "B_wrong_direction",
+     "step": 180.0,
+     "situation_report": "ts1_boundary rel_bearing=103deg cpa=0.033NM tcpa=57s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 16,
+      "encounter_rule": "Rule 13",
+      "conduct_rule": "Rule 14",
+      "reasoning": "The contact 'ts1_boundary' presents a real collision risk due to its CPA being below the safe passing distance (0.033 NM) and TCPA within the risk horizon (57s). According to Rule 13, the give-way vessel must keep out of the way of the stand-on vessel. Since our ship is the give-way vessel, we need to alter course to starboard (which corresponds to turning left in this context) to avoid the collision risk."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "step": 180.0,
+     "situation_report": "ts1_boundary rel_bearing=103deg cpa=0.033NM tcpa=57s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 16,
+      "encounter_rule": "Rule 13",
+      "conduct_rule": "Rule 14",
+      "reasoning": "The contact 'ts1_boundary' presents a real collision risk due to its CPA being below the safe passing distance (0.033 NM) and TCPA within the risk horizon (57s). According to Rule 13, the give-way vessel must keep out of the way of the stand-on vessel. Since our ship is the give-way vessel, we need to alter course to starboard (which corresponds to turning left in this context) to avoid the collision risk."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    }
+   ]
+  },
+  "explanation_compliance": {
+   "breakdown": [
+    {
+     "code": "E_encounter_mismatch",
+     "label": "Wrong Rule Cited",
+     "at": 0.0,
+     "deduction": -0.05
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "label": "Wrong Rule Cited",
+     "at": 30.0,
+     "deduction": -0.05
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "label": "Wrong Rule Cited",
+     "at": 60.0,
+     "deduction": -0.05
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "label": "Wrong Rule Cited",
+     "at": 90.0,
+     "deduction": -0.05
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "label": "Wrong Rule Cited",
+     "at": 120.0,
+     "deduction": -0.05
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "label": "Wrong Rule Cited",
+     "at": 150.0,
+     "deduction": -0.05
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "label": "Wrong Rule Cited",
+     "at": 180.0,
+     "deduction": -0.05
+    }
+   ],
+   "score": 0.65
+  },
+  "temporal": {
+   "arrived": true,
+   "time_actual_s": 2390.0,
+   "time_ratio": 0.996,
+   "temporal_score": 1.0
+  },
+  "spatial": {
+   "path_length_m": 14754.263,
+   "path_ratio": 0.996,
+   "spatial_score": 1.0
+  },
+  "manoeuvre": {
+   "manoeuvre_count": 0,
+   "manoeuvre_score": 1.0,
+   "mean_abs_heading_rate": 0.03,
+   "mean_abs_speed_rate": 0.0,
+   "smoothness_score": 0.997
+  }
+ },
+ "colreg_llm_check": {
+  "checked": false,
+  "explanations": null,
+  "error": null
+ },
+ "params": {
+  "decision_interval": 15,
+  "decision_interval_mode": "adaptive",
+  "dt": 10.0,
+  "max_steps": 370,
+  "enable_thinking": false,
+  "max_new_tokens": 256,
+  "k": 2,
+  "use_rag": true,
+  "system_prompt": "You are the navigator on a large commercial vessel. Decide the next helm order.\n\nMISSION REQUIREMENTS -- this mission is only completed successfully if ALL of these hold, not just\nthe first one you happen to satisfy:\n1. Every contact's CPA stays at or above this mission's safe passing distance (given further below)\n   at all times -- exactly as mandatory as actually reaching the goal. There is no automatic safety\n   net correcting your choice if you get this wrong: your own action each step is what the ship\n   actually does.\n2. Every manoeuvre you take while a real collision risk exists complies with COLREG.\n3. You reach the mission goal.\n\nPRIORITY ORDER when these pull in different directions -- always in this order, never reversed:\n1. Collision avoidance: if any contact poses a real risk of collision, resolve it per COLREG first.\n2. Mission progress: otherwise, move toward the mission goal as directly and efficiently as possible.\n\nFACTS GIVEN TO YOU -- treat all of these as already correct; never recompute, re-derive, or\nsecond-guess them:\n- Positions/ranges are in nautical miles, bearings/headings in degrees (heading 0=north, clockwise,\n  compass convention), speeds in knots.\n- relative bearing is signed: positive=starboard (right), negative=port (left), 0=dead ahead, ~180/-180=astern.\n- CPA = the closest distance a contact will EVER come to you at current headings/speeds. TCPA = seconds\n  until that closest point. CPA at or near 0 with TCPA greater than 0 means you are on a collision\n  course. TCPA=0 together with the situation report explicitly noting \"already past closest point,\n  ranges now increasing\" means that contact's closest point is behind you, not ahead -- that note is\n  never omitted when it applies, and never appears when it does not.\n- The situation report's \"GOAL COURSE CHECK:\" line has ALREADY computed the goal-correction action and\n  degrees for you. Never substitute a contact's relative bearing for it -- that number describes the\n  CONTACT, not the goal, even when the numbers look similar.\n\nDECISION PROCEDURE -- follow in order:\n1. Check every contact's CPA and TCPA against this mission's safe passing distance and risk horizon\n   (given further below). If no contact poses a real risk right now, go to step 3.\n2. If any contact poses a real risk, pick the ONE action that satisfies the applicable COLREG rule\n   for that contact. This step overrides everything below it.\n3. Otherwise, follow \"GOAL COURSE CHECK\" exactly: hold_course if it says you're already on the goal\n   bearing, or copy its exact action and degrees if it names a turn -- do not recompute or replace\n   those values.\n4. Never zigzag: do not answer turn_right then turn_left (or vice versa) on consecutive decisions to\n   chase a small residual mismatch -- \"GOAL COURSE CHECK\" already has a deadband built in for this.\n5. If you are already on the goal bearing and your speed is below this mission's nominal/rated speed,\n   speed_up instead of hold_course -- reaching the goal sooner (when safe) is also progress.\n\nGround your reasoning in the COLREG excerpts/procedure guidance provided, where given. Reply with\nONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"encounter_rule\": \"<'Rule <N>' citing the applicable COLREG rule, or 'none' if no contact poses real risk>\",\n \"conduct_rule\": \"<'Rule <N>' citing the applicable COLREG rule, or 'none' if no real risk>\",\n \"reasoning\": \"<one or two sentences>\"}",
+  "system_prompt_is_custom": false,
+  "prompt_hash": "4f45583d1a8e1816beb9ecdb27f9efc58ed74c1120227395227e38872ea36935",
+  "prompt_version": "2026-09-24-uncapped-turn-adaptive-cadence"
+ },
+ "outcome": {
+  "verdict": "reached_goal",
+  "final_step": 239,
+  "final_time_s": 2390.0
+ },
+ "trajectory": [
+  {
+   "time": 0.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 0.0,
+   "heading": 0.0,
+   "speed": 6.173
+  },
+  {
+   "time": 0.0,
+   "vehicle": "ts1_boundary",
+   "x": 789.88,
+   "y": -319.1,
+   "heading": 337.7,
+   "speed": 8.0
+  },
+  {
+   "time": 10.0,
+   "vehicle": "own_ship",
+   "x": 0.43,
+   "y": 61.73,
+   "heading": 0.4,
+   "speed": 6.173
+  },
+  {
+   "time": 10.0,
+   "vehicle": "ts1_boundary",
+   "x": 759.52,
+   "y": -245.09,
+   "heading": 337.7,
+   "speed": 8.0
+  },
+  {
+   "time": 20.0,
+   "vehicle": "own_ship",
+   "x": 2.18,
+   "y": 123.44,
+   "heading": 1.62,
+   "speed": 6.173
+  },
+  {
+   "time": 20.0,
+   "vehicle": "ts1_boundary",
+   "x": 729.17,
+   "y": -171.07,
+   "heading": 337.7,
+   "speed": 8.0
+  },
+  {
+   "time": 30.0,
+   "vehicle": "own_ship",
+   "x": 5.99,
+   "y": 185.06,
+   "heading": 3.54,
+   "speed": 6.173
+  },
+  {
+   "time": 30.0,
+   "vehicle": "ts1_boundary",
+   "x": 698.81,
+   "y": -97.06,
+   "heading": 337.7,
+   "speed": 8.0
+  },
+  {
+   "time": 40.0,
+   "vehicle": "own_ship",
+   "x": 11.85,
+   "y": 246.51,
+   "heading": 5.45,
+   "speed": 6.173
+  },
+  {
+   "time": 40.0,
+   "vehicle": "ts1_boundary",
+   "x": 668.46,
+   "y": -23.05,
+   "heading": 337.7,
+   "speed": 8.0
+  },
+  {
+   "time": 50.0,
+   "vehicle": "own_ship",
+   "x": 18.91,
+   "y": 307.84,
+   "heading": 6.57,
+   "speed": 6.173
+  },
+  {
+   "time": 50.0,
+   "vehicle": "ts1_boundary",
+   "x": 638.1,
+   "y": 50.97,
+   "heading": 337.7,
+   "speed": 8.0
+  },
+  {
+   "time": 60.0,
+   "vehicle": "own_ship",
+   "x": 26.32,
+   "y": 369.13,
+   "heading": 6.89,
+   "speed": 6.173
+  },
+  {
+   "time": 60.0,
+   "vehicle": "ts1_boundary",
+   "x": 607.75,
+   "y": 124.98,
+   "heading": 337.7,
+   "speed": 8.0
+  },
+  {
+   "time": 70.0,
+   "vehicle": "own_ship",
+   "x": 33.78,
+   "y": 430.41,
+   "heading": 6.94,
+   "speed": 6.173
+  },
+  {
+   "time": 70.0,
+   "vehicle": "ts1_boundary",
+   "x": 577.39,
+   "y": 198.99,
+   "heading": 337.7,
+   "speed": 8.0
+  },
+  {
+   "time": 80.0,
+   "vehicle": "own_ship",
+   "x": 41.57,
+   "y": 491.65,
+   "heading": 7.25,
+   "speed": 6.173
+  },
+  {
+   "time": 80.0,
+   "vehicle": "ts1_boundary",
+   "x": 547.04,
+   "y": 273.01,
+   "heading": 337.7,
+   "speed": 8.0
+  },
+  {
+   "time": 90.0,
+   "vehicle": "own_ship",
+   "x": 49.91,
+   "y": 552.81,
+   "heading": 7.76,
+   "speed": 6.173
+  },
+  {
+   "time": 90.0,
+   "vehicle": "ts1_boundary",
+   "x": 536.87,
+   "y": 352.35,
+   "heading": 352.7,
+   "speed": 8.0
+  },
+  {
+   "time": 100.0,
+   "vehicle": "own_ship",
+   "x": 58.5,
+   "y": 613.95,
+   "heading": 8.0,
+   "speed": 6.173
+  },
+  {
+   "time": 100.0,
+   "vehicle": "ts1_boundary",
+   "x": 526.71,
+   "y": 431.7,
+   "heading": 352.7,
+   "speed": 8.0
+  },
+  {
+   "time": 110.0,
+   "vehicle": "own_ship",
+   "x": 66.57,
+   "y": 675.15,
+   "heading": 7.5,
+   "speed": 6.173
+  },
+  {
+   "time": 110.0,
+   "vehicle": "ts1_boundary",
+   "x": 516.54,
+   "y": 511.05,
+   "heading": 352.7,
+   "speed": 8.0
+  },
+  {
+   "time": 120.0,
+   "vehicle": "own_ship",
+   "x": 73.46,
+   "y": 736.5,
+   "heading": 6.41,
+   "speed": 6.173
+  },
+  {
+   "time": 120.0,
+   "vehicle": "ts1_boundary",
+   "x": 506.38,
+   "y": 590.4,
+   "heading": 352.7,
+   "speed": 8.0
+  },
+  {
+   "time": 130.0,
+   "vehicle": "own_ship",
+   "x": 78.77,
+   "y": 798.0,
+   "heading": 4.93,
+   "speed": 6.173
+  },
+  {
+   "time": 130.0,
+   "vehicle": "ts1_boundary",
+   "x": 496.21,
+   "y": 669.74,
+   "heading": 352.7,
+   "speed": 8.0
+  },
+  {
+   "time": 140.0,
+   "vehicle": "own_ship",
+   "x": 82.29,
+   "y": 859.64,
+   "heading": 3.27,
+   "speed": 6.173
+  },
+  {
+   "time": 140.0,
+   "vehicle": "ts1_boundary",
+   "x": 486.05,
+   "y": 749.09,
+   "heading": 352.7,
+   "speed": 8.0
+  },
+  {
+   "time": 150.0,
+   "vehicle": "own_ship",
+   "x": 84.01,
+   "y": 921.34,
+   "heading": 1.59,
+   "speed": 6.173
+  },
+  {
+   "time": 150.0,
+   "vehicle": "ts1_boundary",
+   "x": 475.89,
+   "y": 828.44,
+   "heading": 352.7,
+   "speed": 8.0
+  },
+  {
+   "time": 160.0,
+   "vehicle": "own_ship",
+   "x": 84.55,
+   "y": 983.08,
+   "heading": 0.51,
+   "speed": 6.173
+  },
+  {
+   "time": 160.0,
+   "vehicle": "ts1_boundary",
+   "x": 465.72,
+   "y": 907.79,
+   "heading": 352.7,
+   "speed": 8.0
+  },
+  {
+   "time": 170.0,
+   "vehicle": "own_ship",
+   "x": 85.11,
+   "y": 1044.81,
+   "heading": 0.52,
+   "speed": 6.173
+  },
+  {
+   "time": 170.0,
+   "vehicle": "ts1_boundary",
+   "x": 417.24,
+   "y": 971.42,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 180.0,
+   "vehicle": "own_ship",
+   "x": 86.66,
+   "y": 1106.52,
+   "heading": 1.44,
+   "speed": 6.173
+  },
+  {
+   "time": 180.0,
+   "vehicle": "ts1_boundary",
+   "x": 368.77,
+   "y": 1035.06,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 190.0,
+   "vehicle": "own_ship",
+   "x": 89.46,
+   "y": 1168.19,
+   "heading": 2.6,
+   "speed": 6.173
+  },
+  {
+   "time": 190.0,
+   "vehicle": "ts1_boundary",
+   "x": 320.29,
+   "y": 1098.69,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 200.0,
+   "vehicle": "own_ship",
+   "x": 92.97,
+   "y": 1229.82,
+   "heading": 3.26,
+   "speed": 6.173
+  },
+  {
+   "time": 200.0,
+   "vehicle": "ts1_boundary",
+   "x": 271.81,
+   "y": 1162.33,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 210.0,
+   "vehicle": "own_ship",
+   "x": 96.68,
+   "y": 1291.45,
+   "heading": 3.44,
+   "speed": 6.173
+  },
+  {
+   "time": 210.0,
+   "vehicle": "ts1_boundary",
+   "x": 223.34,
+   "y": 1225.96,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 220.0,
+   "vehicle": "own_ship",
+   "x": 100.72,
+   "y": 1353.05,
+   "heading": 3.76,
+   "speed": 6.173
+  },
+  {
+   "time": 220.0,
+   "vehicle": "ts1_boundary",
+   "x": 174.86,
+   "y": 1289.6,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 230.0,
+   "vehicle": "own_ship",
+   "x": 106.0,
+   "y": 1414.55,
+   "heading": 4.91,
+   "speed": 6.173
+  },
+  {
+   "time": 230.0,
+   "vehicle": "ts1_boundary",
+   "x": 126.38,
+   "y": 1353.23,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 240.0,
+   "vehicle": "own_ship",
+   "x": 113.2,
+   "y": 1475.87,
+   "heading": 6.69,
+   "speed": 6.173
+  },
+  {
+   "time": 240.0,
+   "vehicle": "ts1_boundary",
+   "x": 77.91,
+   "y": 1416.87,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 250.0,
+   "vehicle": "own_ship",
+   "x": 122.69,
+   "y": 1536.86,
+   "heading": 8.85,
+   "speed": 6.173
+  },
+  {
+   "time": 250.0,
+   "vehicle": "ts1_boundary",
+   "x": 29.43,
+   "y": 1480.5,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 260.0,
+   "vehicle": "own_ship",
+   "x": 134.6,
+   "y": 1597.44,
+   "heading": 11.12,
+   "speed": 6.173
+  },
+  {
+   "time": 260.0,
+   "vehicle": "ts1_boundary",
+   "x": -19.05,
+   "y": 1544.14,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 270.0,
+   "vehicle": "own_ship",
+   "x": 148.78,
+   "y": 1657.52,
+   "heading": 13.27,
+   "speed": 6.173
+  },
+  {
+   "time": 270.0,
+   "vehicle": "ts1_boundary",
+   "x": -67.52,
+   "y": 1607.77,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 280.0,
+   "vehicle": "own_ship",
+   "x": 164.9,
+   "y": 1717.11,
+   "heading": 15.14,
+   "speed": 6.173
+  },
+  {
+   "time": 280.0,
+   "vehicle": "ts1_boundary",
+   "x": -116.0,
+   "y": 1671.4,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 290.0,
+   "vehicle": "own_ship",
+   "x": 182.53,
+   "y": 1776.28,
+   "heading": 16.59,
+   "speed": 6.173
+  },
+  {
+   "time": 290.0,
+   "vehicle": "ts1_boundary",
+   "x": -164.48,
+   "y": 1735.04,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 300.0,
+   "vehicle": "own_ship",
+   "x": 201.16,
+   "y": 1835.13,
+   "heading": 17.57,
+   "speed": 6.173
+  },
+  {
+   "time": 300.0,
+   "vehicle": "ts1_boundary",
+   "x": -212.95,
+   "y": 1798.67,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 310.0,
+   "vehicle": "own_ship",
+   "x": 220.3,
+   "y": 1893.82,
+   "heading": 18.07,
+   "speed": 6.173
+  },
+  {
+   "time": 310.0,
+   "vehicle": "ts1_boundary",
+   "x": -261.43,
+   "y": 1862.31,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 320.0,
+   "vehicle": "own_ship",
+   "x": 239.5,
+   "y": 1952.49,
+   "heading": 18.12,
+   "speed": 6.173
+  },
+  {
+   "time": 320.0,
+   "vehicle": "ts1_boundary",
+   "x": -309.91,
+   "y": 1925.94,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 330.0,
+   "vehicle": "own_ship",
+   "x": 258.36,
+   "y": 2011.27,
+   "heading": 17.79,
+   "speed": 6.173
+  },
+  {
+   "time": 330.0,
+   "vehicle": "ts1_boundary",
+   "x": -358.38,
+   "y": 1989.58,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 340.0,
+   "vehicle": "own_ship",
+   "x": 276.34,
+   "y": 2070.33,
+   "heading": 16.93,
+   "speed": 6.173
+  },
+  {
+   "time": 340.0,
+   "vehicle": "ts1_boundary",
+   "x": -406.86,
+   "y": 2053.21,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 350.0,
+   "vehicle": "own_ship",
+   "x": 292.65,
+   "y": 2129.87,
+   "heading": 15.32,
+   "speed": 6.173
+  },
+  {
+   "time": 350.0,
+   "vehicle": "ts1_boundary",
+   "x": -455.34,
+   "y": 2116.85,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 360.0,
+   "vehicle": "own_ship",
+   "x": 306.63,
+   "y": 2190.0,
+   "heading": 13.09,
+   "speed": 6.173
+  },
+  {
+   "time": 360.0,
+   "vehicle": "ts1_boundary",
+   "x": -503.81,
+   "y": 2180.48,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 370.0,
+   "vehicle": "own_ship",
+   "x": 317.72,
+   "y": 2250.73,
+   "heading": 10.35,
+   "speed": 6.173
+  },
+  {
+   "time": 370.0,
+   "vehicle": "ts1_boundary",
+   "x": -552.29,
+   "y": 2244.12,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 380.0,
+   "vehicle": "own_ship",
+   "x": 325.47,
+   "y": 2311.98,
+   "heading": 7.21,
+   "speed": 6.173
+  },
+  {
+   "time": 380.0,
+   "vehicle": "ts1_boundary",
+   "x": -600.77,
+   "y": 2307.75,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 390.0,
+   "vehicle": "own_ship",
+   "x": 329.64,
+   "y": 2373.57,
+   "heading": 3.87,
+   "speed": 6.173
+  },
+  {
+   "time": 390.0,
+   "vehicle": "ts1_boundary",
+   "x": -649.24,
+   "y": 2371.39,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 400.0,
+   "vehicle": "own_ship",
+   "x": 330.36,
+   "y": 2435.3,
+   "heading": 0.67,
+   "speed": 6.173
+  },
+  {
+   "time": 400.0,
+   "vehicle": "ts1_boundary",
+   "x": -697.72,
+   "y": 2435.02,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 410.0,
+   "vehicle": "own_ship",
+   "x": 328.06,
+   "y": 2496.99,
+   "heading": 357.87,
+   "speed": 6.173
+  },
+  {
+   "time": 410.0,
+   "vehicle": "ts1_boundary",
+   "x": -746.2,
+   "y": 2498.66,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 420.0,
+   "vehicle": "own_ship",
+   "x": 323.38,
+   "y": 2558.54,
+   "heading": 355.65,
+   "speed": 6.173
+  },
+  {
+   "time": 420.0,
+   "vehicle": "ts1_boundary",
+   "x": -794.67,
+   "y": 2562.29,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 430.0,
+   "vehicle": "own_ship",
+   "x": 317.07,
+   "y": 2619.95,
+   "heading": 354.13,
+   "speed": 6.173
+  },
+  {
+   "time": 430.0,
+   "vehicle": "ts1_boundary",
+   "x": -843.15,
+   "y": 2625.93,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 440.0,
+   "vehicle": "own_ship",
+   "x": 309.88,
+   "y": 2681.27,
+   "heading": 353.32,
+   "speed": 6.173
+  },
+  {
+   "time": 440.0,
+   "vehicle": "ts1_boundary",
+   "x": -891.63,
+   "y": 2689.56,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 450.0,
+   "vehicle": "own_ship",
+   "x": 302.54,
+   "y": 2742.56,
+   "heading": 353.17,
+   "speed": 6.173
+  },
+  {
+   "time": 450.0,
+   "vehicle": "ts1_boundary",
+   "x": -940.1,
+   "y": 2753.2,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 460.0,
+   "vehicle": "own_ship",
+   "x": 295.65,
+   "y": 2803.91,
+   "heading": 353.59,
+   "speed": 6.173
+  },
+  {
+   "time": 460.0,
+   "vehicle": "ts1_boundary",
+   "x": -988.58,
+   "y": 2816.83,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 470.0,
+   "vehicle": "own_ship",
+   "x": 289.66,
+   "y": 2865.35,
+   "heading": 354.44,
+   "speed": 6.173
+  },
+  {
+   "time": 470.0,
+   "vehicle": "ts1_boundary",
+   "x": -1037.06,
+   "y": 2880.47,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 480.0,
+   "vehicle": "own_ship",
+   "x": 284.9,
+   "y": 2926.9,
+   "heading": 355.57,
+   "speed": 6.173
+  },
+  {
+   "time": 480.0,
+   "vehicle": "ts1_boundary",
+   "x": -1085.53,
+   "y": 2944.1,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 490.0,
+   "vehicle": "own_ship",
+   "x": 281.48,
+   "y": 2988.54,
+   "heading": 356.83,
+   "speed": 6.173
+  },
+  {
+   "time": 490.0,
+   "vehicle": "ts1_boundary",
+   "x": -1134.01,
+   "y": 3007.74,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 500.0,
+   "vehicle": "own_ship",
+   "x": 279.41,
+   "y": 3050.24,
+   "heading": 358.08,
+   "speed": 6.173
+  },
+  {
+   "time": 500.0,
+   "vehicle": "ts1_boundary",
+   "x": -1182.49,
+   "y": 3071.37,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 510.0,
+   "vehicle": "own_ship",
+   "x": 278.56,
+   "y": 3111.97,
+   "heading": 359.21,
+   "speed": 6.173
+  },
+  {
+   "time": 510.0,
+   "vehicle": "ts1_boundary",
+   "x": -1230.96,
+   "y": 3135.0,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 520.0,
+   "vehicle": "own_ship",
+   "x": 278.72,
+   "y": 3173.7,
+   "heading": 0.14,
+   "speed": 6.173
+  },
+  {
+   "time": 520.0,
+   "vehicle": "ts1_boundary",
+   "x": -1279.44,
+   "y": 3198.64,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 530.0,
+   "vehicle": "own_ship",
+   "x": 279.6,
+   "y": 3235.43,
+   "heading": 0.82,
+   "speed": 6.173
+  },
+  {
+   "time": 530.0,
+   "vehicle": "ts1_boundary",
+   "x": -1327.92,
+   "y": 3262.27,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 540.0,
+   "vehicle": "own_ship",
+   "x": 280.92,
+   "y": 3297.14,
+   "heading": 1.22,
+   "speed": 6.173
+  },
+  {
+   "time": 540.0,
+   "vehicle": "ts1_boundary",
+   "x": -1376.39,
+   "y": 3325.91,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 550.0,
+   "vehicle": "own_ship",
+   "x": 282.39,
+   "y": 3358.86,
+   "heading": 1.37,
+   "speed": 6.173
+  },
+  {
+   "time": 550.0,
+   "vehicle": "ts1_boundary",
+   "x": -1424.87,
+   "y": 3389.54,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 560.0,
+   "vehicle": "own_ship",
+   "x": 283.77,
+   "y": 3420.58,
+   "heading": 1.28,
+   "speed": 6.173
+  },
+  {
+   "time": 560.0,
+   "vehicle": "ts1_boundary",
+   "x": -1473.35,
+   "y": 3453.18,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 570.0,
+   "vehicle": "own_ship",
+   "x": 284.85,
+   "y": 3482.3,
+   "heading": 1.01,
+   "speed": 6.173
+  },
+  {
+   "time": 570.0,
+   "vehicle": "ts1_boundary",
+   "x": -1521.82,
+   "y": 3516.81,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 580.0,
+   "vehicle": "own_ship",
+   "x": 285.51,
+   "y": 3544.03,
+   "heading": 0.61,
+   "speed": 6.173
+  },
+  {
+   "time": 580.0,
+   "vehicle": "ts1_boundary",
+   "x": -1570.3,
+   "y": 3580.45,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 590.0,
+   "vehicle": "own_ship",
+   "x": 285.66,
+   "y": 3605.77,
+   "heading": 0.14,
+   "speed": 6.173
+  },
+  {
+   "time": 590.0,
+   "vehicle": "ts1_boundary",
+   "x": -1618.78,
+   "y": 3644.08,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 600.0,
+   "vehicle": "own_ship",
+   "x": 285.28,
+   "y": 3667.5,
+   "heading": 359.66,
+   "speed": 6.173
+  },
+  {
+   "time": 600.0,
+   "vehicle": "ts1_boundary",
+   "x": -1667.26,
+   "y": 3707.72,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 610.0,
+   "vehicle": "own_ship",
+   "x": 284.43,
+   "y": 3729.22,
+   "heading": 359.2,
+   "speed": 6.173
+  },
+  {
+   "time": 610.0,
+   "vehicle": "ts1_boundary",
+   "x": -1715.73,
+   "y": 3771.35,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 620.0,
+   "vehicle": "own_ship",
+   "x": 283.15,
+   "y": 3790.95,
+   "heading": 358.82,
+   "speed": 6.173
+  },
+  {
+   "time": 620.0,
+   "vehicle": "ts1_boundary",
+   "x": -1764.21,
+   "y": 3834.99,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 630.0,
+   "vehicle": "own_ship",
+   "x": 281.56,
+   "y": 3852.66,
+   "heading": 358.53,
+   "speed": 6.173
+  },
+  {
+   "time": 630.0,
+   "vehicle": "ts1_boundary",
+   "x": -1812.69,
+   "y": 3898.62,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 640.0,
+   "vehicle": "own_ship",
+   "x": 279.77,
+   "y": 3914.37,
+   "heading": 358.33,
+   "speed": 6.173
+  },
+  {
+   "time": 640.0,
+   "vehicle": "ts1_boundary",
+   "x": -1861.16,
+   "y": 3962.26,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 650.0,
+   "vehicle": "own_ship",
+   "x": 277.88,
+   "y": 3976.07,
+   "heading": 358.24,
+   "speed": 6.173
+  },
+  {
+   "time": 650.0,
+   "vehicle": "ts1_boundary",
+   "x": -1909.64,
+   "y": 4025.89,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 660.0,
+   "vehicle": "own_ship",
+   "x": 275.99,
+   "y": 4037.77,
+   "heading": 358.25,
+   "speed": 6.173
+  },
+  {
+   "time": 660.0,
+   "vehicle": "ts1_boundary",
+   "x": -1958.12,
+   "y": 4089.53,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 670.0,
+   "vehicle": "own_ship",
+   "x": 274.19,
+   "y": 4099.48,
+   "heading": 358.33,
+   "speed": 6.173
+  },
+  {
+   "time": 670.0,
+   "vehicle": "ts1_boundary",
+   "x": -2006.59,
+   "y": 4153.16,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 680.0,
+   "vehicle": "own_ship",
+   "x": 272.54,
+   "y": 4161.19,
+   "heading": 358.47,
+   "speed": 6.173
+  },
+  {
+   "time": 680.0,
+   "vehicle": "ts1_boundary",
+   "x": -2055.07,
+   "y": 4216.8,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 690.0,
+   "vehicle": "own_ship",
+   "x": 271.08,
+   "y": 4222.91,
+   "heading": 358.64,
+   "speed": 6.173
+  },
+  {
+   "time": 690.0,
+   "vehicle": "ts1_boundary",
+   "x": -2103.55,
+   "y": 4280.43,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 700.0,
+   "vehicle": "own_ship",
+   "x": 269.81,
+   "y": 4284.63,
+   "heading": 358.82,
+   "speed": 6.173
+  },
+  {
+   "time": 700.0,
+   "vehicle": "ts1_boundary",
+   "x": -2152.02,
+   "y": 4344.07,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 710.0,
+   "vehicle": "own_ship",
+   "x": 268.73,
+   "y": 4346.35,
+   "heading": 359.0,
+   "speed": 6.173
+  },
+  {
+   "time": 710.0,
+   "vehicle": "ts1_boundary",
+   "x": -2200.5,
+   "y": 4407.7,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 720.0,
+   "vehicle": "own_ship",
+   "x": 267.83,
+   "y": 4408.08,
+   "heading": 359.16,
+   "speed": 6.173
+  },
+  {
+   "time": 720.0,
+   "vehicle": "ts1_boundary",
+   "x": -2248.98,
+   "y": 4471.34,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 730.0,
+   "vehicle": "own_ship",
+   "x": 267.05,
+   "y": 4469.81,
+   "heading": 359.28,
+   "speed": 6.173
+  },
+  {
+   "time": 730.0,
+   "vehicle": "ts1_boundary",
+   "x": -2297.45,
+   "y": 4534.97,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 740.0,
+   "vehicle": "own_ship",
+   "x": 266.38,
+   "y": 4531.54,
+   "heading": 359.37,
+   "speed": 6.173
+  },
+  {
+   "time": 740.0,
+   "vehicle": "ts1_boundary",
+   "x": -2345.93,
+   "y": 4598.6,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 750.0,
+   "vehicle": "own_ship",
+   "x": 265.75,
+   "y": 4593.27,
+   "heading": 359.42,
+   "speed": 6.173
+  },
+  {
+   "time": 750.0,
+   "vehicle": "ts1_boundary",
+   "x": -2394.41,
+   "y": 4662.24,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 760.0,
+   "vehicle": "own_ship",
+   "x": 265.13,
+   "y": 4655.0,
+   "heading": 359.43,
+   "speed": 6.173
+  },
+  {
+   "time": 760.0,
+   "vehicle": "ts1_boundary",
+   "x": -2442.88,
+   "y": 4725.87,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 770.0,
+   "vehicle": "own_ship",
+   "x": 264.49,
+   "y": 4716.73,
+   "heading": 359.41,
+   "speed": 6.173
+  },
+  {
+   "time": 770.0,
+   "vehicle": "ts1_boundary",
+   "x": -2491.36,
+   "y": 4789.51,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 780.0,
+   "vehicle": "own_ship",
+   "x": 263.81,
+   "y": 4778.46,
+   "heading": 359.36,
+   "speed": 6.173
+  },
+  {
+   "time": 780.0,
+   "vehicle": "ts1_boundary",
+   "x": -2539.84,
+   "y": 4853.14,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 790.0,
+   "vehicle": "own_ship",
+   "x": 263.05,
+   "y": 4840.19,
+   "heading": 359.3,
+   "speed": 6.173
+  },
+  {
+   "time": 790.0,
+   "vehicle": "ts1_boundary",
+   "x": -2588.31,
+   "y": 4916.78,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 800.0,
+   "vehicle": "own_ship",
+   "x": 262.22,
+   "y": 4901.91,
+   "heading": 359.23,
+   "speed": 6.173
+  },
+  {
+   "time": 800.0,
+   "vehicle": "ts1_boundary",
+   "x": -2636.79,
+   "y": 4980.41,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 810.0,
+   "vehicle": "own_ship",
+   "x": 261.32,
+   "y": 4963.64,
+   "heading": 359.16,
+   "speed": 6.173
+  },
+  {
+   "time": 810.0,
+   "vehicle": "ts1_boundary",
+   "x": -2685.27,
+   "y": 5044.05,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 820.0,
+   "vehicle": "own_ship",
+   "x": 260.35,
+   "y": 5025.37,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 820.0,
+   "vehicle": "ts1_boundary",
+   "x": -2733.74,
+   "y": 5107.68,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 830.0,
+   "vehicle": "own_ship",
+   "x": 259.32,
+   "y": 5087.09,
+   "heading": 359.05,
+   "speed": 6.173
+  },
+  {
+   "time": 830.0,
+   "vehicle": "ts1_boundary",
+   "x": -2782.22,
+   "y": 5171.32,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 840.0,
+   "vehicle": "own_ship",
+   "x": 258.25,
+   "y": 5148.82,
+   "heading": 359.01,
+   "speed": 6.173
+  },
+  {
+   "time": 840.0,
+   "vehicle": "ts1_boundary",
+   "x": -2830.7,
+   "y": 5234.95,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 850.0,
+   "vehicle": "own_ship",
+   "x": 257.15,
+   "y": 5210.54,
+   "heading": 358.98,
+   "speed": 6.173
+  },
+  {
+   "time": 850.0,
+   "vehicle": "ts1_boundary",
+   "x": -2879.17,
+   "y": 5298.59,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 860.0,
+   "vehicle": "own_ship",
+   "x": 256.05,
+   "y": 5272.26,
+   "heading": 358.97,
+   "speed": 6.173
+  },
+  {
+   "time": 860.0,
+   "vehicle": "ts1_boundary",
+   "x": -2927.65,
+   "y": 5362.22,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 870.0,
+   "vehicle": "own_ship",
+   "x": 254.95,
+   "y": 5333.99,
+   "heading": 358.98,
+   "speed": 6.173
+  },
+  {
+   "time": 870.0,
+   "vehicle": "ts1_boundary",
+   "x": -2976.13,
+   "y": 5425.86,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 880.0,
+   "vehicle": "own_ship",
+   "x": 253.86,
+   "y": 5395.71,
+   "heading": 358.99,
+   "speed": 6.173
+  },
+  {
+   "time": 880.0,
+   "vehicle": "ts1_boundary",
+   "x": -3024.6,
+   "y": 5489.49,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 890.0,
+   "vehicle": "own_ship",
+   "x": 252.8,
+   "y": 5457.43,
+   "heading": 359.01,
+   "speed": 6.173
+  },
+  {
+   "time": 890.0,
+   "vehicle": "ts1_boundary",
+   "x": -3073.08,
+   "y": 5553.13,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 900.0,
+   "vehicle": "own_ship",
+   "x": 251.77,
+   "y": 5519.16,
+   "heading": 359.04,
+   "speed": 6.173
+  },
+  {
+   "time": 900.0,
+   "vehicle": "ts1_boundary",
+   "x": -3121.56,
+   "y": 5616.76,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 910.0,
+   "vehicle": "own_ship",
+   "x": 250.76,
+   "y": 5580.88,
+   "heading": 359.07,
+   "speed": 6.173
+  },
+  {
+   "time": 910.0,
+   "vehicle": "ts1_boundary",
+   "x": -3170.03,
+   "y": 5680.4,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 920.0,
+   "vehicle": "own_ship",
+   "x": 249.79,
+   "y": 5642.61,
+   "heading": 359.09,
+   "speed": 6.173
+  },
+  {
+   "time": 920.0,
+   "vehicle": "ts1_boundary",
+   "x": -3218.51,
+   "y": 5744.03,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 930.0,
+   "vehicle": "own_ship",
+   "x": 248.83,
+   "y": 5704.34,
+   "heading": 359.11,
+   "speed": 6.173
+  },
+  {
+   "time": 930.0,
+   "vehicle": "ts1_boundary",
+   "x": -3266.99,
+   "y": 5807.67,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 940.0,
+   "vehicle": "own_ship",
+   "x": 247.9,
+   "y": 5766.06,
+   "heading": 359.13,
+   "speed": 6.173
+  },
+  {
+   "time": 940.0,
+   "vehicle": "ts1_boundary",
+   "x": -3315.46,
+   "y": 5871.3,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 950.0,
+   "vehicle": "own_ship",
+   "x": 246.97,
+   "y": 5827.79,
+   "heading": 359.14,
+   "speed": 6.173
+  },
+  {
+   "time": 950.0,
+   "vehicle": "ts1_boundary",
+   "x": -3363.94,
+   "y": 5934.94,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 960.0,
+   "vehicle": "own_ship",
+   "x": 246.05,
+   "y": 5889.51,
+   "heading": 359.15,
+   "speed": 6.173
+  },
+  {
+   "time": 960.0,
+   "vehicle": "ts1_boundary",
+   "x": -3412.42,
+   "y": 5998.57,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 970.0,
+   "vehicle": "own_ship",
+   "x": 245.13,
+   "y": 5951.24,
+   "heading": 359.15,
+   "speed": 6.173
+  },
+  {
+   "time": 970.0,
+   "vehicle": "ts1_boundary",
+   "x": -3460.89,
+   "y": 6062.21,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 980.0,
+   "vehicle": "own_ship",
+   "x": 244.21,
+   "y": 6012.97,
+   "heading": 359.14,
+   "speed": 6.173
+  },
+  {
+   "time": 980.0,
+   "vehicle": "ts1_boundary",
+   "x": -3509.37,
+   "y": 6125.84,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 990.0,
+   "vehicle": "own_ship",
+   "x": 243.28,
+   "y": 6074.69,
+   "heading": 359.14,
+   "speed": 6.173
+  },
+  {
+   "time": 990.0,
+   "vehicle": "ts1_boundary",
+   "x": -3557.85,
+   "y": 6189.47,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1000.0,
+   "vehicle": "own_ship",
+   "x": 242.34,
+   "y": 6136.42,
+   "heading": 359.13,
+   "speed": 6.173
+  },
+  {
+   "time": 1000.0,
+   "vehicle": "ts1_boundary",
+   "x": -3606.32,
+   "y": 6253.11,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1010.0,
+   "vehicle": "own_ship",
+   "x": 241.39,
+   "y": 6198.15,
+   "heading": 359.12,
+   "speed": 6.173
+  },
+  {
+   "time": 1010.0,
+   "vehicle": "ts1_boundary",
+   "x": -3654.8,
+   "y": 6316.74,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1020.0,
+   "vehicle": "own_ship",
+   "x": 240.42,
+   "y": 6259.87,
+   "heading": 359.11,
+   "speed": 6.173
+  },
+  {
+   "time": 1020.0,
+   "vehicle": "ts1_boundary",
+   "x": -3703.28,
+   "y": 6380.38,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1030.0,
+   "vehicle": "own_ship",
+   "x": 239.45,
+   "y": 6321.6,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1030.0,
+   "vehicle": "ts1_boundary",
+   "x": -3751.75,
+   "y": 6444.01,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1040.0,
+   "vehicle": "own_ship",
+   "x": 238.47,
+   "y": 6383.32,
+   "heading": 359.09,
+   "speed": 6.173
+  },
+  {
+   "time": 1040.0,
+   "vehicle": "ts1_boundary",
+   "x": -3800.23,
+   "y": 6507.65,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1050.0,
+   "vehicle": "own_ship",
+   "x": 237.48,
+   "y": 6445.05,
+   "heading": 359.09,
+   "speed": 6.173
+  },
+  {
+   "time": 1050.0,
+   "vehicle": "ts1_boundary",
+   "x": -3848.71,
+   "y": 6571.28,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1060.0,
+   "vehicle": "own_ship",
+   "x": 236.5,
+   "y": 6506.77,
+   "heading": 359.08,
+   "speed": 6.173
+  },
+  {
+   "time": 1060.0,
+   "vehicle": "ts1_boundary",
+   "x": -3897.18,
+   "y": 6634.92,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1070.0,
+   "vehicle": "own_ship",
+   "x": 235.51,
+   "y": 6568.5,
+   "heading": 359.08,
+   "speed": 6.173
+  },
+  {
+   "time": 1070.0,
+   "vehicle": "ts1_boundary",
+   "x": -3945.66,
+   "y": 6698.55,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1080.0,
+   "vehicle": "own_ship",
+   "x": 234.52,
+   "y": 6630.22,
+   "heading": 359.08,
+   "speed": 6.173
+  },
+  {
+   "time": 1080.0,
+   "vehicle": "ts1_boundary",
+   "x": -3994.14,
+   "y": 6762.19,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1090.0,
+   "vehicle": "own_ship",
+   "x": 233.53,
+   "y": 6691.95,
+   "heading": 359.09,
+   "speed": 6.173
+  },
+  {
+   "time": 1090.0,
+   "vehicle": "ts1_boundary",
+   "x": -4042.61,
+   "y": 6825.82,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1100.0,
+   "vehicle": "own_ship",
+   "x": 232.55,
+   "y": 6753.68,
+   "heading": 359.09,
+   "speed": 6.173
+  },
+  {
+   "time": 1100.0,
+   "vehicle": "ts1_boundary",
+   "x": -4091.09,
+   "y": 6889.46,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1110.0,
+   "vehicle": "own_ship",
+   "x": 231.57,
+   "y": 6815.4,
+   "heading": 359.09,
+   "speed": 6.173
+  },
+  {
+   "time": 1110.0,
+   "vehicle": "ts1_boundary",
+   "x": -4139.57,
+   "y": 6953.09,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1120.0,
+   "vehicle": "own_ship",
+   "x": 230.6,
+   "y": 6877.13,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1120.0,
+   "vehicle": "ts1_boundary",
+   "x": -4188.04,
+   "y": 7016.73,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1130.0,
+   "vehicle": "own_ship",
+   "x": 229.63,
+   "y": 6938.85,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1130.0,
+   "vehicle": "ts1_boundary",
+   "x": -4236.52,
+   "y": 7080.36,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1140.0,
+   "vehicle": "own_ship",
+   "x": 228.66,
+   "y": 7000.58,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1140.0,
+   "vehicle": "ts1_boundary",
+   "x": -4285.0,
+   "y": 7144.0,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1150.0,
+   "vehicle": "own_ship",
+   "x": 227.7,
+   "y": 7062.3,
+   "heading": 359.11,
+   "speed": 6.173
+  },
+  {
+   "time": 1150.0,
+   "vehicle": "ts1_boundary",
+   "x": -4333.47,
+   "y": 7207.63,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1160.0,
+   "vehicle": "own_ship",
+   "x": 226.74,
+   "y": 7124.03,
+   "heading": 359.11,
+   "speed": 6.173
+  },
+  {
+   "time": 1160.0,
+   "vehicle": "ts1_boundary",
+   "x": -4381.95,
+   "y": 7271.27,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1170.0,
+   "vehicle": "own_ship",
+   "x": 225.77,
+   "y": 7185.76,
+   "heading": 359.11,
+   "speed": 6.173
+  },
+  {
+   "time": 1170.0,
+   "vehicle": "ts1_boundary",
+   "x": -4430.43,
+   "y": 7334.9,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1180.0,
+   "vehicle": "own_ship",
+   "x": 224.81,
+   "y": 7247.48,
+   "heading": 359.11,
+   "speed": 6.173
+  },
+  {
+   "time": 1180.0,
+   "vehicle": "ts1_boundary",
+   "x": -4478.9,
+   "y": 7398.54,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1190.0,
+   "vehicle": "own_ship",
+   "x": 223.85,
+   "y": 7309.21,
+   "heading": 359.11,
+   "speed": 6.173
+  },
+  {
+   "time": 1190.0,
+   "vehicle": "ts1_boundary",
+   "x": -4527.38,
+   "y": 7462.17,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1200.0,
+   "vehicle": "own_ship",
+   "x": 222.88,
+   "y": 7370.93,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1200.0,
+   "vehicle": "ts1_boundary",
+   "x": -4575.86,
+   "y": 7525.81,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1210.0,
+   "vehicle": "own_ship",
+   "x": 221.92,
+   "y": 7432.66,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1210.0,
+   "vehicle": "ts1_boundary",
+   "x": -4624.33,
+   "y": 7589.44,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1220.0,
+   "vehicle": "own_ship",
+   "x": 220.95,
+   "y": 7494.38,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1220.0,
+   "vehicle": "ts1_boundary",
+   "x": -4672.81,
+   "y": 7653.07,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1230.0,
+   "vehicle": "own_ship",
+   "x": 219.98,
+   "y": 7556.11,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1230.0,
+   "vehicle": "ts1_boundary",
+   "x": -4721.29,
+   "y": 7716.71,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1240.0,
+   "vehicle": "own_ship",
+   "x": 219.01,
+   "y": 7617.84,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1240.0,
+   "vehicle": "ts1_boundary",
+   "x": -4769.76,
+   "y": 7780.34,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1250.0,
+   "vehicle": "own_ship",
+   "x": 218.04,
+   "y": 7679.56,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1250.0,
+   "vehicle": "ts1_boundary",
+   "x": -4818.24,
+   "y": 7843.98,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1260.0,
+   "vehicle": "own_ship",
+   "x": 217.07,
+   "y": 7741.29,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1260.0,
+   "vehicle": "ts1_boundary",
+   "x": -4866.72,
+   "y": 7907.61,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1270.0,
+   "vehicle": "own_ship",
+   "x": 216.09,
+   "y": 7803.01,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1270.0,
+   "vehicle": "ts1_boundary",
+   "x": -4915.19,
+   "y": 7971.25,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1280.0,
+   "vehicle": "own_ship",
+   "x": 215.12,
+   "y": 7864.74,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1280.0,
+   "vehicle": "ts1_boundary",
+   "x": -4963.67,
+   "y": 8034.88,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1290.0,
+   "vehicle": "own_ship",
+   "x": 214.15,
+   "y": 7926.46,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1290.0,
+   "vehicle": "ts1_boundary",
+   "x": -5012.15,
+   "y": 8098.52,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1300.0,
+   "vehicle": "own_ship",
+   "x": 213.18,
+   "y": 7988.19,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1300.0,
+   "vehicle": "ts1_boundary",
+   "x": -5060.63,
+   "y": 8162.15,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1310.0,
+   "vehicle": "own_ship",
+   "x": 212.21,
+   "y": 8049.92,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1310.0,
+   "vehicle": "ts1_boundary",
+   "x": -5109.1,
+   "y": 8225.79,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1320.0,
+   "vehicle": "own_ship",
+   "x": 211.24,
+   "y": 8111.64,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1320.0,
+   "vehicle": "ts1_boundary",
+   "x": -5157.58,
+   "y": 8289.42,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1330.0,
+   "vehicle": "own_ship",
+   "x": 210.27,
+   "y": 8173.37,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1330.0,
+   "vehicle": "ts1_boundary",
+   "x": -5206.06,
+   "y": 8353.06,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1340.0,
+   "vehicle": "own_ship",
+   "x": 209.3,
+   "y": 8235.09,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1340.0,
+   "vehicle": "ts1_boundary",
+   "x": -5254.53,
+   "y": 8416.69,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1350.0,
+   "vehicle": "own_ship",
+   "x": 208.33,
+   "y": 8296.82,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1350.0,
+   "vehicle": "ts1_boundary",
+   "x": -5303.01,
+   "y": 8480.33,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1360.0,
+   "vehicle": "own_ship",
+   "x": 207.36,
+   "y": 8358.54,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1360.0,
+   "vehicle": "ts1_boundary",
+   "x": -5351.49,
+   "y": 8543.96,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1370.0,
+   "vehicle": "own_ship",
+   "x": 206.39,
+   "y": 8420.27,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1370.0,
+   "vehicle": "ts1_boundary",
+   "x": -5399.96,
+   "y": 8607.6,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1380.0,
+   "vehicle": "own_ship",
+   "x": 205.42,
+   "y": 8482.0,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1380.0,
+   "vehicle": "ts1_boundary",
+   "x": -5448.44,
+   "y": 8671.23,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1390.0,
+   "vehicle": "own_ship",
+   "x": 204.45,
+   "y": 8543.72,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1390.0,
+   "vehicle": "ts1_boundary",
+   "x": -5496.92,
+   "y": 8734.87,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1400.0,
+   "vehicle": "own_ship",
+   "x": 203.48,
+   "y": 8605.45,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1400.0,
+   "vehicle": "ts1_boundary",
+   "x": -5545.39,
+   "y": 8798.5,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1410.0,
+   "vehicle": "own_ship",
+   "x": 202.51,
+   "y": 8667.17,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1410.0,
+   "vehicle": "ts1_boundary",
+   "x": -5593.87,
+   "y": 8862.14,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1420.0,
+   "vehicle": "own_ship",
+   "x": 201.55,
+   "y": 8728.9,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1420.0,
+   "vehicle": "ts1_boundary",
+   "x": -5642.35,
+   "y": 8925.77,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1430.0,
+   "vehicle": "own_ship",
+   "x": 200.58,
+   "y": 8790.62,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1430.0,
+   "vehicle": "ts1_boundary",
+   "x": -5690.82,
+   "y": 8989.41,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1440.0,
+   "vehicle": "own_ship",
+   "x": 199.61,
+   "y": 8852.35,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1440.0,
+   "vehicle": "ts1_boundary",
+   "x": -5739.3,
+   "y": 9053.04,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1450.0,
+   "vehicle": "own_ship",
+   "x": 198.64,
+   "y": 8914.08,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1450.0,
+   "vehicle": "ts1_boundary",
+   "x": -5787.78,
+   "y": 9116.67,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1460.0,
+   "vehicle": "own_ship",
+   "x": 197.67,
+   "y": 8975.8,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1460.0,
+   "vehicle": "ts1_boundary",
+   "x": -5836.25,
+   "y": 9180.31,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1470.0,
+   "vehicle": "own_ship",
+   "x": 196.7,
+   "y": 9037.53,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1470.0,
+   "vehicle": "ts1_boundary",
+   "x": -5884.73,
+   "y": 9243.94,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1480.0,
+   "vehicle": "own_ship",
+   "x": 195.73,
+   "y": 9099.25,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1480.0,
+   "vehicle": "ts1_boundary",
+   "x": -5933.21,
+   "y": 9307.58,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1490.0,
+   "vehicle": "own_ship",
+   "x": 194.76,
+   "y": 9160.98,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1490.0,
+   "vehicle": "ts1_boundary",
+   "x": -5981.68,
+   "y": 9371.21,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1500.0,
+   "vehicle": "own_ship",
+   "x": 193.79,
+   "y": 9222.7,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1500.0,
+   "vehicle": "ts1_boundary",
+   "x": -6030.16,
+   "y": 9434.85,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1510.0,
+   "vehicle": "own_ship",
+   "x": 192.82,
+   "y": 9284.43,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1510.0,
+   "vehicle": "ts1_boundary",
+   "x": -6078.64,
+   "y": 9498.48,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1520.0,
+   "vehicle": "own_ship",
+   "x": 191.85,
+   "y": 9346.16,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1520.0,
+   "vehicle": "ts1_boundary",
+   "x": -6127.11,
+   "y": 9562.12,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1530.0,
+   "vehicle": "own_ship",
+   "x": 190.88,
+   "y": 9407.88,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1530.0,
+   "vehicle": "ts1_boundary",
+   "x": -6175.59,
+   "y": 9625.75,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1540.0,
+   "vehicle": "own_ship",
+   "x": 189.91,
+   "y": 9469.61,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1540.0,
+   "vehicle": "ts1_boundary",
+   "x": -6224.07,
+   "y": 9689.39,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1550.0,
+   "vehicle": "own_ship",
+   "x": 188.94,
+   "y": 9531.33,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1550.0,
+   "vehicle": "ts1_boundary",
+   "x": -6272.54,
+   "y": 9753.02,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1560.0,
+   "vehicle": "own_ship",
+   "x": 187.97,
+   "y": 9593.06,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1560.0,
+   "vehicle": "ts1_boundary",
+   "x": -6321.02,
+   "y": 9816.66,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1570.0,
+   "vehicle": "own_ship",
+   "x": 187.0,
+   "y": 9654.78,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1570.0,
+   "vehicle": "ts1_boundary",
+   "x": -6369.5,
+   "y": 9880.29,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1580.0,
+   "vehicle": "own_ship",
+   "x": 186.03,
+   "y": 9716.51,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1580.0,
+   "vehicle": "ts1_boundary",
+   "x": -6417.97,
+   "y": 9943.93,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1590.0,
+   "vehicle": "own_ship",
+   "x": 185.06,
+   "y": 9778.24,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1590.0,
+   "vehicle": "ts1_boundary",
+   "x": -6466.45,
+   "y": 10007.56,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1600.0,
+   "vehicle": "own_ship",
+   "x": 184.09,
+   "y": 9839.96,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1600.0,
+   "vehicle": "ts1_boundary",
+   "x": -6514.93,
+   "y": 10071.2,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1610.0,
+   "vehicle": "own_ship",
+   "x": 183.12,
+   "y": 9901.69,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1610.0,
+   "vehicle": "ts1_boundary",
+   "x": -6563.4,
+   "y": 10134.83,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1620.0,
+   "vehicle": "own_ship",
+   "x": 182.15,
+   "y": 9963.41,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1620.0,
+   "vehicle": "ts1_boundary",
+   "x": -6611.88,
+   "y": 10198.47,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1630.0,
+   "vehicle": "own_ship",
+   "x": 181.18,
+   "y": 10025.14,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1630.0,
+   "vehicle": "ts1_boundary",
+   "x": -6660.36,
+   "y": 10262.1,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1640.0,
+   "vehicle": "own_ship",
+   "x": 180.21,
+   "y": 10086.86,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1640.0,
+   "vehicle": "ts1_boundary",
+   "x": -6708.83,
+   "y": 10325.74,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1650.0,
+   "vehicle": "own_ship",
+   "x": 179.24,
+   "y": 10148.59,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1650.0,
+   "vehicle": "ts1_boundary",
+   "x": -6757.31,
+   "y": 10389.37,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1660.0,
+   "vehicle": "own_ship",
+   "x": 178.27,
+   "y": 10210.32,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1660.0,
+   "vehicle": "ts1_boundary",
+   "x": -6805.79,
+   "y": 10453.01,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1670.0,
+   "vehicle": "own_ship",
+   "x": 177.3,
+   "y": 10272.04,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1670.0,
+   "vehicle": "ts1_boundary",
+   "x": -6854.26,
+   "y": 10516.64,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1680.0,
+   "vehicle": "own_ship",
+   "x": 176.33,
+   "y": 10333.77,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1680.0,
+   "vehicle": "ts1_boundary",
+   "x": -6902.74,
+   "y": 10580.27,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1690.0,
+   "vehicle": "own_ship",
+   "x": 175.36,
+   "y": 10395.49,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1690.0,
+   "vehicle": "ts1_boundary",
+   "x": -6951.22,
+   "y": 10643.91,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1700.0,
+   "vehicle": "own_ship",
+   "x": 174.39,
+   "y": 10457.22,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1700.0,
+   "vehicle": "ts1_boundary",
+   "x": -6999.69,
+   "y": 10707.54,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1710.0,
+   "vehicle": "own_ship",
+   "x": 173.42,
+   "y": 10518.94,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1710.0,
+   "vehicle": "ts1_boundary",
+   "x": -7048.17,
+   "y": 10771.18,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1720.0,
+   "vehicle": "own_ship",
+   "x": 172.45,
+   "y": 10580.67,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1720.0,
+   "vehicle": "ts1_boundary",
+   "x": -7096.65,
+   "y": 10834.81,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1730.0,
+   "vehicle": "own_ship",
+   "x": 171.48,
+   "y": 10642.4,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1730.0,
+   "vehicle": "ts1_boundary",
+   "x": -7145.12,
+   "y": 10898.45,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1740.0,
+   "vehicle": "own_ship",
+   "x": 170.51,
+   "y": 10704.12,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1740.0,
+   "vehicle": "ts1_boundary",
+   "x": -7193.6,
+   "y": 10962.08,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1750.0,
+   "vehicle": "own_ship",
+   "x": 169.54,
+   "y": 10765.85,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1750.0,
+   "vehicle": "ts1_boundary",
+   "x": -7242.08,
+   "y": 11025.72,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1760.0,
+   "vehicle": "own_ship",
+   "x": 168.58,
+   "y": 10827.57,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1760.0,
+   "vehicle": "ts1_boundary",
+   "x": -7290.55,
+   "y": 11089.35,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1770.0,
+   "vehicle": "own_ship",
+   "x": 167.61,
+   "y": 10889.3,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1770.0,
+   "vehicle": "ts1_boundary",
+   "x": -7339.03,
+   "y": 11152.99,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1780.0,
+   "vehicle": "own_ship",
+   "x": 166.64,
+   "y": 10951.02,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1780.0,
+   "vehicle": "ts1_boundary",
+   "x": -7387.51,
+   "y": 11216.62,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1790.0,
+   "vehicle": "own_ship",
+   "x": 165.67,
+   "y": 11012.75,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1790.0,
+   "vehicle": "ts1_boundary",
+   "x": -7435.98,
+   "y": 11280.26,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1800.0,
+   "vehicle": "own_ship",
+   "x": 164.7,
+   "y": 11074.48,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1800.0,
+   "vehicle": "ts1_boundary",
+   "x": -7484.46,
+   "y": 11343.89,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1810.0,
+   "vehicle": "own_ship",
+   "x": 163.73,
+   "y": 11136.2,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1810.0,
+   "vehicle": "ts1_boundary",
+   "x": -7532.94,
+   "y": 11407.53,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1820.0,
+   "vehicle": "own_ship",
+   "x": 162.76,
+   "y": 11197.93,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1820.0,
+   "vehicle": "ts1_boundary",
+   "x": -7581.41,
+   "y": 11471.16,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1830.0,
+   "vehicle": "own_ship",
+   "x": 161.79,
+   "y": 11259.65,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1830.0,
+   "vehicle": "ts1_boundary",
+   "x": -7629.89,
+   "y": 11534.8,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1840.0,
+   "vehicle": "own_ship",
+   "x": 160.82,
+   "y": 11321.38,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1840.0,
+   "vehicle": "ts1_boundary",
+   "x": -7678.37,
+   "y": 11598.43,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1850.0,
+   "vehicle": "own_ship",
+   "x": 159.85,
+   "y": 11383.1,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1850.0,
+   "vehicle": "ts1_boundary",
+   "x": -7726.84,
+   "y": 11662.07,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1860.0,
+   "vehicle": "own_ship",
+   "x": 158.88,
+   "y": 11444.83,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1860.0,
+   "vehicle": "ts1_boundary",
+   "x": -7775.32,
+   "y": 11725.7,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1870.0,
+   "vehicle": "own_ship",
+   "x": 157.91,
+   "y": 11506.56,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1870.0,
+   "vehicle": "ts1_boundary",
+   "x": -7823.8,
+   "y": 11789.34,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1880.0,
+   "vehicle": "own_ship",
+   "x": 156.94,
+   "y": 11568.28,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1880.0,
+   "vehicle": "ts1_boundary",
+   "x": -7872.27,
+   "y": 11852.97,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1890.0,
+   "vehicle": "own_ship",
+   "x": 155.97,
+   "y": 11630.01,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1890.0,
+   "vehicle": "ts1_boundary",
+   "x": -7920.75,
+   "y": 11916.61,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1900.0,
+   "vehicle": "own_ship",
+   "x": 155.0,
+   "y": 11691.73,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1900.0,
+   "vehicle": "ts1_boundary",
+   "x": -7969.23,
+   "y": 11980.24,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1910.0,
+   "vehicle": "own_ship",
+   "x": 154.03,
+   "y": 11753.46,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1910.0,
+   "vehicle": "ts1_boundary",
+   "x": -8017.7,
+   "y": 12043.87,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1920.0,
+   "vehicle": "own_ship",
+   "x": 153.06,
+   "y": 11815.18,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1920.0,
+   "vehicle": "ts1_boundary",
+   "x": -8066.18,
+   "y": 12107.51,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1930.0,
+   "vehicle": "own_ship",
+   "x": 152.09,
+   "y": 11876.91,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1930.0,
+   "vehicle": "ts1_boundary",
+   "x": -8114.66,
+   "y": 12171.14,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1940.0,
+   "vehicle": "own_ship",
+   "x": 151.12,
+   "y": 11938.64,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1940.0,
+   "vehicle": "ts1_boundary",
+   "x": -8163.13,
+   "y": 12234.78,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1950.0,
+   "vehicle": "own_ship",
+   "x": 150.15,
+   "y": 12000.36,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1950.0,
+   "vehicle": "ts1_boundary",
+   "x": -8211.61,
+   "y": 12298.41,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1960.0,
+   "vehicle": "own_ship",
+   "x": 149.18,
+   "y": 12062.09,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1960.0,
+   "vehicle": "ts1_boundary",
+   "x": -8260.09,
+   "y": 12362.05,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1970.0,
+   "vehicle": "own_ship",
+   "x": 148.21,
+   "y": 12123.81,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1970.0,
+   "vehicle": "ts1_boundary",
+   "x": -8308.57,
+   "y": 12425.68,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1980.0,
+   "vehicle": "own_ship",
+   "x": 147.24,
+   "y": 12185.54,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1980.0,
+   "vehicle": "ts1_boundary",
+   "x": -8357.04,
+   "y": 12489.32,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 1990.0,
+   "vehicle": "own_ship",
+   "x": 146.27,
+   "y": 12247.26,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1990.0,
+   "vehicle": "ts1_boundary",
+   "x": -8405.52,
+   "y": 12552.95,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2000.0,
+   "vehicle": "own_ship",
+   "x": 145.3,
+   "y": 12308.99,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2000.0,
+   "vehicle": "ts1_boundary",
+   "x": -8454.0,
+   "y": 12616.59,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2010.0,
+   "vehicle": "own_ship",
+   "x": 144.33,
+   "y": 12370.72,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2010.0,
+   "vehicle": "ts1_boundary",
+   "x": -8502.47,
+   "y": 12680.22,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2020.0,
+   "vehicle": "own_ship",
+   "x": 143.36,
+   "y": 12432.44,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2020.0,
+   "vehicle": "ts1_boundary",
+   "x": -8550.95,
+   "y": 12743.86,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2030.0,
+   "vehicle": "own_ship",
+   "x": 142.39,
+   "y": 12494.17,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2030.0,
+   "vehicle": "ts1_boundary",
+   "x": -8599.43,
+   "y": 12807.49,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2040.0,
+   "vehicle": "own_ship",
+   "x": 141.42,
+   "y": 12555.89,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2040.0,
+   "vehicle": "ts1_boundary",
+   "x": -8647.9,
+   "y": 12871.13,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2050.0,
+   "vehicle": "own_ship",
+   "x": 140.45,
+   "y": 12617.62,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2050.0,
+   "vehicle": "ts1_boundary",
+   "x": -8696.38,
+   "y": 12934.76,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2060.0,
+   "vehicle": "own_ship",
+   "x": 139.49,
+   "y": 12679.34,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2060.0,
+   "vehicle": "ts1_boundary",
+   "x": -8744.86,
+   "y": 12998.4,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2070.0,
+   "vehicle": "own_ship",
+   "x": 138.52,
+   "y": 12741.07,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2070.0,
+   "vehicle": "ts1_boundary",
+   "x": -8793.33,
+   "y": 13062.03,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2080.0,
+   "vehicle": "own_ship",
+   "x": 137.55,
+   "y": 12802.8,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2080.0,
+   "vehicle": "ts1_boundary",
+   "x": -8841.81,
+   "y": 13125.67,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2090.0,
+   "vehicle": "own_ship",
+   "x": 136.58,
+   "y": 12864.52,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2090.0,
+   "vehicle": "ts1_boundary",
+   "x": -8890.29,
+   "y": 13189.3,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2100.0,
+   "vehicle": "own_ship",
+   "x": 135.61,
+   "y": 12926.25,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2100.0,
+   "vehicle": "ts1_boundary",
+   "x": -8938.76,
+   "y": 13252.94,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2110.0,
+   "vehicle": "own_ship",
+   "x": 134.64,
+   "y": 12987.97,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2110.0,
+   "vehicle": "ts1_boundary",
+   "x": -8987.24,
+   "y": 13316.57,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2120.0,
+   "vehicle": "own_ship",
+   "x": 133.67,
+   "y": 13049.7,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2120.0,
+   "vehicle": "ts1_boundary",
+   "x": -9035.72,
+   "y": 13380.21,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2130.0,
+   "vehicle": "own_ship",
+   "x": 132.7,
+   "y": 13111.42,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2130.0,
+   "vehicle": "ts1_boundary",
+   "x": -9084.19,
+   "y": 13443.84,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2140.0,
+   "vehicle": "own_ship",
+   "x": 131.73,
+   "y": 13173.15,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2140.0,
+   "vehicle": "ts1_boundary",
+   "x": -9132.67,
+   "y": 13507.47,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2150.0,
+   "vehicle": "own_ship",
+   "x": 130.76,
+   "y": 13234.88,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2150.0,
+   "vehicle": "ts1_boundary",
+   "x": -9181.15,
+   "y": 13571.11,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2160.0,
+   "vehicle": "own_ship",
+   "x": 129.79,
+   "y": 13296.6,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2160.0,
+   "vehicle": "ts1_boundary",
+   "x": -9229.62,
+   "y": 13634.74,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2170.0,
+   "vehicle": "own_ship",
+   "x": 128.82,
+   "y": 13358.33,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2170.0,
+   "vehicle": "ts1_boundary",
+   "x": -9278.1,
+   "y": 13698.38,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2180.0,
+   "vehicle": "own_ship",
+   "x": 127.85,
+   "y": 13420.05,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2180.0,
+   "vehicle": "ts1_boundary",
+   "x": -9326.58,
+   "y": 13762.01,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2190.0,
+   "vehicle": "own_ship",
+   "x": 126.88,
+   "y": 13481.78,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2190.0,
+   "vehicle": "ts1_boundary",
+   "x": -9375.05,
+   "y": 13825.65,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2200.0,
+   "vehicle": "own_ship",
+   "x": 125.91,
+   "y": 13543.5,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2200.0,
+   "vehicle": "ts1_boundary",
+   "x": -9423.53,
+   "y": 13889.28,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2210.0,
+   "vehicle": "own_ship",
+   "x": 124.94,
+   "y": 13605.23,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2210.0,
+   "vehicle": "ts1_boundary",
+   "x": -9472.01,
+   "y": 13952.92,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2220.0,
+   "vehicle": "own_ship",
+   "x": 123.97,
+   "y": 13666.96,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2220.0,
+   "vehicle": "ts1_boundary",
+   "x": -9520.48,
+   "y": 14016.55,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2230.0,
+   "vehicle": "own_ship",
+   "x": 123.0,
+   "y": 13728.68,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2230.0,
+   "vehicle": "ts1_boundary",
+   "x": -9568.96,
+   "y": 14080.19,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2240.0,
+   "vehicle": "own_ship",
+   "x": 122.03,
+   "y": 13790.41,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2240.0,
+   "vehicle": "ts1_boundary",
+   "x": -9617.44,
+   "y": 14143.82,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2250.0,
+   "vehicle": "own_ship",
+   "x": 121.06,
+   "y": 13852.13,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2250.0,
+   "vehicle": "ts1_boundary",
+   "x": -9665.91,
+   "y": 14207.46,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2260.0,
+   "vehicle": "own_ship",
+   "x": 120.09,
+   "y": 13913.86,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2260.0,
+   "vehicle": "ts1_boundary",
+   "x": -9714.39,
+   "y": 14271.09,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2270.0,
+   "vehicle": "own_ship",
+   "x": 119.12,
+   "y": 13975.58,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2270.0,
+   "vehicle": "ts1_boundary",
+   "x": -9762.87,
+   "y": 14334.73,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2280.0,
+   "vehicle": "own_ship",
+   "x": 118.15,
+   "y": 14037.31,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2280.0,
+   "vehicle": "ts1_boundary",
+   "x": -9811.34,
+   "y": 14398.36,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2290.0,
+   "vehicle": "own_ship",
+   "x": 117.18,
+   "y": 14099.04,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2290.0,
+   "vehicle": "ts1_boundary",
+   "x": -9859.82,
+   "y": 14462.0,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2300.0,
+   "vehicle": "own_ship",
+   "x": 116.21,
+   "y": 14160.76,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2300.0,
+   "vehicle": "ts1_boundary",
+   "x": -9908.3,
+   "y": 14525.63,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2310.0,
+   "vehicle": "own_ship",
+   "x": 115.24,
+   "y": 14222.49,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2310.0,
+   "vehicle": "ts1_boundary",
+   "x": -9956.77,
+   "y": 14589.27,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2320.0,
+   "vehicle": "own_ship",
+   "x": 114.27,
+   "y": 14284.21,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2320.0,
+   "vehicle": "ts1_boundary",
+   "x": -10005.25,
+   "y": 14652.9,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2330.0,
+   "vehicle": "own_ship",
+   "x": 113.3,
+   "y": 14345.94,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2330.0,
+   "vehicle": "ts1_boundary",
+   "x": -10053.73,
+   "y": 14716.54,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2340.0,
+   "vehicle": "own_ship",
+   "x": 112.33,
+   "y": 14407.66,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2340.0,
+   "vehicle": "ts1_boundary",
+   "x": -10102.2,
+   "y": 14780.17,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2350.0,
+   "vehicle": "own_ship",
+   "x": 111.36,
+   "y": 14469.39,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2350.0,
+   "vehicle": "ts1_boundary",
+   "x": -10150.68,
+   "y": 14843.81,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2360.0,
+   "vehicle": "own_ship",
+   "x": 110.4,
+   "y": 14531.12,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2360.0,
+   "vehicle": "ts1_boundary",
+   "x": -10199.16,
+   "y": 14907.44,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2370.0,
+   "vehicle": "own_ship",
+   "x": 109.43,
+   "y": 14592.84,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2370.0,
+   "vehicle": "ts1_boundary",
+   "x": -10247.63,
+   "y": 14971.07,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2380.0,
+   "vehicle": "own_ship",
+   "x": 108.46,
+   "y": 14654.57,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2380.0,
+   "vehicle": "ts1_boundary",
+   "x": -10296.11,
+   "y": 15034.71,
+   "heading": 322.7,
+   "speed": 8.0
+  },
+  {
+   "time": 2390.0,
+   "vehicle": "own_ship",
+   "x": 107.49,
+   "y": 14716.29,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2390.0,
+   "vehicle": "ts1_boundary",
+   "x": -10344.59,
+   "y": 15098.34,
+   "heading": 322.7,
+   "speed": 8.0
+  }
+ ],
+ "checkpoints": [
+  {
+   "step": 0,
+   "time": 0.0,
+   "timestamp": "2026-09-26T12:31:24.818326+00:00",
+   "latency_s": 3.439915657043457,
+   "situation_report": "Own-ship at (0.000, 0.000) NM, heading 0.0, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 8.000 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2400s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.460 NM, relative bearing 112.0 deg, heading 337.7, speed 15.55 kt, CPA 0.000 NM, TCPA 260s",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 30.0,
+    "encounter_rule": "Rule 13",
+    "conduct_rule": "Rule 13",
+    "reasoning": "The contact 'ts1_boundary' presents a real collision risk due to its CPA being 0.000 NM and TCPA within the risk horizon of 368s. According to Rule 13, the give-way vessel must keep clear of the stand-on vessel by taking early and substantial action. Therefore, a turn_right maneuver is required."
+   },
+   "reasoning_raw": "{\n  \"action\": \"turn_right\",\n  \"degrees\": 30.0,\n  \"encounter_rule\": \"Rule 13\",\n  \"conduct_rule\": \"Rule 13\",\n  \"reasoning\": \"The contact 'ts1_boundary' presents a real collision risk due to its CPA being 0.000 NM and TCPA within the risk horizon of 368s. According to Rule 13, the give-way vessel must keep clear of the stand-on vessel by taking early and substantial action. Therefore, a turn_right maneuver is required.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1565,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.000, 0.000) NM, heading 0.0, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 8.000 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2400s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.460 NM, relative bearing 112.0 deg, heading 337.7, speed 15.55 kt, CPA 0.000 NM, TCPA 260s\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 3,
+   "time": 30.0,
+   "timestamp": "2026-09-26T12:31:28.934180+00:00",
+   "latency_s": 4.115548372268677,
+   "situation_report": "Own-ship at (0.003, 0.100) NM, heading 3.5, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.900 NM away, bearing 360.0 deg.\nGOAL COURSE CHECK: heading is 30 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=30 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2370s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.404 NM, relative bearing 108.6 deg, heading 337.7, speed 15.55 kt, CPA 0.016 NM, TCPA 206s",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 30,
+    "encounter_rule": "Rule 13",
+    "conduct_rule": "Rule 13",
+    "reasoning": "The contact 'ts1_boundary' presents a real collision risk due to its CPA being below the safe passing distance (0.016 NM) and TCPA within the risk horizon (206s). According to Rule 13, the give-way vessel must keep out of the way of the stand-on vessel by altering course to starboard. Since the contact is approaching from the port side (relative bearing 108.6°), the appropriate action is to turn left to avoid collision."
+   },
+   "reasoning_raw": "{\n  \"action\": \"turn_left\",\n  \"degrees\": 30,\n  \"encounter_rule\": \"Rule 13\",\n  \"conduct_rule\": \"Rule 13\",\n  \"reasoning\": \"The contact 'ts1_boundary' presents a real collision risk due to its CPA being below the safe passing distance (0.016 NM) and TCPA within the risk horizon (206s). According to Rule 13, the give-way vessel must keep out of the way of the stand-on vessel by altering course to starboard. Since the contact is approaching from the port side (relative bearing 108.6°), the appropriate action is to turn left to avoid collision.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1654,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.003, 0.100) NM, heading 3.5, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.900 NM away, bearing 360.0 deg.\nGOAL COURSE CHECK: heading is 30 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=30 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2370s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.404 NM, relative bearing 108.6 deg, heading 337.7, speed 15.55 kt, CPA 0.016 NM, TCPA 206s\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 6,
+   "time": 60.0,
+   "timestamp": "2026-09-26T12:31:32.306859+00:00",
+   "latency_s": 3.372345447540283,
+   "situation_report": "Own-ship at (0.014, 0.199) NM, heading 6.9, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.801 NM away, bearing 359.9 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2340s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.341 NM, relative bearing 105.9 deg, heading 337.7, speed 15.55 kt, CPA 0.025 NM, TCPA 158s\n    If own-ship turned to the GOAL COURSE CHECK heading (359.9 deg) now, this contact's CPA would become 0.004 NM, TCPA 193s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 10.1,
+    "encounter_rule": "Rule 13",
+    "conduct_rule": "Rule 13",
+    "reasoning": "The contact 'ts1_boundary' presents a real collision risk since its CPA is below the safe passing distance (0.270 NM) and its TCPA is within the risk horizon (368s). According to Rule 13, the give-way vessel must keep clear of the stand-on vessel by altering course to port."
+   },
+   "reasoning_raw": "{\n  \"action\": \"turn_right\",\n  \"degrees\": 10.1,\n  \"encounter_rule\": \"Rule 13\",\n  \"conduct_rule\": \"Rule 13\",\n  \"reasoning\": \"The contact 'ts1_boundary' presents a real collision risk since its CPA is below the safe passing distance (0.270 NM) and its TCPA is within the risk horizon (368s). According to Rule 13, the give-way vessel must keep clear of the stand-on vessel by altering course to port.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1693,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.014, 0.199) NM, heading 6.9, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.801 NM away, bearing 359.9 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2340s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.341 NM, relative bearing 105.9 deg, heading 337.7, speed 15.55 kt, CPA 0.025 NM, TCPA 158s\n    If own-ship turned to the GOAL COURSE CHECK heading (359.9 deg) now, this contact's CPA would become 0.004 NM, TCPA 193s.\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 9,
+   "time": 90.0,
+   "timestamp": "2026-09-26T12:31:35.496489+00:00",
+   "latency_s": 3.189291000366211,
+   "situation_report": "Own-ship at (0.027, 0.298) NM, heading 7.8, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.702 NM away, bearing 359.8 deg.\nGOAL COURSE CHECK: heading is 10 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=10 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2310s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.284 NM, relative bearing 104.6 deg, heading 352.7, speed 15.55 kt, CPA 0.107 NM, TCPA 188s\n    If own-ship turned to the GOAL COURSE CHECK heading (359.8 deg) now, this contact's CPA would become 0.176 NM, TCPA 205s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 10,
+    "encounter_rule": "Rule 13",
+    "conduct_rule": "Rule 14",
+    "reasoning": "The contact 'ts1_boundary' currently presents a real collision risk with CPA 0.107 NM and TCPA 188s, both below the safe passing distance and within the risk horizon. Turning left by 10 degrees aligns with the goal course check and avoids the collision risk."
+   },
+   "reasoning_raw": "{\n  \"action\": \"turn_left\",\n  \"degrees\": 10,\n  \"encounter_rule\": \"Rule 13\",\n  \"conduct_rule\": \"Rule 14\",\n  \"reasoning\": \"The contact 'ts1_boundary' currently presents a real collision risk with CPA 0.107 NM and TCPA 188s, both below the safe passing distance and within the risk horizon. Turning left by 10 degrees aligns with the goal course check and avoids the collision risk.\"\n}",
+   "measurement": {
+    "checks_fired": [
+     "B_wrong_direction"
+    ],
+    "details": {
+     "B": {
+      "cited_encounter_rule": "Rule 13",
+      "cited_conduct_rule": "Rule 14",
+      "action": "turn_left"
+     }
+    }
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1780,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.027, 0.298) NM, heading 7.8, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.702 NM away, bearing 359.8 deg.\nGOAL COURSE CHECK: heading is 10 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=10 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2310s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.284 NM, relative bearing 104.6 deg, heading 352.7, speed 15.55 kt, CPA 0.107 NM, TCPA 188s\n    If own-ship turned to the GOAL COURSE CHECK heading (359.8 deg) now, this contact's CPA would become 0.176 NM, TCPA 205s.\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 12,
+   "time": 120.0,
+   "timestamp": "2026-09-26T12:31:39.341533+00:00",
+   "latency_s": 3.844724178314209,
+   "situation_report": "Own-ship at (0.040, 0.398) NM, heading 6.4, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.602 NM away, bearing 359.7 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2281s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.247 NM, relative bearing 102.2 deg, heading 352.7, speed 15.55 kt, CPA 0.115 NM, TCPA 163s\n    If own-ship turned to the GOAL COURSE CHECK heading (359.7 deg) now, this contact's CPA would become 0.165 NM, TCPA 168s.",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "Rule 13",
+    "conduct_rule": "Rule 13",
+    "reasoning": "The contact 'ts1_boundary' currently presents a real collision risk since its CPA is below the safe passing distance (0.270 NM) and its TCPA is within the risk horizon (368s). According to Rule 13, we must keep clear of another vessel by altering our course and speed as necessary. Since turning to the goal bearing would still leave the contact within the risk zone, holding course is the appropriate maneuver."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"Rule 13\",\n  \"conduct_rule\": \"Rule 13\",\n  \"reasoning\": \"The contact 'ts1_boundary' currently presents a real collision risk since its CPA is below the safe passing distance (0.270 NM) and its TCPA is within the risk horizon (368s). According to Rule 13, we must keep clear of another vessel by altering our course and speed as necessary. Since turning to the goal bearing would still leave the contact within the risk zone, holding course is the appropriate maneuver.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1693,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.040, 0.398) NM, heading 6.4, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.602 NM away, bearing 359.7 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2281s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.247 NM, relative bearing 102.2 deg, heading 352.7, speed 15.55 kt, CPA 0.115 NM, TCPA 163s\n    If own-ship turned to the GOAL COURSE CHECK heading (359.7 deg) now, this contact's CPA would become 0.165 NM, TCPA 168s.\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 15,
+   "time": 150.0,
+   "timestamp": "2026-09-26T12:31:44.083937+00:00",
+   "latency_s": 4.7419891357421875,
+   "situation_report": "Own-ship at (0.045, 0.497) NM, heading 1.6, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.503 NM away, bearing 359.7 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2251s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.217 NM, relative bearing 101.7 deg, heading 352.7, speed 15.55 kt, CPA 0.147 NM, TCPA 139s",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 15.0,
+    "encounter_rule": "Rule 13",
+    "conduct_rule": "Rule 14",
+    "reasoning": "The contact 'ts1_boundary' presents a real collision risk due to its CPA being below the safe passing distance (0.270 NM) and TCPA within the risk horizon (368s). According to Rule 13, the give-way vessel must keep out of the way of the stand-on vessel. Since our ship is the give-way vessel, we need to alter course to port (turn left) to avoid the collision risk. However, since the contact is approaching from starboard side (relative bearing 101.7°), we should turn right to increase the CPA."
+   },
+   "reasoning_raw": "{\n  \"action\": \"turn_right\",\n  \"degrees\": 15.0,\n  \"encounter_rule\": \"Rule 13\",\n  \"conduct_rule\": \"Rule 14\",\n  \"reasoning\": \"The contact 'ts1_boundary' presents a real collision risk due to its CPA being below the safe passing distance (0.270 NM) and TCPA within the risk horizon (368s). According to Rule 13, the give-way vessel must keep out of the way of the stand-on vessel. Since our ship is the give-way vessel, we need to alter course to port (turn left) to avoid the collision risk. However, since the contact is approaching from starboard side (relative bearing 101.7°), we should turn right to increase the CPA.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1567,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.045, 0.497) NM, heading 1.6, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.503 NM away, bearing 359.7 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2251s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.217 NM, relative bearing 101.7 deg, heading 352.7, speed 15.55 kt, CPA 0.147 NM, TCPA 139s\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 18,
+   "time": 180.0,
+   "timestamp": "2026-09-26T12:31:48.263505+00:00",
+   "latency_s": 4.178894281387329,
+   "situation_report": "Own-ship at (0.047, 0.597) NM, heading 1.4, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.403 NM away, bearing 359.6 deg.\nGOAL COURSE CHECK: heading is 15 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=16 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2221s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.157 NM, relative bearing 102.8 deg, heading 322.7, speed 15.55 kt, CPA 0.033 NM, TCPA 57s",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 16,
+    "encounter_rule": "Rule 13",
+    "conduct_rule": "Rule 14",
+    "reasoning": "The contact 'ts1_boundary' presents a real collision risk due to its CPA being below the safe passing distance (0.033 NM) and TCPA within the risk horizon (57s). According to Rule 13, the give-way vessel must keep out of the way of the stand-on vessel. Since our ship is the give-way vessel, we need to alter course to starboard (which corresponds to turning left in this context) to avoid the collision risk."
+   },
+   "reasoning_raw": "{\n  \"action\": \"turn_left\",\n  \"degrees\": 16,\n  \"encounter_rule\": \"Rule 13\",\n  \"conduct_rule\": \"Rule 14\",\n  \"reasoning\": \"The contact 'ts1_boundary' presents a real collision risk due to its CPA being below the safe passing distance (0.033 NM) and TCPA within the risk horizon (57s). According to Rule 13, the give-way vessel must keep out of the way of the stand-on vessel. Since our ship is the give-way vessel, we need to alter course to starboard (which corresponds to turning left in this context) to avoid the collision risk.\"\n}",
+   "measurement": {
+    "checks_fired": [
+     "B_wrong_direction"
+    ],
+    "details": {
+     "B": {
+      "cited_encounter_rule": "Rule 13",
+      "cited_conduct_rule": "Rule 14",
+      "action": "turn_left"
+     }
+    }
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1653,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.047, 0.597) NM, heading 1.4, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.403 NM away, bearing 359.6 deg.\nGOAL COURSE CHECK: heading is 15 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=16 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2221s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.157 NM, relative bearing 102.8 deg, heading 322.7, speed 15.55 kt, CPA 0.033 NM, TCPA 57s\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 21,
+   "time": 210.0,
+   "timestamp": "2026-09-26T12:31:51.597277+00:00",
+   "latency_s": 3.3333141803741455,
+   "situation_report": "Own-ship at (0.052, 0.697) NM, heading 3.4, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.303 NM away, bearing 359.6 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2191s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.077 NM, relative bearing 113.9 deg, heading 322.7, speed 15.55 kt, CPA 0.033 NM, TCPA 25s",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 15.0,
+    "encounter_rule": "Rule 13",
+    "conduct_rule": "Rule 13",
+    "reasoning": "The contact 'ts1_boundary' presents a real collision risk due to its CPA being below the safe passing distance (0.033 NM) and TCPA within the risk horizon (25s). According to Rule 13, the give-way vessel must keep clear of the stand-on vessel by altering course to starboard."
+   },
+   "reasoning_raw": "{\n  \"action\": \"turn_right\",\n  \"degrees\": 15.0,\n  \"encounter_rule\": \"Rule 13\",\n  \"conduct_rule\": \"Rule 13\",\n  \"reasoning\": \"The contact 'ts1_boundary' presents a real collision risk due to its CPA being below the safe passing distance (0.033 NM) and TCPA within the risk horizon (25s). According to Rule 13, the give-way vessel must keep clear of the stand-on vessel by altering course to starboard.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1566,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.052, 0.697) NM, heading 3.4, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.303 NM away, bearing 359.6 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2191s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.077 NM, relative bearing 113.9 deg, heading 322.7, speed 15.55 kt, CPA 0.033 NM, TCPA 25s\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 24,
+   "time": 240.0,
+   "timestamp": "2026-09-26T12:31:54.175987+00:00",
+   "latency_s": 2.578310012817383,
+   "situation_report": "Own-ship at (0.061, 0.797) NM, heading 6.7, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.203 NM away, bearing 359.5 deg.\nGOAL COURSE CHECK: heading is 15 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=15 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2161s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.037 NM, relative bearing -155.8 deg, heading 322.7, speed 15.55 kt, CPA 0.037 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (359.5 deg) now, this contact's CPA would become 0.037 NM, TCPA 0s.",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "The contact 'ts1_boundary' is already past its closest point of approach (TCPA 0s), and turning to the goal course would not alter its CPA. No real collision risks exist, so we maintain course."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"The contact 'ts1_boundary' is already past its closest point of approach (TCPA 0s), and turning to the goal course would not alter its CPA. No real collision risks exist, so we maintain course.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1829,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.061, 0.797) NM, heading 6.7, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.203 NM away, bearing 359.5 deg.\nGOAL COURSE CHECK: heading is 15 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=15 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2161s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.037 NM, relative bearing -155.8 deg, heading 322.7, speed 15.55 kt, CPA 0.037 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (359.5 deg) now, this contact's CPA would become 0.037 NM, TCPA 0s.\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 27,
+   "time": 270.0,
+   "timestamp": "2026-09-26T12:31:56.709113+00:00",
+   "latency_s": 2.532642364501953,
+   "situation_report": "Own-ship at (0.080, 0.895) NM, heading 13.3, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.105 NM away, bearing 359.4 deg.\nGOAL COURSE CHECK: heading is 15 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=15 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2132s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.120 NM, relative bearing -116.2 deg, heading 322.7, speed 15.55 kt, CPA 0.120 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (359.4 deg) now, this contact's CPA would become 0.120 NM, TCPA 0s.",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "The contact 'ts1_boundary' is already past its closest point (TCPA 0s), and turning to the goal course would not alter its CPA. No real collision risks exist, so we maintain course."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"The contact 'ts1_boundary' is already past its closest point (TCPA 0s), and turning to the goal course would not alter its CPA. No real collision risks exist, so we maintain course.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1830,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.080, 0.895) NM, heading 13.3, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.105 NM away, bearing 359.4 deg.\nGOAL COURSE CHECK: heading is 15 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=15 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2132s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.120 NM, relative bearing -116.2 deg, heading 322.7, speed 15.55 kt, CPA 0.120 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (359.4 deg) now, this contact's CPA would become 0.120 NM, TCPA 0s.\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 30,
+   "time": 300.0,
+   "timestamp": "2026-09-26T12:31:59.242209+00:00",
+   "latency_s": 2.53265643119812,
+   "situation_report": "Own-ship at (0.109, 0.991) NM, heading 17.6, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.010 NM away, bearing 359.1 deg.\nGOAL COURSE CHECK: heading is 15 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=15 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2103s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.224 NM, relative bearing -112.6 deg, heading 322.7, speed 15.55 kt, CPA 0.224 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (359.1 deg) now, this contact's CPA would become 0.224 NM, TCPA 0s.",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "The contact 'ts1_boundary' is already past its closest point (TCPA 0s), and turning to the goal course would not alter its CPA. No real collision risks exist, so we maintain course."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"The contact 'ts1_boundary' is already past its closest point (TCPA 0s), and turning to the goal course would not alter its CPA. No real collision risks exist, so we maintain course.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1830,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.109, 0.991) NM, heading 17.6, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.010 NM away, bearing 359.1 deg.\nGOAL COURSE CHECK: heading is 15 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=15 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2103s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.224 NM, relative bearing -112.6 deg, heading 322.7, speed 15.55 kt, CPA 0.224 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (359.1 deg) now, this contact's CPA would become 0.224 NM, TCPA 0s.\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 33,
+   "time": 330.0,
+   "timestamp": "2026-09-26T12:32:01.949298+00:00",
+   "latency_s": 2.7066380977630615,
+   "situation_report": "Own-ship at (0.140, 1.086) NM, heading 17.8, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 6.915 NM away, bearing 358.8 deg.\nGOAL COURSE CHECK: heading is 15 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=15 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2075s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.333 NM, relative bearing -109.8 deg, heading 322.7, speed 15.55 kt, CPA 0.333 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (358.9 deg) now, this contact's CPA would become 0.333 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 15,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "The contact 'ts1_boundary' is no longer a real collision risk since its TCPA is 0s and CPA remains above the safe passing distance. No other contacts pose a real risk, so the mission can proceed towards the goal bearing."
+   },
+   "reasoning_raw": "{\n  \"action\": \"turn_left\",\n  \"degrees\": 15,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"The contact 'ts1_boundary' is no longer a real collision risk since its TCPA is 0s and CPA remains above the safe passing distance. No other contacts pose a real risk, so the mission can proceed towards the goal bearing.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1831,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.140, 1.086) NM, heading 17.8, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 6.915 NM away, bearing 358.8 deg.\nGOAL COURSE CHECK: heading is 15 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=15 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2075s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.333 NM, relative bearing -109.8 deg, heading 322.7, speed 15.55 kt, CPA 0.333 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (358.9 deg) now, this contact's CPA would become 0.333 NM, TCPA 0s.\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 43,
+   "time": 430.0,
+   "timestamp": "2026-09-26T12:32:04.158069+00:00",
+   "latency_s": 2.207834005355835,
+   "situation_report": "Own-ship at (0.171, 1.415) NM, heading 354.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 6.588 NM away, bearing 358.5 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1976s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.626 NM, relative bearing -83.8 deg, heading 322.7, speed 15.55 kt, CPA 0.626 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1620,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.171, 1.415) NM, heading 354.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 6.588 NM away, bearing 358.5 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1976s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.626 NM, relative bearing -83.8 deg, heading 322.7, speed 15.55 kt, CPA 0.626 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 53,
+   "time": 530.0,
+   "timestamp": "2026-09-26T12:32:06.403365+00:00",
+   "latency_s": 2.24422287940979,
+   "situation_report": "Own-ship at (0.151, 1.747) NM, heading 0.8, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 6.255 NM away, bearing 358.6 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1876s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.868 NM, relative bearing -89.9 deg, heading 322.7, speed 15.55 kt, CPA 0.868 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1618,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.151, 1.747) NM, heading 0.8, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 6.255 NM away, bearing 358.6 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1876s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 0.868 NM, relative bearing -89.9 deg, heading 322.7, speed 15.55 kt, CPA 0.868 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 63,
+   "time": 630.0,
+   "timestamp": "2026-09-26T12:32:08.619176+00:00",
+   "latency_s": 2.214332342147827,
+   "situation_report": "Own-ship at (0.152, 2.080) NM, heading 358.5, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 5.922 NM away, bearing 358.5 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1777s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 1.131 NM, relative bearing -87.3 deg, heading 322.7, speed 15.55 kt, CPA 1.131 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1620,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.152, 2.080) NM, heading 358.5, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 5.922 NM away, bearing 358.5 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1777s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 1.131 NM, relative bearing -87.3 deg, heading 322.7, speed 15.55 kt, CPA 1.131 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 73,
+   "time": 730.0,
+   "timestamp": "2026-09-26T12:32:10.823662+00:00",
+   "latency_s": 2.202877998352051,
+   "situation_report": "Own-ship at (0.144, 2.414) NM, heading 359.3, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 5.588 NM away, bearing 358.5 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1677s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 1.385 NM, relative bearing -87.8 deg, heading 322.7, speed 15.55 kt, CPA 1.385 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1620,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.144, 2.414) NM, heading 359.3, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 5.588 NM away, bearing 358.5 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1677s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 1.385 NM, relative bearing -87.8 deg, heading 322.7, speed 15.55 kt, CPA 1.385 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 83,
+   "time": 830.0,
+   "timestamp": "2026-09-26T12:32:12.972326+00:00",
+   "latency_s": 2.1472320556640625,
+   "situation_report": "Own-ship at (0.140, 2.747) NM, heading 359.0, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 5.255 NM away, bearing 358.5 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1577s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 1.643 NM, relative bearing -87.5 deg, heading 322.7, speed 15.55 kt, CPA 1.643 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1620,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.140, 2.747) NM, heading 359.0, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 5.255 NM away, bearing 358.5 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1577s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 1.643 NM, relative bearing -87.5 deg, heading 322.7, speed 15.55 kt, CPA 1.643 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 93,
+   "time": 930.0,
+   "timestamp": "2026-09-26T12:32:15.072954+00:00",
+   "latency_s": 2.0993857383728027,
+   "situation_report": "Own-ship at (0.134, 3.080) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 4.922 NM away, bearing 358.4 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1477s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 1.899 NM, relative bearing -87.4 deg, heading 322.7, speed 15.55 kt, CPA 1.899 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1620,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.134, 3.080) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 4.922 NM away, bearing 358.4 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1477s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 1.899 NM, relative bearing -87.4 deg, heading 322.7, speed 15.55 kt, CPA 1.899 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 103,
+   "time": 1030.0,
+   "timestamp": "2026-09-26T12:32:17.189975+00:00",
+   "latency_s": 2.1156551837921143,
+   "situation_report": "Own-ship at (0.129, 3.413) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 4.588 NM away, bearing 358.4 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1377s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 2.156 NM, relative bearing -87.3 deg, heading 322.7, speed 15.55 kt, CPA 2.156 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1620,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.129, 3.413) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 4.588 NM away, bearing 358.4 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1377s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 2.156 NM, relative bearing -87.3 deg, heading 322.7, speed 15.55 kt, CPA 2.156 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 113,
+   "time": 1130.0,
+   "timestamp": "2026-09-26T12:32:19.471992+00:00",
+   "latency_s": 2.280595541000366,
+   "situation_report": "Own-ship at (0.124, 3.747) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 4.255 NM away, bearing 358.3 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1277s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 2.413 NM, relative bearing -87.3 deg, heading 322.7, speed 15.55 kt, CPA 2.413 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1620,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.124, 3.747) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 4.255 NM away, bearing 358.3 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1277s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 2.413 NM, relative bearing -87.3 deg, heading 322.7, speed 15.55 kt, CPA 2.413 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 123,
+   "time": 1230.0,
+   "timestamp": "2026-09-26T12:32:21.875997+00:00",
+   "latency_s": 2.401279926300049,
+   "situation_report": "Own-ship at (0.119, 4.080) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 3.922 NM away, bearing 358.3 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1177s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 2.669 NM, relative bearing -87.2 deg, heading 322.7, speed 15.55 kt, CPA 2.669 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1620,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.119, 4.080) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 3.922 NM away, bearing 358.3 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1177s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 2.669 NM, relative bearing -87.2 deg, heading 322.7, speed 15.55 kt, CPA 2.669 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 133,
+   "time": 1330.0,
+   "timestamp": "2026-09-26T12:32:23.974701+00:00",
+   "latency_s": 2.0968832969665527,
+   "situation_report": "Own-ship at (0.114, 4.413) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 3.589 NM away, bearing 358.2 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1077s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 2.926 NM, relative bearing -87.2 deg, heading 322.7, speed 15.55 kt, CPA 2.926 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1620,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.114, 4.413) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 3.589 NM away, bearing 358.2 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1077s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 2.926 NM, relative bearing -87.2 deg, heading 322.7, speed 15.55 kt, CPA 2.926 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 143,
+   "time": 1430.0,
+   "timestamp": "2026-09-26T12:32:26.170970+00:00",
+   "latency_s": 2.193901777267456,
+   "situation_report": "Own-ship at (0.108, 4.747) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 3.255 NM away, bearing 358.1 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 977s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 3.183 NM, relative bearing -87.2 deg, heading 322.7, speed 15.55 kt, CPA 3.183 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1619,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.108, 4.747) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 3.255 NM away, bearing 358.1 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 977s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 3.183 NM, relative bearing -87.2 deg, heading 322.7, speed 15.55 kt, CPA 3.183 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 153,
+   "time": 1530.0,
+   "timestamp": "2026-09-26T12:32:28.383239+00:00",
+   "latency_s": 2.209458351135254,
+   "situation_report": "Own-ship at (0.103, 5.080) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 2.922 NM away, bearing 358.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 877s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 3.440 NM, relative bearing -87.1 deg, heading 322.7, speed 15.55 kt, CPA 3.440 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1619,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.103, 5.080) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 2.922 NM away, bearing 358.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 877s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 3.440 NM, relative bearing -87.1 deg, heading 322.7, speed 15.55 kt, CPA 3.440 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 163,
+   "time": 1630.0,
+   "timestamp": "2026-09-26T12:32:30.607344+00:00",
+   "latency_s": 2.2212915420532227,
+   "situation_report": "Own-ship at (0.098, 5.413) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 2.589 NM away, bearing 357.8 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 777s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 3.696 NM, relative bearing -87.1 deg, heading 322.7, speed 15.55 kt, CPA 3.696 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1619,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.098, 5.413) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 2.589 NM away, bearing 357.8 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 777s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 3.696 NM, relative bearing -87.1 deg, heading 322.7, speed 15.55 kt, CPA 3.696 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 173,
+   "time": 1730.0,
+   "timestamp": "2026-09-26T12:32:32.852320+00:00",
+   "latency_s": 2.241973400115967,
+   "situation_report": "Own-ship at (0.093, 5.746) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 2.255 NM away, bearing 357.6 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 677s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 3.953 NM, relative bearing -87.1 deg, heading 322.7, speed 15.55 kt, CPA 3.953 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is above the safe passing distance and the TCPA is outside the risk horizon.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1619,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.093, 5.746) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 2.255 NM away, bearing 357.6 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 677s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 3.953 NM, relative bearing -87.1 deg, heading 322.7, speed 15.55 kt, CPA 3.953 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 183,
+   "time": 1830.0,
+   "timestamp": "2026-09-26T12:32:35.093939+00:00",
+   "latency_s": 2.2395031452178955,
+   "situation_report": "Own-ship at (0.087, 6.080) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 1.922 NM away, bearing 357.4 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 577s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 4.210 NM, relative bearing -87.1 deg, heading 322.7, speed 15.55 kt, CPA 4.210 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is well above the safe passing distance and the TCPA indicates the contact is no longer a threat."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is well above the safe passing distance and the TCPA indicates the contact is no longer a threat.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1619,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.087, 6.080) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 1.922 NM away, bearing 357.4 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 577s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 4.210 NM, relative bearing -87.1 deg, heading 322.7, speed 15.55 kt, CPA 4.210 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 193,
+   "time": 1930.0,
+   "timestamp": "2026-09-26T12:32:37.317719+00:00",
+   "latency_s": 2.221653461456299,
+   "situation_report": "Own-ship at (0.082, 6.413) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 1.589 NM away, bearing 357.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 477s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 4.467 NM, relative bearing -87.1 deg, heading 322.7, speed 15.55 kt, CPA 4.467 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is well above the safe passing distance and the TCPA indicates the contact is no longer a threat."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is well above the safe passing distance and the TCPA indicates the contact is no longer a threat.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1619,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.082, 6.413) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 1.589 NM away, bearing 357.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 477s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 4.467 NM, relative bearing -87.1 deg, heading 322.7, speed 15.55 kt, CPA 4.467 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 203,
+   "time": 2030.0,
+   "timestamp": "2026-09-26T12:32:39.544334+00:00",
+   "latency_s": 2.224409580230713,
+   "situation_report": "Own-ship at (0.077, 6.746) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 1.256 NM away, bearing 356.5 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 377s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 4.723 NM, relative bearing -87.0 deg, heading 322.7, speed 15.55 kt, CPA 4.723 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is well above the safe passing distance and the TCPA indicates the contact is no longer a threat."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is well above the safe passing distance and the TCPA indicates the contact is no longer a threat.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1619,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.077, 6.746) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 1.256 NM away, bearing 356.5 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 377s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 4.723 NM, relative bearing -87.0 deg, heading 322.7, speed 15.55 kt, CPA 4.723 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 213,
+   "time": 2130.0,
+   "timestamp": "2026-09-26T12:32:41.770892+00:00",
+   "latency_s": 2.224289655685425,
+   "situation_report": "Own-ship at (0.072, 7.080) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 0.923 NM away, bearing 355.5 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 277s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 4.980 NM, relative bearing -87.0 deg, heading 322.7, speed 15.55 kt, CPA 4.980 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA is well above the safe passing distance and the TCPA indicates the contact has passed its closest point."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA is well above the safe passing distance and the TCPA indicates the contact has passed its closest point.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1619,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.072, 7.080) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 0.923 NM away, bearing 355.5 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 277s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 4.980 NM, relative bearing -87.0 deg, heading 322.7, speed 15.55 kt, CPA 4.980 NM, TCPA 0s (already past closest point, ranges now increasing)\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 223,
+   "time": 2230.0,
+   "timestamp": "2026-09-26T12:32:44.462653+00:00",
+   "latency_s": 2.689195156097412,
+   "situation_report": "Own-ship at (0.066, 7.413) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 0.591 NM away, bearing 353.5 deg.\nGOAL COURSE CHECK: heading is 6 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=6 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 177s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 5.237 NM, relative bearing -87.0 deg, heading 322.7, speed 15.55 kt, CPA 5.237 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (353.5 deg) now, this contact's CPA would become 5.237 NM, TCPA 0s.",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA for ts1_boundary is above the safe passing distance and it is already past closest point. The mission goal is within sight and the heading is slightly off but close enough to proceed without immediate correction."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA for ts1_boundary is above the safe passing distance and it is already past closest point. The mission goal is within sight and the heading is slightly off but close enough to proceed without immediate correction.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1828,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.066, 7.413) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 0.591 NM away, bearing 353.5 deg.\nGOAL COURSE CHECK: heading is 6 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=6 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 177s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 5.237 NM, relative bearing -87.0 deg, heading 322.7, speed 15.55 kt, CPA 5.237 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (353.5 deg) now, this contact's CPA would become 5.237 NM, TCPA 0s.\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 233,
+   "time": 2330.0,
+   "timestamp": "2026-09-26T12:32:47.304344+00:00",
+   "latency_s": 2.8378758430480957,
+   "situation_report": "Own-ship at (0.061, 7.746) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 0.261 NM away, bearing 346.4 deg.\nGOAL COURSE CHECK: heading is 13 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=13 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 78s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 5.493 NM, relative bearing -87.0 deg, heading 322.7, speed 15.55 kt, CPA 5.493 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (346.4 deg) now, this contact's CPA would become 5.493 NM, TCPA 0s.",
+   "decision": {
+    "action": "hold_course",
+    "degrees": 0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact poses a real collision risk as the CPA for ts1_boundary is above the safe passing distance and it is already past closest point. The mission goal is within sight and the heading is slightly off but close enough to proceed without immediate correction."
+   },
+   "reasoning_raw": "{\n  \"action\": \"hold_course\",\n  \"degrees\": 0,\n  \"encounter_rule\": \"none\",\n  \"conduct_rule\": \"none\",\n  \"reasoning\": \"No contact poses a real collision risk as the CPA for ts1_boundary is above the safe passing distance and it is already past closest point. The mission goal is within sight and the heading is slightly off but close enough to proceed without immediate correction.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v0_base",
+    "retrieved_chunk_ids": [],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": null,
+    "user_msg_chars": 1829,
+    "user_msg": "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 100s. A 30 degree turn takes about 105s to complete.\n\nSituation:\nOwn-ship at (0.061, 7.746) NM, heading 359.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 0.261 NM away, bearing 346.4 deg.\nGOAL COURSE CHECK: heading is 13 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=13 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 78s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_boundary\", range 5.493 NM, relative bearing -87.0 deg, heading 322.7, speed 15.55 kt, CPA 5.493 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (346.4 deg) now, this contact's CPA would become 5.493 NM, TCPA 0s.\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  }
+ ]
+}
