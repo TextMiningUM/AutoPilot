@@ -132,8 +132,8 @@ from core import AgentPaths, load_env, review_path, safe_write_jsonl, EMBEDDER_M
 from pipeline.oow_agent_spec import (
     SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, classify_rules,
     bearing_and_range, relative_bearing, goal_course_action, goal_course_check_line,
-    render_previous_decisions, real_risk, risk_band, sample_row_limits, fixed_limits, constraint_line,
-    goal_course_cpa_after_turn,
+    render_previous_decisions, real_risk, risk_band, sample_row_limits, sample_row_limits_nomoto,
+    fixed_limits, constraint_line, goal_course_cpa_after_turn,
 )
 
 paths = AgentPaths.oow()
@@ -399,11 +399,18 @@ _LEGACY_LIMITS = {"safe_distance_m": SAFE_CPA_M, "max_turn_deg": MAX_TURN_DEG,
                   "decision_interval_s": 200.0}
 
 
-def limits_for_scenario_record(r: dict) -> dict:
+def limits_for_scenario_record(r: dict, nomoto: bool = False) -> dict:
     """Deterministic per-row STAP-2 sampled limits for training record `r` -- seeded off
     the record's OWN stable `_id` (assigned once per population build, stable across
     reruns of the SAME seed), so the same row always samples the same
-    safe_distance_m/max_turn_deg/risk_horizon_s across separate runs."""
+    safe_distance_m/max_turn_deg/risk_horizon_s across separate runs.
+
+    `nomoto` (2026-09-26, opt-in, default False -- every EXISTING call site is
+    unaffected): switches to sample_row_limits_nomoto(), which additionally samples a
+    REAL cited ship-dynamics profile (pipeline.nomoto.SHIP_PROFILES) and a real
+    manoeuvre_time_s() fact for it -- see that function's own docstring."""
+    if nomoto:
+        return sample_row_limits_nomoto(r["_id"], r["own_speed"])
     return sample_row_limits(r["_id"], r["own_speed"])
 
 
@@ -535,7 +542,7 @@ def render_scenario_situation(rec: dict, limits: dict | None = None) -> str:
         f"Mission waypoint is at ({wx:.1f}, {wy:.1f}).",
         goal_course_check_line(0.0, 0.0, 0.0, wx, wy, limits["max_turn_deg"]),
         constraint_line(limits["safe_distance_m"], limits["max_turn_deg"], limits["risk_horizon_s"],
-                        limits["decision_interval_s"]),
+                        limits["decision_interval_s"], manoeuvre_time_s=limits.get("manoeuvre_time_s")),
         f"{n} other ship{'s' if n != 1 else ''}:" if n else "No other ships tracked.",
     ]
     for i, t in enumerate(rec["targets"]):
@@ -1351,7 +1358,7 @@ def _assistant_fields(unified: dict) -> dict:
     return {k: v for k, v in unified.items() if k != "decisive_contact_index"}
 
 
-def write_scenario_sft_files(recs: list[dict], cache_dir: Path, mode: str = "w") -> None:
+def write_scenario_sft_files(recs: list[dict], cache_dir: Path, mode: str = "w", nomoto: bool = False) -> None:
     """Writes oow_scenario_sft_direct.jsonl / _cot.jsonl in the UNIFIED task format (Fase
     B2, RAG-rebuild-v2 plan): system=SYSTEM_OOW_AGENT, user=user_message_for(r) (Fase B4's
     optional previous-decisions preamble + render_scenario_situation(r) -- the latter is
@@ -1362,14 +1369,19 @@ def write_scenario_sft_files(recs: list[dict], cache_dir: Path, mode: str = "w")
     render_reasoning_full_population() before this is called. direct/cot
     share the same content, matching the old writer's own rationale (one fixed question,
     one fused decision+reasoning paragraph, no separate terse/step-by-step version to
-    write). `mode="a"` appends new-category rows onto already-committed files."""
-    direct_path = cache_dir / "oow_scenario_sft_direct.jsonl"
-    cot_path = cache_dir / "oow_scenario_sft_cot.jsonl"
+    write). `mode="a"` appends new-category rows onto already-committed files.
+
+    `nomoto=True` (2026-09-26, opt-in): samples ship-dynamics-aware limits via
+    limits_for_scenario_record(r, nomoto=True) instead, and writes to PARALLEL
+    _nomoto-suffixed filenames -- never overwrites the existing kinematics-model files."""
+    suffix = "_nomoto" if nomoto else ""
+    direct_path = cache_dir / f"oow_scenario_sft_direct{suffix}.jsonl"
+    cot_path = cache_dir / f"oow_scenario_sft_cot{suffix}.jsonl"
     with direct_path.open(mode, encoding="utf-8") as fd, cot_path.open(mode, encoding="utf-8") as fc:
         for r in recs:
             if not r.get("reasoning"):
                 continue
-            limits = limits_for_scenario_record(r)
+            limits = limits_for_scenario_record(r, nomoto=nomoto)
             unified = to_unified_action(r, limits)
             assistant = {**_assistant_fields(unified), "reasoning": r["reasoning"]}
             row = {
@@ -1396,14 +1408,15 @@ def user_message_for(r: dict, limits: dict | None = None) -> str:
     return f"Situation:\n{history_prefix}{render_scenario_situation(r, limits)}\n\n{FIXED_QUESTION_UNIFIED}"
 
 
-def write_scenario_dpo_file(recs: list[dict], cache_dir: Path, mode: str = "w") -> None:
-    out_path = cache_dir / "oow_scenario_dpo_pairs.jsonl"
+def write_scenario_dpo_file(recs: list[dict], cache_dir: Path, mode: str = "w", nomoto: bool = False) -> None:
+    suffix = "_nomoto" if nomoto else ""
+    out_path = cache_dir / f"oow_scenario_dpo_pairs{suffix}.jsonl"
     n = 0
     with out_path.open(mode, encoding="utf-8") as f:
         for r in recs:
             if not r.get("reasoning"):
                 continue
-            limits = limits_for_scenario_record(r)
+            limits = limits_for_scenario_record(r, nomoto=nomoto)
             unified = _assistant_fields(to_unified_action(r, limits))
             chosen = {**unified, "reasoning": r["reasoning"]}
             rejected_action = wrong_action_variant(unified)
@@ -1420,20 +1433,21 @@ def write_scenario_dpo_file(recs: list[dict], cache_dir: Path, mode: str = "w") 
     print(f"Wrote {out_path.name} ({n} pairs)")
 
 
-def write_scenario_reflection_file(recs: list[dict], cache_dir: Path, mode: str = "w") -> None:
+def write_scenario_reflection_file(recs: list[dict], cache_dir: Path, mode: str = "w", nomoto: bool = False) -> None:
     """Draft/Critique/Refined triples, same convention as build_reflection.py's output
     (see oow_reflection.jsonl): draft = the bare action name with no parameters or rule
     citation (deliberately vague, not wrong), critique = fixed text pointing out exactly
     that gap, refined = the unified JSON object with the full B3 reasoning text.
     Draft+critique are wrapped in a <think> block; the visible completion is bare JSON
     (refined) only -- see build_reflection.py's module docstring for why."""
-    out_path = cache_dir / "oow_scenario_reflection.jsonl"
+    suffix = "_nomoto" if nomoto else ""
+    out_path = cache_dir / f"oow_scenario_reflection{suffix}.jsonl"
     n = 0
     with out_path.open(mode, encoding="utf-8") as f:
         for r in recs:
             if not r.get("reasoning"):
                 continue
-            limits = limits_for_scenario_record(r)
+            limits = limits_for_scenario_record(r, nomoto=nomoto)
             unified = _assistant_fields(to_unified_action(r, limits))
             refined = json.dumps({**unified, "reasoning": r["reasoning"]}, ensure_ascii=False)
             draft = f"I will {r['action'].replace('_', ' ')}."
@@ -1589,6 +1603,12 @@ def main() -> None:
                          "(B3_CHECKPOINT_FILE) so it can resume after a crash/interrupt. Writes "
                          "oow_scenario_sft_direct/_cot/_dpo_pairs/_reflection.jsonl + the training "
                          "traces file -- never touches EVAL_OUT (v1, frozen) or gold_answer.")
+    ap.add_argument("--nomoto", action="store_true",
+                    help="2026-09-26: sample ship-dynamics-aware limits (sample_row_limits_nomoto(), "
+                         "see pipeline.nomoto.SHIP_PROFILES) instead of the legacy analytic "
+                         "sample_row_limits(), and write oow_scenario_sft_direct/_cot/_dpo_pairs/"
+                         "_reflection_nomoto.jsonl -- PARALLEL files, never overwrites the existing "
+                         "kinematics-model ones. Only affects --b3-full-population.")
     args = ap.parse_args()
 
     if args.build_v2:
@@ -1682,7 +1702,7 @@ def main() -> None:
         # (a no-risk hold_course history would be a trivial, uninformative signal).
         n_with_history = 0
         for i, r in enumerate(train_recs):
-            unified = to_unified_action(r, limits_for_scenario_record(r))
+            unified = to_unified_action(r, limits_for_scenario_record(r, nomoto=args.nomoto))
             if i % 5 == 0 and unified["encounter_rule"] != "none":
                 r["prev_decisions"] = [{"action": unified["action"], "degrees": unified["degrees"]}] * 2
                 n_with_history += 1
@@ -1690,15 +1710,20 @@ def main() -> None:
                 r["prev_decisions"] = None
         print(f"Fase B4: {n_with_history}/{len(train_recs)} rows given a previous-decisions "
              "history preamble")
-        trace_out = [to_trace_record(r, i + 1) for i, r in enumerate(train_recs)]
-        TRACES_OUT.parent.mkdir(parents=True, exist_ok=True)
-        with TRACES_OUT.open("w", encoding="utf-8") as f:
-            for t in trace_out:
-                f.write(json.dumps(t, ensure_ascii=False) + "\n")
-        print(f"Wrote {TRACES_OUT} ({len(trace_out)} training traces)")
-        write_scenario_sft_files(train_recs, CACHE, mode="w")
-        write_scenario_dpo_file(train_recs, CACHE, mode="w")
-        write_scenario_reflection_file(train_recs, CACHE, mode="w")
+        if not args.nomoto:
+            # Traces file doesn't depend on ship-dynamics limits (to_trace_record() embeds
+            # situation_report, rendered earlier via render_situation_narrative() with no
+            # `limits`/nomoto concept at all) -- skip rewriting it in --nomoto mode so a
+            # nomoto-only regeneration run can never touch this shared, non-nomoto file.
+            trace_out = [to_trace_record(r, i + 1) for i, r in enumerate(train_recs)]
+            TRACES_OUT.parent.mkdir(parents=True, exist_ok=True)
+            with TRACES_OUT.open("w", encoding="utf-8") as f:
+                for t in trace_out:
+                    f.write(json.dumps(t, ensure_ascii=False) + "\n")
+            print(f"Wrote {TRACES_OUT} ({len(trace_out)} training traces)")
+        write_scenario_sft_files(train_recs, CACHE, mode="w", nomoto=args.nomoto)
+        write_scenario_dpo_file(train_recs, CACHE, mode="w", nomoto=args.nomoto)
+        write_scenario_reflection_file(train_recs, CACHE, mode="w", nomoto=args.nomoto)
         return
 
     n_eval = 2 if args.smoke else args.n_eval_per_category

@@ -66,8 +66,8 @@ from core import AgentPaths, load_env, review_path, safe_write_jsonl, CONTAM_THR
 from pipeline.oow_agent_spec import (
     SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, goal_course_check_line, goal_course_action,
     classify_rules, render_previous_decisions, real_risk, risk_band, STAND_ON_TCPA_S,
-    classify_encounter, sample_row_limits, constraint_line, bearing_and_range, relative_bearing,
-    goal_course_cpa_after_turn,
+    classify_encounter, sample_row_limits, sample_row_limits_nomoto, constraint_line,
+    bearing_and_range, relative_bearing, goal_course_cpa_after_turn,
 )
 
 paths = AgentPaths.oow()
@@ -166,10 +166,15 @@ _DEFAULT_LIMITS = {"safe_distance_m": SAFE_CPA_M, "max_turn_deg": MAX_TURN_DEG,
                    "decision_interval_s": 200.0}
 
 
-def limits_for_leo_record(r: dict) -> dict:
+def limits_for_leo_record(r: dict, nomoto: bool = False) -> dict:
     """Deterministic per-row STAP-2 sampled limits for Leo record `r` -- seeded off the
     record's OWN stable `id` (never a running index), so the same source row always
-    samples the same safe_distance_m/max_turn_deg/risk_horizon_s across separate runs."""
+    samples the same safe_distance_m/max_turn_deg/risk_horizon_s across separate runs.
+
+    `nomoto` (2026-09-26, opt-in, default False -- every EXISTING call site is
+    unaffected): switches to sample_row_limits_nomoto() -- see its docstring."""
+    if nomoto:
+        return sample_row_limits_nomoto(r["id"], r["state"]["own_ship"]["speed"])
     return sample_row_limits(r["id"], r["state"]["own_ship"]["speed"])
 
 
@@ -201,7 +206,7 @@ def render_leo_narrative(state: dict, limits: dict | None = None) -> str:
         f"Mission waypoint is at ({mx:.1f}, {my:.1f}), {dist:.0f} m away, bearing {bearing:.1f} deg.",
         goal_course_check_line(ox, oy, own["heading"], mx, my, limits["max_turn_deg"]),
         constraint_line(limits["safe_distance_m"], limits["max_turn_deg"], limits["risk_horizon_s"],
-                        limits["decision_interval_s"]),
+                        limits["decision_interval_s"], manoeuvre_time_s=limits.get("manoeuvre_time_s")),
         f"{n} other ship{'s' if n != 1 else ''}:" if n else "No other ships tracked.",
     ]
     for i, c in enumerate(contacts, start=1):
@@ -1089,6 +1094,11 @@ def main() -> None:
                          "action buckets via stratified_sample) and write them to _review/ for "
                          "human review, then exit -- never runs the full population, never touches "
                          "any production or checkpoint file.")
+    ap.add_argument("--nomoto", action="store_true",
+                    help="2026-09-26: sample ship-dynamics-aware limits (sample_row_limits_nomoto(), "
+                         "see pipeline.nomoto.SHIP_PROFILES) instead of the legacy analytic "
+                         "sample_row_limits(), and write oow_scenario_Leo_*_nomoto.jsonl -- PARALLEL "
+                         "files, never overwrites the existing kinematics-model ones.")
     args = ap.parse_args()
 
     all_recs = [json.loads(l) for l in LEO_FILE.read_text(encoding="utf-8").splitlines()]
@@ -1098,7 +1108,7 @@ def main() -> None:
 
     recs: list[dict] = []
     for i, r in enumerate(sample):
-        limits = limits_for_leo_record(r)
+        limits = limits_for_leo_record(r, nomoto=args.nomoto)
         decision = decisions_by_id[r["id"]]
         prev_decisions = decision["_previous_decisions"]
         show_history = prev_decisions is not None and _row_gets_history_text(r["id"])
@@ -1279,11 +1289,11 @@ def main() -> None:
         })
 
     outputs = {
-        "oow_scenario_Leo_sft_direct.jsonl": sft_rows,
-        "oow_scenario_Leo_sft_cot.jsonl": sft_rows,
-        "oow_scenario_Leo_dpo_pairs.jsonl": dpo_rows,
-        "oow_scenario_Leo_reflection.jsonl": reflect_rows,
-        "oow_scenario_Leo_reasoning_traces.jsonl": trace_rows,
+        f"oow_scenario_Leo_sft_direct{'_nomoto' if args.nomoto else ''}.jsonl": sft_rows,
+        f"oow_scenario_Leo_sft_cot{'_nomoto' if args.nomoto else ''}.jsonl": sft_rows,
+        f"oow_scenario_Leo_dpo_pairs{'_nomoto' if args.nomoto else ''}.jsonl": dpo_rows,
+        f"oow_scenario_Leo_reflection{'_nomoto' if args.nomoto else ''}.jsonl": reflect_rows,
+        f"oow_scenario_Leo_reasoning_traces{'_nomoto' if args.nomoto else ''}.jsonl": trace_rows,
     }
     write_outputs(outputs, CACHE, overwrite=args.overwrite)
 
