@@ -73,9 +73,10 @@ from pipeline.ingest.build_kg import kg_retrieve, rerank_hits
 from pipeline.ingest.pg_guidance import ProceduralGraph, render_guidance, load_merged_pg
 from pipeline.eval.prep_ablation import format_context
 from pipeline.oow_agent_spec import (
-    SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, derive_risk_horizon_s, constraint_line,
-    render_previous_decisions,
+    SYSTEM_OOW_AGENT, ACTIONS, validate_action_json, derive_risk_horizon_s,
+    derive_risk_horizon_s_nomoto, constraint_line, render_previous_decisions,
 )
+from pipeline.nomoto import NomotoParams, manoeuvre_time_s
 
 from app.missions import Mission, Vessel
 from app.narrate import contact_line, narrate
@@ -500,38 +501,73 @@ def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], confi
         # get the same step template.
         user_parts.append(COT_INSTR)
     if constraints is not None:
-        # Example-turn duration (2026-09-24): illustrates the ONLY physical limit left
-        # (turn_rate_deg_s) now that turn_left/turn_right accept any size order -- 90 deg
-        # is an arbitrary reference angle, not a cap, chosen only because it's a large,
-        # easy-to-picture turn.
-        example_turn_deg = 90.0
-        example_turn_s = example_turn_deg / constraints.turn_rate_deg_s
-        # Risk horizon (quality-review STAP 2, 2026-09-23): geometry-derived from THIS
-        # mission's own safe distance/max turn/own-ship speed via the SAME
-        # derive_risk_horizon_s() the training generators sample around -- the live
-        # simulator always uses the derived default (no random multiplier, that variation
-        # is a training-only device). The safe-distance/max-turn/horizon sentence itself
-        # is rendered via the SAME constraint_line() the training generators call (not a
-        # hand-duplicated copy), so it is guaranteed byte-identical whenever settings
-        # coincide (see the parity test) -- fixes a real bug found at STOP-1/2-
-        # verification: the old hand-duplicated text said "CPA below that is a real
-        # collision risk" unconditionally, which is the ALREADY-FIXED STAP-1 CPA-alone
-        # bug's own definition, not the CPA-AND-TCPA conjunction real_risk() actually uses.
-        risk_horizon_s = derive_risk_horizon_s(constraints.min_cpa_m, constraints.max_rudder_angle_deg,
-                                               own.speed)
         accel_kt_per_min = mps_to_kn(constraints.max_acceleration_mps2 * 60.0)
         decel_kt_per_min = mps_to_kn(constraints.max_deceleration_mps2 * 60.0)
-        user_parts.append(
-            f"Own-ship's physical limits: heading changes at {constraints.turn_rate_deg_s:.1f} deg/s. "
-            f"There is no cap on how large a single turn order may be -- a bigger order just takes "
-            f"longer to complete (e.g. a {example_turn_deg:.0f} deg turn takes about "
-            f"{example_turn_s:.0f}s). "
+        speed_line = (
             f"Speed is capped at {mps_to_kn(constraints.max_speed_mps):.1f} kt, changing gradually "
             f"(~{accel_kt_per_min:.2f} kt/min up / ~{decel_kt_per_min:.2f} kt/min down) -- "
             "speed_up/slow_down are not instant. "
-            + constraint_line(constraints.min_cpa_m, constraints.max_rudder_angle_deg, risk_horizon_s,
-                             next_decision_in_s if next_decision_in_s is not None else 200.0)
         )
+        if getattr(constraints, "kinematics_model", "kinematics") == "nomoto":
+            # 2026-09-26: Nomoto is a 2nd-order system (rudder-servo lag + yaw-rate lag) --
+            # unlike the legacy slew, NO constant deg/s figure describes it honestly, and
+            # the turn-time/reference-angle relationship is NOT linear (measured: a 10 deg
+            # turn already takes 18x longer than the legacy model's, a 90 deg turn only
+            # 7.7x longer -- see pipeline/nomoto.py's manoeuvre_time_s()). Three REAL
+            # simulated worked examples (not a formula extrapolation) let the model
+            # interpolate honestly instead of assuming one rate applies to every angle.
+            nomoto_params = NomotoParams(
+                K_per_s=constraints.nomoto_K_per_s, T_s=constraints.nomoto_T_s,
+                T_E_s=constraints.nomoto_T_E_s, rudder_limit_deg=constraints.nomoto_rudder_limit_deg,
+                autopilot_kp=constraints.nomoto_autopilot_kp)
+            t30 = manoeuvre_time_s(30.0, nomoto_params, substep_s=constraints.nomoto_substep_s)
+            t60 = manoeuvre_time_s(60.0, nomoto_params, substep_s=constraints.nomoto_substep_s)
+            t90 = manoeuvre_time_s(90.0, nomoto_params, substep_s=constraints.nomoto_substep_s)
+            risk_horizon_s = derive_risk_horizon_s_nomoto(constraints.min_cpa_m, constraints.max_rudder_angle_deg,
+                                                          own.speed, nomoto_params)
+            reference_manoeuvre_s = manoeuvre_time_s(constraints.max_rudder_angle_deg, nomoto_params,
+                                                     substep_s=constraints.nomoto_substep_s)
+            user_parts.append(
+                "Own-ship's heading responds with lag (slow steering dynamics): once ordered, a "
+                "turn builds up gradually rather than at a constant rate. A 30 deg turn takes about "
+                f"{t30:.0f}s, a 60 deg turn about {t60:.0f}s, a 90 deg turn about {t90:.0f}s "
+                "(measured from rest). There is no cap on how large a single turn order may be -- "
+                "larger orders simply take longer, and not proportionally longer (a small order "
+                "costs relatively more time, not less). "
+                + speed_line
+                + constraint_line(constraints.min_cpa_m, constraints.max_rudder_angle_deg, risk_horizon_s,
+                                 next_decision_in_s if next_decision_in_s is not None else 200.0,
+                                 manoeuvre_time_s=reference_manoeuvre_s)
+            )
+        else:
+            # Example-turn duration (2026-09-24): illustrates the ONLY physical limit left
+            # (turn_rate_deg_s) now that turn_left/turn_right accept any size order -- 90 deg
+            # is an arbitrary reference angle, not a cap, chosen only because it's a large,
+            # easy-to-picture turn.
+            example_turn_deg = 90.0
+            example_turn_s = example_turn_deg / constraints.turn_rate_deg_s
+            # Risk horizon (quality-review STAP 2, 2026-09-23): geometry-derived from THIS
+            # mission's own safe distance/max turn/own-ship speed via the SAME
+            # derive_risk_horizon_s() the training generators sample around -- the live
+            # simulator always uses the derived default (no random multiplier, that variation
+            # is a training-only device). The safe-distance/max-turn/horizon sentence itself
+            # is rendered via the SAME constraint_line() the training generators call (not a
+            # hand-duplicated copy), so it is guaranteed byte-identical whenever settings
+            # coincide (see the parity test) -- fixes a real bug found at STOP-1/2-
+            # verification: the old hand-duplicated text said "CPA below that is a real
+            # collision risk" unconditionally, which is the ALREADY-FIXED STAP-1 CPA-alone
+            # bug's own definition, not the CPA-AND-TCPA conjunction real_risk() actually uses.
+            risk_horizon_s = derive_risk_horizon_s(constraints.min_cpa_m, constraints.max_rudder_angle_deg,
+                                                   own.speed)
+            user_parts.append(
+                f"Own-ship's physical limits: heading changes at {constraints.turn_rate_deg_s:.1f} deg/s. "
+                f"There is no cap on how large a single turn order may be -- a bigger order just takes "
+                f"longer to complete (e.g. a {example_turn_deg:.0f} deg turn takes about "
+                f"{example_turn_s:.0f}s). "
+                + speed_line
+                + constraint_line(constraints.min_cpa_m, constraints.max_rudder_angle_deg, risk_horizon_s,
+                                 next_decision_in_s if next_decision_in_s is not None else 200.0)
+            )
     if pg_text:
         user_parts.append(f"Procedure guidance:\n{pg_text}")
     if ctx is not None:

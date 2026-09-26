@@ -13,6 +13,7 @@ if str(APP_ROOT) not in sys.path:
 import app.agents as agents  # noqa: E402
 from app.llm_runs import parse_run_filename, run_log_path  # noqa: E402
 from app.missions import load_mission  # noqa: E402
+from app.simulation import VesselConstraints  # noqa: E402
 
 EXPECTED_CONFIGS = {
     "bare_qwen", "v0_base", "v1_rag", "v2_cot", "v3_rag_cot",
@@ -25,6 +26,39 @@ EXPECTED_CONFIGS = {
 def test_config_specs_exact_set() -> None:
     assert set(agents._CONFIG_SPECS) == EXPECTED_CONFIGS
     assert set(agents.MODEL_CONFIGS) == EXPECTED_CONFIGS
+
+
+def test_kinematics_model_physical_limits_paragraph_unchanged_by_default() -> None:
+    """2026-09-26: adding the Nomoto-aware branch must not alter a single byte of the
+    default ("kinematics") physical-limits text -- no prompt-hash bump for existing runs."""
+    m = load_mission("Imazu01")
+    messages, _ = agents.build_oow_prompt(m, m.own_ship, m.targets, config="v0_base",
+                                          constraints=VesselConstraints())
+    user_msg = messages[1]["content"]
+    assert "Own-ship's physical limits: heading changes at 3.0 deg/s." in user_msg
+    assert "a 90 deg turn takes about 30s" in user_msg
+    assert "responds with lag" not in user_msg
+
+
+def test_kinematics_model_nomoto_states_real_measured_turn_times() -> None:
+    """The Nomoto branch must state REAL simulated manoeuvre_time_s() numbers (not the
+    legacy linear formula) -- verified against the SAME function, not a hardcoded number,
+    so this test can't silently drift out of sync with the physics."""
+    from pipeline.nomoto import NomotoParams, manoeuvre_time_s
+    m = load_mission("Imazu01")
+    constraints = VesselConstraints(kinematics_model="nomoto")
+    messages, _ = agents.build_oow_prompt(m, m.own_ship, m.targets, config="v0_base",
+                                          constraints=constraints)
+    user_msg = messages[1]["content"]
+    assert "responds with lag" in user_msg
+    params = NomotoParams(K_per_s=constraints.nomoto_K_per_s, T_s=constraints.nomoto_T_s,
+                          T_E_s=constraints.nomoto_T_E_s, rudder_limit_deg=constraints.nomoto_rudder_limit_deg,
+                          autopilot_kp=constraints.nomoto_autopilot_kp)
+    t60 = manoeuvre_time_s(60.0, params, substep_s=constraints.nomoto_substep_s)
+    assert f"a 60 deg turn about {t60:.0f}s" in user_msg
+    # A 30deg reference turn (max_rudder_angle_deg default) manoeuvre-time fact must also
+    # be present via constraint_line()'s manoeuvre_time_s param (Phase 3 step 1, now wired in).
+    assert "degree turn takes about" in user_msg and "to complete." in user_msg
 
 
 def test_v7_has_no_cot_or_pg_but_has_rag() -> None:
