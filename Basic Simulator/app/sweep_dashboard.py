@@ -62,6 +62,38 @@ _DEFAULT_MIN_CPA_M = VesselConstraints().min_cpa_m
 AUDIT_SCRIPT = ROOT / "_analysis" / "audit_runs.py"
 AUDIT_OUT_DIR = ROOT / "_analysis" / "audit"
 
+# ── UI preference persistence ─────────────────────────────────────────────
+# Same local-JSON-file pattern as app/streamlit_app.py's _UI_PREFS_PATH -- Streamlit's
+# session_state only lives for one browser session, so without this the Baseline tab's
+# tag selection silently reset to its hardcoded default on every dashboard restart.
+_UI_PREFS_PATH = ROOT / "Data" / "_sweep_dashboard_ui_prefs.json"
+_UI_PREFS_KEYS = ["comparison_baseline_tag"]
+
+
+def _load_ui_prefs() -> dict:
+    if _UI_PREFS_PATH.exists():
+        try:
+            return json.loads(_UI_PREFS_PATH.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def _save_ui_prefs() -> None:
+    prefs = {k: st.session_state[k] for k in _UI_PREFS_KEYS if k in st.session_state}
+    _UI_PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _UI_PREFS_PATH.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+
+
+# Seed session_state from the persisted file BEFORE the widget with this key renders --
+# Streamlit only honours a widget's `index=`/`value=` default on the very first render of
+# THIS session for that key, so this must run once per (browser) session, ahead of the tabs.
+if "_ui_prefs_loaded" not in st.session_state:
+    for _k, _v in _load_ui_prefs().items():
+        if _k in _UI_PREFS_KEYS:
+            st.session_state[_k] = _v
+    st.session_state._ui_prefs_loaded = True
+
 st.set_page_config(page_title="LLM sweep dashboard", layout="wide")
 title_cols = st.columns([5, 1])
 with title_cols[0]:
@@ -147,6 +179,10 @@ def _score_log(mission_id: str, log: dict, tag: str, path: Path,
         "config": log.get("config"), "weights": weights_value,
         "model_variant": model_variant, "model_label": variant_label(model_variant),
         "tag": log.get("tag", tag),
+        # Missing in older logs predating this param -- run_llm_scenario.py's own CLI
+        # default was always "kinematics" before --kinematics-model existed, so a missing
+        # field means that default was used, never "unknown".
+        "kinematics_model": (log.get("params") or {}).get("kinematics_model") or "kinematics",
         "composite_score": result["composite_score"], "verdict": result["verdict"],
         "safety": result["safety"], "compliance": result["compliance"],
         "explanation_compliance": result.get("explanation_compliance") or {"score": None, "breakdown": []},
@@ -332,10 +368,29 @@ def _describe_run(r: dict) -> str:
     return "\n".join(lines)
 
 
+def _resolve_baseline_tag(baseline_tags: list[str]) -> str | None:
+    """Single shared baseline-tag resolution (the SAME `comparison_baseline_tag` session
+    key the Baseline tab's own selectbox reads/writes, persisted across restarts) -- used
+    everywhere else a baseline reference is shown too, so picking e.g. a Nomoto-generated
+    vs. an old-kinematics-generated baseline tag there is reflected in the Sweep tab's
+    Leaderboard/per-mission tables as well, instead of each place tracking it separately."""
+    if not baseline_tags:
+        return None
+    current = st.session_state.get("comparison_baseline_tag")
+    if current in baseline_tags:
+        return current
+    return "baseline" if "baseline" in baseline_tags else baseline_tags[0]
+
+
 def _render() -> None:
     gen_at_index = _generated_at_index()
     rows_by_mission = {m: _scan_mission_runs(m, gen_at_index) for m in MISSIONS}
     done = sum(len(rows) for rows in rows_by_mission.values())
+
+    baseline_tags = _available_baseline_tags()
+    active_baseline_tag = _resolve_baseline_tag(baseline_tags)
+    baseline_rows_by_mission = ({m: _scan_baseline_runs(m, active_baseline_tag) for m in MISSIONS}
+                                if active_baseline_tag else {})
 
     current_job, current_job_age = _read_current_job()
 
@@ -349,6 +404,13 @@ def _render() -> None:
                       help=f"last updated {current_job_age}")
         else:
             st.metric("In progress", "\u2014 (none running on this host)")
+
+    if active_baseline_tag:
+        st.caption(f"\u2696\uFE0F Baseline reference: **{active_baseline_tag}** (ship-dynamics model: "
+                  f"**{_baseline_tag_kinematics_model(active_baseline_tag)}**) -- change on the "
+                  "Baseline tab (shared selection, applies here too). \"best_llm_vs_baseline\" below "
+                  "is restricted to LLM runs using that SAME ship-dynamics model, never mixed with "
+                  "the other one.")
 
     st.caption(f"Scans {RUNS_DIR.relative_to(ROOT)} directly for "
               "{mission}__{config}[__{tag}].json \u2022 read-only \u2022 click Refresh "
@@ -409,7 +471,22 @@ def _render() -> None:
     st.subheader("Leaderboard (best config \u00d7 variant per mission so far)")
     leaderboard = []
     best_row_by_mission: dict[str, dict] = {}
+    wanted_km = _baseline_tag_kinematics_model(active_baseline_tag) if active_baseline_tag else None
     for mission_id in MISSIONS:
+        base_rows = baseline_rows_by_mission.get(mission_id) or {}
+        best_base = max(base_rows.values(), key=lambda r: r["composite_score"], default=None)
+        all_rows = rows_by_mission[mission_id]
+        # Restricted to the SAME ship-dynamics model as the active baseline tag -- comparing
+        # against the best LLM run regardless of physics model would be apples-to-oranges.
+        matching_rows = ({k: r for k, r in all_rows.items() if r["kinematics_model"] == wanted_km}
+                         if wanted_km else {})
+        best_matching = max(matching_rows.values(), key=lambda r: r["composite_score"], default=None)
+        base_cols = {
+            "best_baseline": BASELINE_CONFIGS.get(best_base["config"], best_base["config"])
+                            if best_base else "\u2014",
+            "baseline_composite": best_base["composite_score"] if best_base else None,
+            "best_llm_vs_baseline": best_matching["composite_score"] if best_matching else None,
+        }
         rows = {k: r for k, r in rows_by_mission[mission_id].items() if k[1] in picked_variants}
         if not rows:
             leaderboard.append({
@@ -417,7 +494,7 @@ def _render() -> None:
                 "best_config": "\u2014", "best_variant": "\u2014",
                 "composite": None, "verdict": "\u2014", "safety": None, "compliance": None,
                 "explanation": None, "temporal": None, "spatial": None, "manoeuvre": None,
-                "latency": None, "colreg": "\u2014",
+                "latency": None, "colreg": "\u2014", **base_cols,
             })
             continue
         best = max(rows.values(), key=lambda r: r["composite_score"])
@@ -426,7 +503,7 @@ def _render() -> None:
             "mission": mission_id, "done": f"{len(rows)}/{len(CONFIGS) * len(picked_variants)}",
             "best_config": best["config"], "best_variant": best["model_label"],
             "composite": best["composite_score"],
-            "verdict": best["verdict"], **_axis_cols(best),
+            "verdict": best["verdict"], **_axis_cols(best), **base_cols,
         })
     st.dataframe(leaderboard, width="stretch", hide_index=True)
 
@@ -488,6 +565,12 @@ def _render() -> None:
                             "composite": r["composite_score"], "verdict": r["verdict"],
                             **_axis_cols(r),
                         })
+            for base_cfg, r in (baseline_rows_by_mission.get(mission_id) or {}).items():
+                table.append({
+                    "config": BASELINE_CONFIGS.get(base_cfg, base_cfg), "variant": "deterministic baseline",
+                    "status": "\u2705 done", "composite": r["composite_score"], "verdict": r["verdict"],
+                    **_axis_cols(r),
+                })
             st.dataframe(table, width="stretch", hide_index=True)
 
             done_keys = [k for k in rows if rows.get(k) is not None]
@@ -777,6 +860,15 @@ def _available_baseline_tags() -> list[str]:
     return sorted(tags)
 
 
+def _baseline_tag_kinematics_model(tag: str) -> str:
+    """Baseline runs never record their own params.kinematics_model (app.run_baseline_
+    scenario writes no "params" block at all, deterministic baselines need no prompt/model
+    params) -- the ONLY signal for which ship-dynamics model generated a baseline tag's
+    runs is the tag NAME itself, by convention ("baseline_Nomoto_all" vs plain "baseline").
+    Matches _score_log()'s own "missing means kinematics" default for LLM runs."""
+    return "nomoto" if "nomoto" in tag.lower() else "kinematics"
+
+
 def _scan_baseline_runs(mission_id: str, tag: str) -> dict[str, dict]:
     """{config: scored_row} for every deterministic baseline run log matching this
     mission_id + tag (see app.baselines.BASELINE_CONFIGS) -- same on-disk scan+scoring
@@ -845,12 +937,17 @@ def _load_comparison_data(tag: str) -> tuple[list[dict], dict[tuple[str, str], d
     show up within half a minute, without re-scanning on every widget interaction."""
     gen_at_index = _generated_at_index()
     baseline_configs = list(BASELINE_CONFIGS)
+    wanted_km = _baseline_tag_kinematics_model(tag)
     detail_lookup: dict[tuple[str, str], dict] = {}
     best_llm_label: dict[str, str] = {}
     table_rows = []
     for mission_id in MISSIONS:
         base_rows = _scan_baseline_runs(mission_id, tag)
-        llm_rows = _scan_mission_runs(mission_id, gen_at_index)
+        all_llm_rows = _scan_mission_runs(mission_id, gen_at_index)
+        # Only compare against LLM runs generated under the SAME ship-dynamics model as
+        # this baseline tag (Nomoto-vs-Nomoto or legacy-kinematics-vs-legacy-kinematics) --
+        # mixing them would be an apples-to-oranges physics comparison.
+        llm_rows = {k: r for k, r in all_llm_rows.items() if r["kinematics_model"] == wanted_km}
         row_out = {"mission": mission_id}
         for cfg in baseline_configs:
             r = base_rows.get(cfg)
@@ -886,7 +983,15 @@ def _render_comparison_tab() -> None:
                "app.run_baseline_scenario` first (see Basic Simulator/app/baselines/).")
         return
     default_idx = baseline_tags.index("baseline") if "baseline" in baseline_tags else 0
+    # A persisted tag from a previous session that no longer exists on disk must not reach
+    # the widget (Streamlit raises if session_state[key] isn't in options) -- drop it and
+    # fall back to default_idx instead.
+    if st.session_state.get("comparison_baseline_tag") not in baseline_tags:
+        st.session_state.pop("comparison_baseline_tag", None)
     tag = st.selectbox("Baseline tag", baseline_tags, index=default_idx, key="comparison_baseline_tag")
+    st.caption(f"\"best_llm\" below is restricted to LLM runs using the SAME ship-dynamics "
+              f"model as this tag (**{_baseline_tag_kinematics_model(tag)}**) -- never the best "
+              "LLM run overall, which could otherwise have used the other physics model.")
 
     baseline_configs = list(BASELINE_CONFIGS)
     system_keys = baseline_configs + ["best_llm"]
@@ -932,14 +1037,19 @@ def _render_comparison_tab() -> None:
     numeric_summary_cols = [c for c in summary_df.columns if c != "n_missions"]
     count_cols = ["reached_goal", "collision"]
     float_cols = [c for c in numeric_summary_cols if c not in count_cols]
+    # std_composite (spread) and collision (count) are both "lower is better" -- the
+    # opposite sense of every other column's higher-is-better default.
+    inverse_cols = ["std_composite", "collision"]
+    normal_cols = [c for c in numeric_summary_cols if c not in inverse_cols]
     summary_styler = (summary_df.style
                       .format("{:.3f}", subset=float_cols, na_rep="\u2014")
                       .format("{:.0f}", subset=count_cols, na_rep="\u2014")
-                      .apply(_tiered_highlight, axis=0, subset=numeric_summary_cols))
+                      .apply(_tiered_highlight, axis=0, subset=normal_cols)
+                      .apply(_tiered_highlight, axis=0, subset=inverse_cols, higher_is_better=False))
     st.dataframe(summary_styler, width="stretch")
-    st.caption("Per column: greenest = highest, reddest = lowest (lighter shade = within "
-              "5% of that extreme) -- except \"collision\", where green means the MOST "
-              "collisions (worst), not best.")
+    st.caption("Per column: greenest = best, reddest = worst (lighter shade = within 5% "
+              "of that extreme) -- higher is better for every column except \"collision\" "
+              "and \"std_composite\" (spread), where lower is better.")
 
     st.markdown("### Strengths / weaknesses per algorithm (relative to the other techniques)")
     # Per-axis MEAN per system, then RANK systems against each other on that SAME axis --
@@ -1200,3 +1310,5 @@ with tab_audit:
     _render_audit_tab()
 with tab_comparison:
     _render_comparison_tab()
+
+_save_ui_prefs()
