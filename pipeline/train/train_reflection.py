@@ -103,10 +103,15 @@ REFL_FILES   = {
         # Track 2 -- applied helm/engine-order decisions (build_reflection.py run against
         # the deterministic MOOS-scenario reasoning traces, notebook § 6.5).
         CACHE / "oow_scenario_reflection.jsonl",
+        # Ship-dynamics-aware sibling (Nomoto-derived manoeuvre-time facts, 2026-09-26) --
+        # trained MIXED alongside the legacy file above, same rationale as train_sft.py.
+        CACHE / "oow_scenario_reflection_nomoto.jsonl",
         # Track 2 (continued) -- Leo MOOS-trajectory sample (notebook § 6.5.1),
         # kept separate from the plain oow_scenario_* reflection above for traceability.
         # Fase B5: capped at LEO_REFLECTION_CAP below, same rationale as train_sft.py's LEO_SFT_CAP.
         CACHE / "oow_scenario_Leo_reflection.jsonl",
+        # Nomoto-aware sibling, same rationale as the plain oow_scenario_*_nomoto pair above.
+        CACHE / "oow_scenario_Leo_reflection_nomoto.jsonl",
     ],
 }[paths.domain]
 

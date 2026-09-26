@@ -130,10 +130,15 @@ DPO_FILES   = {
         # Track 2 -- applied helm/engine-order decisions (build_rlhf.py run against
         # the deterministic MOOS-scenario reasoning traces, notebook § 6.5).
         CACHE / "oow_scenario_dpo_pairs.jsonl",
+        # Ship-dynamics-aware sibling (Nomoto-derived manoeuvre-time facts, 2026-09-26) --
+        # trained MIXED alongside the legacy file above, same rationale as train_sft.py.
+        CACHE / "oow_scenario_dpo_pairs_nomoto.jsonl",
         # Track 2 (continued) -- Leo MOOS-trajectory sample (notebook § 6.5.1),
         # kept separate from the plain oow_scenario_* pairs above for traceability.
         # Fase B5: capped at LEO_DPO_CAP below, same rationale as train_sft.py's LEO_SFT_CAP.
         CACHE / "oow_scenario_Leo_dpo_pairs.jsonl",
+        # Nomoto-aware sibling, same rationale as the plain oow_scenario_*_nomoto pair above.
+        CACHE / "oow_scenario_Leo_dpo_pairs_nomoto.jsonl",
         # Fase C2(ii) -- "anti-fabricated-risk" pairs mined deterministically (no LLM)
         # from real model mistakes in the archived units_v1 mission checkpoints
         # (build_measurement_dpo.py against app/measurement.py's Check A hits).

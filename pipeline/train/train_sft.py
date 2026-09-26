@@ -133,6 +133,13 @@ SFT_DATASETS = {
         # variant: there's no Track 2 retrieval corpus for this data to ground against.
         CACHE / "oow_scenario_sft_direct.jsonl",
         CACHE / "oow_scenario_sft_cot.jsonl",
+        # Ship-dynamics-aware siblings (same rows, Nomoto-derived manoeuvre-time facts
+        # instead of legacy turn-rate-slew facts -- sample_row_limits_nomoto(), 2026-09-26).
+        # Trained MIXED alongside the legacy files above (not a replacement) so the model
+        # learns to reason from WHATEVER ship-dynamics facts are stated, rather than
+        # overfitting to either physics model.
+        CACHE / "oow_scenario_sft_direct_nomoto.jsonl",
+        CACHE / "oow_scenario_sft_cot_nomoto.jsonl",
         # Track 2 (continued) -- same, but from the Leo MOOS-trajectory dataset (7928
         # real bridge states, richer situations -- build_oow_scenarios_leo.py, notebook
         # § 6.5.1). Kept in its own oow_scenario_Leo_* files (never merged into the
@@ -141,6 +148,9 @@ SFT_DATASETS = {
         # bigger than every other Track 2 source and previously dominated the mix at 69%).
         CACHE / "oow_scenario_Leo_sft_direct.jsonl",
         CACHE / "oow_scenario_Leo_sft_cot.jsonl",
+        # Nomoto-aware siblings, same rationale as the plain oow_scenario_*_nomoto pair above.
+        CACHE / "oow_scenario_Leo_sft_direct_nomoto.jsonl",
+        CACHE / "oow_scenario_Leo_sft_cot_nomoto.jsonl",
         # Procedural-graph step-order data: merged graph (rule+incident+scenario
         # traces, build_pg.py) plus a dedicated incident-only file so its "what
         # actually went wrong" pitfalls stay traceable, same Track1/Track2 convention.
