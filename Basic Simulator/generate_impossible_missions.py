@@ -109,6 +109,16 @@ def build(mission_id: str, name: str, rule_refs: list[str], own_ship_role: str,
     built = [_target(n, b, v, t) for n, b, v, t in targets_spec]
     targets = [d for d, _state in built]
     state_by_name = {d["name"]: s for d, s in built}
+    # ORIGINAL phase-1 speed per target (m/s) -- needed below to project a target's
+    # position forward to the reaim trigger time using the speed it's ACTUALLY moving at
+    # during [0, trigger_t] (still its phase-1 speed, not yet the new post-rounding
+    # speed). Bug fixed 2026-09-26: pos_at_trigger was computed using v_ts (the NEW
+    # reaim speed) for that whole interval, silently mis-projecting the target's position
+    # BEFORE the reaim heading was even computed from it -- the resulting heading still
+    # LOOKED like a valid intercept solution, but aimed from the wrong start point, so
+    # replaying the mission with own-ship holding course produced a near-miss (28-375m)
+    # instead of the intended guaranteed collision.
+    speed_mps_by_name = {n: v for n, b, v, t in targets_spec}
     targets += [_target_direct(n, b, r, h, v) for n, b, r, h, v in (direct_targets or [])]
     heading_by_name = {t["name"]: t["heading_deg"] for t in targets}
     target_maneuvers = []
@@ -119,8 +129,9 @@ def build(mission_id: str, name: str, rule_refs: list[str], own_ship_role: str,
     for tname, trigger_t, v_ts in (reaim_maneuvers or []):
         x0, y0, heading0 = state_by_name[tname]
         h0 = math.radians(heading0)
-        pos_at_trigger = (x0 + v_ts * math.sin(h0) * trigger_t,
-                         y0 + v_ts * math.cos(h0) * trigger_t)
+        original_speed = speed_mps_by_name[tname]
+        pos_at_trigger = (x0 + original_speed * math.sin(h0) * trigger_t,
+                         y0 + original_speed * math.cos(h0) * trigger_t)
         new_heading = _reaim_heading(pos_at_trigger, v_ts, trigger_t)
         print(f"  [reaim] {tname} @t={trigger_t:.0f}s -> new heading {new_heading:.1f} deg "
              f"(fresh guaranteed collision)")
@@ -262,108 +273,109 @@ MISSIONS = [
         ["Own-ship takes an immediate, large emergency manoeuvre.", "Own-ship avoids collision."],
         [("ts1_extremis", 5.0, 6.173, 70.0)],
     ),
-    # IMP11-13: "chaos at the windward mark" -- inspired by fleet dinghy racing. Real
-    # windward-mark geometry (2026-09-26 correction, first attempt had targets converging
-    # from all bearings and bearing away in random/mixed directions -- wrong): the fleet
-    # beats upwind on port/starboard tacks, so boats approach the mark from a NARROW
-    # sector (roughly abeam-to-astern on one side -- "from the left and south"), all on
-    # roughly the SAME initial heading (close-hauled, upwind, here ~340-15 deg -- small
-    # tack-angle spread, not a fan of headings). Each rounds the mark at ITS OWN staggered
-    # moment (never reactive to own-ship) and turns the SAME rotational way (a mark is
-    # always rounded the same way by the whole fleet) onto a SHARED new heading of
-    # roughly south (~170-190 deg, "wind angle 140-170 deg" broad-reach/run), but at
-    # DIFFERENT POST-ROUNDING SPEEDS (a slow spinnaker hoist vs. a clean one) -- that's
-    # where "different speeds" belongs, not in the pre-mark approach. Plus, per the
-    # classic real-world picture, one vessel sitting becalmed/dead-in-the-water right at
-    # the mark itself. No single-contact avoidance plan can work here -- Rule 8's "due
-    # regard to all dangers" holistic-plan requirement is the actual test, since the
-    # "safe" bearing-away lane keeps closing as each boat rounds.
+    # IMP11-13: "chaos at the windward mark" -- inspired by fleet dinghy racing.
+    # 2026-09-26 rebuild #2: attempt #1 (direct-placement geometry) never actually forced
+    # a crossing -- ruletree/apf sailed straight through untroubled (composite 0.57-0.81,
+    # no CPA violation). Fixed by reusing the ALREADY-VALIDATED collision-guarantee
+    # machinery TWICE per target instead of hand-placing positions:
+    #   Phase 1 (approach): built via `_target()`/solve_intercept, EXACTLY like every
+    #   other IMP mission -- a genuine, guaranteed collision course with own-ship if
+    #   own-ship doesn't react, approaching from a narrow left/astern sector (varied
+    #   bearing/speed/T_collision per boat -- "different routes and speeds").
+    #   Phase 2 (round the mark, bear away): at each boat's own staggered trigger time
+    #   (before its phase-1 T_collision would have arrived), `reaim_maneuvers` computes a
+    #   FRESH guaranteed collision course via _reaim_heading() against own-ship's
+    #   CONTINUING nominal track -- i.e. the boat doesn't just turn onto a generic
+    #   "south" heading, it turns onto whatever heading re-threatens own-ship's onward
+    #   path, at a new (also varied) speed. This makes own-ship genuinely cross the fleet
+    #   TWICE: once on their inbound beat, once again after they round and bear away back
+    #   across its track -- both encounters real, not just spatially-plausible-looking.
+    # Plus, per the classic real-world picture, one vessel sitting becalmed/dead-in-the-
+    # water right at the mark itself (unchanged from rebuild #1).
     build(
         "IMP11", "Chaos at the windward mark (5 vessels)",
-        ["Rule 8", "Rule 13", "Rule 15", "Rule 17"], "mixed",
-        "Four vessels beat upwind toward the same mark from a narrow, left/astern sector "
-        "(roughly the same close-hauled heading, only their tack angle/speed differ), "
-        "each rounding at its own staggered moment and bearing away onto the SAME new "
-        "heading (south, broad reach) but at a different post-rounding speed -- plus one "
-        "becalmed/dead-in-the-water vessel sitting at the mark itself. Correct: Rule 8 -- "
-        "a single holistic plan with due regard to ALL vessels present, re-checked as "
-        "each one rounds and the safe lane shifts, not a per-contact reaction.",
+        ["Rule 8", "Rule 13", "Rule 14", "Rule 15", "Rule 17"], "mixed",
+        "Four vessels beat upwind toward the same mark on a genuine collision course with "
+        "own-ship (varied bearing/speed/timing), then EACH rounds at its own staggered "
+        "moment and bears away back across own-ship's continuing track on a FRESH "
+        "collision course at a different post-rounding speed -- plus one becalmed/dead-"
+        "in-the-water vessel sitting at the mark itself. Own-ship must cross this fleet "
+        "TWICE: once on their approach, again after they round. Correct: Rule 8 -- a "
+        "single holistic plan with due regard to ALL vessels present, re-checked as each "
+        "one rounds and re-threatens, not a per-contact reaction.",
         ["Own-ship avoids collision with all 5 contacts.", "Reach the goal."],
-        [],
-        direct_targets=[
-            ("ts1_beat_west", -80.0, 1600.0, 15.0, 7.0),
-            ("ts2_beat_westsw", -110.0, 1900.0, 5.0, 8.0),
-            ("ts3_beat_sw", -140.0, 2200.0, 350.0, 6.5),
-            ("ts4_beat_south", -170.0, 2500.0, 340.0, 9.0),
-            ("ts5_becalmed", 5.0, 1900.0, 250.0, 0.3),
+        [
+            ("ts1_beat_a", -50.0, 7.0, 190.0),
+            ("ts2_beat_b", -80.0, 8.5, 220.0),
+            ("ts3_beat_c", -100.0, 8.0, 240.0),
+            ("ts4_beat_d", -145.0, 9.8, 170.0),
         ],
-        maneuvers=[
-            ("ts1_beat_west", 220.0, 160.0, 10.0),
-            ("ts2_beat_westsw", 235.0, 170.0, 7.0),
-            ("ts3_beat_sw", 335.0, 185.0, 13.0),
-            ("ts4_beat_south", 275.0, 195.0, 6.0),
+        reaim_maneuvers=[
+            ("ts1_beat_a", 115.0, 6.0),
+            ("ts2_beat_b", 135.0, 10.5),
+            ("ts3_beat_c", 145.0, 7.5),
+            ("ts4_beat_d", 100.0, 8.2),
         ],
+        direct_targets=[("ts5_becalmed", 0.0, 1900.0, 250.0, 0.3)],
     ),
     build(
         "IMP12", "Chaos at the windward mark (6 vessels)",
-        ["Rule 8", "Rule 13", "Rule 15", "Rule 17"], "mixed",
-        "Five vessels beat upwind toward the same mark from a narrow, left/astern sector "
-        "(roughly the same close-hauled heading, only their tack angle/speed differ), "
-        "each rounding at its own staggered moment and bearing away onto the SAME new "
-        "heading (south, broad reach) but at a different post-rounding speed -- plus one "
-        "becalmed/dead-in-the-water vessel sitting at the mark itself. Busier than IMP11 "
-        "-- a 5th, faster boat closing from further abeam means the approach lane is "
-        "occupied for longer before any rounding even starts. Correct: Rule 8 -- a single "
-        "holistic plan re-checked as each vessel rounds, not a per-contact reaction.",
+        ["Rule 8", "Rule 13", "Rule 14", "Rule 15", "Rule 17"], "mixed",
+        "Five vessels beat upwind toward the same mark on a genuine collision course with "
+        "own-ship (varied bearing/speed/timing), then EACH rounds at its own staggered "
+        "moment and bears away back across own-ship's continuing track on a FRESH "
+        "collision course at a different post-rounding speed -- plus one becalmed/dead-"
+        "in-the-water vessel sitting at the mark itself. Busier than IMP11 -- a 5th boat "
+        "closing faster from further abeam. Own-ship must cross this fleet TWICE. "
+        "Correct: Rule 8 -- a single holistic plan re-checked as each vessel rounds and "
+        "re-threatens, not a per-contact reaction.",
         ["Own-ship avoids collision with all 6 contacts.", "Reach the goal."],
-        [],
-        direct_targets=[
-            ("ts1_beat_west", -80.0, 1600.0, 15.0, 7.0),
-            ("ts2_beat_westsw", -110.0, 1900.0, 5.0, 8.0),
-            ("ts3_beat_sw", -140.0, 2200.0, 350.0, 6.5),
-            ("ts4_beat_south", -170.0, 2500.0, 340.0, 9.0),
-            ("ts5_beat_farwest", -60.0, 1400.0, 25.0, 9.5),
-            ("ts6_becalmed", 5.0, 1900.0, 250.0, 0.3),
+        [
+            ("ts1_beat_a", -50.0, 7.0, 190.0),
+            ("ts2_beat_b", -80.0, 8.5, 220.0),
+            ("ts3_beat_c", -100.0, 8.0, 240.0),
+            ("ts4_beat_d", -145.0, 9.8, 170.0),
+            ("ts5_beat_e", -65.0, 7.8, 210.0),
         ],
-        maneuvers=[
-            ("ts1_beat_west", 220.0, 160.0, 10.0),
-            ("ts2_beat_westsw", 235.0, 170.0, 7.0),
-            ("ts3_beat_sw", 335.0, 185.0, 13.0),
-            ("ts4_beat_south", 275.0, 195.0, 6.0),
-            ("ts5_beat_farwest", 145.0, 150.0, 14.0),
+        reaim_maneuvers=[
+            ("ts1_beat_a", 115.0, 6.0),
+            ("ts2_beat_b", 135.0, 10.5),
+            ("ts3_beat_c", 145.0, 7.5),
+            ("ts4_beat_d", 100.0, 8.2),
+            ("ts5_beat_e", 125.0, 11.0),
         ],
+        direct_targets=[("ts6_becalmed", 0.0, 1900.0, 250.0, 0.3)],
     ),
     build(
         "IMP13", "Chaos at the windward mark (7 vessels)",
-        ["Rule 8", "Rule 13", "Rule 15", "Rule 17"], "mixed",
-        "Six vessels beat upwind toward the same mark from a narrow, left/astern sector "
-        "(roughly the same close-hauled heading, only their tack angle/speed differ), "
-        "each rounding at its own staggered moment and bearing away onto the SAME new "
-        "heading (south, broad reach) but at a different post-rounding speed -- plus one "
-        "becalmed/dead-in-the-water vessel sitting at the mark itself. The busiest of the "
-        "three -- a 6th, wide-out straggler rounds last and long after the others are "
-        "already reaching away, so the 'clear' water behind the fleet fills in too. "
-        "Correct: Rule 8 -- a single holistic plan re-checked continuously as each vessel "
-        "rounds, not a per-contact reaction.",
+        ["Rule 8", "Rule 13", "Rule 14", "Rule 15", "Rule 17"], "mixed",
+        "Six vessels beat upwind toward the same mark on a genuine collision course with "
+        "own-ship (varied bearing/speed/timing), then EACH rounds at its own staggered "
+        "moment and bears away back across own-ship's continuing track on a FRESH "
+        "collision course at a different post-rounding speed -- plus one becalmed/dead-"
+        "in-the-water vessel sitting at the mark itself. The busiest of the three -- a "
+        "6th, wide-out straggler rounds last, long after the others are already bearing "
+        "away. Own-ship must cross this fleet TWICE. Correct: Rule 8 -- a single holistic "
+        "plan re-checked continuously as each vessel rounds and re-threatens, not a "
+        "per-contact reaction.",
         ["Own-ship avoids collision with all 7 contacts.", "Reach the goal."],
-        [],
-        direct_targets=[
-            ("ts1_beat_west", -80.0, 1600.0, 15.0, 7.0),
-            ("ts2_beat_westsw", -110.0, 1900.0, 5.0, 8.0),
-            ("ts3_beat_sw", -140.0, 2200.0, 350.0, 6.5),
-            ("ts4_beat_south", -170.0, 2500.0, 340.0, 9.0),
-            ("ts5_beat_farwest", -60.0, 1400.0, 25.0, 9.5),
-            ("ts6_beat_wide", -155.0, 2700.0, 345.0, 7.5),
-            ("ts7_becalmed", 5.0, 1900.0, 250.0, 0.3),
+        [
+            ("ts1_beat_a", -50.0, 7.0, 190.0),
+            ("ts2_beat_b", -80.0, 8.5, 220.0),
+            ("ts3_beat_c", -100.0, 8.0, 240.0),
+            ("ts4_beat_d", -145.0, 9.8, 170.0),
+            ("ts5_beat_e", -65.0, 7.8, 210.0),
+            ("ts6_beat_f", -160.0, 8.9, 240.0),
         ],
-        maneuvers=[
-            ("ts1_beat_west", 220.0, 160.0, 10.0),
-            ("ts2_beat_westsw", 235.0, 170.0, 7.0),
-            ("ts3_beat_sw", 335.0, 185.0, 13.0),
-            ("ts4_beat_south", 275.0, 195.0, 6.0),
-            ("ts5_beat_farwest", 145.0, 150.0, 14.0),
-            ("ts6_beat_wide", 360.0, 180.0, 8.0),
+        reaim_maneuvers=[
+            ("ts1_beat_a", 115.0, 6.0),
+            ("ts2_beat_b", 135.0, 10.5),
+            ("ts3_beat_c", 145.0, 7.5),
+            ("ts4_beat_d", 100.0, 8.2),
+            ("ts5_beat_e", 125.0, 11.0),
+            ("ts6_beat_f", 145.0, 7.2),
         ],
+        direct_targets=[("ts7_becalmed", 0.0, 1900.0, 250.0, 0.3)],
     ),
 ]
 
