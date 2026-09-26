@@ -121,6 +121,7 @@ def run_one(mission_id: str, config: str, tag: str = "baseline",
         "params": {
             "decision_interval": decision_interval, "decision_interval_mode": "fixed",
             "dt": dt, "max_steps": max_steps, "baseline": True,
+            "kinematics_model": kinematics_model,
         },
         "outcome": {"verdict": outcome, "final_step": step, "final_time_s": sim.t},
         "trajectory": sim.trajectory,

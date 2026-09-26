@@ -239,6 +239,7 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
             "system_prompt_is_custom": system_prompt is not None,
             "prompt_hash": _PROMPT_HASH,
             "prompt_version": PROMPT_VERSION,
+            "kinematics_model": kinematics_model,
         },
         "outcome": {"verdict": outcome, "final_step": step, "final_time_s": sim.t},
         "trajectory": sim.trajectory,
