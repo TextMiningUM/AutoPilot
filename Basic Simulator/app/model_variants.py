@@ -38,6 +38,15 @@ MODEL_VARIANTS: dict[str, dict[str, str]] = {
                        "fix -- merged onto the SAME 4-bit NF4 base the adapters were "
                        "trained against, see pipeline/train/merge_adapter.py).",
     },
+    "qwen_sftdpo_nomoto": {
+        "label": "QWEN-SFT-DPO (Nomoto)",
+        "weights": "MERGED:OOW-QWEN_nomoto_mix_v1_sftdpo",
+        "description": "SFT+DPO merged checkpoint (2026-09-26), trained on a MIX of "
+                       "legacy-kinematics and Nomoto-aware Track-2 data (ship-dynamics-"
+                       "agnostic) -- reflection deliberately excluded, same composition as "
+                       "qwen_sftdpo, for a direct comparison. Intended for use under "
+                       "kinematics_model='nomoto'.",
+    },
     # Add "qwen_sftdpo_reflect" here once a reflection adapter that doesn't regress
     # mission quality exists (see repo memory: the 2026-09-25 reflection retrain fixed the
     # Draft/Critique/Refined format-leak bug but still underperforms qwen_sftdpo on real
