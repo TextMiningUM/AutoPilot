@@ -491,16 +491,111 @@ cd "Auto Pilot\Basic Simulator"
 
 ---
 
-## 12. Known gaps / next steps (explicitly not done yet)
+## 12. Falsification experiment: an independent test of the apf/dwa/mpc/vo regressions (2026-09-26)
 
-1. **Track-2 training-data regeneration** using `sample_row_limits_nomoto()` — infra
-   exists (§9), the actual regeneration run does not.
+Follow-up to §6.4's finding that `apf`/`dwa`/`mpc`/`vo` regress heavily under Nomoto
+while `ruletree`/`sawada` do not. A separate, throwaway exploratory script
+(`_tmp_impossible_mission_test.py`, repo root — **not part of the pipeline**, not
+committed/tested like the rest of this project, kept on disk only for ongoing
+experimentation) was used to probe, empirically, WHICH baselines are most vulnerable to
+the Nomoto-vs-legacy risk-horizon mismatch (§7), and whether the fine-tuned LLM agent
+(which IS Nomoto-aware per §8) can succeed where they fail.
+
+### 12.1 Method
+
+- A 6-target "near-encirclement" mission (bearings ~0°/±55°/±115°/178° around own-ship,
+  each on a guaranteed unavoided-collision course constructed via
+  `Basic Simulator/app/geometry.py::solve_intercept`, same construction principle as
+  `generate_imazu_missions.py`).
+- A single "severity" parameter (0.0=mild .. 1.0=severe) scales a scripted, non-COLREG-
+  compliant target manoeuvre (each target reverses further toward own-ship's transit
+  line late in the encounter) — modelling "give-way vessel does not comply"/"target
+  changes plan mid-encounter" categories from a separate, still-informal "impossible
+  missions" planning discussion (not yet part of the formal mission schema).
+- Each of the 6 `app/baselines/*` decision functions, plus the LLM agent
+  (`config="v10_super_colreg_rag"`, `weights="MERGED:OOW-QWEN_v2_sftdpo_fix"` i.e.
+  `qwen_sftdpo`), run from the SAME initial conditions with
+  `VesselConstraints(kinematics_model="nomoto")` (Sawada's own default K/T/T_E/rudder
+  limit, §2).
+
+### 12.2 Result — confirms item 3 below more precisely than "likely the same bug class"
+
+At `severity=0.0` (the MILDEST scripted manoeuvre tested — i.e. this is not even an
+adversarial-difficulty result, just what Nomoto's own lag alone already does):
+
+| System | Outcome | min-CPA |
+|---|---|---:|
+| `baseline_vo` | **FAIL** (never reaches goal) | 246 m |
+| `baseline_dwa` | **FAIL** (never reaches goal) | 326 m |
+| `baseline_mpc` | **FAIL** (never reaches goal) | 133 m |
+| `baseline_apf` | reached_goal | 247 m |
+| `baseline_sawada` | reached_goal | 72 m |
+| `baseline_ruletree` | reached_goal | 105 m |
+| LLM (`qwen_sftdpo`, `v10_super_colreg_rag`) | reached_goal | **401 m** (best of all 7) |
+
+At a separately-tested higher severity (0.90, escalating the same scripted manoeuvre),
+`baseline_apf` ALSO failed under Nomoto (min-CPA 54 m, never reached goal) — so of the 6
+baselines, only `ruletree`/`sawada` have not yet been broken at any severity tried so far.
+
+### 12.3 Root-cause hypothesis (qualitative — NOT yet verified line-by-line the way §6's
+bug was)
+
+- `baseline_vo`/`baseline_apf` (`velocity_obstacle.py`/`potential_field.py`) have NO
+  kinematic/forward-simulation model at all — they pick a "best" heading per step and
+  implicitly assume it is adopted instantly (confirmed structurally: neither file
+  references `pipeline/nomoto.py` or `kinematics_model`).
+- `baseline_dwa`/`baseline_mpc` (`dynamic_window.py`/`mpc.py`) DO forward-simulate, but
+  their internal rollout still uses the OLD idealised instant-turn-rate model
+  (`dynamic_window.py::_project()` assumes the candidate heading is reached at t=0 of its
+  own 60 s horizon; `mpc.py::_turn_toward()` is a literal copy of the legacy slew
+  formula) — a genuine model-MISMATCH (their own forward model disagrees with what the
+  real Nomoto plant will actually do), not merely "no model", which may explain why they
+  are just as vulnerable as `vo`/`apf` despite doing more work per decision.
+- `baseline_ruletree`/`baseline_sawada` are, so far, the most robust — but (argued, not
+  measured) apparently NOT because they model the ship's dynamics correctly: neither
+  calls into `pipeline/nomoto.py` either, both still use the plain (non-Nomoto)
+  `derive_risk_horizon_s()` per §7. Their robustness is more plausibly explained by a
+  simpler control law (repeat the same correction every decision regardless of how the
+  real, lagging plant is actually responding) tolerating lag better than a controller
+  that COMMITS to a multi-step plan believing it executes instantly (dwa/mpc), or a
+  single continuous-field/geometric choice that can get "locked in" to a stale
+  assumption (vo/apf).
+- The LLM path is the only one of the 7 that receives REAL Nomoto facts (§7/§8) in its
+  own decision input every time it is asked — consistent with, but not proof of, it
+  having the best margin in this one test.
+
+### 12.4 Status and caveats
+
+- Exploratory/throwaway script, not wired into the sweep/audit tooling — numbers above
+  are real single-run measurements, not statistically averaged over multiple
+  seeds/missions.
+- Only one mission geometry and two severity levels tested under Nomoto so far;
+  `sawada`/`ruletree` may still fail at higher severities not yet tried.
+- This experiment used the ALREADY-FIXED prompt (post commit `d29c5f1`), so its LLM
+  result is not subject to §8's stale-prompt caveat.
+
+---
+
+## 13. Known gaps / next steps (explicitly not done yet)
+
+1. ~~**Track-2 training-data regeneration**~~ — **DONE** (commit `fd72980`). Both
+   `pipeline/track2/build_oow_scenarios.py` and `build_oow_scenarios_leo.py` gained an
+   opt-in `nomoto`/`--nomoto` flag; re-running their existing production commands
+   (`--b3-full-population --nomoto` / `--n 7928 --nomoto --overwrite`) hit their
+   respective B3 checkpoints 100% (390/390 and 6993/6993 rows), so **zero new Anthropic
+   API calls** were needed. Produced 9 new, parallel `*_nomoto.jsonl` files (row counts
+   identical to their existing counterparts — only the rendered constraint-line text
+   differs). These new files are **not yet wired into** `train_sft.py`/`train_dpo.py`/
+   `train_reflection.py`'s file lists — that wiring is deferred until a decision is made
+   about actually training a Nomoto-specific model variant.
 2. **Bow-crossing capsule domain** (§1.1, Sawada's own 1.0 NM bow-crossing extension of
    the safety region) — not implemented anywhere in this project yet; still purely a
    circular safe-distance check.
-3. **`apf`/`dwa`/`mpc`/`vo` baselines' own Nomoto regressions** (§6.4) — not investigated;
-   likely the same bug class (a decision function computing a correction from a lagging
-   actual-state reference) in each baseline's own independent steering logic.
+3. **`apf`/`dwa`/`mpc`/`vo` baselines' own Nomoto regressions** (§6.4) — partially
+   investigated in §12: `vo`/`dwa`/`mpc` fail even at the mildest tested adversarial
+   setting, `apf` fails at a higher severity, `ruletree`/`sawada` not yet broken. Root
+   cause is argued (§12.3) but not yet verified line-by-line the way §6's bug was — still
+   an open item.
 4. **Full re-sweep of the LLM agent under the CORRECTED prompt** (§8's fix invalidates
    every Nomoto-tagged LLM run generated before commit `d29c5f1` on this same day) — not
    yet re-run.
