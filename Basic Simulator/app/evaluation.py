@@ -225,6 +225,12 @@ def score_trajectory(trajectory_rows: list[dict], start_xy: tuple[float, float],
         codes_by_step.setdefault(f["step"], []).append(f["code"])
     checkpoint_codes = list(codes_by_step.items())
     run_level_codes = _check_wrong_side_pass(trajectory_rows, own_vehicle)
+    # manoeuvre axis (2026-09-26): counts CONTRADICTORY decisions (turn_right<->turn_left,
+    # speed_up<->slow_down), not the realized trajectory's heading-rate -- see
+    # evaluate_run.manoeuvre_axis_from_decisions()'s docstring for why the trajectory-based
+    # version silently read 0 under Nomoto regardless of how indecisive the decisions were.
+    decision_events = [(cp.get("decision") or {}).get("action") for cp in (checkpoints or [])]
+    n_contacts = len({r["vehicle"] for r in trajectory_rows if r["vehicle"] != own_vehicle}) or 1
 
     with tempfile.NamedTemporaryFile("w", suffix=".csv", newline="", delete=False) as f:
         writer = csv.DictWriter(f, fieldnames=["time", "vehicle", "x", "y", "heading", "speed"])
@@ -237,6 +243,7 @@ def score_trajectory(trajectory_rows: list[dict], start_xy: tuple[float, float],
             nominal_speed=nominal_speed, collision_radius_m=collision_radius_m,
             safe_distance_m=safe_distance_m, reached_radius_m=reached_radius_m,
             checkpoint_codes=checkpoint_codes, run_level_codes=run_level_codes, verbose=False,
+            decision_events=decision_events, n_contacts=n_contacts,
         )
     finally:
         Path(tmp_path).unlink(missing_ok=True)

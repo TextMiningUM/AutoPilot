@@ -574,9 +574,141 @@ bug was)
 - This experiment used the ALREADY-FIXED prompt (post commit `d29c5f1`), so its LLM
   result is not subject to §8's stale-prompt caveat.
 
+### 12.5 Follow-up (same day): `ruletree` broken too; `sawada` resists every attempt tried
+
+Further escalation (tighter overall timing — `T_collision` shortened ~45%, target speeds
+raised 8–9 m/s → 10.5–12.5 m/s — plus a finer severity grid) found a real collision for
+`baseline_ruletree` at `severity≈0.80–0.86` (min-CPA as low as **9 m**, i.e. a genuine
+collision, not just a safe-distance violation) — notably a LOCAL worst case, not the
+global maximum severity (ruletree recovers to 23–72 m again above severity 0.88,
+consistent with §12.3's "non-monotonic" caveat: these controllers re-plan every step
+with an idealised instant-turn model, so exact timing relative to their own logic
+matters more than raw severity). **5 of 6 deterministic baselines are now broken under
+Nomoto: `vo`/`dwa`/`mpc` (mild severity already), `apf` (severity ≈0.75–0.90 depending on
+exact geometry), `ruletree` (severity ≈0.80–0.86).**
+
+`baseline_sawada` (`app/baselines/sawada.py`) resisted every attempt, including one
+specifically targeting a real, code-confirmed weak point: it only takes STAND-ON
+emergency action once its Collision Risk Index (CRI, a continuous DCPA/TCPA-based score)
+reaches `STAND_ON_EMERGENCY_CRI=0.8` — a much later/stricter threshold than every other
+baseline's stand-on gate. A follow-up mission specifically shortened the `T_collision` of
+the two contacts placing own-ship in the "stand_on" role (per
+`sawada.py::_ENCOUNTER_TO_ROLE`, `"crossing_target_on_port" → "stand_on"`) to stress
+exactly this threshold — `sawada`'s min-CPA still never dropped below ~46 m across a full
+fine-grained severity scan (0.70–0.90 in steps of 0.02). Its likely structural advantage
+(argued, not proven line-by-line): `sawada` is the only one of the 6 baselines that
+scales its avoidance-turn MAGNITUDE continuously with the risk score
+(`MIN_AVOIDANCE_TURN_DEG=10` .. `MAX_AVOIDANCE_TURN_DEG=45`, proportional to CRI) instead
+of always requesting the same fixed-size correction (`ruletree`'s fixed 30°) or believing
+a candidate is instantly achieved (`vo`/`apf`/`dwa`/`mpc`) — a graceful-degradation
+property that happens to partially compensate for its risk-horizon still being computed
+with the non-Nomoto `derive_risk_horizon_s()`, same as every other baseline.
+**Decision: stopped the `sawada`-specific search here** (diminishing returns across
+several independent attack angles) — 5/6 is treated as a sufficient, well-evidenced
+result for this experiment; `sawada` remaining unbroken is itself a reportable finding
+about which design pattern is more Nomoto-resistant, not a gap in the search.
+
 ---
 
-## 13. Known gaps / next steps (explicitly not done yet)
+## 13. Evaluation-function composite formula: fixes and rationale (2026-09-26)
+
+Two independent bugs in `Evaluation Functions/evaluate_run.py`'s composite score were
+found and fixed while investigating why the IMP01-10 missions (§built separately, see
+`generate_impossible_missions.py`) produced suspiciously high composite scores for runs
+that had come within tens of metres of an actual collision. Both fixes are documented
+here because they retroactively change the meaning of every composite score in every
+existing run log, not just the IMP set — **all existing `_llm_runs/*.json` files (local
+and cloud) were rescored in place** from their own already-stored per-axis data (no
+resimulation needed) once each fix landed.
+
+### 13.1 Bug 1 — `safety_score` was computed but never fed into the composite
+
+`safety_axis()` already computed a continuous `safety_score` (`min_cpa_m /
+safe_distance_m`, clipped to `[0, 1]`) reflecting exactly how close a near-miss was. But
+the composite formula for `PASS`/`PASS_WITH_CPA_VIOLATION` runs never used it — a
+collision was (correctly) a hard gate to `composite=0`, but anything short of an actual
+hull-to-hull collision only affected the composite through a **flat, one-time -0.30
+"cpa_violation" compliance deduction**, identical whether the near-miss was 490 m or 5 m
+short of the collision radius. Concrete example that surfaced this
+(`IMP02__baseline_ruletree`): `min_cpa_m=26.5` (`safety_score=0.053`, i.e. this was
+seconds from an actual collision) still scored `composite=0.900`.
+
+**Fix**: `safety` is now a real weighted term in the composite (not just the collision
+hard-gate it already was). `DEFAULT_WEIGHTS` changed from
+`{compliance: 0.30, temporal: 0.15, spatial: 0.15, manoeuvre: 0.15, smoothness: 0.25}` to
+`{safety: 0.35, compliance: 0.20, temporal: 0.10, spatial: 0.10, manoeuvre: 0.10,
+smoothness: 0.15}` (still sums to 1.0). The collision hard-gate (`composite=0`) and the
+did-not-reach-goal cap (`composite <= 0.2`) branches are unchanged. Re-running the same
+`IMP02__baseline_ruletree` example: `composite` drops from 0.900 to 0.602 — a razor-thin
+near-miss is no longer scored almost as well as a comfortably clear pass. (Commit
+`5922d30`.)
+
+### 13.2 Bug 2 — `manoeuvre_score` was inferred from the realized trajectory, not the decisions, and broke under Nomoto specifically
+
+The pre-existing `manoeuvre_and_smoothness_axes()` counted "manoeuvre events" from the
+own-ship trajectory's realized heading-rate crossing a fixed 0.6°/s deadband. Under the
+**legacy instant-turn kinematics engine** this worked: a helm order shows up almost
+immediately as a heading-rate spike, so counting rate-crossings ≈ counting orders. Under
+**Nomoto** (§2-§6 above) it silently broke: the same underlying decision-making (e.g.
+`ruletree`/`sawada` issuing an oscillating `turn_right(30°)` / `turn_left(30°)` /
+`turn_right(30°)`/... sequence every re-decision cycle) gets physically smoothed by the
+ship's inertia into a slow, continuous curve that never crosses the deadband as discrete
+events — `manoeuvre_count` silently read `0` (`manoeuvre_score=1.000`) regardless of how
+indecisive the actual decisions were. Confirmed directly: replaying the identical
+`ruletree`/`sawada` decisions for `Imazu01` under the legacy engine gave
+`manoeuvre_count=37-40` (`manoeuvre_score=0.000`); the exact same decisions replayed
+under Nomoto gave `manoeuvre_count=0` (`manoeuvre_score=1.000`) — a pure kinematics-engine
+artifact, not a difference in decision quality. Critically, this wasn't unique to the
+baselines: the LLM's own decisions showed the same masking (e.g. `IMP01/v0_base` had 9
+direct direction-reversals across only 33 checkpoints, invisible to the old trajectory-
+based method).
+
+**Fix**: manoeuvre-count scoring is now computed from the **decided actions themselves**
+(`checkpoints[i].decision.action`, already recorded per run — no resimulation needed to
+rescore existing logs), not the resulting trajectory. New
+`manoeuvre_axis_from_decisions()`:
+- Counts **contradictions** only — a `turn_right` reversing the last commanded turn
+  direction (or vice versa), or a `speed_up`/`slow_down` reversing the last commanded
+  speed direction — not just any alteration. This directly targets Rule 8(b)'s actual
+  wording ("a *succession* of small alterations... should be avoided"), i.e. flip-
+  flopping, not a single decisive correction. `hold_course` entries do not reset "last
+  commanded direction", so a reversal separated by holds still counts as a reversal of
+  intent.
+- Normalizes by **this run's own number of decision opportunities**
+  (`n_contradictions / (n_checkpoints - 1)`), not a fixed absolute count. This makes the
+  score fair across algorithms with very different decision cadences without needing a
+  separate time-based weighting: a reversal "at the very next decision" is scored the
+  same way whether that next decision came 10 s later (a baseline re-deciding every
+  step) or ~80 s later (an LLM deciding only at sparse checkpoints).
+- Further divides by **the number of contacts present** in the mission, since a busier
+  multi-contact scene gives legitimately more reasons to change course than a single
+  1-on-1 pass; the same raw contradiction count should count for less in a 6-contact
+  encirclement (IMP05) than in a 1-on-1 mission.
+- `manoeuvre_score = max(0, 1 - rate / 0.30)`. The `0.30` cap (and an earlier, too-strict
+  `0.15`) were both empirically tuned against the 10 IMP missions until baselines stayed
+  high (0.96-1.00, since their per-decision contradiction rate is genuinely tiny) while
+  the LLM's rate produced meaningfully differentiated, non-degenerate scores (0.06-0.88
+  across IMP01-08, rather than every run collapsing to a flat 0.000).
+
+**A weighting attempt that was tried and explicitly rejected**: scaling each
+contradiction's cost by the elapsed time since the previous opposing order (intending to
+penalize "quick" flip-flops more than slow ones). This was backwards in practice: it made
+a single, well-separated, considered late correction (e.g. one turn ordered at t=10s, one
+opposite correction after 30 minutes of otherwise straight sailing) score as the *worst*
+kind of contradiction — when that's actually the most defensible kind of behaviour. The
+per-decision-opportunity, un-weighted-by-time count above does not have this problem, so
+the time-weighting was dropped rather than fixed.
+
+`smoothness_score` (heading-rate/speed-rate control-effort penalty) is unaffected and
+intentionally stays trajectory-based: how gently the hull physically moved is a
+legitimate, genuinely engine-dependent fact (Nomoto really does produce a smoother ride
+for the same orders), not an artifact worth removing.
+
+(Commit: same rescore pass as §13.1, immediately following.)
+
+---
+
+## 14. Known gaps / next steps (explicitly not done yet)
 
 1. ~~**Track-2 training-data regeneration**~~ — **DONE** (commit `fd72980`). Both
    `pipeline/track2/build_oow_scenarios.py` and `build_oow_scenarios_leo.py` gained an

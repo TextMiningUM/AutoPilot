@@ -149,38 +149,27 @@ def heading_delta(h1, h0):
     return (h1 - h0 + 540) % 360 - 180
 
 
-def manoeuvre_and_smoothness_axes(own, heading_rate_deadband_deg_s=0.6,
-                                   max_reasonable_manoeuvres=6,
-                                   max_reasonable_heading_rate=5.0,
+def manoeuvre_and_smoothness_axes(own, max_reasonable_heading_rate=5.0,
                                    max_reasonable_speed_rate=1.0):
-    """Counts discrete manoeuvre events and computes a smoothness penalty
-    from heading-rate / speed-rate variance (quadratic control-effort
-    penalty). A manoeuvre event starts when heading-rate crosses the
-    deadband from below, OR when it reverses sign while still above the
-    deadband -- the latter is essential to catch a continuous zigzag
-    (alternating small corrections that never drop back to near-zero
-    heading-rate would otherwise be counted as a single sustained
-    manoeuvre instead of the many discrete corrections they actually are;
-    confirmed against a synthetic zigzag trajectory during testing, where
-    the sign-reversal check was the difference between counting 1
-    manoeuvre and correctly counting dozens).
-
-    The deadband is a heading-RATE threshold (deg/s), not a raw per-step
-    degrees threshold -- comparing dt-scaled degrees against a fixed
-    constant previously made manoeuvre/smoothness scores dependent on the
-    trajectory's sampling interval dt (the Basic Simulator's adjustable
-    1-60s time-step slider), so identical maneuvering behaviour scored
-    differently just from a different dt. A rate-based threshold is
-    dt-invariant by construction."""
+    """Computes ONLY the smoothness penalty (heading-rate / speed-rate
+    control-effort). Manoeuvre-count scoring used to also live here, inferred
+    from this same realized trajectory -- REMOVED 2026-09-26 (see
+    manoeuvre_axis_from_decisions()): under a physically-inertial kinematics
+    model (Nomoto), a rapid succession of contradictory helm orders gets
+    smoothed into a trajectory whose heading-rate never crosses the deadband,
+    so manoeuvre_count silently read 0 regardless of how indecisive the
+    actual decision-making was -- confirmed by comparing the same
+    ruletree/sawada decisions replayed under the legacy instant-turn engine
+    (manoeuvre_count 37-40) vs. Nomoto (manoeuvre_count 0, identical
+    decisions). Smoothness itself is kept trajectory-based on purpose: how
+    gently the HULL actually moved is a legitimate, engine-dependent physical
+    fact, not an artifact -- Nomoto genuinely does produce a smoother ride
+    for the same orders, and that's worth scoring as such."""
     if len(own) < 2:
-        return {"manoeuvre_count": 0, "manoeuvre_score": 1.0,
-                "mean_abs_heading_rate": 0.0, "mean_abs_speed_rate": 0.0,
+        return {"mean_abs_heading_rate": 0.0, "mean_abs_speed_rate": 0.0,
                 "smoothness_score": 1.0}
 
     heading_rates, speed_rates = [], []
-    manoeuvre_count = 0
-    in_manoeuvre = False
-    last_sign = 0
 
     for i in range(1, len(own)):
         t0, x0, y0, h0, s0 = own[i - 1]
@@ -191,34 +180,83 @@ def manoeuvre_and_smoothness_axes(own, heading_rate_deadband_deg_s=0.6,
         heading_rates.append(abs(heading_rate))
         speed_rates.append(abs(s1 - s0) / dt)
 
-        above_deadband = abs(heading_rate) > heading_rate_deadband_deg_s
-        sign = (1 if dh > 0 else -1) if above_deadband else 0
-
-        if above_deadband:
-            if not in_manoeuvre:
-                manoeuvre_count += 1
-                in_manoeuvre = True
-            elif last_sign != 0 and sign != last_sign:
-                # direction reversal mid-manoeuvre: a new, separate event
-                manoeuvre_count += 1
-            last_sign = sign
-        else:
-            in_manoeuvre = False
-            last_sign = 0
-
     mean_hr = sum(heading_rates) / len(heading_rates)
     mean_sr = sum(speed_rates) / len(speed_rates)
 
-    manoeuvre_score = max(0.0, 1.0 - manoeuvre_count / max_reasonable_manoeuvres)
     smoothness_hr = max(0.0, 1.0 - mean_hr / max_reasonable_heading_rate)
     smoothness_sr = max(0.0, 1.0 - mean_sr / max_reasonable_speed_rate)
     smoothness_score = 0.5 * smoothness_hr + 0.5 * smoothness_sr
 
     return {
-        "manoeuvre_count": manoeuvre_count, "manoeuvre_score": manoeuvre_score,
         "mean_abs_heading_rate": mean_hr, "mean_abs_speed_rate": mean_sr,
         "smoothness_score": smoothness_score,
     }
+
+
+def manoeuvre_axis_from_decisions(decisions, n_contacts=1, max_reasonable_rate=0.30):
+    """decisions: chronological list of decided actions (e.g. run_llm_scenario.py's
+    per-checkpoint "turn_right"/"turn_left"/"speed_up"/"slow_down"/"hold_course"),
+    one per decision opportunity. Counts CONTRADICTIONS -- a turn reversing the
+    last commanded turn direction (turn_right after turn_left or vice versa), or
+    a speed order reversing the last commanded speed direction -- not just any
+    alteration, per Rule 8(b)'s actual concern (a SUCCESSION of alterations, i.e.
+    flip-flopping, not one single decisive change). hold_course entries don't
+    reset "last commanded direction": ordering turn_right, then holding for a
+    while, then turn_left is still a reversal of intent, just not an
+    immediately-adjacent one.
+
+    Normalization (2026-09-26, replacing a naive fixed-count cap):
+      rate = n_contradictions / (n_decision_opportunities - 1) / n_contacts
+    - Dividing by THIS RUN'S OWN decision-opportunity count (not an absolute
+      number) means every algorithm is judged against its own decision cadence:
+      a reversal at "the very next decision" is scored the same way whether
+      that next decision came 10s later (a baseline re-deciding every step) or
+      80s later (an LLM deciding only at sparse checkpoints) -- no separate
+      time-based weighting needed.
+    - Dividing by n_contacts accounts for busier scenes legitimately giving more
+      reasons to change your mind; the same raw contradiction count should not
+      count as heavily in a 6-contact encirclement as in a single 1-on-1 pass.
+    - An earlier attempt weighted each contradiction by the elapsed time since
+      the previous opposing order (to penalize "quick" flip-flops more) --
+      dropped because it does the OPPOSITE of what's intended: it makes one
+      well-separated, considered late correction (e.g. one turn at t=10s, one
+      opposite correction after 30 minutes of straight sailing) score as the
+      WORST kind of contradiction, when that's actually the most defensible
+      kind of behaviour."""
+    if len(decisions) < 2:
+        return 0, 0.0, 1.0
+
+    def turn_sign(action):
+        if action == "turn_right":
+            return 1
+        if action == "turn_left":
+            return -1
+        return 0
+
+    def speed_sign(action):
+        if action == "speed_up":
+            return 1
+        if action == "slow_down":
+            return -1
+        return 0
+
+    contradictions = 0
+    prev_turn, prev_speed = 0, 0
+    for action in decisions:
+        t_sign, s_sign = turn_sign(action), speed_sign(action)
+        if t_sign != 0 and prev_turn != 0 and t_sign == -prev_turn:
+            contradictions += 1
+        if s_sign != 0 and prev_speed != 0 and s_sign == -prev_speed:
+            contradictions += 1
+        if t_sign != 0:
+            prev_turn = t_sign
+        if s_sign != 0:
+            prev_speed = s_sign
+
+    n_opportunities = max(1, len(decisions) - 1)
+    rate = (contradictions / n_opportunities) / max(1, n_contacts)
+    score = max(0.0, 1.0 - rate / max_reasonable_rate)
+    return contradictions, rate, score
 
 
 # ---------------------------------------------------------------------
@@ -384,7 +422,13 @@ DEFAULT_WEIGHTS = {
 
 def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
                   collision_radius_m=15.0, safe_distance_m=50.0, reached_radius_m=25.0,
-                  checkpoint_codes=(), run_level_codes=(), weights=None, verbose=True):
+                  checkpoint_codes=(), run_level_codes=(), weights=None, verbose=True,
+                  decision_events=None, n_contacts=1):
+    """decision_events: optional chronological list of decided actions (e.g.
+    run_llm_scenario.py's per-checkpoint "turn_right"/"hold_course"/...), one per
+    decision opportunity -- see manoeuvre_axis_from_decisions(). If omitted (e.g.
+    the bare-CSV CLI below), manoeuvre_score defaults to a neutral 1.0 rather than
+    reviving the old, engine-dependent trajectory-heading-rate heuristic."""
     weights = weights or DEFAULT_WEIGHTS
     data = load_csv(csv_path)
     own = data[own_vehicle]
@@ -393,6 +437,13 @@ def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
     passed, min_cpa, safety_score = safety_axis(own, targets, collision_radius_m, safe_distance_m)
     eff = efficiency_axes(own, start_xy, goal_xy, nominal_speed, reached_radius_m=reached_radius_m)
     man = manoeuvre_and_smoothness_axes(own)
+    if decision_events:
+        manoeuvre_count, manoeuvre_rate, manoeuvre_score = manoeuvre_axis_from_decisions(
+            decision_events, n_contacts=n_contacts)
+    else:
+        manoeuvre_count, manoeuvre_rate, manoeuvre_score = 0, 0.0, 1.0
+    man = {**man, "manoeuvre_count": manoeuvre_count, "manoeuvre_rate": round(manoeuvre_rate, 4),
+           "manoeuvre_score": manoeuvre_score}
     # cpa_violation is derived HERE (min_cpa is already computed above for safety_axis)
     # rather than asked of the caller -- a genuine near-miss that never reached an actual
     # collision is still always a run-level compliance fact, not something callers should
