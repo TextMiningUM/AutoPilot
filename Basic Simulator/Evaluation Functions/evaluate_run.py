@@ -8,7 +8,8 @@ Design, following (in spirit -- not reproducing exact undisclosed formulas)
 the four-axis framework in Woerner, Benjamin, Novitzky & Leonard,
 "Quantifying protocol evaluation for autonomous collision avoidance:
 toward establishing COLREGS compliance metrics" (Autonomous Robots, 2019):
-    - SAFETY        (hard gate, not a weighted term -- see below)
+    - SAFETY        (hard gate on actual collisions, PLUS a weighted continuous
+      term for near-misses -- see below)
     - COMPLIANCE    (COLREG rule violations)
     - TEMPORAL efficiency (time to reach the goal vs. a straight-line baseline)
     - SPATIAL efficiency  (distance sailed vs. straight-line distance)
@@ -20,19 +21,6 @@ plus two extras you specifically asked for:
       nicety, it's a literal rule)
     - SMOOTHNESS (penalize large deltas in heading-rate / speed-rate --
       standard quadratic control-effort penalty from optimal control)
-
-WHY SAFETY IS A GATE, NOT A WEIGHTED TERM
-    If every axis is blended into one weighted sum, "stop and never move"
-    can look attractive to an optimizer: it trivially maximizes the safety
-    term, and a large-enough safety weight can outweigh bad efficiency
-    scores. The actual fix isn't just "weight efficiency heavily" -- it's
-    structural: a run that produces an actual collision is scored 0
-    (or excluded / marked FAIL) regardless of every other axis. Within the
-    set of runs that did NOT collide, efficiency/compliance/smoothness then
-    genuinely differentiate a good run from a merely-safe one. This also
-    makes "stop and wait forever" score badly on its own terms: it never
-    reaches the goal, so temporal efficiency is unbounded-bad (or scored 0
-    if you cap it), not something a safety bonus can buy back.
 
 INPUT FORMAT
     Same trajectory CSV as score_scenario.py: time,vehicle,x,y,heading,speed.
@@ -378,12 +366,20 @@ def explanation_axis(checkpoint_codes, run_level_codes, collided=False):
 # ---------------------------------------------------------------------
 # Composite score
 # ---------------------------------------------------------------------
+# 2026-09-26: "safety" is now a weighted term, not just a hard collision gate --
+# previously a razor-thin near-miss (e.g. 26.5m CPA, safety_score=0.053) fed the
+# composite ONLY through a flat, one-time -0.30 "cpa_violation" compliance
+# deduction, identical regardless of how close the near-miss actually was. That
+# let PASS_WITH_CPA_VIOLATION runs that were seconds from an actual collision
+# still score ~0.9. safety_score is continuous (min_cpa/safe_distance_m) and now
+# directly drags the composite down in proportion to how close the call was.
 DEFAULT_WEIGHTS = {
-    "compliance": 0.30,
-    "temporal": 0.15,
-    "spatial": 0.15,
-    "manoeuvre": 0.15,
-    "smoothness": 0.25,
+    "safety": 0.35,
+    "compliance": 0.20,
+    "temporal": 0.10,
+    "spatial": 0.10,
+    "manoeuvre": 0.10,
+    "smoothness": 0.15,
 }
 
 def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
@@ -435,6 +431,7 @@ def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
         verdict = "FAIL -- did not reach the goal"
     else:
         composite = (
+            weights["safety"] * safety_score +
             weights["compliance"] * compliance_score +
             weights["temporal"] * eff["temporal_score"] +
             weights["spatial"] * eff["spatial_score"] +

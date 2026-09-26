@@ -116,8 +116,8 @@ result = evaluate_run(
     collision_radius_m=15, safe_distance_m=50,
     checkpoint_codes=[(0, ["B_wrong_direction"])],
     run_level_codes=[("P_wrong_side_pass", "ts1")],
-    weights={"compliance": 0.35, "temporal": 0.10, "spatial": 0.10,
-             "manoeuvre": 0.15, "smoothness": 0.30},
+    weights={"safety": 0.35, "compliance": 0.20, "temporal": 0.10, "spatial": 0.10,
+             "manoeuvre": 0.10, "smoothness": 0.15},
 )
 ```
 
