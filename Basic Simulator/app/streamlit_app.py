@@ -153,7 +153,8 @@ from app.model_variants import MODEL_VARIANTS, variant_label
 _UI_PREFS_PATH = ROOT / "Data" / "_ui_prefs.json"
 _UI_PREFS_KEYS = [
     "ship_max_speed_kn", "ship_max_turn_rate_pct", "ship_max_accel_kn_s", "ship_max_decel_kn_s",
-    "ship_turn_rate_deg_s",
+    "ship_turn_rate_deg_s", "ship_kinematics_model", "nomoto_K_per_s", "nomoto_T_s",
+    "nomoto_T_E_s", "nomoto_rudder_limit_deg", "nomoto_autopilot_kp",
 ]
 
 
@@ -209,6 +210,12 @@ def build_vessel_constraints(mission: Mission) -> VesselConstraints:
         cruise_speed_mps=mission.own_ship.speed,
         min_cpa_m=nm_to_m(MISSION_MIN_CPA_NM),
         time_step_s=10.0,
+        kinematics_model=g("ship_kinematics_model", "kinematics"),
+        nomoto_K_per_s=g("nomoto_K_per_s", 0.05),
+        nomoto_T_s=g("nomoto_T_s", 50.0),
+        nomoto_T_E_s=g("nomoto_T_E_s", 2.5),
+        nomoto_rudder_limit_deg=g("nomoto_rudder_limit_deg", 10.0),
+        nomoto_autopilot_kp=g("nomoto_autopilot_kp", 1.0),
     )
 
 
@@ -730,6 +737,21 @@ with st.sidebar:
     st.number_input("Turn rate (deg/s)", min_value=0.0, value=3.0, step=0.5, key="ship_turn_rate_deg_s",
                     help="The only actively-enforced limit on how many degrees own-ship's "
                          "heading may change per simulation step.")
+    st.selectbox("Kinematics model", options=["kinematics", "nomoto"], index=0,
+                key="ship_kinematics_model",
+                help="'kinematics' = the turn-rate slew model above (unchanged default). "
+                     "'nomoto' = Sawada et al. (2021)'s 2nd-order Nomoto + rudder-servo model "
+                     "-- much slower to complete a turn (a 60 deg turn takes ~155s vs ~20s "
+                     "under the slew model). See Docs/nomoto_dynamics_design_and_verification.md.")
+    if st.session_state.get("ship_kinematics_model", "kinematics") == "nomoto":
+        np1, np2 = st.columns(2)
+        np1.number_input("Nomoto K (1/s)", min_value=0.001, value=0.05, step=0.01, key="nomoto_K_per_s",
+                         format="%.3f")
+        np2.number_input("Nomoto T (s)", min_value=0.1, value=50.0, step=1.0, key="nomoto_T_s")
+        np3, np4 = st.columns(2)
+        np3.number_input("Rudder servo T_E (s)", min_value=0.1, value=2.5, step=0.1, key="nomoto_T_E_s")
+        np4.number_input("Rudder limit (deg)", min_value=1.0, value=10.0, step=1.0, key="nomoto_rudder_limit_deg")
+        st.number_input("Autopilot gain (Kp)", min_value=0.0, value=1.0, step=0.1, key="nomoto_autopilot_kp")
     st.divider()
 
     st.header("Mission")

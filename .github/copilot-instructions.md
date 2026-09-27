@@ -19,12 +19,12 @@ There are exactly two places this project runs, and they have **different respon
 | | Local (laptop) | Cloud (LeafCloud GPU pod) |
 |---|---|---|
 | OS | Windows | Ubuntu |
-| GPU | NVIDIA RTX 4070 Laptop, 8 GB VRAM | NVIDIA A30, 24 GB VRAM |
+| GPU | NVIDIA RTX 4070 Laptop, 8 GB VRAM | NVIDIA RTX 6000, 96 GB VRAM |
 | Workspace | `C:\Users\jcsch\Documents\Python\Auto Pilot` | `/home/ubuntu/AutoPilot` |
 | Python env | `.venv` (project-local) | `.venv` (project-local, same layout) |
 | SSH | n/a | key file + host/user are kept in local-only notes (never committed) |
 | What runs here | Data pipeline: JSON parsing (§8), chunking/RAG/KG (§9-10), reasoning-trace extraction (§11, OpenAI API calls), all `build_*.py` dataset builders (§12/§12.5/§12.6). Also used to sanity-check that `train_sft.py`/`train_dpo.py`/`train_reflection.py`'s data-loading functions (`load_all_sft()`, `load_dpo()`, `load_reflection()`) run cleanly against the current datasets — **without** loading the actual model. | **All actual QLoRA fine-tuning, merging, AWQ quantization, pruning, distillation, and evaluation** (`train_sft.py`, `train_dpo.py`, `train_reflection.py`, `merge_adapter.py`, `compress_*.py`, `eval_finetuned.py`, `eval_colreg_scenarios.py`, ablation). |
-| Why the split | 8 GB VRAM is enough to verify the data pipeline and run tiny smoke tests, but a full SFT→DPO→Reflection→AWQ→prune→distill→ablation chain takes 8-12+ hours — that needs the cloud's 24 GB A30 and needs to survive disconnects. | See `tmux` note below. |
+| Why the split | 8 GB VRAM is enough to verify the data pipeline and run tiny smoke tests, but a full SFT→DPO→Reflection→AWQ→prune→distill→ablation chain takes 8-12+ hours — that needs the cloud's 96 GB RTX 6000 and needs to survive disconnects. | See `tmux` note below. |
 
 **Rule of thumb: never launch actual model training/compression/distillation locally.** Verify data changes locally (fast, free, no GPU risk), then push to git and run the real training chain only on the cloud.
 

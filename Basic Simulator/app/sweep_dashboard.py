@@ -103,6 +103,11 @@ with title_cols[1]:
 
 MISSIONS = list_mission_ids()
 CONFIGS = CONFIG_NAMES
+# The two ship-dynamics models a run can be generated under (see app.simulation
+# .VesselConstraints.kinematics_model) -- shared by every section below that needs to show
+# legacy and Nomoto runs of the SAME model variant side by side rather than one silently
+# hiding the other.
+KINEMATICS_MODELS = ["kinematics", "nomoto"]
 # Total jobs assumes ONE model variant (qwen_base, the only one with full history); a
 # second variant doubles the real total, but this is only used for a rough top-of-page
 # progress bar, not for anything score-bearing -- see the model-variant multiselect below
@@ -193,21 +198,21 @@ def _score_log(mission_id: str, log: dict, tag: str, path: Path,
     }
 
 
-def _scan_mission_runs(mission_id: str, gen_at_index: list[tuple[datetime, Path]]) -> dict[tuple[str, str], dict]:
+def _scan_mission_runs(mission_id: str, gen_at_index: list[tuple[datetime, Path]]) -> dict[tuple[str, str, str], dict]:
     """Globs RUNS_DIR for every {mission_id}__*.json and scores each file directly -- the
     single source of truth for what's actually on disk RIGHT NOW, instead of
     _sweep_summary.json's append-only cache. Filenames are parsed via
     app.llm_runs.parse_run_filename(), which understands both the current
     {mission}__{config}__{weights}__{tag}.json form and the older 2/3-segment forms
-    written before the weights axis existed. Keyed by (config, model_variant) -- NOT just
-    config -- so two different model variants sharing a config never silently overwrite
-    each other (the old config-only keying did exactly that, discarding whichever variant
-    wasn't most-recently-modified). When more than one tag produced a log for the SAME
-    (config, model_variant) pair, the most recently modified file wins (whatever's actually
-    current)."""
+    written before the weights axis existed. Keyed by (config, model_variant,
+    kinematics_model) -- NOT just (config, model_variant) -- so the SAME model variant run
+    under two different ship-dynamics models (e.g. a legacy-kinematics AND a Nomoto run of
+    "qwen_base"/"v0_base") never silently overwrites the other; only genuine re-runs of the
+    exact same (config, variant, kinematics) combo (e.g. a newer tag superseding an older
+    one) still tie-break on mtime, same as before."""
     prefix = f"{mission_id}__"
-    latest_mtime: dict[tuple[str, str], float] = {}
-    rows: dict[tuple[str, str], dict] = {}
+    latest_mtime: dict[tuple[str, str, str], float] = {}
+    rows: dict[tuple[str, str, str], dict] = {}
     for path in RUNS_DIR.glob(f"{prefix}*.json"):
         parsed = parse_run_filename(path)
         config, weights, tag = parsed["config"], parsed["weights"], parsed["tag"]
@@ -219,7 +224,8 @@ def _scan_mission_runs(mission_id: str, gen_at_index: list[tuple[datetime, Path]
         except (json.JSONDecodeError, OSError):
             continue
         model_variant = log.get("model_variant") or weights
-        key = (config, model_variant)
+        kinematics_model = (log.get("params") or {}).get("kinematics_model") or "kinematics"
+        key = (config, model_variant, kinematics_model)
         if key in latest_mtime and latest_mtime[key] >= mtime:
             continue
         latest_mtime[key] = mtime
@@ -389,8 +395,16 @@ def _render() -> None:
 
     baseline_tags = _available_baseline_tags()
     active_baseline_tag = _resolve_baseline_tag(baseline_tags)
-    baseline_rows_by_mission = ({m: _scan_baseline_runs(m, active_baseline_tag) for m in MISSIONS}
-                                if active_baseline_tag else {})
+    baseline_rows_by_mission = (
+        _scan_baseline_runs_all_missions(active_baseline_tag, _baseline_signature(active_baseline_tag))
+        if active_baseline_tag else {})
+    # Shared kinematics filter for BOTH the comparison grid below and the Leaderboard --
+    # a single registered model variant (e.g. "qwen_base") can have runs under multiple
+    # ship-dynamics models, and mixing them into one "best across configs" cell silently
+    # picked whichever physics model happened to score higher, with no visual indication
+    # of which one that was (found confusing in practice: a Nomoto run outscoring its own
+    # legacy counterpart looked identical to a legacy-only result).
+    wanted_km = _baseline_tag_kinematics_model(active_baseline_tag) if active_baseline_tag else None
 
     current_job, current_job_age = _read_current_job()
 
@@ -421,6 +435,11 @@ def _render() -> None:
     # via variant_label()'s unregistered fallback) instead of silently vanishing.
     all_variants = sorted({key[1] for rows in rows_by_mission.values() for key in rows},
                           key=lambda v: (v not in MODEL_VARIANTS, v))
+    # Which (variant, kinematics_model) combos actually have at least one run anywhere --
+    # e.g. qwen_sftdpo_nomoto is Nomoto-only by design and the old qwen_sftdpo is
+    # legacy-only in this comparison, so neither needs a pointless always-"\u2014" column
+    # for the ship-dynamics model it was never run under.
+    existing_variant_km = {(key[1], key[2]) for rows in rows_by_mission.values() for key in rows}
     filt_cols = st.columns([2, 2])
     with filt_cols[0]:
         picked_variants = st.multiselect(
@@ -442,36 +461,65 @@ def _render() -> None:
     if not picked_variants:
         st.info("Selecteer minstens \u00e9\u00e9n model variant hierboven.")
     else:
+        # Always show BOTH ship-dynamics models side by side, per variant -- e.g.
+        # "QWEN (base) [kinematics]" and "QWEN (base) [nomoto]" as two separate columns --
+        # rather than one column silently switching between them based on the Baseline
+        # tab's selection (which made a Nomoto run outscoring its own legacy counterpart
+        # indistinguishable from a legacy-only result, see prior session note). Grouped by
+        # kinematics model (all legacy columns, THEN all Nomoto columns) rather than
+        # interleaved per variant, with a spacer column marking the boundary, so the two
+        # ship-dynamics regimes read as two visually separate blocks. Only a (variant, km)
+        # pair that ACTUALLY has at least one run somewhere gets a column at all -- e.g.
+        # qwen_sftdpo_nomoto is Nomoto-only by design (see repo notes), so it never gets a
+        # pointless always-"\u2014" [kinematics] column, and the old qwen_sftdpo never gets
+        # one for [nomoto] either.
+        DIVIDER_COL = "\u2551"  # double vertical bar -- visually heavier than a plain "|"
+        cols_by_km = {
+            km: [v for v in picked_variants if (v, km) in existing_variant_km]
+            for km in KINEMATICS_MODELS
+        }
         grid_rows = []
         for mission_id in MISSIONS:
             rows = rows_by_mission[mission_id]
             row_out = {"mission": mission_id}
-            for variant in picked_variants:
-                if picked_setup == "(best across configs)":
-                    candidates = [r for (cfg, v), r in rows.items() if v == variant]
-                    cell = max(candidates, key=lambda r: r["composite_score"]) if candidates else None
-                else:
-                    cell = rows.get((picked_setup, variant))
-                label = variant_label(variant)
-                if cell is None:
-                    row_out[label] = "\u2014"
-                else:
-                    cfg_suffix = f" ({cell['config']})" if picked_setup == "(best across configs)" else ""
-                    row_out[label] = f"{cell['composite_score']:.3f}{cfg_suffix}"
+            first_group_done = False
+            for km in KINEMATICS_MODELS:
+                variants_for_km = cols_by_km[km]
+                if not variants_for_km:
+                    continue
+                if first_group_done:
+                    row_out[DIVIDER_COL] = ""
+                first_group_done = True
+                for variant in variants_for_km:
+                    label = variant_label(variant)
+                    km_rows = {k: r for k, r in rows.items()
+                              if k[1] == variant and k[2] == km}
+                    if picked_setup == "(best across configs)":
+                        cell = max(km_rows.values(), key=lambda r: r["composite_score"]) if km_rows else None
+                    else:
+                        cell = km_rows.get((picked_setup, variant, km))
+                    col_label = f"{label} [{km}]"
+                    if cell is None:
+                        row_out[col_label] = "\u2014"
+                    else:
+                        cfg_suffix = f" ({cell['config']})" if picked_setup == "(best across configs)" else ""
+                        row_out[col_label] = f"{cell['composite_score']:.3f}{cfg_suffix}"
             grid_rows.append(row_out)
-        st.dataframe(grid_rows, width="stretch", hide_index=True)
+        st.dataframe(grid_rows, width="stretch", hide_index=True,
+                    column_config={DIVIDER_COL: st.column_config.TextColumn(DIVIDER_COL, width="small")})
         st.caption("Cel = composite score" +
                   (" van de best-scorende config voor die (missie, variant)-combinatie."
                    if picked_setup == "(best across configs)"
                    else f" voor config={picked_setup!r}.") +
                   " \u2014 zie de per-missie detail-tabellen hieronder voor de volledige "
-                  "per-config/per-variant breakdown.")
+                  "per-config/per-variant breakdown. Elke variant toont twee kolommen -- "
+                  "[kinematics] (legacy) en [nomoto] -- nooit gemengd; \u2014 betekent geen "
+                  "run onder dat scheepsdynamica-model.")
 
     st.divider()
     st.subheader("Leaderboard (best config \u00d7 variant per mission so far)")
     leaderboard = []
     best_row_by_mission: dict[str, dict] = {}
-    wanted_km = _baseline_tag_kinematics_model(active_baseline_tag) if active_baseline_tag else None
     for mission_id in MISSIONS:
         base_rows = baseline_rows_by_mission.get(mission_id) or {}
         best_base = max(base_rows.values(), key=lambda r: r["composite_score"], default=None)
@@ -531,9 +579,11 @@ def _render() -> None:
 
     st.divider()
     st.subheader("Per-mission detail (all variations)")
+    expected_variant_km = [(v, km) for v in picked_variants for km in KINEMATICS_MODELS
+                          if (v, km) in existing_variant_km]
     for mission_id in MISSIONS:
         rows = {k: r for k, r in rows_by_mission[mission_id].items() if k[1] in picked_variants}
-        n_expected = len(CONFIGS) * max(len(picked_variants), 1)
+        n_expected = len(CONFIGS) * max(len(expected_variant_km), 1)
         # Explicit `key=` (stable across reruns) instead of relying on the auto-key derived
         # from the label -- the label's "(done/8)" count changes as jobs complete, which
         # would otherwise make Streamlit treat it as a brand-new expander each time and
@@ -547,13 +597,14 @@ def _render() -> None:
             st.divider()
             table = []
             for config in CONFIGS:
-                for variant in picked_variants:
-                    r = rows.get((config, variant))
+                for variant, km in expected_variant_km:
+                    r = rows.get((config, variant, km))
                     is_current = current_job == (mission_id, config)
+                    variant_km_label = f"{variant_label(variant)} [{km}]"
                     if r is None:
                         status = "\U0001F504 running" if is_current else "\u23F3 pending"
                         table.append({
-                            "config": config, "variant": variant_label(variant),
+                            "config": config, "variant": variant_km_label,
                             "status": status, "composite": None,
                             "verdict": None, "safety": None, "compliance": None,
                             "explanation": None, "temporal": None, "spatial": None,
@@ -561,7 +612,7 @@ def _render() -> None:
                         })
                     else:
                         table.append({
-                            "config": config, "variant": r["model_label"], "status": "\u2705 done",
+                            "config": config, "variant": f"{r['model_label']} [{km}]", "status": "\u2705 done",
                             "composite": r["composite_score"], "verdict": r["verdict"],
                             **_axis_cols(r),
                         })
@@ -575,7 +626,7 @@ def _render() -> None:
 
             done_keys = [k for k in rows if rows.get(k) is not None]
             if done_keys:
-                key_labels = {k: f"{k[0]} / {variant_label(k[1])}" for k in done_keys}
+                key_labels = {k: f"{k[0]} / {variant_label(k[1])} [{k[2]}]" for k in done_keys}
                 picked = st.selectbox("View details for:", done_keys, format_func=lambda k: key_labels[k],
                                       key=f"detail_pick_{mission_id}")
                 r = rows[picked]
@@ -888,6 +939,36 @@ def _scan_baseline_runs(mission_id: str, tag: str) -> dict[str, dict]:
     return rows
 
 
+def _runs_signature(predicate) -> tuple:
+    """(filename, mtime) per matching run file -- a cheap stand-in for "have any of these
+    files changed" (glob+stat only, never opens/reads a file) used as an explicit
+    st.cache_data cache-key component: the cache is reused ONLY while this signature is
+    byte-identical, so a new/edited/deleted run file invalidates it the INSTANT it happens,
+    never after a fixed time delay -- there must be no risk of showing stale results."""
+    return tuple(sorted(
+        (p.name, p.stat().st_mtime) for p in RUNS_DIR.glob("*.json")
+        if not p.name.startswith("_sweep_") and predicate(p)
+    ))
+
+
+def _baseline_signature(tag: str) -> tuple:
+    return _runs_signature(lambda p: parse_run_filename(p)["config"] in BASELINE_CONFIGS
+                           and parse_run_filename(p)["tag"] == tag)
+
+
+def _llm_signature() -> tuple:
+    return _runs_signature(lambda p: parse_run_filename(p)["config"] not in BASELINE_CONFIGS)
+
+
+@st.cache_data(show_spinner=False)
+def _scan_baseline_runs_all_missions(tag: str, _signature: tuple) -> dict[str, dict[str, dict]]:
+    """{mission_id: {config: scored_row}} for every mission, one tag -- cached, keyed on
+    _baseline_signature(tag) rather than a time budget, so the Sweep tab's per-render
+    baseline reference skips re-scanning+re-scoring 35 missions' worth of files on every
+    rerun UNLESS a matching baseline run was actually added/changed/removed since."""
+    return {m: _scan_baseline_runs(m, tag) for m in MISSIONS}
+
+
 _FULL_GREEN, _NEAR_GREEN = "#2ecc71", "#a9dfbf"
 _FULL_RED, _NEAR_RED = "#e74c3c", "#f5b7b1"
 
@@ -928,13 +1009,15 @@ def _tiered_highlight(s: pd.Series, band_frac: float = 0.05, higher_is_better: b
 
 
 
-@st.cache_data(ttl=30, show_spinner="Scanning baseline + LLM run logs...")
-def _load_comparison_data(tag: str) -> tuple[list[dict], dict[tuple[str, str], dict], dict[str, str]]:
-    """Scans+scores every mission's baseline and LLM run logs ONCE, cached for 30s --
-    the per-mission grid used to re-run this full 35-mission scan on EVERY interaction
-    (including a slow, glitchy native cell-click selection), making even a slider drag
-    noticeably slow. A 30s TTL means new runs written while the dashboard is open still
-    show up within half a minute, without re-scanning on every widget interaction."""
+@st.cache_data(show_spinner="Scanning baseline + LLM run logs...")
+def _load_comparison_data(tag: str, _baseline_sig: tuple,
+                          _llm_sig: tuple) -> tuple[list[dict], dict[tuple[str, str], dict], dict[str, str]]:
+    """Scans+scores every mission's baseline and LLM run logs ONCE, cached on an explicit
+    (baseline files, LLM files) mtime signature -- NOT a time budget -- so this never shows
+    a buffered/stale result: any run file being added, changed, or removed invalidates the
+    cache immediately, while an unchanged data set still skips re-scanning+re-scoring all
+    35 missions on every interaction (including a slow, glitchy native cell-click
+    selection, which made even a slider drag noticeably slow before this was cached at all)."""
     gen_at_index = _generated_at_index()
     baseline_configs = list(BASELINE_CONFIGS)
     wanted_km = _baseline_tag_kinematics_model(tag)
@@ -1000,7 +1083,8 @@ def _render_comparison_tab() -> None:
     short_to_system["best_llm"] = "best_llm"
     axis_names = ["safety", "compliance", "explanation", "temporal", "spatial", "manoeuvre"]
 
-    table_rows, detail_lookup, best_llm_label = _load_comparison_data(tag)
+    table_rows, detail_lookup, best_llm_label = _load_comparison_data(
+        tag, _baseline_signature(tag), _llm_signature())
     # Per-system aggregates (n/reached/collision/composite/axes), derived from the SAME
     # cached detail_lookup -- kept out of the cached function itself so a code change to
     # this aggregation doesn't require waiting out the cache TTL to see effect.

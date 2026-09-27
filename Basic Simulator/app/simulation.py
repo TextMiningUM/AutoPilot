@@ -86,6 +86,7 @@ class Simulation:
         # _advance_own_kinematics_nomoto(). Kept even when unused so switching models
         # mid-run (e.g. a UI toggle) doesn't need a fresh Simulation instance.
         self._nomoto_state = NomotoState(rudder_deg=0.0, yaw_rate_deg_s=0.0, heading_deg=self.own.heading)
+        self._applied_target_maneuvers: set[int] = set()
         self.trajectory: list[dict] = []
         self.agent_log: list[dict] = []  # {t, narration, oow_decision}
         self._record()
@@ -97,6 +98,22 @@ class Simulation:
                 "x": round(v.x, 2), "y": round(v.y, 2),
                 "heading": round(v.heading, 2), "speed": round(v.speed, 3),
             })
+
+    def _apply_target_maneuvers(self) -> None:
+        """Scripted, non-reactive target course/speed changes (Mission.target_maneuvers) --
+        applied the first step sim.t reaches each entry's trigger_time_s, each entry only
+        once. Deliberately NOT gated on any agent action -- these model a give-way vessel
+        that never yields/turns the wrong way/wavers, independent of what own-ship does."""
+        for i, tm in enumerate(self.mission.target_maneuvers):
+            if i in self._applied_target_maneuvers or self.t < tm["trigger_time_s"]:
+                continue
+            tgt = next((t for t in self.targets if t.name == tm["target"]), None)
+            if tgt is not None:
+                if tm.get("new_heading_deg") is not None:
+                    tgt.heading = tm["new_heading_deg"] % 360
+                if tm.get("new_speed_mps") is not None:
+                    tgt.speed = tm["new_speed_mps"]
+            self._applied_target_maneuvers.add(i)
 
     def _update_behaviour_status(self) -> None:
         """Deterministic (never LLM-decided) AVOIDING/CRUISING status machine -- purely
@@ -159,6 +176,7 @@ class Simulation:
 
     def step(self, dt: float | None = None) -> None:
         dt = self.constraints.time_step_s if dt is None else dt
+        self._apply_target_maneuvers()
         self._update_behaviour_status()
         self._advance_own_kinematics(dt)
         for v in [self.own] + self.targets:
@@ -175,6 +193,7 @@ class Simulation:
         exclusively for project_scenario()'s "no avoidance" preview, which must
         keep showing the raw, un-steered collision geometry a scenario was built
         to create -- not autonomous goal-tracking once "cruising"."""
+        self._apply_target_maneuvers()
         for v in [self.own] + self.targets:
             h = math.radians(v.heading)
             v.x += v.speed * math.sin(h) * dt

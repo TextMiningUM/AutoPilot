@@ -637,7 +637,7 @@ def _generate(tok, mdl, messages: list[dict], max_new_tokens: int = 256,
     # times verbatim (never self-correcting, never closing the JSON) until max_new_tokens ran
     # out, causing most of the parse-error/hold_course fallbacks seen in the sweep. A mild
     # repetition_penalty discourages that without banning any exact token sequence outright.
-    # Tried no_repeat_ngram_size=4 as well -- REVERTED: observed on a cloud A30 re-test that
+    # Tried no_repeat_ngram_size=4 as well -- REVERTED: observed on a cloud RTX 6000 re-test that
     # hard-blocking every repeated 4-gram forces the model off a CORRECT number (e.g. a given
     # distance) once it needs to restate it a second time, since repeating it verbatim is now
     # forbidden -- produced garbled/hallucinated distances and even stray CJK characters

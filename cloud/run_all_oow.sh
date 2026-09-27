@@ -224,7 +224,7 @@ run_stage 47 eval_pruned_colreg false -m pipeline.eval.eval_oow_scenarios \
 
 log "--- § 14.2: knowledge distillation -> DistillOOW-QWEN, TAG=$TAG ---"
 # Teacher (8B, 4-bit) + student (1.7B, bf16) + KD-loss tensors over a ~152k vocab
-# came within ~200MB of OOMing the A30's 24GB -- shrink the sequence length and
+# came within ~200MB of OOMing the cloud GPU's VRAM headroom -- shrink the sequence length and
 # reduce allocator fragmentation rather than relying on bf16 logits alone.
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 run_stage 48 distill            true  -m pipeline.compress.compress_distill \

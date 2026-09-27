@@ -13,7 +13,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.units import kn_to_mps, nm_to_m
+from app.units import kn_to_mps, mps_to_kn, nm_to_m
 
 APP_DIR = Path(__file__).resolve().parent
 ROOT = APP_DIR.parent
@@ -46,6 +46,14 @@ class Mission:
     own_ship: Vessel
     goal: tuple[float, float]
     targets: list[Vessel] = field(default_factory=list)
+    # Scripted, NON-reactive target course/speed changes -- models a give-way vessel that
+    # never yields, turns the wrong way, or a target whose aspect wavers, WITHOUT any
+    # intelligence/decision-making on the target's side (see Docs/nomoto_dynamics_design_
+    # and_verification.md §12 for why this matters under Nomoto). Each dict:
+    # {"target": name, "trigger_time_s": float, "new_heading_deg": float|None,
+    # "new_speed_mps": float|None (already converted from new_speed_kn at load time)}.
+    # Applied by Simulation, once per entry, the first step sim.t >= trigger_time_s.
+    target_maneuvers: list[dict] = field(default_factory=list)
 
     def as_text(self) -> str:
         """Human-readable mission brief -- the "missie in tekst" panel."""
@@ -92,6 +100,14 @@ def mission_from_dict(d: dict) -> Mission:
         own_ship=_vessel("own_ship", d["own_ship"]),
         goal=_goal_xy(d["goal"]),
         targets=[_vessel(t["name"], t) for t in d["targets"]],
+        target_maneuvers=[
+            {
+                "target": tm["target"], "trigger_time_s": float(tm["trigger_time_s"]),
+                "new_heading_deg": float(tm["new_heading_deg"]) if tm.get("new_heading_deg") is not None else None,
+                "new_speed_mps": kn_to_mps(float(tm["new_speed_kn"])) if tm.get("new_speed_kn") is not None else None,
+            }
+            for tm in d.get("target_maneuvers", [])
+        ],
     )
 
 
@@ -109,6 +125,14 @@ def mission_to_dict(mission: Mission) -> dict:
         "goal": {"x": mission.goal[0], "y": mission.goal[1]},
         "targets": [{"name": t.name, "x": t.x, "y": t.y, "heading": t.heading, "speed": t.speed}
                    for t in mission.targets],
+        "target_maneuvers": [
+            {
+                "target": tm["target"], "trigger_time_s": tm["trigger_time_s"],
+                "new_heading_deg": tm["new_heading_deg"],
+                "new_speed_kn": mps_to_kn(tm["new_speed_mps"]) if tm["new_speed_mps"] is not None else None,
+            }
+            for tm in mission.target_maneuvers
+        ],
     }
 
 

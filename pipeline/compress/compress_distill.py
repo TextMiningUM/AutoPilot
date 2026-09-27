@@ -198,7 +198,7 @@ def train(args: argparse.Namespace) -> None:
                 # float32 -- with a ~152k vocab these tensors are the single biggest VRAM
                 # consumer in the whole loop (teacher + student + the KD intermediate all
                 # scale with vocab size), and bf16 log-softmax/kl_div is standard/stable
-                # enough for this use. This alone roughly halves peak VRAM on the A30.
+                # enough for this use. This alone roughly halves peak VRAM on the cloud GPU.
                 t_logits = t_out.logits
             s_out = student(input_ids=batch["input_ids"],
                             attention_mask=batch["attention_mask"])
