@@ -1,12 +1,15 @@
 """Generator: Data/missions/Imazu01.json .. Imazu22.json from Sawada et al. (2021)'s own
 Table 1/Table 4 (J. Mar. Sci. Technol. 26(2), 509-524, DOI 10.1007/s00773-020-00755-0) --
-the canonical Imazu-problem reference paper. Positions are in nautical miles and speeds in
-knots, matching the paper exactly, NOT rescaled to this project's other missions' metre/m-s
-convention -- fields are unit-labelled (x_nm/y_nm/heading_deg/speed_kn) rather than bare
-x/y/speed specifically to avoid the kind of unit ambiguity that caused the mission.targets
-staleness bug earlier in this project. These files are NOT yet loadable by app/missions.py
--- that conversion (NM/kt -> the physics engine's internal m/m/s at load time, via
-app/units.py) is wired up in the next phase.
+the canonical Imazu-problem reference paper. NOTE: only 20 of these 22 cases are actually
+written to disk -- cases 8 and 22 are exact geometric duplicates (of cases 5 and 15
+respectively) in the paper's own Table 4 and are permanently skipped, see REMOVED_CASES
+below. Positions are in nautical miles and speeds in knots, matching the paper exactly,
+NOT rescaled to this project's other missions' metre/m-s convention -- fields are
+unit-labelled (x_nm/y_nm/heading_deg/speed_kn) rather than bare x/y/speed specifically to
+avoid the kind of unit ambiguity that caused the mission.targets staleness bug earlier in
+this project. These files are NOT yet loadable by app/missions.py -- that conversion
+(NM/kt -> the physics engine's internal m/m/s at load time, via app/units.py) is wired up
+in the next phase.
 
 COORDINATE CONVENTION: Sawada's (X, Y) has X = the own-ship transit axis (north-equivalent,
 own-ship's heading 0 moves along +X) and Y = the perpendicular axis (east-equivalent) --

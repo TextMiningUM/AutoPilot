@@ -1,7 +1,9 @@
 """Sawada et al. (2021)'s own conventional (non-RL) collision-avoidance method -- the
 comparison baseline their paper used against their deep-reinforcement-learning agent on
 the same 22 Imazu problems this project's Imazu01..Imazu22 missions reproduce exactly
-(see generate_imazu_missions.py).
+(see generate_imazu_missions.py). Note: cases 8 and 22 are exact geometric duplicates of
+cases 5 and 15 in the paper's own Table 4, so only 20 of those 22 mission files actually
+exist on disk (Imazu08/Imazu22 are never generated -- see REMOVED_CASES there).
 
 *** BEST-EFFORT RECONSTRUCTION, NOT THE LITERAL PUBLISHED ALGORITHM ***
 Only the paper's own Table 4 (exact scenario start geometry: positions/headings/speeds)
@@ -30,7 +32,9 @@ import math
 from app.missions import Mission, Vessel
 from app.narrate import contact_line, narrate
 from app.simulation import VesselConstraints
-from pipeline.oow_agent_spec import classify_rules, derive_risk_horizon_s, goal_course_action
+from pipeline.oow_agent_spec import (
+    bearing_and_range, classify_rules, derive_risk_horizon_s, goal_course_action,
+)
 
 MIN_AVOIDANCE_TURN_DEG = 10.0
 MAX_AVOIDANCE_TURN_DEG = 45.0
@@ -71,12 +75,20 @@ def decide(mission: Mission, own: Vessel, targets: list[Vessel],
     scored.sort(key=lambda pair: pair[1], reverse=True)
     decisive, cri = scored[0] if scored else (None, 0.0)
 
+    # heading_deg (2026-09-28): ABSOLUTE commanded heading, computed fresh from own-ship's
+    # CURRENT actual heading every call -- see ruletree.py's identical comment/
+    # Simulation.apply_action()'s docstring for why (avoids stacking/zigzag under slow
+    # kinematics). None whenever no heading change is ordered.
+    heading_deg = None
     if decisive is None or cri < CRI_ACT_THRESHOLD:
         action, degrees = goal_course_action(own.x, own.y, own.heading, mission.goal[0], mission.goal[1],
                                             target_heading=own.target_heading)
         encounter_rule, conduct_rule = "none", "none"
         reasoning = (f"Collision Risk Index below the acting threshold ({cri:.2f} < "
                     f"{CRI_ACT_THRESHOLD}) -- following GOAL COURSE CHECK.")
+        if action != "hold_course":
+            goal_brg, _ = bearing_and_range(own.x, own.y, mission.goal[0], mission.goal[1])
+            heading_deg = round(goal_brg, 1)
     else:
         role = _ENCOUNTER_TO_ROLE[decisive["encounter"]]
         if role in ("stand_on", "overtaking_stand_on") and cri < STAND_ON_EMERGENCY_CRI:
@@ -89,13 +101,14 @@ def decide(mission: Mission, own: Vessel, targets: list[Vessel],
                 action = "turn_right"  # give-way roles: COLREGS' default starboard preference
             degrees = round(MIN_AVOIDANCE_TURN_DEG
                            + (MAX_AVOIDANCE_TURN_DEG - MIN_AVOIDANCE_TURN_DEG) * cri, 1)
+            heading_deg = round((own.heading + (degrees if action == "turn_right" else -degrees)) % 360, 1)
         encounter_rule, conduct_rule = classify_rules(role, action)
         reasoning = (f"Collision Risk Index {cri:.2f} vs contact {decisive['name']!r} "
                     f"({decisive['encounter']}) -- action={action}"
                     + (f" ({degrees} deg, CRI-scaled)" if degrees else "") + ".")
 
     decision = {
-        "action": action, "degrees": degrees,
+        "action": action, "degrees": degrees, "heading_deg": heading_deg,
         "encounter_rule": encounter_rule, "conduct_rule": conduct_rule,
         "reasoning": reasoning,
     }

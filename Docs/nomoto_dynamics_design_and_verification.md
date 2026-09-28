@@ -22,11 +22,19 @@ response lag, and the ship's yaw rate itself builds up gradually in response to 
 not instantaneously.
 
 To make this project's own trajectories directly comparable to a real, published
-reference (Sawada, Sato & Majima 2021 — the paper whose exact 22 Imazu scenarios this
-project already reproduces byte-for-byte, see `generate_imazu_missions.py`), we
-implemented that paper's own **Nomoto first-order ship-manoeuvring model** plus its
-rudder-servo dynamics, as an **opt-in** physics model living alongside (not replacing)
-the original slew model.
+reference (Sawada, Sato & Majima 2021 — the paper whose Imazu scenarios this project
+already reproduces byte-for-byte, see `generate_imazu_missions.py`), we implemented
+that paper's own **Nomoto first-order ship-manoeuvring model** plus its rudder-servo
+dynamics, as an **opt-in** physics model living alongside (not replacing) the original
+slew model.
+
+> **Note (2026-09-28):** the paper's own Table 4 contains two exact geometric
+> duplicates — case 8 is byte-identical to case 5, and case 22 is byte-identical to
+> case 15. This project therefore only generates 20 mission files (`Imazu08` and
+> `Imazu22` are never written), not 22 — see `generate_imazu_missions.py`'s
+> `REMOVED_CASES` constant. `Imazu06`/`Imazu12` are a *near*-duplicate (same two
+> targets, ts1/ts2 order swapped) and are kept, just tagged via `duplicate_of` in
+> `app/missions.py`.
 
 ### 1.1 Primary reference
 
@@ -213,6 +221,31 @@ design so this module can be imported from anywhere without pulling in torch/str
 
 Persistent Nomoto state (`self._nomoto_state: NomotoState`) is carried on the
 `Simulation` object across steps, initialised once in `__init__`.
+
+### 4.1 Speed control: a deliberate divergence from Sawada et al. (2021)
+
+Sawada's own paper (§1.1's "autopilot model" variant, Figs. 11/12 — architecturally the
+closest match to this project's design) gives its agent a **target course only**; the
+paper's own published action space never lets the RL agent alter speed. This project's
+own-ship instead keeps `speed_up`/`slow_down`/`set_speed` (`Basic
+Simulator/app/simulation.py`, unchanged since before this Nomoto work) fully available to
+every agent/baseline, **regardless of `kinematics_model`** ("kinematics" and "nomoto"
+alike) — own-ship's speed may range anywhere up to `constraints.max_speed_mps`, but
+never instantaneously: every change is rate-limited by `max_acceleration_mps2`/
+`max_deceleration_mps2`, the exact same accel/decel model on both branches (see the bullet
+above). Nomoto's own equations (§2) only govern heading/rudder — no speed equation was
+added or changed; this project simply never restricted the pre-existing, already
+accel/decel-limited speed-control interface once Nomoto became an option for heading.
+
+**Why we diverge on purpose:** COLREG Rule 8(a) explicitly names speed alteration
+("slackening speed") as a legitimate collision-avoidance action alongside a course
+change, and several of this project's own scenarios are specifically designed to require
+it (e.g. `IMP04`'s Rule 17(b) — reduce speed rather than turn, once an overtaking
+vessel's passing distance is too small; `IMP09`'s Rule 8(e) — slacken speed when a turn
+alone cannot clear an obstruction). Restricting own-ship to course-only would silently
+remove this whole class of correct COLREG behaviour from every evaluation. Consequently
+this project runs a single, combined course-and-speed benchmark throughout — there is no
+separate course-only evaluation variant.
 
 CLI flags added to the two run-orchestration scripts, in both cases defaulting to
 `"kinematics"` (zero behaviour change unless explicitly requested):
