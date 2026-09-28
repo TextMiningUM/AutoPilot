@@ -38,7 +38,7 @@ for p in (ROOT, ROOT.parent):
 
 from app.evaluation import compliance_finding_parts, score_trajectory
 from app.llm_runs import parse_run_filename
-from app.missions import list_mission_ids, load_mission
+from app.missions import duplicate_of, list_mission_ids, load_mission
 from app.model_variants import MODEL_VARIANTS, variant_label
 from app.simulation import VesselConstraints
 from app.baselines import BASELINE_CONFIGS
@@ -102,12 +102,22 @@ with title_cols[1]:
     st.button("\U0001F504 Refresh", width="stretch")
 
 MISSIONS = list_mission_ids()
+# Imazu08/Imazu22 (EXACT duplicates of Imazu05/Imazu15 in Sawada et al.'s own Table 4) were
+# removed entirely (2026-09-28) -- see generate_imazu_missions.py's REMOVED_CASES -- so they
+# never appear here at all. Imazu12 (same two targets as Imazu06, reversed order -- not
+# byte-identical, just relabelled) is KEPT but tagged duplicate_of() so it still appears
+# individually everywhere (mission pickers, per-mission rows) but must NOT double-count a
+# repeated scenario into any cross-mission MEAN/rank -- see _render_comparison_tab()'s
+# "Summary"/"Strengths" tables.
+AGGREGATE_MISSIONS = [m for m in MISSIONS if not duplicate_of(m)]
 CONFIGS = CONFIG_NAMES
-# The two ship-dynamics models a run can be generated under (see app.simulation
+# The three ship-dynamics models a run can be generated under (see app.simulation
 # .VesselConstraints.kinematics_model) -- shared by every section below that needs to show
-# legacy and Nomoto runs of the SAME model variant side by side rather than one silently
-# hiding the other.
-KINEMATICS_MODELS = ["kinematics", "nomoto"]
+# legacy/Nomoto/Nomoto-v2 runs of the SAME model variant side by side rather than one
+# silently hiding the other. "nomoto_v2" (2026-09-28) is a LABEL, not new physics --
+# identical Nomoto equations to "nomoto", used to keep this session's absolute-steering/
+# adaptive-cadence changes distinguishable from the frozen "nomoto" reference numbers.
+KINEMATICS_MODELS = ["kinematics", "nomoto", "nomoto_v2"]
 # Total jobs assumes ONE model variant (qwen_base, the only one with full history); a
 # second variant doubles the real total, but this is only used for a rough top-of-page
 # progress bar, not for anything score-bearing -- see the model-variant multiselect below
@@ -915,9 +925,15 @@ def _baseline_tag_kinematics_model(tag: str) -> str:
     """Baseline runs never record their own params.kinematics_model (app.run_baseline_
     scenario writes no "params" block at all, deterministic baselines need no prompt/model
     params) -- the ONLY signal for which ship-dynamics model generated a baseline tag's
-    runs is the tag NAME itself, by convention ("baseline_Nomoto_all" vs plain "baseline").
-    Matches _score_log()'s own "missing means kinematics" default for LLM runs."""
-    return "nomoto" if "nomoto" in tag.lower() else "kinematics"
+    runs is the tag NAME itself, by convention ("baseline_Nomoto_all" vs plain "baseline"
+    vs a "nomoto_v2"-tagged run). "nomoto_v2" is checked FIRST since it's a substring
+    superset of "nomoto" -- a tag literally named "nomoto_v2" would otherwise also match
+    the plain "nomoto" check. Matches _score_log()'s own "missing means kinematics"
+    default for LLM runs."""
+    t = tag.lower()
+    if "nomoto_v2" in t:
+        return "nomoto_v2"
+    return "nomoto" if "nomoto" in t else "kinematics"
 
 
 def _scan_baseline_runs(mission_id: str, tag: str) -> dict[str, dict]:
@@ -1072,11 +1088,27 @@ def _render_comparison_tab() -> None:
     if st.session_state.get("comparison_baseline_tag") not in baseline_tags:
         st.session_state.pop("comparison_baseline_tag", None)
     tag = st.selectbox("Baseline tag", baseline_tags, index=default_idx, key="comparison_baseline_tag")
+    kinematics_model = _baseline_tag_kinematics_model(tag)
     st.caption(f"\"best_llm\" below is restricted to LLM runs using the SAME ship-dynamics "
-              f"model as this tag (**{_baseline_tag_kinematics_model(tag)}**) -- never the best "
+              f"model as this tag (**{kinematics_model}**) -- never the best "
               "LLM run overall, which could otherwise have used the other physics model.")
 
     baseline_configs = list(BASELINE_CONFIGS)
+    if kinematics_model in ("nomoto", "nomoto_v2"):
+        # 2026-09-28: apf/mpc/vo pick/roll out a candidate heading using an internal
+        # reachability model that does NOT account for Nomoto's rudder-servo/yaw-rate lag
+        # (mpc.py's own docstring: "mirrors app/simulation.py's Simulation._advance_own_
+        # kinematics() [the LEGACY turn-rate slew] exactly") -- their own "when can I reach
+        # this heading" assumption silently mismatches the real (much slower) plant under
+        # Nomoto, so comparing them against ruletree/sawada/dwa/the LLM (which either have
+        # no such internal assumption, or are Nomoto-aware) here would not be apples-to-
+        # apples. Excluded from the table under Nomoto rather than given a Nomoto-aware
+        # rollout (bigger effort, not pursued -- explicit user decision, see repo memory).
+        excluded = {"baseline_apf", "baseline_mpc", "baseline_vo"} & set(baseline_configs)
+        baseline_configs = [c for c in baseline_configs if c not in excluded]
+        st.caption(f"Excludes {sorted(BASELINE_CONFIGS.get(c, c) for c in excluded)} from "
+                  "this Nomoto comparison -- their own internal rollout assumes the legacy "
+                  "turn-rate model, not Nomoto (see app/baselines/mpc.py's docstring).")
     system_keys = baseline_configs + ["best_llm"]
     system_labels = {**BASELINE_CONFIGS, "best_llm": "Best LLM-agent run per mission (any config/variant)"}
     short_to_system = {cfg.replace("baseline_", ""): cfg for cfg in baseline_configs}
@@ -1090,6 +1122,8 @@ def _render_comparison_tab() -> None:
     # this aggregation doesn't require waiting out the cache TTL to see effect.
     agg = {k: {"n": 0, "reached": 0, "collision": 0, "composite": [], "axes": []} for k in system_keys}
     for (mission_id, short), r in detail_lookup.items():
+        if mission_id not in AGGREGATE_MISSIONS:
+            continue  # known geometric duplicate (e.g. Imazu08) -- excluded from means/ranks
         cfg = short_to_system.get(short)
         if cfg is None:
             continue
@@ -1134,6 +1168,10 @@ def _render_comparison_tab() -> None:
     st.caption("Per column: greenest = best, reddest = worst (lighter shade = within 5% "
               "of that extreme) -- higher is better for every column except \"collision\" "
               "and \"std_composite\" (spread), where lower is better.")
+    if len(AGGREGATE_MISSIONS) < len(MISSIONS):
+        st.caption(f"Excludes {len(MISSIONS) - len(AGGREGATE_MISSIONS)} known geometric-"
+                  "duplicate mission(s) from these means/ranks (still runnable/browsable "
+                  "individually elsewhere) -- see app.missions.duplicate_of().")
 
     st.markdown("### Strengths / weaknesses per algorithm (relative to the other techniques)")
     # Per-axis MEAN per system, then RANK systems against each other on that SAME axis --

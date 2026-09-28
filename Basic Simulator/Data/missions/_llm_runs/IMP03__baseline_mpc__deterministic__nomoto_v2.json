@@ -1,0 +1,7242 @@
+{
+ "mission_id": "IMP03",
+ "config": "baseline_mpc",
+ "weights": "deterministic",
+ "model_variant": "baseline_mpc",
+ "tag": "nomoto_v2",
+ "generated_at": "2026-09-28T15:12:12.784484+00:00",
+ "latency_s": 0.2846682071685791,
+ "mission": {
+  "id": "IMP03",
+  "name": "Head-on target turns to port",
+  "rule_refs": [
+   "Rule 14",
+   "Rule 2",
+   "Rule 8"
+  ],
+  "own_ship_role": "mutual",
+  "description": "Head-on encounter. Rule 14 says both vessels should turn to starboard, but the target visibly turns to ITS OWN PORT partway through -- turning to starboard now would be fatal (it would steer own-ship INTO the target's new track). Correct: Rule 2(b)/8 -- depart from the standard rule to avoid immediate danger.",
+  "pass_criteria": [
+   "Own-ship does not turn to starboard once the target's port turn is visible.",
+   "Own-ship avoids collision.",
+   "Reach the goal."
+  ],
+  "own_ship": {
+   "x": 0.0,
+   "y": 0.0,
+   "heading": 0.0,
+   "speed": 6.173333333333333
+  },
+  "goal": {
+   "x": 0.0,
+   "y": 14816.0
+  },
+  "targets": [
+   {
+    "name": "ts1_headon_port",
+    "x": 142.04840000000002,
+    "y": 2708.7351999999996,
+    "heading": 186.0,
+    "speed": 6.173333333333333
+   }
+  ],
+  "target_maneuvers": [
+   {
+    "target": "ts1_headon_port",
+    "trigger_time_s": 140.0,
+    "new_heading_deg": 121.0,
+    "new_speed_kn": null
+   }
+  ]
+ },
+ "evaluation": {
+  "verdict": "FAIL -- did not reach the goal",
+  "composite_score": 0.2,
+  "safety": {
+   "passed": true,
+   "min_cpa_m": 796.4,
+   "score": 1.0
+  },
+  "compliance": {
+   "breakdown": [
+    {
+     "code": "D_no_action_when_required",
+     "label": "No Action Despite Risk",
+     "at": 0.0,
+     "deduction": -0.07317073170731707
+    },
+    {
+     "code": "B_wrong_direction",
+     "label": "Wrong Turn Direction",
+     "at": 60.0,
+     "deduction": -0.07317073170731707
+    },
+    {
+     "code": "P_wrong_side_pass",
+     "label": "Wrong Passing Side",
+     "at": "ts1_headon_port",
+     "deduction": -0.3
+    }
+   ],
+   "score": 0.554,
+   "findings": [
+    {
+     "code": "D_no_action_when_required",
+     "step": 0.0,
+     "situation_report": "ts1_headon_port rel_bearing=3deg cpa=0.000NM tcpa=220s -> Rule 14/Rule 14 applies (head_on, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "hold_course",
+      "degrees": null,
+      "heading_deg": null,
+      "encounter_rule": "Rule 14",
+      "conduct_rule": "Rule 14",
+      "reasoning": "MPC: best 6-step rollout commits to a first-step offset of 0 deg (cost=0.241, min clearance 2012m vs contact 'ts1_headon_port') -> action=hold_course."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 14",
+     "expected_conduct_rule": "Rule 14",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "D_no_action_when_required",
+     "step": 30.0,
+     "situation_report": "ts1_headon_port rel_bearing=3deg cpa=0.000NM tcpa=190s -> Rule 14/Rule 14 applies (head_on, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "hold_course",
+      "degrees": null,
+      "heading_deg": null,
+      "encounter_rule": "Rule 14",
+      "conduct_rule": "Rule 14",
+      "reasoning": "MPC: best 6-step rollout commits to a first-step offset of 0 deg (cost=0.241, min clearance 1643m vs contact 'ts1_headon_port') -> action=hold_course."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 14",
+     "expected_conduct_rule": "Rule 14",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "B_wrong_direction",
+     "step": 60.0,
+     "situation_report": "ts1_headon_port rel_bearing=3deg cpa=0.000NM tcpa=160s -> Rule 14/Rule 14 applies (head_on, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 30,
+      "heading_deg": 330.0,
+      "encounter_rule": "Rule 14",
+      "conduct_rule": "Rule 14",
+      "reasoning": "MPC: best 6-step rollout commits to a first-step offset of -30 deg (cost=0.293, min clearance 1305m vs contact 'ts1_headon_port') -> action=turn_left."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 14",
+     "expected_conduct_rule": "Rule 14",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "B_wrong_direction",
+     "step": 90.0,
+     "situation_report": "ts1_headon_port rel_bearing=7deg cpa=0.030NM tcpa=130s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 90,
+      "heading_deg": 266.5,
+      "encounter_rule": "Rule 15",
+      "conduct_rule": "Rule 16",
+      "reasoning": "MPC: best 6-step rollout commits to a first-step offset of -90 deg (cost=0.362, min clearance 956m vs contact 'ts1_headon_port') -> action=turn_left."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "B_wrong_direction",
+     "step": 120.0,
+     "situation_report": "ts1_headon_port rel_bearing=17deg cpa=0.090NM tcpa=101s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 75,
+      "heading_deg": 272.7,
+      "encounter_rule": "Rule 15",
+      "conduct_rule": "Rule 16",
+      "reasoning": "MPC: best 6-step rollout commits to a first-step offset of -75 deg (cost=0.385, min clearance 597m vs contact 'ts1_headon_port') -> action=turn_left."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    }
+   ]
+  },
+  "explanation_compliance": {
+   "breakdown": [],
+   "score": 1.0
+  },
+  "temporal": {
+   "arrived": false,
+   "time_actual_s": null,
+   "time_ratio": null,
+   "temporal_score": 0.0
+  },
+  "spatial": {
+   "path_length_m": 22841.332,
+   "path_ratio": null,
+   "spatial_score": 0.0
+  },
+  "manoeuvre": {
+   "mean_abs_heading_rate": 0.267,
+   "mean_abs_speed_rate": 0.0,
+   "smoothness_score": 0.973,
+   "manoeuvre_count": 13,
+   "manoeuvre_rate": 0.325,
+   "manoeuvre_score": 0.0
+  }
+ },
+ "colreg_llm_check": {
+  "checked": false,
+  "explanations": null,
+  "error": null
+ },
+ "params": {
+  "decision_interval": 10,
+  "decision_interval_mode": "adaptive",
+  "dt": 10.0,
+  "max_steps": 370,
+  "baseline": true,
+  "kinematics_model": "nomoto_v2"
+ },
+ "outcome": {
+  "verdict": "max_steps_reached",
+  "final_step": 369,
+  "final_time_s": 3700.0
+ },
+ "trajectory": [
+  {
+   "time": 0.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 0.0,
+   "heading": 0.0,
+   "speed": 6.173
+  },
+  {
+   "time": 0.0,
+   "vehicle": "ts1_headon_port",
+   "x": 142.05,
+   "y": 2708.74,
+   "heading": 186.0,
+   "speed": 6.173
+  },
+  {
+   "time": 10.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 61.73,
+   "heading": 0.0,
+   "speed": 6.173
+  },
+  {
+   "time": 10.0,
+   "vehicle": "ts1_headon_port",
+   "x": 135.6,
+   "y": 2647.34,
+   "heading": 186.0,
+   "speed": 6.173
+  },
+  {
+   "time": 20.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 123.47,
+   "heading": 0.0,
+   "speed": 6.173
+  },
+  {
+   "time": 20.0,
+   "vehicle": "ts1_headon_port",
+   "x": 129.14,
+   "y": 2585.94,
+   "heading": 186.0,
+   "speed": 6.173
+  },
+  {
+   "time": 30.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 185.2,
+   "heading": 0.0,
+   "speed": 6.173
+  },
+  {
+   "time": 30.0,
+   "vehicle": "ts1_headon_port",
+   "x": 122.69,
+   "y": 2524.55,
+   "heading": 186.0,
+   "speed": 6.173
+  },
+  {
+   "time": 40.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 246.93,
+   "heading": 0.0,
+   "speed": 6.173
+  },
+  {
+   "time": 40.0,
+   "vehicle": "ts1_headon_port",
+   "x": 116.24,
+   "y": 2463.15,
+   "heading": 186.0,
+   "speed": 6.173
+  },
+  {
+   "time": 50.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 308.67,
+   "heading": 0.0,
+   "speed": 6.173
+  },
+  {
+   "time": 50.0,
+   "vehicle": "ts1_headon_port",
+   "x": 109.78,
+   "y": 2401.76,
+   "heading": 186.0,
+   "speed": 6.173
+  },
+  {
+   "time": 60.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 370.4,
+   "heading": 0.0,
+   "speed": 6.173
+  },
+  {
+   "time": 60.0,
+   "vehicle": "ts1_headon_port",
+   "x": 103.33,
+   "y": 2340.36,
+   "heading": 186.0,
+   "speed": 6.173
+  },
+  {
+   "time": 70.0,
+   "vehicle": "own_ship",
+   "x": -0.43,
+   "y": 432.13,
+   "heading": 359.6,
+   "speed": 6.173
+  },
+  {
+   "time": 70.0,
+   "vehicle": "ts1_headon_port",
+   "x": 96.88,
+   "y": 2278.97,
+   "heading": 186.0,
+   "speed": 6.173
+  },
+  {
+   "time": 80.0,
+   "vehicle": "own_ship",
+   "x": -2.18,
+   "y": 493.84,
+   "heading": 358.38,
+   "speed": 6.173
+  },
+  {
+   "time": 80.0,
+   "vehicle": "ts1_headon_port",
+   "x": 90.43,
+   "y": 2217.57,
+   "heading": 186.0,
+   "speed": 6.173
+  },
+  {
+   "time": 90.0,
+   "vehicle": "own_ship",
+   "x": -5.99,
+   "y": 555.46,
+   "heading": 356.46,
+   "speed": 6.173
+  },
+  {
+   "time": 90.0,
+   "vehicle": "ts1_headon_port",
+   "x": 83.97,
+   "y": 2156.18,
+   "heading": 186.0,
+   "speed": 6.173
+  },
+  {
+   "time": 100.0,
+   "vehicle": "own_ship",
+   "x": -12.46,
+   "y": 616.85,
+   "heading": 353.99,
+   "speed": 6.173
+  },
+  {
+   "time": 100.0,
+   "vehicle": "ts1_headon_port",
+   "x": 77.52,
+   "y": 2094.78,
+   "heading": 186.0,
+   "speed": 6.173
+  },
+  {
+   "time": 110.0,
+   "vehicle": "own_ship",
+   "x": -22.06,
+   "y": 677.83,
+   "heading": 351.05,
+   "speed": 6.173
+  },
+  {
+   "time": 110.0,
+   "vehicle": "ts1_headon_port",
+   "x": 71.07,
+   "y": 2033.39,
+   "heading": 186.0,
+   "speed": 6.173
+  },
+  {
+   "time": 120.0,
+   "vehicle": "own_ship",
+   "x": -35.18,
+   "y": 738.15,
+   "heading": 347.73,
+   "speed": 6.173
+  },
+  {
+   "time": 120.0,
+   "vehicle": "ts1_headon_port",
+   "x": 64.61,
+   "y": 1971.99,
+   "heading": 186.0,
+   "speed": 6.173
+  },
+  {
+   "time": 130.0,
+   "vehicle": "own_ship",
+   "x": -52.09,
+   "y": 797.53,
+   "heading": 344.11,
+   "speed": 6.173
+  },
+  {
+   "time": 130.0,
+   "vehicle": "ts1_headon_port",
+   "x": 58.16,
+   "y": 1910.6,
+   "heading": 186.0,
+   "speed": 6.173
+  },
+  {
+   "time": 140.0,
+   "vehicle": "own_ship",
+   "x": -72.97,
+   "y": 855.62,
+   "heading": 340.23,
+   "speed": 6.173
+  },
+  {
+   "time": 140.0,
+   "vehicle": "ts1_headon_port",
+   "x": 51.71,
+   "y": 1849.2,
+   "heading": 186.0,
+   "speed": 6.173
+  },
+  {
+   "time": 150.0,
+   "vehicle": "own_ship",
+   "x": -97.94,
+   "y": 912.08,
+   "heading": 336.15,
+   "speed": 6.173
+  },
+  {
+   "time": 150.0,
+   "vehicle": "ts1_headon_port",
+   "x": 104.62,
+   "y": 1817.41,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 160.0,
+   "vehicle": "own_ship",
+   "x": -127.01,
+   "y": 966.54,
+   "heading": 331.9,
+   "speed": 6.173
+  },
+  {
+   "time": 160.0,
+   "vehicle": "ts1_headon_port",
+   "x": 157.54,
+   "y": 1785.61,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 170.0,
+   "vehicle": "own_ship",
+   "x": -160.15,
+   "y": 1018.62,
+   "heading": 327.54,
+   "speed": 6.173
+  },
+  {
+   "time": 170.0,
+   "vehicle": "ts1_headon_port",
+   "x": 210.46,
+   "y": 1753.82,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 180.0,
+   "vehicle": "own_ship",
+   "x": -197.01,
+   "y": 1068.14,
+   "heading": 323.33,
+   "speed": 6.173
+  },
+  {
+   "time": 180.0,
+   "vehicle": "ts1_headon_port",
+   "x": 263.37,
+   "y": 1722.02,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 190.0,
+   "vehicle": "own_ship",
+   "x": -236.99,
+   "y": 1115.19,
+   "heading": 319.64,
+   "speed": 6.173
+  },
+  {
+   "time": 190.0,
+   "vehicle": "ts1_headon_port",
+   "x": 316.29,
+   "y": 1690.23,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 200.0,
+   "vehicle": "own_ship",
+   "x": -279.32,
+   "y": 1160.12,
+   "heading": 316.71,
+   "speed": 6.173
+  },
+  {
+   "time": 200.0,
+   "vehicle": "ts1_headon_port",
+   "x": 369.2,
+   "y": 1658.43,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 210.0,
+   "vehicle": "own_ship",
+   "x": -323.21,
+   "y": 1203.53,
+   "heading": 314.68,
+   "speed": 6.173
+  },
+  {
+   "time": 210.0,
+   "vehicle": "ts1_headon_port",
+   "x": 422.12,
+   "y": 1626.64,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 220.0,
+   "vehicle": "own_ship",
+   "x": -367.93,
+   "y": 1246.09,
+   "heading": 313.58,
+   "speed": 6.173
+  },
+  {
+   "time": 220.0,
+   "vehicle": "ts1_headon_port",
+   "x": 475.03,
+   "y": 1594.84,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 230.0,
+   "vehicle": "own_ship",
+   "x": -412.82,
+   "y": 1288.46,
+   "heading": 313.35,
+   "speed": 6.173
+  },
+  {
+   "time": 230.0,
+   "vehicle": "ts1_headon_port",
+   "x": 527.95,
+   "y": 1563.05,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 240.0,
+   "vehicle": "own_ship",
+   "x": -457.33,
+   "y": 1331.24,
+   "heading": 313.86,
+   "speed": 6.173
+  },
+  {
+   "time": 240.0,
+   "vehicle": "ts1_headon_port",
+   "x": 580.87,
+   "y": 1531.25,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 250.0,
+   "vehicle": "own_ship",
+   "x": -501.02,
+   "y": 1374.86,
+   "heading": 314.95,
+   "speed": 6.173
+  },
+  {
+   "time": 250.0,
+   "vehicle": "ts1_headon_port",
+   "x": 633.78,
+   "y": 1499.46,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 260.0,
+   "vehicle": "own_ship",
+   "x": -544.07,
+   "y": 1419.1,
+   "heading": 315.78,
+   "speed": 6.173
+  },
+  {
+   "time": 260.0,
+   "vehicle": "ts1_headon_port",
+   "x": 686.7,
+   "y": 1467.66,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 270.0,
+   "vehicle": "own_ship",
+   "x": -587.28,
+   "y": 1463.19,
+   "heading": 315.58,
+   "speed": 6.173
+  },
+  {
+   "time": 270.0,
+   "vehicle": "ts1_headon_port",
+   "x": 739.61,
+   "y": 1435.87,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 280.0,
+   "vehicle": "own_ship",
+   "x": -631.31,
+   "y": 1506.46,
+   "heading": 314.5,
+   "speed": 6.173
+  },
+  {
+   "time": 280.0,
+   "vehicle": "ts1_headon_port",
+   "x": 792.53,
+   "y": 1404.07,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 290.0,
+   "vehicle": "own_ship",
+   "x": -676.68,
+   "y": 1548.33,
+   "heading": 312.7,
+   "speed": 6.173
+  },
+  {
+   "time": 290.0,
+   "vehicle": "ts1_headon_port",
+   "x": 845.44,
+   "y": 1372.28,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 300.0,
+   "vehicle": "own_ship",
+   "x": -723.75,
+   "y": 1588.27,
+   "heading": 310.32,
+   "speed": 6.173
+  },
+  {
+   "time": 300.0,
+   "vehicle": "ts1_headon_port",
+   "x": 898.36,
+   "y": 1340.48,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 310.0,
+   "vehicle": "own_ship",
+   "x": -772.76,
+   "y": 1625.81,
+   "heading": 307.45,
+   "speed": 6.173
+  },
+  {
+   "time": 310.0,
+   "vehicle": "ts1_headon_port",
+   "x": 951.28,
+   "y": 1308.69,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 320.0,
+   "vehicle": "own_ship",
+   "x": -823.81,
+   "y": 1660.51,
+   "heading": 304.2,
+   "speed": 6.173
+  },
+  {
+   "time": 320.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1004.19,
+   "y": 1276.89,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 330.0,
+   "vehicle": "own_ship",
+   "x": -876.94,
+   "y": 1691.97,
+   "heading": 300.63,
+   "speed": 6.173
+  },
+  {
+   "time": 330.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1057.11,
+   "y": 1245.1,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 340.0,
+   "vehicle": "own_ship",
+   "x": -932.04,
+   "y": 1719.79,
+   "heading": 296.79,
+   "speed": 6.173
+  },
+  {
+   "time": 340.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1110.02,
+   "y": 1213.3,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 350.0,
+   "vehicle": "own_ship",
+   "x": -988.97,
+   "y": 1743.66,
+   "heading": 292.75,
+   "speed": 6.173
+  },
+  {
+   "time": 350.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1162.94,
+   "y": 1181.51,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 360.0,
+   "vehicle": "own_ship",
+   "x": -1047.23,
+   "y": 1764.1,
+   "heading": 289.33,
+   "speed": 6.173
+  },
+  {
+   "time": 360.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1215.86,
+   "y": 1149.71,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 370.0,
+   "vehicle": "own_ship",
+   "x": -1106.13,
+   "y": 1782.56,
+   "heading": 287.41,
+   "speed": 6.173
+  },
+  {
+   "time": 370.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1268.77,
+   "y": 1117.92,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 380.0,
+   "vehicle": "own_ship",
+   "x": -1165.24,
+   "y": 1800.36,
+   "heading": 286.75,
+   "speed": 6.173
+  },
+  {
+   "time": 380.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1321.69,
+   "y": 1086.12,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 390.0,
+   "vehicle": "own_ship",
+   "x": -1224.24,
+   "y": 1818.55,
+   "heading": 287.14,
+   "speed": 6.173
+  },
+  {
+   "time": 390.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1374.6,
+   "y": 1054.33,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 400.0,
+   "vehicle": "own_ship",
+   "x": -1282.83,
+   "y": 1838.0,
+   "heading": 288.36,
+   "speed": 6.173
+  },
+  {
+   "time": 400.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1427.52,
+   "y": 1022.53,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 410.0,
+   "vehicle": "own_ship",
+   "x": -1340.74,
+   "y": 1859.39,
+   "heading": 290.28,
+   "speed": 6.173
+  },
+  {
+   "time": 410.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1480.43,
+   "y": 990.74,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 420.0,
+   "vehicle": "own_ship",
+   "x": -1397.66,
+   "y": 1883.27,
+   "heading": 292.76,
+   "speed": 6.173
+  },
+  {
+   "time": 420.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1533.35,
+   "y": 958.94,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 430.0,
+   "vehicle": "own_ship",
+   "x": -1453.29,
+   "y": 1910.04,
+   "heading": 295.7,
+   "speed": 6.173
+  },
+  {
+   "time": 430.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1586.27,
+   "y": 927.15,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 440.0,
+   "vehicle": "own_ship",
+   "x": -1507.27,
+   "y": 1939.99,
+   "heading": 299.02,
+   "speed": 6.173
+  },
+  {
+   "time": 440.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1639.18,
+   "y": 895.35,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 450.0,
+   "vehicle": "own_ship",
+   "x": -1559.26,
+   "y": 1973.28,
+   "heading": 302.64,
+   "speed": 6.173
+  },
+  {
+   "time": 450.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1692.1,
+   "y": 863.56,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 460.0,
+   "vehicle": "own_ship",
+   "x": -1608.87,
+   "y": 2010.02,
+   "heading": 306.52,
+   "speed": 6.173
+  },
+  {
+   "time": 460.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1745.01,
+   "y": 831.76,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 470.0,
+   "vehicle": "own_ship",
+   "x": -1655.74,
+   "y": 2050.2,
+   "heading": 310.6,
+   "speed": 6.173
+  },
+  {
+   "time": 470.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1797.93,
+   "y": 799.97,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 480.0,
+   "vehicle": "own_ship",
+   "x": -1699.5,
+   "y": 2093.74,
+   "heading": 314.85,
+   "speed": 6.173
+  },
+  {
+   "time": 480.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1850.84,
+   "y": 768.17,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 490.0,
+   "vehicle": "own_ship",
+   "x": -1739.81,
+   "y": 2140.5,
+   "heading": 319.24,
+   "speed": 6.173
+  },
+  {
+   "time": 490.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1903.76,
+   "y": 736.38,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 500.0,
+   "vehicle": "own_ship",
+   "x": -1776.32,
+   "y": 2190.27,
+   "heading": 323.74,
+   "speed": 6.173
+  },
+  {
+   "time": 500.0,
+   "vehicle": "ts1_headon_port",
+   "x": 1956.68,
+   "y": 704.58,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 510.0,
+   "vehicle": "own_ship",
+   "x": -1808.74,
+   "y": 2242.81,
+   "heading": 328.33,
+   "speed": 6.173
+  },
+  {
+   "time": 510.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2009.59,
+   "y": 672.79,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 520.0,
+   "vehicle": "own_ship",
+   "x": -1836.77,
+   "y": 2297.82,
+   "heading": 333.0,
+   "speed": 6.173
+  },
+  {
+   "time": 520.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2062.51,
+   "y": 640.99,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 530.0,
+   "vehicle": "own_ship",
+   "x": -1860.17,
+   "y": 2354.94,
+   "heading": 337.72,
+   "speed": 6.173
+  },
+  {
+   "time": 530.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2115.42,
+   "y": 609.2,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 540.0,
+   "vehicle": "own_ship",
+   "x": -1878.73,
+   "y": 2413.82,
+   "heading": 342.5,
+   "speed": 6.173
+  },
+  {
+   "time": 540.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2168.34,
+   "y": 577.4,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 550.0,
+   "vehicle": "own_ship",
+   "x": -1892.29,
+   "y": 2474.05,
+   "heading": 347.32,
+   "speed": 6.173
+  },
+  {
+   "time": 550.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2221.26,
+   "y": 545.61,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 560.0,
+   "vehicle": "own_ship",
+   "x": -1900.7,
+   "y": 2535.2,
+   "heading": 352.17,
+   "speed": 6.173
+  },
+  {
+   "time": 560.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2274.17,
+   "y": 513.81,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 570.0,
+   "vehicle": "own_ship",
+   "x": -1903.88,
+   "y": 2596.85,
+   "heading": 357.05,
+   "speed": 6.173
+  },
+  {
+   "time": 570.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2327.09,
+   "y": 482.02,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 580.0,
+   "vehicle": "own_ship",
+   "x": -1901.78,
+   "y": 2658.55,
+   "heading": 1.95,
+   "speed": 6.173
+  },
+  {
+   "time": 580.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2380.0,
+   "y": 450.22,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 590.0,
+   "vehicle": "own_ship",
+   "x": -1894.4,
+   "y": 2719.84,
+   "heading": 6.87,
+   "speed": 6.173
+  },
+  {
+   "time": 590.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2432.92,
+   "y": 418.43,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 600.0,
+   "vehicle": "own_ship",
+   "x": -1881.78,
+   "y": 2780.27,
+   "heading": 11.8,
+   "speed": 6.173
+  },
+  {
+   "time": 600.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2485.83,
+   "y": 386.63,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 610.0,
+   "vehicle": "own_ship",
+   "x": -1863.99,
+   "y": 2839.39,
+   "heading": 16.75,
+   "speed": 6.173
+  },
+  {
+   "time": 610.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2538.75,
+   "y": 354.84,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 620.0,
+   "vehicle": "own_ship",
+   "x": -1841.16,
+   "y": 2896.75,
+   "heading": 21.7,
+   "speed": 6.173
+  },
+  {
+   "time": 620.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2591.67,
+   "y": 323.04,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 630.0,
+   "vehicle": "own_ship",
+   "x": -1813.46,
+   "y": 2951.91,
+   "heading": 26.66,
+   "speed": 6.173
+  },
+  {
+   "time": 630.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2644.58,
+   "y": 291.25,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 640.0,
+   "vehicle": "own_ship",
+   "x": -1781.08,
+   "y": 3004.47,
+   "heading": 31.64,
+   "speed": 6.173
+  },
+  {
+   "time": 640.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2697.5,
+   "y": 259.45,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 650.0,
+   "vehicle": "own_ship",
+   "x": -1744.26,
+   "y": 3054.03,
+   "heading": 36.61,
+   "speed": 6.173
+  },
+  {
+   "time": 650.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2750.41,
+   "y": 227.66,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 660.0,
+   "vehicle": "own_ship",
+   "x": -1703.28,
+   "y": 3100.2,
+   "heading": 41.59,
+   "speed": 6.173
+  },
+  {
+   "time": 660.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2803.33,
+   "y": 195.86,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 670.0,
+   "vehicle": "own_ship",
+   "x": -1658.49,
+   "y": 3142.67,
+   "heading": 46.52,
+   "speed": 6.173
+  },
+  {
+   "time": 670.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2856.25,
+   "y": 164.07,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 680.0,
+   "vehicle": "own_ship",
+   "x": -1610.46,
+   "y": 3181.46,
+   "heading": 51.07,
+   "speed": 6.173
+  },
+  {
+   "time": 680.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2909.16,
+   "y": 132.27,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 690.0,
+   "vehicle": "own_ship",
+   "x": -1559.96,
+   "y": 3216.96,
+   "heading": 54.9,
+   "speed": 6.173
+  },
+  {
+   "time": 690.0,
+   "vehicle": "ts1_headon_port",
+   "x": 2962.08,
+   "y": 100.48,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 700.0,
+   "vehicle": "own_ship",
+   "x": -1507.73,
+   "y": 3249.88,
+   "heading": 57.77,
+   "speed": 6.173
+  },
+  {
+   "time": 700.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3014.99,
+   "y": 68.68,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 710.0,
+   "vehicle": "own_ship",
+   "x": -1454.49,
+   "y": 3281.13,
+   "heading": 59.6,
+   "speed": 6.173
+  },
+  {
+   "time": 710.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3067.91,
+   "y": 36.89,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 720.0,
+   "vehicle": "own_ship",
+   "x": -1400.82,
+   "y": 3311.64,
+   "heading": 60.38,
+   "speed": 6.173
+  },
+  {
+   "time": 720.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3120.82,
+   "y": 5.09,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 730.0,
+   "vehicle": "own_ship",
+   "x": -1347.23,
+   "y": 3342.28,
+   "heading": 60.23,
+   "speed": 6.173
+  },
+  {
+   "time": 730.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3173.74,
+   "y": -26.7,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 740.0,
+   "vehicle": "own_ship",
+   "x": -1294.14,
+   "y": 3373.78,
+   "heading": 59.32,
+   "speed": 6.173
+  },
+  {
+   "time": 740.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3226.66,
+   "y": -58.5,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 750.0,
+   "vehicle": "own_ship",
+   "x": -1241.86,
+   "y": 3406.62,
+   "heading": 57.86,
+   "speed": 6.173
+  },
+  {
+   "time": 750.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3279.57,
+   "y": -90.29,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 760.0,
+   "vehicle": "own_ship",
+   "x": -1190.26,
+   "y": 3440.5,
+   "heading": 56.71,
+   "speed": 6.173
+  },
+  {
+   "time": 760.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3332.49,
+   "y": -122.09,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 770.0,
+   "vehicle": "own_ship",
+   "x": -1138.69,
+   "y": 3474.43,
+   "heading": 56.66,
+   "speed": 6.173
+  },
+  {
+   "time": 770.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3385.4,
+   "y": -153.88,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 780.0,
+   "vehicle": "own_ship",
+   "x": -1086.61,
+   "y": 3507.57,
+   "heading": 57.53,
+   "speed": 6.173
+  },
+  {
+   "time": 780.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3438.32,
+   "y": -185.68,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 790.0,
+   "vehicle": "own_ship",
+   "x": -1033.61,
+   "y": 3539.23,
+   "heading": 59.15,
+   "speed": 6.173
+  },
+  {
+   "time": 790.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3491.23,
+   "y": -217.47,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 800.0,
+   "vehicle": "own_ship",
+   "x": -979.41,
+   "y": 3568.79,
+   "heading": 61.39,
+   "speed": 6.173
+  },
+  {
+   "time": 800.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3544.15,
+   "y": -249.27,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 810.0,
+   "vehicle": "own_ship",
+   "x": -923.86,
+   "y": 3595.72,
+   "heading": 64.14,
+   "speed": 6.173
+  },
+  {
+   "time": 810.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3597.07,
+   "y": -281.06,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 820.0,
+   "vehicle": "own_ship",
+   "x": -866.95,
+   "y": 3619.64,
+   "heading": 67.2,
+   "speed": 6.173
+  },
+  {
+   "time": 820.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3649.98,
+   "y": -312.86,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 830.0,
+   "vehicle": "own_ship",
+   "x": -808.85,
+   "y": 3640.5,
+   "heading": 70.25,
+   "speed": 6.173
+  },
+  {
+   "time": 830.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3702.9,
+   "y": -344.65,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 840.0,
+   "vehicle": "own_ship",
+   "x": -749.8,
+   "y": 3658.52,
+   "heading": 73.03,
+   "speed": 6.173
+  },
+  {
+   "time": 840.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3755.81,
+   "y": -376.45,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 850.0,
+   "vehicle": "own_ship",
+   "x": -690.08,
+   "y": 3674.15,
+   "heading": 75.33,
+   "speed": 6.173
+  },
+  {
+   "time": 850.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3808.73,
+   "y": -408.24,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 860.0,
+   "vehicle": "own_ship",
+   "x": -630.0,
+   "y": 3688.33,
+   "heading": 76.73,
+   "speed": 6.173
+  },
+  {
+   "time": 860.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3861.65,
+   "y": -440.04,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 870.0,
+   "vehicle": "own_ship",
+   "x": -569.85,
+   "y": 3702.24,
+   "heading": 76.97,
+   "speed": 6.173
+  },
+  {
+   "time": 870.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3914.56,
+   "y": -471.83,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 880.0,
+   "vehicle": "own_ship",
+   "x": -509.89,
+   "y": 3716.9,
+   "heading": 76.26,
+   "speed": 6.173
+  },
+  {
+   "time": 880.0,
+   "vehicle": "ts1_headon_port",
+   "x": 3967.48,
+   "y": -503.63,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 890.0,
+   "vehicle": "own_ship",
+   "x": -450.32,
+   "y": 3733.13,
+   "heading": 74.76,
+   "speed": 6.173
+  },
+  {
+   "time": 890.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4020.39,
+   "y": -535.42,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 900.0,
+   "vehicle": "own_ship",
+   "x": -391.41,
+   "y": 3751.57,
+   "heading": 72.62,
+   "speed": 6.173
+  },
+  {
+   "time": 900.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4073.31,
+   "y": -567.22,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 910.0,
+   "vehicle": "own_ship",
+   "x": -333.41,
+   "y": 3772.72,
+   "heading": 69.96,
+   "speed": 6.173
+  },
+  {
+   "time": 910.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4126.22,
+   "y": -599.01,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 920.0,
+   "vehicle": "own_ship",
+   "x": -276.64,
+   "y": 3796.97,
+   "heading": 66.87,
+   "speed": 6.173
+  },
+  {
+   "time": 920.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4179.14,
+   "y": -630.81,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 930.0,
+   "vehicle": "own_ship",
+   "x": -221.43,
+   "y": 3824.58,
+   "heading": 63.43,
+   "speed": 6.173
+  },
+  {
+   "time": 930.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4232.06,
+   "y": -662.6,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 940.0,
+   "vehicle": "own_ship",
+   "x": -168.12,
+   "y": 3855.72,
+   "heading": 59.71,
+   "speed": 6.173
+  },
+  {
+   "time": 940.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4284.97,
+   "y": -694.4,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 950.0,
+   "vehicle": "own_ship",
+   "x": -117.09,
+   "y": 3890.47,
+   "heading": 55.75,
+   "speed": 6.173
+  },
+  {
+   "time": 950.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4337.89,
+   "y": -726.19,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 960.0,
+   "vehicle": "own_ship",
+   "x": -68.71,
+   "y": 3928.81,
+   "heading": 51.6,
+   "speed": 6.173
+  },
+  {
+   "time": 960.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4390.8,
+   "y": -757.99,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 970.0,
+   "vehicle": "own_ship",
+   "x": -23.35,
+   "y": 3970.68,
+   "heading": 47.3,
+   "speed": 6.173
+  },
+  {
+   "time": 970.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4443.72,
+   "y": -789.78,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 980.0,
+   "vehicle": "own_ship",
+   "x": 18.65,
+   "y": 4015.93,
+   "heading": 42.86,
+   "speed": 6.173
+  },
+  {
+   "time": 980.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4496.63,
+   "y": -821.58,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 990.0,
+   "vehicle": "own_ship",
+   "x": 56.93,
+   "y": 4064.36,
+   "heading": 38.33,
+   "speed": 6.173
+  },
+  {
+   "time": 990.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4549.55,
+   "y": -853.37,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1000.0,
+   "vehicle": "own_ship",
+   "x": 91.19,
+   "y": 4115.71,
+   "heading": 33.71,
+   "speed": 6.173
+  },
+  {
+   "time": 1000.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4602.47,
+   "y": -885.17,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1010.0,
+   "vehicle": "own_ship",
+   "x": 121.14,
+   "y": 4169.69,
+   "heading": 29.02,
+   "speed": 6.173
+  },
+  {
+   "time": 1010.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4655.38,
+   "y": -916.96,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1020.0,
+   "vehicle": "own_ship",
+   "x": 146.51,
+   "y": 4225.97,
+   "heading": 24.27,
+   "speed": 6.173
+  },
+  {
+   "time": 1020.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4708.3,
+   "y": -948.76,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1030.0,
+   "vehicle": "own_ship",
+   "x": 167.1,
+   "y": 4284.17,
+   "heading": 19.48,
+   "speed": 6.173
+  },
+  {
+   "time": 1030.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4761.21,
+   "y": -980.55,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1040.0,
+   "vehicle": "own_ship",
+   "x": 182.71,
+   "y": 4343.9,
+   "heading": 14.65,
+   "speed": 6.173
+  },
+  {
+   "time": 1040.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4814.13,
+   "y": -1012.35,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1050.0,
+   "vehicle": "own_ship",
+   "x": 193.2,
+   "y": 4404.73,
+   "heading": 9.79,
+   "speed": 6.173
+  },
+  {
+   "time": 1050.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4867.05,
+   "y": -1044.14,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1060.0,
+   "vehicle": "own_ship",
+   "x": 198.47,
+   "y": 4466.24,
+   "heading": 4.9,
+   "speed": 6.173
+  },
+  {
+   "time": 1060.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4919.96,
+   "y": -1075.94,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1070.0,
+   "vehicle": "own_ship",
+   "x": 198.52,
+   "y": 4527.97,
+   "heading": 0.04,
+   "speed": 6.173
+  },
+  {
+   "time": 1070.0,
+   "vehicle": "ts1_headon_port",
+   "x": 4972.88,
+   "y": -1107.73,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1080.0,
+   "vehicle": "own_ship",
+   "x": 193.71,
+   "y": 4589.52,
+   "heading": 355.54,
+   "speed": 6.173
+  },
+  {
+   "time": 1080.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5025.79,
+   "y": -1139.53,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1090.0,
+   "vehicle": "own_ship",
+   "x": 184.83,
+   "y": 4650.61,
+   "heading": 351.73,
+   "speed": 6.173
+  },
+  {
+   "time": 1090.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5078.71,
+   "y": -1171.32,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1100.0,
+   "vehicle": "own_ship",
+   "x": 172.89,
+   "y": 4711.18,
+   "heading": 348.85,
+   "speed": 6.173
+  },
+  {
+   "time": 1100.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5131.62,
+   "y": -1203.12,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1110.0,
+   "vehicle": "own_ship",
+   "x": 159.01,
+   "y": 4771.33,
+   "heading": 347.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1110.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5184.54,
+   "y": -1234.91,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1120.0,
+   "vehicle": "own_ship",
+   "x": 144.26,
+   "y": 4831.28,
+   "heading": 346.18,
+   "speed": 6.173
+  },
+  {
+   "time": 1120.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5237.46,
+   "y": -1266.71,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1130.0,
+   "vehicle": "own_ship",
+   "x": 129.62,
+   "y": 4891.25,
+   "heading": 346.28,
+   "speed": 6.173
+  },
+  {
+   "time": 1130.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5290.37,
+   "y": -1298.5,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1140.0,
+   "vehicle": "own_ship",
+   "x": 115.88,
+   "y": 4951.43,
+   "heading": 347.14,
+   "speed": 6.173
+  },
+  {
+   "time": 1140.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5343.29,
+   "y": -1330.3,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1150.0,
+   "vehicle": "own_ship",
+   "x": 103.63,
+   "y": 5011.94,
+   "heading": 348.55,
+   "speed": 6.173
+  },
+  {
+   "time": 1150.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5396.2,
+   "y": -1362.09,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1160.0,
+   "vehicle": "own_ship",
+   "x": 93.4,
+   "y": 5072.82,
+   "heading": 350.46,
+   "speed": 6.173
+  },
+  {
+   "time": 1160.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5449.12,
+   "y": -1393.89,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1170.0,
+   "vehicle": "own_ship",
+   "x": 85.8,
+   "y": 5134.08,
+   "heading": 352.93,
+   "speed": 6.173
+  },
+  {
+   "time": 1170.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5502.03,
+   "y": -1425.68,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1180.0,
+   "vehicle": "own_ship",
+   "x": 81.34,
+   "y": 5195.65,
+   "heading": 355.85,
+   "speed": 6.173
+  },
+  {
+   "time": 1180.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5554.95,
+   "y": -1457.48,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1190.0,
+   "vehicle": "own_ship",
+   "x": 80.24,
+   "y": 5257.38,
+   "heading": 358.98,
+   "speed": 6.173
+  },
+  {
+   "time": 1190.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5607.87,
+   "y": -1489.27,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1200.0,
+   "vehicle": "own_ship",
+   "x": 82.38,
+   "y": 5319.07,
+   "heading": 1.99,
+   "speed": 6.173
+  },
+  {
+   "time": 1200.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5660.78,
+   "y": -1521.07,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1210.0,
+   "vehicle": "own_ship",
+   "x": 87.37,
+   "y": 5380.61,
+   "heading": 4.64,
+   "speed": 6.173
+  },
+  {
+   "time": 1210.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5713.7,
+   "y": -1552.86,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1220.0,
+   "vehicle": "own_ship",
+   "x": 94.62,
+   "y": 5441.91,
+   "heading": 6.74,
+   "speed": 6.173
+  },
+  {
+   "time": 1220.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5766.61,
+   "y": -1584.66,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1230.0,
+   "vehicle": "own_ship",
+   "x": 103.43,
+   "y": 5503.01,
+   "heading": 8.2,
+   "speed": 6.173
+  },
+  {
+   "time": 1230.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5819.53,
+   "y": -1616.45,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1240.0,
+   "vehicle": "own_ship",
+   "x": 113.08,
+   "y": 5563.99,
+   "heading": 8.99,
+   "speed": 6.173
+  },
+  {
+   "time": 1240.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5872.45,
+   "y": -1648.25,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1250.0,
+   "vehicle": "own_ship",
+   "x": 122.91,
+   "y": 5624.93,
+   "heading": 9.16,
+   "speed": 6.173
+  },
+  {
+   "time": 1250.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5925.36,
+   "y": -1680.04,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1260.0,
+   "vehicle": "own_ship",
+   "x": 132.15,
+   "y": 5685.97,
+   "heading": 8.61,
+   "speed": 6.173
+  },
+  {
+   "time": 1260.0,
+   "vehicle": "ts1_headon_port",
+   "x": 5978.28,
+   "y": -1711.84,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1270.0,
+   "vehicle": "own_ship",
+   "x": 139.94,
+   "y": 5747.21,
+   "heading": 7.26,
+   "speed": 6.173
+  },
+  {
+   "time": 1270.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6031.19,
+   "y": -1743.63,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1280.0,
+   "vehicle": "own_ship",
+   "x": 145.58,
+   "y": 5808.69,
+   "heading": 5.23,
+   "speed": 6.173
+  },
+  {
+   "time": 1280.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6084.11,
+   "y": -1775.43,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1290.0,
+   "vehicle": "own_ship",
+   "x": 148.45,
+   "y": 5870.35,
+   "heading": 2.67,
+   "speed": 6.173
+  },
+  {
+   "time": 1290.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6137.02,
+   "y": -1807.22,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1300.0,
+   "vehicle": "own_ship",
+   "x": 148.22,
+   "y": 5932.09,
+   "heading": 359.78,
+   "speed": 6.173
+  },
+  {
+   "time": 1300.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6189.94,
+   "y": -1839.02,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1310.0,
+   "vehicle": "own_ship",
+   "x": 144.86,
+   "y": 5993.73,
+   "heading": 356.88,
+   "speed": 6.173
+  },
+  {
+   "time": 1310.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6242.86,
+   "y": -1870.81,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1320.0,
+   "vehicle": "own_ship",
+   "x": 138.64,
+   "y": 6055.15,
+   "heading": 354.22,
+   "speed": 6.173
+  },
+  {
+   "time": 1320.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6295.77,
+   "y": -1902.61,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1330.0,
+   "vehicle": "own_ship",
+   "x": 130.07,
+   "y": 6116.28,
+   "heading": 352.01,
+   "speed": 6.173
+  },
+  {
+   "time": 1330.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6348.69,
+   "y": -1934.4,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1340.0,
+   "vehicle": "own_ship",
+   "x": 119.75,
+   "y": 6177.15,
+   "heading": 350.38,
+   "speed": 6.173
+  },
+  {
+   "time": 1340.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6401.6,
+   "y": -1966.2,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1350.0,
+   "vehicle": "own_ship",
+   "x": 108.37,
+   "y": 6237.82,
+   "heading": 349.38,
+   "speed": 6.173
+  },
+  {
+   "time": 1350.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6454.52,
+   "y": -1997.99,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1360.0,
+   "vehicle": "own_ship",
+   "x": 96.57,
+   "y": 6298.42,
+   "heading": 348.98,
+   "speed": 6.173
+  },
+  {
+   "time": 1360.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6507.43,
+   "y": -2029.79,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1370.0,
+   "vehicle": "own_ship",
+   "x": 84.92,
+   "y": 6359.04,
+   "heading": 349.13,
+   "speed": 6.173
+  },
+  {
+   "time": 1370.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6560.35,
+   "y": -2061.58,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1380.0,
+   "vehicle": "own_ship",
+   "x": 73.9,
+   "y": 6419.78,
+   "heading": 349.71,
+   "speed": 6.173
+  },
+  {
+   "time": 1380.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6613.27,
+   "y": -2093.38,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1390.0,
+   "vehicle": "own_ship",
+   "x": 63.82,
+   "y": 6480.69,
+   "heading": 350.6,
+   "speed": 6.173
+  },
+  {
+   "time": 1390.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6666.18,
+   "y": -2125.17,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1400.0,
+   "vehicle": "own_ship",
+   "x": 54.88,
+   "y": 6541.77,
+   "heading": 351.67,
+   "speed": 6.173
+  },
+  {
+   "time": 1400.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6719.1,
+   "y": -2156.97,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1410.0,
+   "vehicle": "own_ship",
+   "x": 47.13,
+   "y": 6603.02,
+   "heading": 352.79,
+   "speed": 6.173
+  },
+  {
+   "time": 1410.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6772.01,
+   "y": -2188.76,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1420.0,
+   "vehicle": "own_ship",
+   "x": 40.52,
+   "y": 6664.39,
+   "heading": 353.85,
+   "speed": 6.173
+  },
+  {
+   "time": 1420.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6824.93,
+   "y": -2220.56,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1430.0,
+   "vehicle": "own_ship",
+   "x": 34.87,
+   "y": 6725.87,
+   "heading": 354.76,
+   "speed": 6.173
+  },
+  {
+   "time": 1430.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6877.85,
+   "y": -2252.35,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1440.0,
+   "vehicle": "own_ship",
+   "x": 29.99,
+   "y": 6787.41,
+   "heading": 355.46,
+   "speed": 6.173
+  },
+  {
+   "time": 1440.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6930.76,
+   "y": -2284.15,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1450.0,
+   "vehicle": "own_ship",
+   "x": 25.61,
+   "y": 6848.99,
+   "heading": 355.93,
+   "speed": 6.173
+  },
+  {
+   "time": 1450.0,
+   "vehicle": "ts1_headon_port",
+   "x": 6983.68,
+   "y": -2315.94,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1460.0,
+   "vehicle": "own_ship",
+   "x": 21.12,
+   "y": 6910.56,
+   "heading": 355.83,
+   "speed": 6.173
+  },
+  {
+   "time": 1460.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7036.59,
+   "y": -2347.74,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1470.0,
+   "vehicle": "own_ship",
+   "x": 15.58,
+   "y": 6972.04,
+   "heading": 354.86,
+   "speed": 6.173
+  },
+  {
+   "time": 1470.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7089.51,
+   "y": -2379.53,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1480.0,
+   "vehicle": "own_ship",
+   "x": 8.21,
+   "y": 7033.33,
+   "heading": 353.14,
+   "speed": 6.173
+  },
+  {
+   "time": 1480.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7142.42,
+   "y": -2411.33,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1490.0,
+   "vehicle": "own_ship",
+   "x": -1.63,
+   "y": 7094.28,
+   "heading": 350.83,
+   "speed": 6.173
+  },
+  {
+   "time": 1490.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7195.34,
+   "y": -2443.12,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1500.0,
+   "vehicle": "own_ship",
+   "x": -14.4,
+   "y": 7154.67,
+   "heading": 348.06,
+   "speed": 6.173
+  },
+  {
+   "time": 1500.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7248.26,
+   "y": -2474.92,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1510.0,
+   "vehicle": "own_ship",
+   "x": -30.27,
+   "y": 7214.33,
+   "heading": 345.1,
+   "speed": 6.173
+  },
+  {
+   "time": 1510.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7301.17,
+   "y": -2506.71,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1520.0,
+   "vehicle": "own_ship",
+   "x": -49.07,
+   "y": 7273.13,
+   "heading": 342.27,
+   "speed": 6.173
+  },
+  {
+   "time": 1520.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7354.09,
+   "y": -2538.51,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1530.0,
+   "vehicle": "own_ship",
+   "x": -70.4,
+   "y": 7331.07,
+   "heading": 339.79,
+   "speed": 6.173
+  },
+  {
+   "time": 1530.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7407.0,
+   "y": -2570.3,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1540.0,
+   "vehicle": "own_ship",
+   "x": -93.68,
+   "y": 7388.24,
+   "heading": 337.84,
+   "speed": 6.173
+  },
+  {
+   "time": 1540.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7459.92,
+   "y": -2602.1,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1550.0,
+   "vehicle": "own_ship",
+   "x": -118.3,
+   "y": 7444.85,
+   "heading": 336.49,
+   "speed": 6.173
+  },
+  {
+   "time": 1550.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7512.83,
+   "y": -2633.89,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1560.0,
+   "vehicle": "own_ship",
+   "x": -144.2,
+   "y": 7500.89,
+   "heading": 335.2,
+   "speed": 6.173
+  },
+  {
+   "time": 1560.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7565.75,
+   "y": -2665.69,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1570.0,
+   "vehicle": "own_ship",
+   "x": -171.99,
+   "y": 7556.01,
+   "heading": 333.25,
+   "speed": 6.173
+  },
+  {
+   "time": 1570.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7618.67,
+   "y": -2697.48,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1580.0,
+   "vehicle": "own_ship",
+   "x": -202.17,
+   "y": 7609.87,
+   "heading": 330.74,
+   "speed": 6.173
+  },
+  {
+   "time": 1580.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7671.58,
+   "y": -2729.28,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1590.0,
+   "vehicle": "own_ship",
+   "x": -235.03,
+   "y": 7662.13,
+   "heading": 327.84,
+   "speed": 6.173
+  },
+  {
+   "time": 1590.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7724.5,
+   "y": -2761.07,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1600.0,
+   "vehicle": "own_ship",
+   "x": -270.56,
+   "y": 7712.61,
+   "heading": 324.86,
+   "speed": 6.173
+  },
+  {
+   "time": 1600.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7777.41,
+   "y": -2792.87,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1610.0,
+   "vehicle": "own_ship",
+   "x": -308.5,
+   "y": 7761.31,
+   "heading": 322.08,
+   "speed": 6.173
+  },
+  {
+   "time": 1610.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7830.33,
+   "y": -2824.66,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1620.0,
+   "vehicle": "own_ship",
+   "x": -348.41,
+   "y": 7808.41,
+   "heading": 319.72,
+   "speed": 6.173
+  },
+  {
+   "time": 1620.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7883.25,
+   "y": -2856.46,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1630.0,
+   "vehicle": "own_ship",
+   "x": -389.78,
+   "y": 7854.23,
+   "heading": 317.92,
+   "speed": 6.173
+  },
+  {
+   "time": 1630.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7936.16,
+   "y": -2888.25,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1640.0,
+   "vehicle": "own_ship",
+   "x": -432.07,
+   "y": 7899.2,
+   "heading": 316.76,
+   "speed": 6.173
+  },
+  {
+   "time": 1640.0,
+   "vehicle": "ts1_headon_port",
+   "x": 7989.08,
+   "y": -2920.05,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1650.0,
+   "vehicle": "own_ship",
+   "x": -474.78,
+   "y": 7943.77,
+   "heading": 316.22,
+   "speed": 6.173
+  },
+  {
+   "time": 1650.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8041.99,
+   "y": -2951.84,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1660.0,
+   "vehicle": "own_ship",
+   "x": -517.94,
+   "y": 7987.91,
+   "heading": 315.65,
+   "speed": 6.173
+  },
+  {
+   "time": 1660.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8094.91,
+   "y": -2983.64,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1670.0,
+   "vehicle": "own_ship",
+   "x": -562.13,
+   "y": 8031.02,
+   "heading": 314.29,
+   "speed": 6.173
+  },
+  {
+   "time": 1670.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8147.82,
+   "y": -3015.43,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1680.0,
+   "vehicle": "own_ship",
+   "x": -607.81,
+   "y": 8072.54,
+   "heading": 312.27,
+   "speed": 6.173
+  },
+  {
+   "time": 1680.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8200.74,
+   "y": -3047.23,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1690.0,
+   "vehicle": "own_ship",
+   "x": -655.31,
+   "y": 8111.97,
+   "heading": 309.7,
+   "speed": 6.173
+  },
+  {
+   "time": 1690.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8253.66,
+   "y": -3079.02,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1700.0,
+   "vehicle": "own_ship",
+   "x": -704.82,
+   "y": 8148.86,
+   "heading": 306.69,
+   "speed": 6.173
+  },
+  {
+   "time": 1700.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8306.57,
+   "y": -3110.82,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1710.0,
+   "vehicle": "own_ship",
+   "x": -756.41,
+   "y": 8182.76,
+   "heading": 303.31,
+   "speed": 6.173
+  },
+  {
+   "time": 1710.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8359.49,
+   "y": -3142.61,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1720.0,
+   "vehicle": "own_ship",
+   "x": -810.07,
+   "y": 8213.29,
+   "heading": 299.64,
+   "speed": 6.173
+  },
+  {
+   "time": 1720.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8412.4,
+   "y": -3174.41,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1730.0,
+   "vehicle": "own_ship",
+   "x": -865.68,
+   "y": 8240.08,
+   "heading": 295.72,
+   "speed": 6.173
+  },
+  {
+   "time": 1730.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8465.32,
+   "y": -3206.2,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1740.0,
+   "vehicle": "own_ship",
+   "x": -923.08,
+   "y": 8262.81,
+   "heading": 291.61,
+   "speed": 6.173
+  },
+  {
+   "time": 1740.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8518.24,
+   "y": -3238.0,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1750.0,
+   "vehicle": "own_ship",
+   "x": -982.01,
+   "y": 8281.2,
+   "heading": 287.33,
+   "speed": 6.173
+  },
+  {
+   "time": 1750.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8571.15,
+   "y": -3269.79,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1760.0,
+   "vehicle": "own_ship",
+   "x": -1041.98,
+   "y": 8295.85,
+   "heading": 283.72,
+   "speed": 6.173
+  },
+  {
+   "time": 1760.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8624.07,
+   "y": -3301.59,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1770.0,
+   "vehicle": "own_ship",
+   "x": -1102.44,
+   "y": 8308.32,
+   "heading": 281.65,
+   "speed": 6.173
+  },
+  {
+   "time": 1770.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8676.98,
+   "y": -3333.38,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1780.0,
+   "vehicle": "own_ship",
+   "x": -1163.06,
+   "y": 8319.96,
+   "heading": 280.87,
+   "speed": 6.173
+  },
+  {
+   "time": 1780.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8729.9,
+   "y": -3365.18,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1790.0,
+   "vehicle": "own_ship",
+   "x": -1223.63,
+   "y": 8331.91,
+   "heading": 281.15,
+   "speed": 6.173
+  },
+  {
+   "time": 1790.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8782.81,
+   "y": -3396.97,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1800.0,
+   "vehicle": "own_ship",
+   "x": -1283.95,
+   "y": 8345.05,
+   "heading": 282.3,
+   "speed": 6.173
+  },
+  {
+   "time": 1800.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8835.73,
+   "y": -3428.77,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1810.0,
+   "vehicle": "own_ship",
+   "x": -1343.81,
+   "y": 8360.14,
+   "heading": 284.14,
+   "speed": 6.173
+  },
+  {
+   "time": 1810.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8888.65,
+   "y": -3460.56,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1820.0,
+   "vehicle": "own_ship",
+   "x": -1402.98,
+   "y": 8377.74,
+   "heading": 286.57,
+   "speed": 6.173
+  },
+  {
+   "time": 1820.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8941.56,
+   "y": -3492.36,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1830.0,
+   "vehicle": "own_ship",
+   "x": -1461.19,
+   "y": 8398.31,
+   "heading": 289.46,
+   "speed": 6.173
+  },
+  {
+   "time": 1830.0,
+   "vehicle": "ts1_headon_port",
+   "x": 8994.48,
+   "y": -3524.15,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1840.0,
+   "vehicle": "own_ship",
+   "x": -1518.12,
+   "y": 8422.18,
+   "heading": 292.74,
+   "speed": 6.173
+  },
+  {
+   "time": 1840.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9047.39,
+   "y": -3555.95,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1850.0,
+   "vehicle": "own_ship",
+   "x": -1573.44,
+   "y": 8449.57,
+   "heading": 296.34,
+   "speed": 6.173
+  },
+  {
+   "time": 1850.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9100.31,
+   "y": -3587.74,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1860.0,
+   "vehicle": "own_ship",
+   "x": -1626.8,
+   "y": 8480.61,
+   "heading": 300.19,
+   "speed": 6.173
+  },
+  {
+   "time": 1860.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9153.22,
+   "y": -3619.54,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1870.0,
+   "vehicle": "own_ship",
+   "x": -1677.83,
+   "y": 8515.36,
+   "heading": 304.25,
+   "speed": 6.173
+  },
+  {
+   "time": 1870.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9206.14,
+   "y": -3651.33,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1880.0,
+   "vehicle": "own_ship",
+   "x": -1726.15,
+   "y": 8553.78,
+   "heading": 308.49,
+   "speed": 6.173
+  },
+  {
+   "time": 1880.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9259.06,
+   "y": -3683.13,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1890.0,
+   "vehicle": "own_ship",
+   "x": -1771.4,
+   "y": 8595.77,
+   "heading": 312.86,
+   "speed": 6.173
+  },
+  {
+   "time": 1890.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9311.97,
+   "y": -3714.92,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1900.0,
+   "vehicle": "own_ship",
+   "x": -1813.22,
+   "y": 8641.18,
+   "heading": 317.35,
+   "speed": 6.173
+  },
+  {
+   "time": 1900.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9364.89,
+   "y": -3746.72,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1910.0,
+   "vehicle": "own_ship",
+   "x": -1851.29,
+   "y": 8689.78,
+   "heading": 321.93,
+   "speed": 6.173
+  },
+  {
+   "time": 1910.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9417.8,
+   "y": -3778.51,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1920.0,
+   "vehicle": "own_ship",
+   "x": -1885.28,
+   "y": 8741.31,
+   "heading": 326.59,
+   "speed": 6.173
+  },
+  {
+   "time": 1920.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9470.72,
+   "y": -3810.31,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1930.0,
+   "vehicle": "own_ship",
+   "x": -1914.92,
+   "y": 8795.47,
+   "heading": 331.31,
+   "speed": 6.173
+  },
+  {
+   "time": 1930.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9523.64,
+   "y": -3842.1,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1940.0,
+   "vehicle": "own_ship",
+   "x": -1939.94,
+   "y": 8851.9,
+   "heading": 336.08,
+   "speed": 6.173
+  },
+  {
+   "time": 1940.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9576.55,
+   "y": -3873.9,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1950.0,
+   "vehicle": "own_ship",
+   "x": -1960.15,
+   "y": 8910.23,
+   "heading": 340.9,
+   "speed": 6.173
+  },
+  {
+   "time": 1950.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9629.47,
+   "y": -3905.7,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1960.0,
+   "vehicle": "own_ship",
+   "x": -1975.35,
+   "y": 8970.07,
+   "heading": 345.74,
+   "speed": 6.173
+  },
+  {
+   "time": 1960.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9682.38,
+   "y": -3937.49,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1970.0,
+   "vehicle": "own_ship",
+   "x": -1985.46,
+   "y": 9030.97,
+   "heading": 350.57,
+   "speed": 6.173
+  },
+  {
+   "time": 1970.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9735.3,
+   "y": -3969.29,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1980.0,
+   "vehicle": "own_ship",
+   "x": -1990.77,
+   "y": 9092.47,
+   "heading": 355.06,
+   "speed": 6.173
+  },
+  {
+   "time": 1980.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9788.21,
+   "y": -4001.08,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 1990.0,
+   "vehicle": "own_ship",
+   "x": -1992.0,
+   "y": 9154.19,
+   "heading": 358.86,
+   "speed": 6.173
+  },
+  {
+   "time": 1990.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9841.13,
+   "y": -4032.88,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2000.0,
+   "vehicle": "own_ship",
+   "x": -1990.12,
+   "y": 9215.9,
+   "heading": 1.75,
+   "speed": 6.173
+  },
+  {
+   "time": 2000.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9894.05,
+   "y": -4064.67,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2010.0,
+   "vehicle": "own_ship",
+   "x": -1986.23,
+   "y": 9277.51,
+   "heading": 3.61,
+   "speed": 6.173
+  },
+  {
+   "time": 2010.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9946.96,
+   "y": -4096.47,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2020.0,
+   "vehicle": "own_ship",
+   "x": -1981.43,
+   "y": 9339.05,
+   "heading": 4.45,
+   "speed": 6.173
+  },
+  {
+   "time": 2020.0,
+   "vehicle": "ts1_headon_port",
+   "x": 9999.88,
+   "y": -4128.26,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2030.0,
+   "vehicle": "own_ship",
+   "x": -1976.72,
+   "y": 9400.61,
+   "heading": 4.37,
+   "speed": 6.173
+  },
+  {
+   "time": 2030.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10052.79,
+   "y": -4160.06,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2040.0,
+   "vehicle": "own_ship",
+   "x": -1972.92,
+   "y": 9462.22,
+   "heading": 3.54,
+   "speed": 6.173
+  },
+  {
+   "time": 2040.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10105.71,
+   "y": -4191.85,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2050.0,
+   "vehicle": "own_ship",
+   "x": -1970.61,
+   "y": 9523.91,
+   "heading": 2.14,
+   "speed": 6.173
+  },
+  {
+   "time": 2050.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10158.62,
+   "y": -4223.65,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2060.0,
+   "vehicle": "own_ship",
+   "x": -1970.33,
+   "y": 9585.65,
+   "heading": 0.25,
+   "speed": 6.173
+  },
+  {
+   "time": 2060.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10211.54,
+   "y": -4255.44,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2070.0,
+   "vehicle": "own_ship",
+   "x": -1972.71,
+   "y": 9647.33,
+   "heading": 357.8,
+   "speed": 6.173
+  },
+  {
+   "time": 2070.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10264.46,
+   "y": -4287.24,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2080.0,
+   "vehicle": "own_ship",
+   "x": -1978.22,
+   "y": 9708.82,
+   "heading": 354.88,
+   "speed": 6.173
+  },
+  {
+   "time": 2080.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10317.37,
+   "y": -4319.03,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2090.0,
+   "vehicle": "own_ship",
+   "x": -1987.26,
+   "y": 9769.89,
+   "heading": 351.58,
+   "speed": 6.173
+  },
+  {
+   "time": 2090.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10370.29,
+   "y": -4350.83,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2100.0,
+   "vehicle": "own_ship",
+   "x": -2000.13,
+   "y": 9830.26,
+   "heading": 347.97,
+   "speed": 6.173
+  },
+  {
+   "time": 2100.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10423.2,
+   "y": -4382.62,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2110.0,
+   "vehicle": "own_ship",
+   "x": -2017.04,
+   "y": 9889.64,
+   "heading": 344.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2110.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10476.12,
+   "y": -4414.42,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2120.0,
+   "vehicle": "own_ship",
+   "x": -2038.13,
+   "y": 9947.66,
+   "heading": 340.03,
+   "speed": 6.173
+  },
+  {
+   "time": 2120.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10529.04,
+   "y": -4446.21,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2130.0,
+   "vehicle": "own_ship",
+   "x": -2063.45,
+   "y": 10003.96,
+   "heading": 335.78,
+   "speed": 6.173
+  },
+  {
+   "time": 2130.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10581.95,
+   "y": -4478.01,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2140.0,
+   "vehicle": "own_ship",
+   "x": -2093.0,
+   "y": 10058.16,
+   "heading": 331.4,
+   "speed": 6.173
+  },
+  {
+   "time": 2140.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10634.87,
+   "y": -4509.8,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2150.0,
+   "vehicle": "own_ship",
+   "x": -2126.71,
+   "y": 10109.88,
+   "heading": 326.91,
+   "speed": 6.173
+  },
+  {
+   "time": 2150.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10687.78,
+   "y": -4541.6,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2160.0,
+   "vehicle": "own_ship",
+   "x": -2163.75,
+   "y": 10159.26,
+   "heading": 323.12,
+   "speed": 6.173
+  },
+  {
+   "time": 2160.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10740.7,
+   "y": -4573.39,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2170.0,
+   "vehicle": "own_ship",
+   "x": -2202.68,
+   "y": 10207.17,
+   "heading": 320.91,
+   "speed": 6.173
+  },
+  {
+   "time": 2170.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10793.61,
+   "y": -4605.19,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2180.0,
+   "vehicle": "own_ship",
+   "x": -2242.36,
+   "y": 10254.47,
+   "heading": 320.01,
+   "speed": 6.173
+  },
+  {
+   "time": 2180.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10846.53,
+   "y": -4636.98,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2190.0,
+   "vehicle": "own_ship",
+   "x": -2281.88,
+   "y": 10301.89,
+   "heading": 320.19,
+   "speed": 6.173
+  },
+  {
+   "time": 2190.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10899.45,
+   "y": -4668.78,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2200.0,
+   "vehicle": "own_ship",
+   "x": -2320.52,
+   "y": 10350.04,
+   "heading": 321.25,
+   "speed": 6.173
+  },
+  {
+   "time": 2200.0,
+   "vehicle": "ts1_headon_port",
+   "x": 10952.36,
+   "y": -4700.57,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2210.0,
+   "vehicle": "own_ship",
+   "x": -2357.64,
+   "y": 10399.37,
+   "heading": 323.04,
+   "speed": 6.173
+  },
+  {
+   "time": 2210.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11005.28,
+   "y": -4732.37,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2220.0,
+   "vehicle": "own_ship",
+   "x": -2392.69,
+   "y": 10450.18,
+   "heading": 325.41,
+   "speed": 6.173
+  },
+  {
+   "time": 2220.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11058.19,
+   "y": -4764.16,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2230.0,
+   "vehicle": "own_ship",
+   "x": -2425.16,
+   "y": 10502.69,
+   "heading": 328.26,
+   "speed": 6.173
+  },
+  {
+   "time": 2230.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11111.11,
+   "y": -4795.96,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2240.0,
+   "vehicle": "own_ship",
+   "x": -2454.61,
+   "y": 10556.94,
+   "heading": 331.51,
+   "speed": 6.173
+  },
+  {
+   "time": 2240.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11164.02,
+   "y": -4827.75,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2250.0,
+   "vehicle": "own_ship",
+   "x": -2480.63,
+   "y": 10612.92,
+   "heading": 335.07,
+   "speed": 6.173
+  },
+  {
+   "time": 2250.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11216.94,
+   "y": -4859.55,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2260.0,
+   "vehicle": "own_ship",
+   "x": -2503.66,
+   "y": 10670.2,
+   "heading": 338.1,
+   "speed": 6.173
+  },
+  {
+   "time": 2260.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11269.86,
+   "y": -4891.34,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2270.0,
+   "vehicle": "own_ship",
+   "x": -2525.08,
+   "y": 10728.1,
+   "heading": 339.7,
+   "speed": 6.173
+  },
+  {
+   "time": 2270.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11322.77,
+   "y": -4923.14,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2280.0,
+   "vehicle": "own_ship",
+   "x": -2546.1,
+   "y": 10786.14,
+   "heading": 340.09,
+   "speed": 6.173
+  },
+  {
+   "time": 2280.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11375.69,
+   "y": -4954.93,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2290.0,
+   "vehicle": "own_ship",
+   "x": -2567.73,
+   "y": 10843.96,
+   "heading": 339.49,
+   "speed": 6.173
+  },
+  {
+   "time": 2290.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11428.6,
+   "y": -4986.73,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2300.0,
+   "vehicle": "own_ship",
+   "x": -2590.77,
+   "y": 10901.24,
+   "heading": 338.09,
+   "speed": 6.173
+  },
+  {
+   "time": 2300.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11481.52,
+   "y": -5018.52,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2310.0,
+   "vehicle": "own_ship",
+   "x": -2615.84,
+   "y": 10957.65,
+   "heading": 336.03,
+   "speed": 6.173
+  },
+  {
+   "time": 2310.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11534.44,
+   "y": -5050.32,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2320.0,
+   "vehicle": "own_ship",
+   "x": -2643.45,
+   "y": 11012.86,
+   "heading": 333.44,
+   "speed": 6.173
+  },
+  {
+   "time": 2320.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11587.35,
+   "y": -5082.11,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2330.0,
+   "vehicle": "own_ship",
+   "x": -2673.94,
+   "y": 11066.54,
+   "heading": 330.4,
+   "speed": 6.173
+  },
+  {
+   "time": 2330.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11640.27,
+   "y": -5113.91,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2340.0,
+   "vehicle": "own_ship",
+   "x": -2707.56,
+   "y": 11118.32,
+   "heading": 327.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2340.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11693.18,
+   "y": -5145.7,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2350.0,
+   "vehicle": "own_ship",
+   "x": -2744.45,
+   "y": 11167.82,
+   "heading": 323.31,
+   "speed": 6.173
+  },
+  {
+   "time": 2350.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11746.1,
+   "y": -5177.5,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2360.0,
+   "vehicle": "own_ship",
+   "x": -2783.97,
+   "y": 11215.24,
+   "heading": 320.18,
+   "speed": 6.173
+  },
+  {
+   "time": 2360.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11799.01,
+   "y": -5209.29,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2370.0,
+   "vehicle": "own_ship",
+   "x": -2824.88,
+   "y": 11261.48,
+   "heading": 318.51,
+   "speed": 6.173
+  },
+  {
+   "time": 2370.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11851.93,
+   "y": -5241.09,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2380.0,
+   "vehicle": "own_ship",
+   "x": -2866.15,
+   "y": 11307.39,
+   "heading": 318.05,
+   "speed": 6.173
+  },
+  {
+   "time": 2380.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11904.85,
+   "y": -5272.88,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2390.0,
+   "vehicle": "own_ship",
+   "x": -2906.98,
+   "y": 11353.69,
+   "heading": 318.59,
+   "speed": 6.173
+  },
+  {
+   "time": 2390.0,
+   "vehicle": "ts1_headon_port",
+   "x": 11957.76,
+   "y": -5304.68,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2400.0,
+   "vehicle": "own_ship",
+   "x": -2946.71,
+   "y": 11400.94,
+   "heading": 319.94,
+   "speed": 6.173
+  },
+  {
+   "time": 2400.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12010.68,
+   "y": -5336.47,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2410.0,
+   "vehicle": "own_ship",
+   "x": -2984.74,
+   "y": 11449.56,
+   "heading": 321.97,
+   "speed": 6.173
+  },
+  {
+   "time": 2410.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12063.59,
+   "y": -5368.27,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2420.0,
+   "vehicle": "own_ship",
+   "x": -3020.56,
+   "y": 11499.84,
+   "heading": 324.53,
+   "speed": 6.173
+  },
+  {
+   "time": 2420.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12116.51,
+   "y": -5400.06,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2430.0,
+   "vehicle": "own_ship",
+   "x": -3053.69,
+   "y": 11551.93,
+   "heading": 327.55,
+   "speed": 6.173
+  },
+  {
+   "time": 2430.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12169.42,
+   "y": -5431.86,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2440.0,
+   "vehicle": "own_ship",
+   "x": -3083.69,
+   "y": 11605.89,
+   "heading": 330.92,
+   "speed": 6.173
+  },
+  {
+   "time": 2440.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12222.34,
+   "y": -5463.65,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2450.0,
+   "vehicle": "own_ship",
+   "x": -3110.18,
+   "y": 11661.65,
+   "heading": 334.59,
+   "speed": 6.173
+  },
+  {
+   "time": 2450.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12275.26,
+   "y": -5495.45,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2460.0,
+   "vehicle": "own_ship",
+   "x": -3133.59,
+   "y": 11718.77,
+   "heading": 337.71,
+   "speed": 6.173
+  },
+  {
+   "time": 2460.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12328.17,
+   "y": -5527.24,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2470.0,
+   "vehicle": "own_ship",
+   "x": -3155.34,
+   "y": 11776.55,
+   "heading": 339.38,
+   "speed": 6.173
+  },
+  {
+   "time": 2470.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12381.09,
+   "y": -5559.04,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2480.0,
+   "vehicle": "own_ship",
+   "x": -3176.62,
+   "y": 11834.49,
+   "heading": 339.83,
+   "speed": 6.173
+  },
+  {
+   "time": 2480.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12434.0,
+   "y": -5590.83,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2490.0,
+   "vehicle": "own_ship",
+   "x": -3198.46,
+   "y": 11892.23,
+   "heading": 339.28,
+   "speed": 6.173
+  },
+  {
+   "time": 2490.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12486.92,
+   "y": -5622.63,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2500.0,
+   "vehicle": "own_ship",
+   "x": -3221.67,
+   "y": 11949.44,
+   "heading": 337.92,
+   "speed": 6.173
+  },
+  {
+   "time": 2500.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12539.84,
+   "y": -5654.42,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2510.0,
+   "vehicle": "own_ship",
+   "x": -3246.89,
+   "y": 12005.79,
+   "heading": 335.89,
+   "speed": 6.173
+  },
+  {
+   "time": 2510.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12592.75,
+   "y": -5686.22,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2520.0,
+   "vehicle": "own_ship",
+   "x": -3274.61,
+   "y": 12060.95,
+   "heading": 333.32,
+   "speed": 6.173
+  },
+  {
+   "time": 2520.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12645.67,
+   "y": -5718.01,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2530.0,
+   "vehicle": "own_ship",
+   "x": -3305.19,
+   "y": 12114.57,
+   "heading": 330.3,
+   "speed": 6.173
+  },
+  {
+   "time": 2530.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12698.58,
+   "y": -5749.81,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2540.0,
+   "vehicle": "own_ship",
+   "x": -3338.87,
+   "y": 12166.31,
+   "heading": 326.94,
+   "speed": 6.173
+  },
+  {
+   "time": 2540.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12751.5,
+   "y": -5781.6,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2550.0,
+   "vehicle": "own_ship",
+   "x": -3375.6,
+   "y": 12215.93,
+   "heading": 323.49,
+   "speed": 6.173
+  },
+  {
+   "time": 2550.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12804.41,
+   "y": -5813.4,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2560.0,
+   "vehicle": "own_ship",
+   "x": -3414.63,
+   "y": 12263.76,
+   "heading": 320.79,
+   "speed": 6.173
+  },
+  {
+   "time": 2560.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12857.33,
+   "y": -5845.19,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2570.0,
+   "vehicle": "own_ship",
+   "x": -3454.75,
+   "y": 12310.68,
+   "heading": 319.46,
+   "speed": 6.173
+  },
+  {
+   "time": 2570.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12910.25,
+   "y": -5876.99,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2580.0,
+   "vehicle": "own_ship",
+   "x": -3495.01,
+   "y": 12357.48,
+   "heading": 319.3,
+   "speed": 6.173
+  },
+  {
+   "time": 2580.0,
+   "vehicle": "ts1_headon_port",
+   "x": 12963.16,
+   "y": -5908.78,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2590.0,
+   "vehicle": "own_ship",
+   "x": -3534.62,
+   "y": 12404.82,
+   "heading": 320.08,
+   "speed": 6.173
+  },
+  {
+   "time": 2590.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13016.08,
+   "y": -5940.58,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2600.0,
+   "vehicle": "own_ship",
+   "x": -3572.94,
+   "y": 12453.22,
+   "heading": 321.63,
+   "speed": 6.173
+  },
+  {
+   "time": 2600.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13068.99,
+   "y": -5972.37,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2610.0,
+   "vehicle": "own_ship",
+   "x": -3609.39,
+   "y": 12503.05,
+   "heading": 323.81,
+   "speed": 6.173
+  },
+  {
+   "time": 2610.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13121.91,
+   "y": -6004.17,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2620.0,
+   "vehicle": "own_ship",
+   "x": -3643.45,
+   "y": 12554.53,
+   "heading": 326.51,
+   "speed": 6.173
+  },
+  {
+   "time": 2620.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13174.83,
+   "y": -6035.96,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2630.0,
+   "vehicle": "own_ship",
+   "x": -3674.67,
+   "y": 12607.8,
+   "heading": 329.63,
+   "speed": 6.173
+  },
+  {
+   "time": 2630.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13227.74,
+   "y": -6067.76,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2640.0,
+   "vehicle": "own_ship",
+   "x": -3702.6,
+   "y": 12662.85,
+   "heading": 333.09,
+   "speed": 6.173
+  },
+  {
+   "time": 2640.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13280.66,
+   "y": -6099.55,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2650.0,
+   "vehicle": "own_ship",
+   "x": -3726.89,
+   "y": 12719.6,
+   "heading": 336.84,
+   "speed": 6.173
+  },
+  {
+   "time": 2650.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13333.57,
+   "y": -6131.35,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2660.0,
+   "vehicle": "own_ship",
+   "x": -3747.18,
+   "y": 12777.91,
+   "heading": 340.81,
+   "speed": 6.173
+  },
+  {
+   "time": 2660.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13386.49,
+   "y": -6163.14,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2670.0,
+   "vehicle": "own_ship",
+   "x": -3763.18,
+   "y": 12837.53,
+   "heading": 344.97,
+   "speed": 6.173
+  },
+  {
+   "time": 2670.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13439.4,
+   "y": -6194.94,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2680.0,
+   "vehicle": "own_ship",
+   "x": -3774.66,
+   "y": 12898.19,
+   "heading": 349.29,
+   "speed": 6.173
+  },
+  {
+   "time": 2680.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13492.32,
+   "y": -6226.73,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2690.0,
+   "vehicle": "own_ship",
+   "x": -3781.4,
+   "y": 12959.55,
+   "heading": 353.73,
+   "speed": 6.173
+  },
+  {
+   "time": 2690.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13545.24,
+   "y": -6258.53,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2700.0,
+   "vehicle": "own_ship",
+   "x": -3783.27,
+   "y": 13021.25,
+   "heading": 358.27,
+   "speed": 6.173
+  },
+  {
+   "time": 2700.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13598.15,
+   "y": -6290.32,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2710.0,
+   "vehicle": "own_ship",
+   "x": -3780.15,
+   "y": 13082.91,
+   "heading": 2.9,
+   "speed": 6.173
+  },
+  {
+   "time": 2710.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13651.07,
+   "y": -6322.12,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2720.0,
+   "vehicle": "own_ship",
+   "x": -3771.99,
+   "y": 13144.1,
+   "heading": 7.59,
+   "speed": 6.173
+  },
+  {
+   "time": 2720.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13703.98,
+   "y": -6353.91,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2730.0,
+   "vehicle": "own_ship",
+   "x": -3758.8,
+   "y": 13204.41,
+   "heading": 12.34,
+   "speed": 6.173
+  },
+  {
+   "time": 2730.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13756.9,
+   "y": -6385.71,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2740.0,
+   "vehicle": "own_ship",
+   "x": -3740.6,
+   "y": 13263.4,
+   "heading": 17.14,
+   "speed": 6.173
+  },
+  {
+   "time": 2740.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13809.81,
+   "y": -6417.5,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2750.0,
+   "vehicle": "own_ship",
+   "x": -3717.51,
+   "y": 13320.65,
+   "heading": 21.97,
+   "speed": 6.173
+  },
+  {
+   "time": 2750.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13862.73,
+   "y": -6449.3,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2760.0,
+   "vehicle": "own_ship",
+   "x": -3689.64,
+   "y": 13375.73,
+   "heading": 26.84,
+   "speed": 6.173
+  },
+  {
+   "time": 2760.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13915.65,
+   "y": -6481.09,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2770.0,
+   "vehicle": "own_ship",
+   "x": -3657.18,
+   "y": 13428.24,
+   "heading": 31.72,
+   "speed": 6.173
+  },
+  {
+   "time": 2770.0,
+   "vehicle": "ts1_headon_port",
+   "x": 13968.56,
+   "y": -6512.89,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2780.0,
+   "vehicle": "own_ship",
+   "x": -3620.34,
+   "y": 13477.78,
+   "heading": 36.63,
+   "speed": 6.173
+  },
+  {
+   "time": 2780.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14021.48,
+   "y": -6544.68,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2790.0,
+   "vehicle": "own_ship",
+   "x": -3579.39,
+   "y": 13523.98,
+   "heading": 41.56,
+   "speed": 6.173
+  },
+  {
+   "time": 2790.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14074.39,
+   "y": -6576.48,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2800.0,
+   "vehicle": "own_ship",
+   "x": -3534.61,
+   "y": 13566.47,
+   "heading": 46.5,
+   "speed": 6.173
+  },
+  {
+   "time": 2800.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14127.31,
+   "y": -6608.27,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2810.0,
+   "vehicle": "own_ship",
+   "x": -3486.33,
+   "y": 13604.94,
+   "heading": 51.45,
+   "speed": 6.173
+  },
+  {
+   "time": 2810.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14180.23,
+   "y": -6640.07,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2820.0,
+   "vehicle": "own_ship",
+   "x": -3434.91,
+   "y": 13639.1,
+   "heading": 56.41,
+   "speed": 6.173
+  },
+  {
+   "time": 2820.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14233.14,
+   "y": -6671.86,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2830.0,
+   "vehicle": "own_ship",
+   "x": -3380.74,
+   "y": 13668.71,
+   "heading": 61.34,
+   "speed": 6.173
+  },
+  {
+   "time": 2830.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14286.06,
+   "y": -6703.66,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2840.0,
+   "vehicle": "own_ship",
+   "x": -3324.36,
+   "y": 13693.87,
+   "heading": 65.94,
+   "speed": 6.173
+  },
+  {
+   "time": 2840.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14338.97,
+   "y": -6735.45,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2850.0,
+   "vehicle": "own_ship",
+   "x": -3266.41,
+   "y": 13715.13,
+   "heading": 69.86,
+   "speed": 6.173
+  },
+  {
+   "time": 2850.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14391.89,
+   "y": -6767.25,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2860.0,
+   "vehicle": "own_ship",
+   "x": -3207.42,
+   "y": 13733.33,
+   "heading": 72.85,
+   "speed": 6.173
+  },
+  {
+   "time": 2860.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14444.8,
+   "y": -6799.04,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2870.0,
+   "vehicle": "own_ship",
+   "x": -3147.84,
+   "y": 13749.52,
+   "heading": 74.8,
+   "speed": 6.173
+  },
+  {
+   "time": 2870.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14497.72,
+   "y": -6830.84,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2880.0,
+   "vehicle": "own_ship",
+   "x": -3088.02,
+   "y": 13764.76,
+   "heading": 75.71,
+   "speed": 6.173
+  },
+  {
+   "time": 2880.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14550.64,
+   "y": -6862.63,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2890.0,
+   "vehicle": "own_ship",
+   "x": -3028.21,
+   "y": 13780.04,
+   "heading": 75.67,
+   "speed": 6.173
+  },
+  {
+   "time": 2890.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14603.55,
+   "y": -6894.43,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2900.0,
+   "vehicle": "own_ship",
+   "x": -2968.62,
+   "y": 13796.18,
+   "heading": 74.84,
+   "speed": 6.173
+  },
+  {
+   "time": 2900.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14656.47,
+   "y": -6926.22,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2910.0,
+   "vehicle": "own_ship",
+   "x": -2909.45,
+   "y": 13813.77,
+   "heading": 73.45,
+   "speed": 6.173
+  },
+  {
+   "time": 2910.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14709.38,
+   "y": -6958.02,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2920.0,
+   "vehicle": "own_ship",
+   "x": -2850.84,
+   "y": 13833.16,
+   "heading": 71.7,
+   "speed": 6.173
+  },
+  {
+   "time": 2920.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14762.3,
+   "y": -6989.81,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2930.0,
+   "vehicle": "own_ship",
+   "x": -2792.9,
+   "y": 13854.45,
+   "heading": 69.82,
+   "speed": 6.173
+  },
+  {
+   "time": 2930.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14815.21,
+   "y": -7021.61,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2940.0,
+   "vehicle": "own_ship",
+   "x": -2735.66,
+   "y": 13877.58,
+   "heading": 68.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2940.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14868.13,
+   "y": -7053.4,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2950.0,
+   "vehicle": "own_ship",
+   "x": -2679.08,
+   "y": 13902.29,
+   "heading": 66.41,
+   "speed": 6.173
+  },
+  {
+   "time": 2950.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14921.05,
+   "y": -7085.2,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2960.0,
+   "vehicle": "own_ship",
+   "x": -2623.07,
+   "y": 13928.25,
+   "heading": 65.13,
+   "speed": 6.173
+  },
+  {
+   "time": 2960.0,
+   "vehicle": "ts1_headon_port",
+   "x": 14973.96,
+   "y": -7116.99,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2970.0,
+   "vehicle": "own_ship",
+   "x": -2567.47,
+   "y": 13955.07,
+   "heading": 64.25,
+   "speed": 6.173
+  },
+  {
+   "time": 2970.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15026.88,
+   "y": -7148.79,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2980.0,
+   "vehicle": "own_ship",
+   "x": -2512.1,
+   "y": 13982.36,
+   "heading": 63.76,
+   "speed": 6.173
+  },
+  {
+   "time": 2980.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15079.79,
+   "y": -7180.58,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 2990.0,
+   "vehicle": "own_ship",
+   "x": -2456.78,
+   "y": 14009.76,
+   "heading": 63.65,
+   "speed": 6.173
+  },
+  {
+   "time": 2990.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15132.71,
+   "y": -7212.38,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3000.0,
+   "vehicle": "own_ship",
+   "x": -2401.35,
+   "y": 14036.95,
+   "heading": 63.87,
+   "speed": 6.173
+  },
+  {
+   "time": 3000.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15185.63,
+   "y": -7244.17,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3010.0,
+   "vehicle": "own_ship",
+   "x": -2345.71,
+   "y": 14063.68,
+   "heading": 64.33,
+   "speed": 6.173
+  },
+  {
+   "time": 3010.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15238.54,
+   "y": -7275.97,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3020.0,
+   "vehicle": "own_ship",
+   "x": -2289.78,
+   "y": 14089.81,
+   "heading": 64.96,
+   "speed": 6.173
+  },
+  {
+   "time": 3020.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15291.46,
+   "y": -7307.76,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3030.0,
+   "vehicle": "own_ship",
+   "x": -2233.53,
+   "y": 14115.24,
+   "heading": 65.67,
+   "speed": 6.173
+  },
+  {
+   "time": 3030.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15344.37,
+   "y": -7339.56,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3040.0,
+   "vehicle": "own_ship",
+   "x": -2176.97,
+   "y": 14139.98,
+   "heading": 66.38,
+   "speed": 6.173
+  },
+  {
+   "time": 3040.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15397.29,
+   "y": -7371.35,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3050.0,
+   "vehicle": "own_ship",
+   "x": -2120.13,
+   "y": 14164.08,
+   "heading": 67.02,
+   "speed": 6.173
+  },
+  {
+   "time": 3050.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15450.2,
+   "y": -7403.15,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3060.0,
+   "vehicle": "own_ship",
+   "x": -2063.08,
+   "y": 14187.65,
+   "heading": 67.55,
+   "speed": 6.173
+  },
+  {
+   "time": 3060.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15503.12,
+   "y": -7434.94,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3070.0,
+   "vehicle": "own_ship",
+   "x": -2005.86,
+   "y": 14210.83,
+   "heading": 67.95,
+   "speed": 6.173
+  },
+  {
+   "time": 3070.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15556.04,
+   "y": -7466.74,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3080.0,
+   "vehicle": "own_ship",
+   "x": -1948.55,
+   "y": 14233.77,
+   "heading": 68.19,
+   "speed": 6.173
+  },
+  {
+   "time": 3080.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15608.95,
+   "y": -7498.53,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3090.0,
+   "vehicle": "own_ship",
+   "x": -1891.2,
+   "y": 14256.62,
+   "heading": 68.28,
+   "speed": 6.173
+  },
+  {
+   "time": 3090.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15661.87,
+   "y": -7530.33,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3100.0,
+   "vehicle": "own_ship",
+   "x": -1833.87,
+   "y": 14279.51,
+   "heading": 68.23,
+   "speed": 6.173
+  },
+  {
+   "time": 3100.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15714.78,
+   "y": -7562.12,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3110.0,
+   "vehicle": "own_ship",
+   "x": -1776.59,
+   "y": 14302.55,
+   "heading": 68.09,
+   "speed": 6.173
+  },
+  {
+   "time": 3110.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15767.7,
+   "y": -7593.92,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3120.0,
+   "vehicle": "own_ship",
+   "x": -1719.41,
+   "y": 14325.81,
+   "heading": 67.87,
+   "speed": 6.173
+  },
+  {
+   "time": 3120.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15820.61,
+   "y": -7625.71,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3130.0,
+   "vehicle": "own_ship",
+   "x": -1662.33,
+   "y": 14349.33,
+   "heading": 67.6,
+   "speed": 6.173
+  },
+  {
+   "time": 3130.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15873.53,
+   "y": -7657.51,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3140.0,
+   "vehicle": "own_ship",
+   "x": -1605.37,
+   "y": 14373.12,
+   "heading": 67.33,
+   "speed": 6.173
+  },
+  {
+   "time": 3140.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15926.45,
+   "y": -7689.3,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3150.0,
+   "vehicle": "own_ship",
+   "x": -1548.51,
+   "y": 14397.17,
+   "heading": 67.07,
+   "speed": 6.173
+  },
+  {
+   "time": 3150.0,
+   "vehicle": "ts1_headon_port",
+   "x": 15979.36,
+   "y": -7721.1,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3160.0,
+   "vehicle": "own_ship",
+   "x": -1491.92,
+   "y": 14421.83,
+   "heading": 66.46,
+   "speed": 6.173
+  },
+  {
+   "time": 3160.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16032.28,
+   "y": -7752.89,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3170.0,
+   "vehicle": "own_ship",
+   "x": -1435.94,
+   "y": 14447.86,
+   "heading": 65.05,
+   "speed": 6.173
+  },
+  {
+   "time": 3170.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16085.19,
+   "y": -7784.69,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3180.0,
+   "vehicle": "own_ship",
+   "x": -1380.94,
+   "y": 14475.9,
+   "heading": 62.99,
+   "speed": 6.173
+  },
+  {
+   "time": 3180.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16138.11,
+   "y": -7816.48,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3190.0,
+   "vehicle": "own_ship",
+   "x": -1327.26,
+   "y": 14506.39,
+   "heading": 60.4,
+   "speed": 6.173
+  },
+  {
+   "time": 3190.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16191.03,
+   "y": -7848.28,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3200.0,
+   "vehicle": "own_ship",
+   "x": -1275.2,
+   "y": 14539.56,
+   "heading": 57.5,
+   "speed": 6.173
+  },
+  {
+   "time": 3200.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16243.94,
+   "y": -7880.07,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3210.0,
+   "vehicle": "own_ship",
+   "x": -1224.87,
+   "y": 14575.32,
+   "heading": 54.6,
+   "speed": 6.173
+  },
+  {
+   "time": 3210.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16296.86,
+   "y": -7911.87,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3220.0,
+   "vehicle": "own_ship",
+   "x": -1176.25,
+   "y": 14613.35,
+   "heading": 51.97,
+   "speed": 6.173
+  },
+  {
+   "time": 3220.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16349.77,
+   "y": -7943.66,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3230.0,
+   "vehicle": "own_ship",
+   "x": -1129.1,
+   "y": 14653.2,
+   "heading": 49.79,
+   "speed": 6.173
+  },
+  {
+   "time": 3230.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16402.69,
+   "y": -7975.46,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3240.0,
+   "vehicle": "own_ship",
+   "x": -1083.08,
+   "y": 14694.35,
+   "heading": 48.2,
+   "speed": 6.173
+  },
+  {
+   "time": 3240.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16455.6,
+   "y": -8007.25,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3250.0,
+   "vehicle": "own_ship",
+   "x": -1037.76,
+   "y": 14736.27,
+   "heading": 47.23,
+   "speed": 6.173
+  },
+  {
+   "time": 3250.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16508.52,
+   "y": -8039.05,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3260.0,
+   "vehicle": "own_ship",
+   "x": -993.15,
+   "y": 14778.94,
+   "heading": 46.27,
+   "speed": 6.173
+  },
+  {
+   "time": 3260.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16561.44,
+   "y": -8070.84,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3270.0,
+   "vehicle": "own_ship",
+   "x": -949.81,
+   "y": 14822.9,
+   "heading": 44.6,
+   "speed": 6.173
+  },
+  {
+   "time": 3270.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16614.35,
+   "y": -8102.64,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3280.0,
+   "vehicle": "own_ship",
+   "x": -908.25,
+   "y": 14868.54,
+   "heading": 42.32,
+   "speed": 6.173
+  },
+  {
+   "time": 3280.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16667.27,
+   "y": -8134.43,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3290.0,
+   "vehicle": "own_ship",
+   "x": -868.94,
+   "y": 14916.15,
+   "heading": 39.54,
+   "speed": 6.173
+  },
+  {
+   "time": 3290.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16720.18,
+   "y": -8166.23,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3300.0,
+   "vehicle": "own_ship",
+   "x": -832.35,
+   "y": 14965.87,
+   "heading": 36.36,
+   "speed": 6.173
+  },
+  {
+   "time": 3300.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16773.1,
+   "y": -8198.02,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3310.0,
+   "vehicle": "own_ship",
+   "x": -798.87,
+   "y": 15017.73,
+   "heading": 32.84,
+   "speed": 6.173
+  },
+  {
+   "time": 3310.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16826.01,
+   "y": -8229.82,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3320.0,
+   "vehicle": "own_ship",
+   "x": -768.89,
+   "y": 15071.7,
+   "heading": 29.05,
+   "speed": 6.173
+  },
+  {
+   "time": 3320.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16878.93,
+   "y": -8261.61,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3330.0,
+   "vehicle": "own_ship",
+   "x": -742.76,
+   "y": 15127.63,
+   "heading": 25.04,
+   "speed": 6.173
+  },
+  {
+   "time": 3330.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16931.85,
+   "y": -8293.41,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3340.0,
+   "vehicle": "own_ship",
+   "x": -720.79,
+   "y": 15185.32,
+   "heading": 20.85,
+   "speed": 6.173
+  },
+  {
+   "time": 3340.0,
+   "vehicle": "ts1_headon_port",
+   "x": 16984.76,
+   "y": -8325.2,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3350.0,
+   "vehicle": "own_ship",
+   "x": -703.24,
+   "y": 15244.51,
+   "heading": 16.51,
+   "speed": 6.173
+  },
+  {
+   "time": 3350.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17037.68,
+   "y": -8357.0,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3360.0,
+   "vehicle": "own_ship",
+   "x": -689.51,
+   "y": 15304.69,
+   "heading": 12.85,
+   "speed": 6.173
+  },
+  {
+   "time": 3360.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17090.59,
+   "y": -8388.79,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3370.0,
+   "vehicle": "own_ship",
+   "x": -678.0,
+   "y": 15365.35,
+   "heading": 10.74,
+   "speed": 6.173
+  },
+  {
+   "time": 3370.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17143.51,
+   "y": -8420.59,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3380.0,
+   "vehicle": "own_ship",
+   "x": -667.36,
+   "y": 15426.15,
+   "heading": 9.93,
+   "speed": 6.173
+  },
+  {
+   "time": 3380.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17196.43,
+   "y": -8452.38,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3390.0,
+   "vehicle": "own_ship",
+   "x": -656.45,
+   "y": 15486.92,
+   "heading": 10.18,
+   "speed": 6.173
+  },
+  {
+   "time": 3390.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17249.34,
+   "y": -8484.18,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3400.0,
+   "vehicle": "own_ship",
+   "x": -644.35,
+   "y": 15547.45,
+   "heading": 11.3,
+   "speed": 6.173
+  },
+  {
+   "time": 3400.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17302.26,
+   "y": -8515.97,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3410.0,
+   "vehicle": "own_ship",
+   "x": -630.33,
+   "y": 15607.57,
+   "heading": 13.13,
+   "speed": 6.173
+  },
+  {
+   "time": 3410.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17355.17,
+   "y": -8547.77,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3420.0,
+   "vehicle": "own_ship",
+   "x": -613.79,
+   "y": 15667.05,
+   "heading": 15.54,
+   "speed": 6.173
+  },
+  {
+   "time": 3420.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17408.09,
+   "y": -8579.56,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3430.0,
+   "vehicle": "own_ship",
+   "x": -594.29,
+   "y": 15725.62,
+   "heading": 18.42,
+   "speed": 6.173
+  },
+  {
+   "time": 3430.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17461.0,
+   "y": -8611.36,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3440.0,
+   "vehicle": "own_ship",
+   "x": -571.47,
+   "y": 15782.98,
+   "heading": 21.69,
+   "speed": 6.173
+  },
+  {
+   "time": 3440.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17513.92,
+   "y": -8643.15,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3450.0,
+   "vehicle": "own_ship",
+   "x": -545.11,
+   "y": 15838.8,
+   "heading": 25.28,
+   "speed": 6.173
+  },
+  {
+   "time": 3450.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17566.84,
+   "y": -8674.95,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3460.0,
+   "vehicle": "own_ship",
+   "x": -515.06,
+   "y": 15892.73,
+   "heading": 29.12,
+   "speed": 6.173
+  },
+  {
+   "time": 3460.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17619.75,
+   "y": -8706.74,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3470.0,
+   "vehicle": "own_ship",
+   "x": -481.28,
+   "y": 15944.4,
+   "heading": 33.18,
+   "speed": 6.173
+  },
+  {
+   "time": 3470.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17672.67,
+   "y": -8738.54,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3480.0,
+   "vehicle": "own_ship",
+   "x": -443.77,
+   "y": 15993.44,
+   "heading": 37.41,
+   "speed": 6.173
+  },
+  {
+   "time": 3480.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17725.58,
+   "y": -8770.33,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3490.0,
+   "vehicle": "own_ship",
+   "x": -402.64,
+   "y": 16039.47,
+   "heading": 41.78,
+   "speed": 6.173
+  },
+  {
+   "time": 3490.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17778.5,
+   "y": -8802.13,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3500.0,
+   "vehicle": "own_ship",
+   "x": -358.04,
+   "y": 16082.15,
+   "heading": 46.27,
+   "speed": 6.173
+  },
+  {
+   "time": 3500.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17831.41,
+   "y": -8833.92,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3510.0,
+   "vehicle": "own_ship",
+   "x": -310.17,
+   "y": 16121.13,
+   "heading": 50.84,
+   "speed": 6.173
+  },
+  {
+   "time": 3510.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17884.33,
+   "y": -8865.72,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3520.0,
+   "vehicle": "own_ship",
+   "x": -259.29,
+   "y": 16156.09,
+   "heading": 55.5,
+   "speed": 6.173
+  },
+  {
+   "time": 3520.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17937.25,
+   "y": -8897.51,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3530.0,
+   "vehicle": "own_ship",
+   "x": -205.71,
+   "y": 16186.75,
+   "heading": 60.22,
+   "speed": 6.173
+  },
+  {
+   "time": 3530.0,
+   "vehicle": "ts1_headon_port",
+   "x": 17990.16,
+   "y": -8929.31,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3540.0,
+   "vehicle": "own_ship",
+   "x": -149.76,
+   "y": 16212.85,
+   "heading": 64.99,
+   "speed": 6.173
+  },
+  {
+   "time": 3540.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18043.08,
+   "y": -8961.1,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3550.0,
+   "vehicle": "own_ship",
+   "x": -91.83,
+   "y": 16234.17,
+   "heading": 69.8,
+   "speed": 6.173
+  },
+  {
+   "time": 3550.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18095.99,
+   "y": -8992.9,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3560.0,
+   "vehicle": "own_ship",
+   "x": -32.3,
+   "y": 16250.51,
+   "heading": 74.65,
+   "speed": 6.173
+  },
+  {
+   "time": 3560.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18148.91,
+   "y": -9024.69,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3570.0,
+   "vehicle": "own_ship",
+   "x": 28.41,
+   "y": 16261.73,
+   "heading": 79.53,
+   "speed": 6.173
+  },
+  {
+   "time": 3570.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18201.83,
+   "y": -9056.49,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3580.0,
+   "vehicle": "own_ship",
+   "x": 89.85,
+   "y": 16267.73,
+   "heading": 84.42,
+   "speed": 6.173
+  },
+  {
+   "time": 3580.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18254.74,
+   "y": -9088.28,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3590.0,
+   "vehicle": "own_ship",
+   "x": 151.58,
+   "y": 16268.44,
+   "heading": 89.34,
+   "speed": 6.173
+  },
+  {
+   "time": 3590.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18307.66,
+   "y": -9120.08,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3600.0,
+   "vehicle": "own_ship",
+   "x": 213.14,
+   "y": 16263.84,
+   "heading": 94.27,
+   "speed": 6.173
+  },
+  {
+   "time": 3600.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18360.57,
+   "y": -9151.87,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3610.0,
+   "vehicle": "own_ship",
+   "x": 274.08,
+   "y": 16253.96,
+   "heading": 99.22,
+   "speed": 6.173
+  },
+  {
+   "time": 3610.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18413.49,
+   "y": -9183.67,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3620.0,
+   "vehicle": "own_ship",
+   "x": 333.93,
+   "y": 16238.84,
+   "heading": 104.17,
+   "speed": 6.173
+  },
+  {
+   "time": 3620.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18466.4,
+   "y": -9215.46,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3630.0,
+   "vehicle": "own_ship",
+   "x": 392.26,
+   "y": 16218.61,
+   "heading": 109.13,
+   "speed": 6.173
+  },
+  {
+   "time": 3630.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18519.32,
+   "y": -9247.26,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3640.0,
+   "vehicle": "own_ship",
+   "x": 448.61,
+   "y": 16193.4,
+   "heading": 114.1,
+   "speed": 6.173
+  },
+  {
+   "time": 3640.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18572.24,
+   "y": -9279.05,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3650.0,
+   "vehicle": "own_ship",
+   "x": 502.56,
+   "y": 16163.4,
+   "heading": 119.08,
+   "speed": 6.173
+  },
+  {
+   "time": 3650.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18625.15,
+   "y": -9310.85,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3660.0,
+   "vehicle": "own_ship",
+   "x": 553.7,
+   "y": 16128.83,
+   "heading": 124.06,
+   "speed": 6.173
+  },
+  {
+   "time": 3660.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18678.07,
+   "y": -9342.64,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3670.0,
+   "vehicle": "own_ship",
+   "x": 601.65,
+   "y": 16089.94,
+   "heading": 129.04,
+   "speed": 6.173
+  },
+  {
+   "time": 3670.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18730.98,
+   "y": -9374.44,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3680.0,
+   "vehicle": "own_ship",
+   "x": 646.04,
+   "y": 16047.04,
+   "heading": 134.03,
+   "speed": 6.173
+  },
+  {
+   "time": 3680.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18783.9,
+   "y": -9406.23,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3690.0,
+   "vehicle": "own_ship",
+   "x": 686.53,
+   "y": 16000.44,
+   "heading": 139.02,
+   "speed": 6.173
+  },
+  {
+   "time": 3690.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18836.82,
+   "y": -9438.03,
+   "heading": 121.0,
+   "speed": 6.173
+  },
+  {
+   "time": 3700.0,
+   "vehicle": "own_ship",
+   "x": 722.81,
+   "y": 15950.49,
+   "heading": 144.01,
+   "speed": 6.173
+  },
+  {
+   "time": 3700.0,
+   "vehicle": "ts1_headon_port",
+   "x": 18889.73,
+   "y": -9469.82,
+   "heading": 121.0,
+   "speed": 6.173
+  }
+ ],
+ "checkpoints": [
+  {
+   "step": 0,
+   "time": 0.0,
+   "timestamp": "2026-09-28T15:12:11.912914+00:00",
+   "latency_s": 0.0017094612121582031,
+   "situation_report": "Own-ship at (0.000, 0.000) NM, heading 0.0, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 8.000 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2400s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 1.465 NM, relative bearing 3.0 deg, heading 186.0, speed 12.00 kt, CPA 0.000 NM, TCPA 220s",
+   "decision": {
+    "action": "hold_course",
+    "degrees": null,
+    "heading_deg": null,
+    "encounter_rule": "Rule 14",
+    "conduct_rule": "Rule 14",
+    "reasoning": "MPC: best 6-step rollout commits to a first-step offset of 0 deg (cost=0.241, min clearance 2012m vs contact 'ts1_headon_port') -> action=hold_course."
+   },
+   "commanded_heading_deg": 0.0,
+   "reasoning_raw": "MPC: best 6-step rollout commits to a first-step offset of 0 deg (cost=0.241, min clearance 2012m vs contact 'ts1_headon_port') -> action=hold_course.",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 3,
+   "time": 30.0,
+   "timestamp": "2026-09-28T15:12:11.914941+00:00",
+   "latency_s": 0.00180816650390625,
+   "situation_report": "Own-ship at (0.000, 0.100) NM, heading 0.0, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.900 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2370s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 1.265 NM, relative bearing 3.0 deg, heading 186.0, speed 12.00 kt, CPA 0.000 NM, TCPA 190s",
+   "decision": {
+    "action": "hold_course",
+    "degrees": null,
+    "heading_deg": null,
+    "encounter_rule": "Rule 14",
+    "conduct_rule": "Rule 14",
+    "reasoning": "MPC: best 6-step rollout commits to a first-step offset of 0 deg (cost=0.241, min clearance 1643m vs contact 'ts1_headon_port') -> action=hold_course."
+   },
+   "commanded_heading_deg": 0.0,
+   "reasoning_raw": "MPC: best 6-step rollout commits to a first-step offset of 0 deg (cost=0.241, min clearance 1643m vs contact 'ts1_headon_port') -> action=hold_course.",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 6,
+   "time": 60.0,
+   "timestamp": "2026-09-28T15:12:11.916883+00:00",
+   "latency_s": 0.0016741752624511719,
+   "situation_report": "Own-ship at (0.000, 0.200) NM, heading 0.0, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.800 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2340s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 1.065 NM, relative bearing 3.0 deg, heading 186.0, speed 12.00 kt, CPA 0.000 NM, TCPA 160s",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 30,
+    "heading_deg": 330.0,
+    "encounter_rule": "Rule 14",
+    "conduct_rule": "Rule 14",
+    "reasoning": "MPC: best 6-step rollout commits to a first-step offset of -30 deg (cost=0.293, min clearance 1305m vs contact 'ts1_headon_port') -> action=turn_left."
+   },
+   "commanded_heading_deg": 330.0,
+   "reasoning_raw": "MPC: best 6-step rollout commits to a first-step offset of -30 deg (cost=0.293, min clearance 1305m vs contact 'ts1_headon_port') -> action=turn_left.",
+   "measurement": {
+    "checks_fired": [
+     "B_wrong_direction"
+    ],
+    "details": {
+     "B": {
+      "cited_encounter_rule": "Rule 14",
+      "cited_conduct_rule": "Rule 14",
+      "action": "turn_left"
+     }
+    }
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 9,
+   "time": 90.0,
+   "timestamp": "2026-09-28T15:12:11.919201+00:00",
+   "latency_s": 0.0020084381103515625,
+   "situation_report": "Own-ship at (-0.003, 0.300) NM, heading 356.5, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.700 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is 30 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=30 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2310s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 0.866 NM, relative bearing 6.8 deg, heading 186.0, speed 12.00 kt, CPA 0.030 NM, TCPA 130s",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 90,
+    "heading_deg": 266.5,
+    "encounter_rule": "Rule 15",
+    "conduct_rule": "Rule 16",
+    "reasoning": "MPC: best 6-step rollout commits to a first-step offset of -90 deg (cost=0.362, min clearance 956m vs contact 'ts1_headon_port') -> action=turn_left."
+   },
+   "commanded_heading_deg": 266.5,
+   "reasoning_raw": "MPC: best 6-step rollout commits to a first-step offset of -90 deg (cost=0.362, min clearance 956m vs contact 'ts1_headon_port') -> action=turn_left.",
+   "measurement": {
+    "checks_fired": [
+     "B_wrong_direction"
+    ],
+    "details": {
+     "B": {
+      "cited_encounter_rule": "Rule 15",
+      "cited_conduct_rule": "Rule 16",
+      "action": "turn_left"
+     }
+    }
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 12,
+   "time": 120.0,
+   "timestamp": "2026-09-28T15:12:11.921407+00:00",
+   "latency_s": 0.0018849372863769531,
+   "situation_report": "Own-ship at (-0.019, 0.399) NM, heading 347.7, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.601 NM away, bearing 0.1 deg.\nGOAL COURSE CHECK: heading is 94 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=94 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 2280s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 0.668 NM, relative bearing 16.9 deg, heading 186.0, speed 12.00 kt, CPA 0.090 NM, TCPA 101s\n    If own-ship turned to the GOAL COURSE CHECK heading (0.1 deg) now, this contact's CPA would become 0.018 NM, TCPA 100s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 75,
+    "heading_deg": 272.7,
+    "encounter_rule": "Rule 15",
+    "conduct_rule": "Rule 16",
+    "reasoning": "MPC: best 6-step rollout commits to a first-step offset of -75 deg (cost=0.385, min clearance 597m vs contact 'ts1_headon_port') -> action=turn_left."
+   },
+   "commanded_heading_deg": 272.7,
+   "reasoning_raw": "MPC: best 6-step rollout commits to a first-step offset of -75 deg (cost=0.385, min clearance 597m vs contact 'ts1_headon_port') -> action=turn_left.",
+   "measurement": {
+    "checks_fired": [
+     "B_wrong_direction"
+    ],
+    "details": {
+     "B": {
+      "cited_encounter_rule": "Rule 15",
+      "cited_conduct_rule": "Rule 16",
+      "action": "turn_left"
+     }
+    }
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 15,
+   "time": 150.0,
+   "timestamp": "2026-09-28T15:12:11.923519+00:00",
+   "latency_s": 0.0018301010131835938,
+   "situation_report": "Own-ship at (-0.053, 0.492) NM, heading 336.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.508 NM away, bearing 0.4 deg.\nGOAL COURSE CHECK: heading is 88 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=88 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 2252s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 0.501 NM, relative bearing 36.5 deg, heading 121.0, speed 12.00 kt, CPA 0.405 NM, TCPA 46s\n    If own-ship turned to the GOAL COURSE CHECK heading (0.4 deg) now, this contact's CPA would become 0.334 NM, TCPA 64s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 15,
+    "heading_deg": 321.1,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset -15 deg (cost=0.244)."
+   },
+   "commanded_heading_deg": 321.1,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset -15 deg (cost=0.244).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 25,
+   "time": 250.0,
+   "timestamp": "2026-09-28T15:12:11.926104+00:00",
+   "latency_s": 0.0017015933990478516,
+   "situation_report": "Own-ship at (-0.271, 0.742) NM, heading 315.0, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.263 NM away, bearing 2.1 deg.\nGOAL COURSE CHECK: heading is 41 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=41 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 2179s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 0.616 NM, relative bearing 128.8 deg, heading 121.0, speed 12.00 kt, CPA 0.616 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (2.2 deg) now, this contact's CPA would become 0.616 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 60,
+    "heading_deg": 255.0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset -60 deg (cost=0.501)."
+   },
+   "commanded_heading_deg": 255.0,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset -60 deg (cost=0.501).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 35,
+   "time": 350.0,
+   "timestamp": "2026-09-28T15:12:11.928861+00:00",
+   "latency_s": 0.0017011165618896484,
+   "situation_report": "Own-ship at (-0.534, 0.942) NM, heading 292.7, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.079 NM away, bearing 4.3 deg.\nGOAL COURSE CHECK: heading is 109 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=109 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 2124s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 1.201 NM, relative bearing 171.9 deg, heading 121.0, speed 12.00 kt, CPA 1.201 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (4.3 deg) now, this contact's CPA would become 1.201 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 90,
+    "heading_deg": 22.7,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 90 deg (cost=0.344)."
+   },
+   "commanded_heading_deg": 22.7,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 90 deg (cost=0.344).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 45,
+   "time": 450.0,
+   "timestamp": "2026-09-28T15:12:11.931867+00:00",
+   "latency_s": 0.0016913414001464844,
+   "situation_report": "Own-ship at (-0.842, 1.065) NM, heading 302.6, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 6.985 NM away, bearing 6.9 deg.\nGOAL COURSE CHECK: heading is 16 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=16 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2096s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 1.855 NM, relative bearing 166.2 deg, heading 121.0, speed 12.00 kt, CPA 1.855 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (6.9 deg) now, this contact's CPA would become 1.855 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 90,
+    "heading_deg": 32.6,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 90 deg (cost=0.359)."
+   },
+   "commanded_heading_deg": 32.6,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 90 deg (cost=0.359).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 55,
+   "time": 550.0,
+   "timestamp": "2026-09-28T15:12:11.935098+00:00",
+   "latency_s": 0.0017168521881103516,
+   "situation_report": "Own-ship at (-1.022, 1.336) NM, heading 347.3, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 6.742 NM away, bearing 8.7 deg.\nGOAL COURSE CHECK: heading is 24 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=24 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2023s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 2.453 NM, relative bearing 127.8 deg, heading 121.0, speed 12.00 kt, CPA 2.453 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (8.7 deg) now, this contact's CPA would become 2.453 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 90,
+    "heading_deg": 77.3,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 90 deg (cost=0.284)."
+   },
+   "commanded_heading_deg": 77.3,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 90 deg (cost=0.284).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 65,
+   "time": 650.0,
+   "timestamp": "2026-09-28T15:12:11.938539+00:00",
+   "latency_s": 0.0016970634460449219,
+   "situation_report": "Own-ship at (-0.942, 1.649) NM, heading 36.6, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 6.420 NM away, bearing 8.4 deg.\nGOAL COURSE CHECK: heading is 69 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=69 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 1926s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 2.867 NM, relative bearing 85.6 deg, heading 121.0, speed 12.00 kt, CPA 2.867 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (8.4 deg) now, this contact's CPA would become 2.867 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 15,
+    "heading_deg": 51.6,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 15 deg (cost=0.285)."
+   },
+   "commanded_heading_deg": 51.6,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 15 deg (cost=0.285).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 75,
+   "time": 750.0,
+   "timestamp": "2026-09-28T15:12:11.942190+00:00",
+   "latency_s": 0.001703500747680664,
+   "situation_report": "Own-ship at (-0.671, 1.839) NM, heading 57.9, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 6.197 NM away, bearing 6.2 deg.\nGOAL COURSE CHECK: heading is 45 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=45 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 1859s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 3.086 NM, relative bearing 69.9 deg, heading 121.0, speed 12.00 kt, CPA 3.086 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (6.2 deg) now, this contact's CPA would become 3.086 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 15,
+    "heading_deg": 72.9,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 15 deg (cost=0.514)."
+   },
+   "commanded_heading_deg": 72.9,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 15 deg (cost=0.514).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 85,
+   "time": 850.0,
+   "timestamp": "2026-09-28T15:12:11.946119+00:00",
+   "latency_s": 0.0017392635345458984,
+   "situation_report": "Own-ship at (-0.373, 1.984) NM, heading 75.3, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 6.028 NM away, bearing 3.5 deg.\nGOAL COURSE CHECK: heading is 69 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=69 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 1808s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 3.280 NM, relative bearing 56.9 deg, heading 121.0, speed 12.00 kt, CPA 3.280 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (3.5 deg) now, this contact's CPA would become 3.280 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 75,
+    "heading_deg": 0.3,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset -75 deg (cost=0.342)."
+   },
+   "commanded_heading_deg": 0.3,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset -75 deg (cost=0.342).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 95,
+   "time": 950.0,
+   "timestamp": "2026-09-28T15:12:11.950150+00:00",
+   "latency_s": 0.0015735626220703125,
+   "situation_report": "Own-ship at (-0.063, 2.101) NM, heading 55.7, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 5.900 NM away, bearing 0.6 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1770s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 3.464 NM, relative bearing 80.3 deg, heading 121.0, speed 12.00 kt, CPA 3.464 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (0.6 deg) now, this contact's CPA would become 3.464 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 60,
+    "heading_deg": 355.7,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset -60 deg (cost=0.172)."
+   },
+   "commanded_heading_deg": 355.7,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset -60 deg (cost=0.172).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 105,
+   "time": 1050.0,
+   "timestamp": "2026-09-28T15:12:11.954463+00:00",
+   "latency_s": 0.0015766620635986328,
+   "situation_report": "Own-ship at (0.104, 2.378) NM, heading 9.8, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 5.623 NM away, bearing 358.9 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1687s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 3.876 NM, relative bearing 129.6 deg, heading 121.0, speed 12.00 kt, CPA 3.876 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (359.0 deg) now, this contact's CPA would become 3.876 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 15,
+    "heading_deg": 354.8,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset -15 deg (cost=0.059)."
+   },
+   "commanded_heading_deg": 354.8,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset -15 deg (cost=0.059).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 115,
+   "time": 1150.0,
+   "timestamp": "2026-09-28T15:12:11.958928+00:00",
+   "latency_s": 0.0016217231750488281,
+   "situation_report": "Own-ship at (0.056, 2.706) NM, heading 348.6, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 5.294 NM away, bearing 359.4 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1588s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 4.473 NM, relative bearing 151.7 deg, heading 121.0, speed 12.00 kt, CPA 4.473 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (359.4 deg) now, this contact's CPA would become 4.473 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 15,
+    "heading_deg": 3.6,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 15 deg (cost=0.059)."
+   },
+   "commanded_heading_deg": 3.6,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 15 deg (cost=0.059).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 125,
+   "time": 1250.0,
+   "timestamp": "2026-09-28T15:12:11.963698+00:00",
+   "latency_s": 0.0016739368438720703,
+   "situation_report": "Own-ship at (0.066, 3.037) NM, heading 9.2, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 4.963 NM away, bearing 359.2 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1489s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 5.037 NM, relative bearing 132.4 deg, heading 121.0, speed 12.00 kt, CPA 5.037 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (359.3 deg) now, this contact's CPA would become 5.037 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 15,
+    "heading_deg": 354.2,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset -15 deg (cost=0.067)."
+   },
+   "commanded_heading_deg": 354.2,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset -15 deg (cost=0.067).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 135,
+   "time": 1350.0,
+   "timestamp": "2026-09-28T15:12:11.969088+00:00",
+   "latency_s": 0.001975536346435547,
+   "situation_report": "Own-ship at (0.059, 3.368) NM, heading 349.4, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 4.632 NM away, bearing 359.3 deg.\nGOAL COURSE CHECK: heading is 5 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=5 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 1390s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 5.614 NM, relative bearing 153.0 deg, heading 121.0, speed 12.00 kt, CPA 5.614 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (359.3 deg) now, this contact's CPA would become 5.614 NM, TCPA 0s.",
+   "decision": {
+    "action": "hold_course",
+    "degrees": null,
+    "heading_deg": null,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 0 deg (cost=0.091)."
+   },
+   "commanded_heading_deg": 354.2,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 0 deg (cost=0.091).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 145,
+   "time": 1450.0,
+   "timestamp": "2026-09-28T15:12:11.974618+00:00",
+   "latency_s": 0.0019142627716064453,
+   "situation_report": "Own-ship at (0.014, 3.698) NM, heading 355.9, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 4.302 NM away, bearing 359.8 deg.\nGOAL COURSE CHECK: heading is 6 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=6 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 1291s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 6.213 NM, relative bearing 146.9 deg, heading 121.0, speed 12.00 kt, CPA 6.213 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 15,
+    "heading_deg": 340.9,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset -15 deg (cost=0.097)."
+   },
+   "commanded_heading_deg": 340.9,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset -15 deg (cost=0.097).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 155,
+   "time": 1550.0,
+   "timestamp": "2026-09-28T15:12:11.980428+00:00",
+   "latency_s": 0.001840353012084961,
+   "situation_report": "Own-ship at (-0.064, 4.020) NM, heading 336.5, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 3.981 NM away, bearing 0.9 deg.\nGOAL COURSE CHECK: heading is 20 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=20 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 1194s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 6.826 NM, relative bearing 166.4 deg, heading 121.0, speed 12.00 kt, CPA 6.826 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (0.9 deg) now, this contact's CPA would become 6.826 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 15,
+    "heading_deg": 321.5,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset -15 deg (cost=0.337)."
+   },
+   "commanded_heading_deg": 321.5,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset -15 deg (cost=0.337).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 165,
+   "time": 1650.0,
+   "timestamp": "2026-09-28T15:12:11.986379+00:00",
+   "latency_s": 0.0018048286437988281,
+   "situation_report": "Own-ship at (-0.256, 4.289) NM, heading 316.2, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 3.720 NM away, bearing 4.0 deg.\nGOAL COURSE CHECK: heading is 42 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=42 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 1116s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 7.467 NM, relative bearing -174.2 deg, heading 121.0, speed 12.00 kt, CPA 7.467 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (3.9 deg) now, this contact's CPA would become 7.467 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 60,
+    "heading_deg": 256.2,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset -60 deg (cost=0.503)."
+   },
+   "commanded_heading_deg": 256.2,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset -60 deg (cost=0.503).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 175,
+   "time": 1750.0,
+   "timestamp": "2026-09-28T15:12:11.992360+00:00",
+   "latency_s": 0.0017240047454833984,
+   "situation_report": "Own-ship at (-0.530, 4.471) NM, heading 287.3, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 3.568 NM away, bearing 8.5 deg.\nGOAL COURSE CHECK: heading is 112 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=112 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 1070s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 8.094 NM, relative bearing -146.9 deg, heading 121.0, speed 12.00 kt, CPA 8.094 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (8.5 deg) now, this contact's CPA would become 8.094 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 90,
+    "heading_deg": 17.3,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 90 deg (cost=0.422)."
+   },
+   "commanded_heading_deg": 17.3,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 90 deg (cost=0.422).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 185,
+   "time": 1850.0,
+   "timestamp": "2026-09-28T15:12:12.001716+00:00",
+   "latency_s": 0.0027265548706054688,
+   "situation_report": "Own-ship at (-0.850, 4.562) NM, heading 296.3, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 3.541 NM away, bearing 13.9 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 1062s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 8.687 NM, relative bearing -157.9 deg, heading 121.0, speed 12.00 kt, CPA 8.687 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (13.8 deg) now, this contact's CPA would become 8.687 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 75,
+    "heading_deg": 11.3,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 75 deg (cost=0.257)."
+   },
+   "commanded_heading_deg": 11.3,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 75 deg (cost=0.257).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 195,
+   "time": 1950.0,
+   "timestamp": "2026-09-28T15:12:12.009923+00:00",
+   "latency_s": 0.0028951168060302734,
+   "situation_report": "Own-ship at (-1.058, 4.811) NM, heading 340.9, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 3.360 NM away, bearing 18.4 deg.\nGOAL COURSE CHECK: heading is 7 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=7 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 1008s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 9.330 NM, relative bearing 157.0 deg, heading 121.0, speed 12.00 kt, CPA 9.330 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (18.4 deg) now, this contact's CPA would become 9.330 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 15,
+    "heading_deg": 355.9,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 15 deg (cost=0.170)."
+   },
+   "commanded_heading_deg": 355.9,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 15 deg (cost=0.170).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 205,
+   "time": 2050.0,
+   "timestamp": "2026-09-28T15:12:12.016606+00:00",
+   "latency_s": 0.001767873764038086,
+   "situation_report": "Own-ship at (-1.064, 5.143) NM, heading 2.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 3.049 NM away, bearing 20.4 deg.\nGOAL COURSE CHECK: heading is 25 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=24 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 915s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 9.899 NM, relative bearing 136.4 deg, heading 121.0, speed 12.00 kt, CPA 9.899 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (20.4 deg) now, this contact's CPA would become 9.899 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 60,
+    "heading_deg": 302.1,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset -60 deg (cost=0.365)."
+   },
+   "commanded_heading_deg": 302.1,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset -60 deg (cost=0.365).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 215,
+   "time": 2150.0,
+   "timestamp": "2026-09-28T15:12:12.023725+00:00",
+   "latency_s": 0.002063751220703125,
+   "situation_report": "Own-ship at (-1.148, 5.459) NM, heading 326.9, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 2.789 NM away, bearing 24.3 deg.\nGOAL COURSE CHECK: heading is 82 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=82 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 837s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 10.510 NM, relative bearing 171.9 deg, heading 121.0, speed 12.00 kt, CPA 10.510 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (24.3 deg) now, this contact's CPA would become 10.510 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 30,
+    "heading_deg": 356.9,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 30 deg (cost=0.246)."
+   },
+   "commanded_heading_deg": 356.9,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 30 deg (cost=0.246).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 225,
+   "time": 2250.0,
+   "timestamp": "2026-09-28T15:12:12.031301+00:00",
+   "latency_s": 0.001817941665649414,
+   "situation_report": "Own-ship at (-1.339, 5.731) NM, heading 335.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 2.635 NM away, bearing 30.5 deg.\nGOAL COURSE CHECK: heading is 34 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=34 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 791s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 11.158 NM, relative bearing 163.4 deg, heading 121.0, speed 12.00 kt, CPA 11.158 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (30.6 deg) now, this contact's CPA would become 11.158 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 30,
+    "heading_deg": 305.1,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset -30 deg (cost=0.521)."
+   },
+   "commanded_heading_deg": 305.1,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset -30 deg (cost=0.521).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 235,
+   "time": 2350.0,
+   "timestamp": "2026-09-28T15:12:12.038975+00:00",
+   "latency_s": 0.0018184185028076172,
+   "situation_report": "Own-ship at (-1.482, 6.030) NM, heading 323.3, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 2.465 NM away, bearing 37.0 deg.\nGOAL COURSE CHECK: heading is 92 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=92 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 740s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 11.795 NM, relative bearing 175.1 deg, heading 121.0, speed 12.00 kt, CPA 11.795 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (36.9 deg) now, this contact's CPA would become 11.795 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 45,
+    "heading_deg": 8.3,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 45 deg (cost=0.311)."
+   },
+   "commanded_heading_deg": 8.3,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 45 deg (cost=0.311).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 245,
+   "time": 2450.0,
+   "timestamp": "2026-09-28T15:12:12.050031+00:00",
+   "latency_s": 0.004354953765869141,
+   "situation_report": "Own-ship at (-1.679, 6.297) NM, heading 334.6, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 2.392 NM away, bearing 44.6 deg.\nGOAL COURSE CHECK: heading is 36 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=36 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 718s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 12.443 NM, relative bearing 163.5 deg, heading 121.0, speed 12.00 kt, CPA 12.443 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (44.6 deg) now, this contact's CPA would become 12.443 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 15,
+    "heading_deg": 319.6,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset -15 deg (cost=0.542)."
+   },
+   "commanded_heading_deg": 319.6,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset -15 deg (cost=0.542).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 255,
+   "time": 2550.0,
+   "timestamp": "2026-09-28T15:12:12.063701+00:00",
+   "latency_s": 0.004595279693603516,
+   "situation_report": "Own-ship at (-1.823, 6.596) NM, heading 323.5, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 2.301 NM away, bearing 52.4 deg.\nGOAL COURSE CHECK: heading is 93 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=93 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 690s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 13.080 NM, relative bearing 174.6 deg, heading 121.0, speed 12.00 kt, CPA 13.080 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (52.4 deg) now, this contact's CPA would become 13.080 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 45,
+    "heading_deg": 8.5,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 45 deg (cost=0.385)."
+   },
+   "commanded_heading_deg": 8.5,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 45 deg (cost=0.385).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 265,
+   "time": 2650.0,
+   "timestamp": "2026-09-28T15:12:12.074961+00:00",
+   "latency_s": 0.001974821090698242,
+   "situation_report": "Own-ship at (-2.012, 6.868) NM, heading 336.8, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 2.309 NM away, bearing 60.6 deg.\nGOAL COURSE CHECK: heading is 52 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=52 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 693s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 13.728 NM, relative bearing 161.0 deg, heading 121.0, speed 12.00 kt, CPA 13.728 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (60.6 deg) now, this contact's CPA would become 13.728 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 90,
+    "heading_deg": 66.8,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 90 deg (cost=0.382)."
+   },
+   "commanded_heading_deg": 66.8,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 90 deg (cost=0.382).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 275,
+   "time": 2750.0,
+   "timestamp": "2026-09-28T15:12:12.089645+00:00",
+   "latency_s": 0.0016982555389404297,
+   "situation_report": "Own-ship at (-2.007, 7.193) NM, heading 22.0, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 2.164 NM away, bearing 68.1 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 649s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 14.285 NM, relative bearing 116.4 deg, heading 121.0, speed 12.00 kt, CPA 14.285 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (68.1 deg) now, this contact's CPA would become 14.285 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 45,
+    "heading_deg": 67.0,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 45 deg (cost=0.116)."
+   },
+   "commanded_heading_deg": 67.0,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 45 deg (cost=0.116).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 285,
+   "time": 2850.0,
+   "timestamp": "2026-09-28T15:12:12.097897+00:00",
+   "latency_s": 0.0016803741455078125,
+   "situation_report": "Own-ship at (-1.764, 7.406) NM, heading 69.9, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 1.861 NM away, bearing 71.4 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 558s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 14.602 NM, relative bearing 69.4 deg, heading 121.0, speed 12.00 kt, CPA 14.602 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": null,
+    "heading_deg": null,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 0 deg (cost=0.018)."
+   },
+   "commanded_heading_deg": 67.0,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 0 deg (cost=0.018).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 295,
+   "time": 2950.0,
+   "timestamp": "2026-09-28T15:12:12.106776+00:00",
+   "latency_s": 0.0016937255859375,
+   "situation_report": "Own-ship at (-1.447, 7.507) NM, heading 66.4, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 1.528 NM away, bearing 71.2 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 459s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 14.790 NM, relative bearing 73.6 deg, heading 121.0, speed 12.00 kt, CPA 14.790 NM, TCPA 0s (already past closest point, ranges now increasing)",
+   "decision": {
+    "action": "hold_course",
+    "degrees": null,
+    "heading_deg": null,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 0 deg (cost=0.057)."
+   },
+   "commanded_heading_deg": 67.0,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 0 deg (cost=0.057).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 305,
+   "time": 3050.0,
+   "timestamp": "2026-09-28T15:12:12.118888+00:00",
+   "latency_s": 0.003146648406982422,
+   "situation_report": "Own-ship at (-1.145, 7.648) NM, heading 67.0, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 1.198 NM away, bearing 72.9 deg.\nGOAL COURSE CHECK: heading is 6 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=6 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 359s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 15.021 NM, relative bearing 73.8 deg, heading 121.0, speed 12.00 kt, CPA 15.021 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (72.9 deg) now, this contact's CPA would become 15.021 NM, TCPA 0s.",
+   "decision": {
+    "action": "hold_course",
+    "degrees": null,
+    "heading_deg": null,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 0 deg (cost=0.109)."
+   },
+   "commanded_heading_deg": 67.0,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 0 deg (cost=0.109).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 315,
+   "time": 3150.0,
+   "timestamp": "2026-09-28T15:12:12.133817+00:00",
+   "latency_s": 0.003996133804321289,
+   "situation_report": "Own-ship at (-0.836, 7.774) NM, heading 67.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 0.866 NM away, bearing 74.9 deg.\nGOAL COURSE CHECK: heading is 8 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=8 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 260s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 15.238 NM, relative bearing 74.5 deg, heading 121.0, speed 12.00 kt, CPA 15.238 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (74.9 deg) now, this contact's CPA would become 15.238 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 15,
+    "heading_deg": 52.1,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset -15 deg (cost=0.150)."
+   },
+   "commanded_heading_deg": 52.1,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset -15 deg (cost=0.150).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 325,
+   "time": 3250.0,
+   "timestamp": "2026-09-28T15:12:12.151419+00:00",
+   "latency_s": 0.0022954940795898438,
+   "situation_report": "Own-ship at (-0.560, 7.957) NM, heading 47.2, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 0.562 NM away, bearing 85.6 deg.\nGOAL COURSE CHECK: heading is 34 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=34 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 169s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 15.524 NM, relative bearing 95.2 deg, heading 121.0, speed 12.00 kt, CPA 15.524 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (85.6 deg) now, this contact's CPA would become 15.524 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 60,
+    "heading_deg": 347.2,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset -60 deg (cost=0.489)."
+   },
+   "commanded_heading_deg": 347.2,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset -60 deg (cost=0.489).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 335,
+   "time": 3350.0,
+   "timestamp": "2026-09-28T15:12:12.161146+00:00",
+   "latency_s": 0.0017461776733398438,
+   "situation_report": "Own-ship at (-0.380, 8.231) NM, heading 16.5, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 0.445 NM away, bearing 121.4 deg.\nGOAL COURSE CHECK: heading is 134 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=134 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 133s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 15.943 NM, relative bearing 126.6 deg, heading 121.0, speed 12.00 kt, CPA 15.943 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (121.3 deg) now, this contact's CPA would become 14.791 NM, TCPA 326575s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 60,
+    "heading_deg": 76.5,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 60 deg (cost=0.882)."
+   },
+   "commanded_heading_deg": 76.5,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 60 deg (cost=0.882).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 345,
+   "time": 3450.0,
+   "timestamp": "2026-09-28T15:12:12.171167+00:00",
+   "latency_s": 0.0018186569213867188,
+   "situation_report": "Own-ship at (-0.294, 8.552) NM, heading 25.3, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 0.626 NM away, bearing 151.9 deg.\nGOAL COURSE CHECK: heading is 75 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=75 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 188s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 16.457 NM, relative bearing 118.3 deg, heading 121.0, speed 12.00 kt, CPA 16.457 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (152.0 deg) now, this contact's CPA would become 16.333 NM, TCPA 1135s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 75,
+    "heading_deg": 100.3,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 75 deg (cost=0.940)."
+   },
+   "commanded_heading_deg": 100.3,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 75 deg (cost=0.940).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 355,
+   "time": 3550.0,
+   "timestamp": "2026-09-28T15:12:12.181199+00:00",
+   "latency_s": 0.0018062591552734375,
+   "situation_report": "Own-ship at (-0.050, 8.766) NM, heading 69.8, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 0.767 NM away, bearing 176.3 deg.\nGOAL COURSE CHECK: heading is 76 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=76 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 230s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 16.793 NM, relative bearing 74.4 deg, heading 121.0, speed 12.00 kt, CPA 16.793 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (176.3 deg) now, this contact's CPA would become 16.793 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 75,
+    "heading_deg": 144.8,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 75 deg (cost=0.707)."
+   },
+   "commanded_heading_deg": 144.8,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 75 deg (cost=0.707).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  },
+  {
+   "step": 365,
+   "time": 3650.0,
+   "timestamp": "2026-09-28T15:12:12.191617+00:00",
+   "latency_s": 0.0017726421356201172,
+   "situation_report": "Own-ship at (0.271, 8.728) NM, heading 119.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 0.776 NM away, bearing 200.5 deg.\nGOAL COURSE CHECK: heading is 56 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=56 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 233s if heading straight there.\n1 other ship:\n  - Other ship 1: named \"ts1_headon_port\", range 16.881 NM, relative bearing 25.5 deg, heading 121.0, speed 12.00 kt, CPA 16.881 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (200.5 deg) now, this contact's CPA would become 16.881 NM, TCPA 0s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 75,
+    "heading_deg": 194.1,
+    "encounter_rule": "none",
+    "conduct_rule": "none",
+    "reasoning": "No contact meets real_risk() -- MPC rollout best first-step offset 75 deg (cost=0.379)."
+   },
+   "commanded_heading_deg": 194.1,
+   "reasoning_raw": "No contact meets real_risk() -- MPC rollout best first-step offset 75 deg (cost=0.379).",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "baseline_mpc"
+   },
+   "decision_interval_steps": 10,
+   "decision_interval_s": 100.0
+  }
+ ]
+}

@@ -79,6 +79,24 @@ TABLE4 = {
 # target at 6.000 NM (12.0kt x 0.5h) -- see module docstring.
 SLOW_TARGET_CASES = {3, 7, 15, 16, 17, 20, 22}
 
+# 2026-09-28: Table 4 itself contains exact geometric duplicates -- confirmed via a direct
+# scan (sorted per-target (position, heading, speed) tuples, so target ORDER within a case
+# doesn't hide a match) of every one of TABLE4's 22 entries against every other:
+#   - cases 5 and 8: identical target list, identical order.
+#   - cases 15 and 22: identical target list, identical order (both also in
+#     SLOW_TARGET_CASES, applying the same slow speed to the same first target).
+#   - cases 6 and 12: the SAME two targets, listed in reversed order (ts1/ts2 swapped) --
+#     geometrically the same combined scenario regardless of which target is labelled ts1.
+# Not a transcription slip on this project's part -- these really are published with the
+# same target geometry. Cases 8 and 22 (exact duplicates of 5 and 15) are REMOVED entirely
+# (2026-09-28, explicit user request) -- not generated, not scored, not averaged, in any
+# model or baseline. Case 12 is KEPT (its targets are only equivalent up to relabelling,
+# not byte-identical to 6) but still tagged via the informational `"duplicate_of"` JSON key
+# so cross-mission table aggregates (app/sweep_dashboard.py) can exclude it from averages;
+# see app/missions.py's duplicate_of().
+DUPLICATE_OF = {12: 6}
+REMOVED_CASES = {8, 22}  # exact duplicates of 5 and 15 -- not generated at all
+
 RULE_MAP = {
     "head_on": ["Rule 14"],
     "crossing_stbd": ["Rule 15", "Rule 16"],
@@ -227,11 +245,17 @@ def build_mission(case_num: int) -> dict:
                     "heading_deg": OWN_HEADING_DEG, "speed_kn": own_speed},
         "goal": {"x_nm": GOAL_NM[0], "y_nm": GOAL_NM[1]},
         "targets": targets_json,
+        **({"duplicate_of": f"Imazu{DUPLICATE_OF[case_num]:02d}"} if case_num in DUPLICATE_OF else {}),
     }
 
 
 if __name__ == "__main__":
+    _removed_originals = {8: 5, 22: 15}  # informational only, for the skip message below
     for case_num in range(1, 23):
+        if case_num in REMOVED_CASES:
+            print(f"skipped Imazu{case_num:02d}: exact duplicate of "
+                  f"Imazu{_removed_originals[case_num]:02d} -- removed entirely")
+            continue
         mission = build_mission(case_num)
         out_path = OUT_DIR / f"Imazu{case_num:02d}.json"
         out_path.write_text(json.dumps(mission, indent=2, ensure_ascii=False) + "\n",

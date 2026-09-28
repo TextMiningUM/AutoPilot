@@ -46,6 +46,13 @@ OWN_START_NM = (0.0, -6.0)   # Sawada (X=-6, Y=0) -> our (x_nm=Y=0, y_nm=X=-6)
 GOAL_NM = (0.0, 6.0)         # Sawada (X=6, Y=0)
 TOL = 0.001
 
+# Cases 8 and 22 are EXACT duplicates of cases 5 and 15 respectively in Table 4 itself
+# (confirmed 2026-09-28) -- removed entirely from Data/missions (not generated, not scored,
+# not averaged, in any model or baseline), per explicit user request. Skipped in every loop
+# below rather than asserting their presence; TABLE4 above still keeps the full 22 rows
+# since it's an independent transcription of the PAPER, not a claim about which files exist.
+REMOVED_CASES = {8, 22}
+
 
 def _load(case: int) -> dict:
     return json.loads((MISSIONS_DIR / f"Imazu{case:02d}.json").read_text(encoding="utf-8"))
@@ -53,11 +60,20 @@ def _load(case: int) -> dict:
 
 def test_all_22_cases_exist() -> None:
     for case in range(1, 23):
+        if case in REMOVED_CASES:
+            continue
         assert (MISSIONS_DIR / f"Imazu{case:02d}.json").is_file(), case
+
+
+def test_removed_duplicate_cases_do_not_exist() -> None:
+    for case in REMOVED_CASES:
+        assert not (MISSIONS_DIR / f"Imazu{case:02d}.json").exists(), case
 
 
 def test_own_ship_and_goal_identical_across_all_cases() -> None:
     for case in range(1, 23):
+        if case in REMOVED_CASES:
+            continue
         d = _load(case)
         own = d["own_ship"]
         assert own["x_nm"] == OWN_START_NM[0], case
@@ -70,6 +86,8 @@ def test_own_ship_and_goal_identical_across_all_cases() -> None:
 
 def test_targets_match_table4_exactly() -> None:
     for case, targets in TABLE4.items():
+        if case in REMOVED_CASES:
+            continue
         d = _load(case)
         assert len(d["targets"]) == len(targets), case
         for i, (sawada_x, sawada_y, heading) in enumerate(targets):
@@ -96,6 +114,8 @@ def test_case2_ts1_documents_its_heading_correction() -> None:
 
 def test_slow_targets_are_exactly_the_expected_seven_cases() -> None:
     for case in range(1, 23):
+        if case in REMOVED_CASES:
+            continue
         d = _load(case)
         ts1_speed = d["targets"][0]["speed_kn"]
         if case in SLOW_TARGET_CASES:

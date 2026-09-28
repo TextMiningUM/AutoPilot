@@ -142,6 +142,23 @@ def load_mission(mission_id: str, missions_dir: Path = MISSIONS_DIR) -> Mission:
     return mission_from_dict(d)
 
 
+def duplicate_of(mission_id: str, missions_dir: Path = MISSIONS_DIR) -> str | None:
+    """Returns the mission id this one is a KNOWN geometric duplicate of (e.g. Imazu06/
+    Imazu12 -- same two targets, listed in reversed order, in Sawada et al.'s own Table 4,
+    see generate_imazu_missions.py's own docstring), or None -- an optional, purely
+    informational `"duplicate_of"` key on the raw on-disk JSON (mission_from_dict()/Mission
+    deliberately never carries it, so it never round-trips into a run log's embedded
+    mission). 2026-09-28 addition, so tabel-level aggregates (app/sweep_dashboard.py) can
+    exclude a duplicate from cross-mission averages without deleting/renaming the file
+    (which would break any already-generated run log referencing it). EXACT duplicates
+    (Imazu08 of Imazu05, Imazu22 of Imazu15) are instead removed entirely -- see
+    generate_imazu_missions.py's REMOVED_CASES."""
+    path = missions_dir / f"{mission_id}.json"
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8")).get("duplicate_of")
+
+
 def list_mission_ids(missions_dir: Path = MISSIONS_DIR) -> list[str]:
     return sorted(p.stem for p in missions_dir.glob("*.json"))
 
