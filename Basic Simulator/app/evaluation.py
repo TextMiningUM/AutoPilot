@@ -107,7 +107,13 @@ def _check_wrong_side_pass(trajectory_rows: list[dict], own_vehicle: str) -> lis
         the contact must be on own's own PORT side (rel_bearing < 0) at closest approach.
       - crossing, own give-way (Rule 15, contact on own's starboard side): own must pass
         BEHIND the contact -- projecting the contact's position onto own's own course
-        vector at closest approach must be non-positive (not still ahead along-track)."""
+        vector at closest approach must be non-positive (not still ahead along-track).
+      - we_are_overtaking_target (Rule 13, own is the overtaking give-way vessel, 2026-09-28
+        addition -- "give-way crosses ahead" gap): the SAME along-track projection check as
+        the crossing case above -- this project's own established pass-criteria wording
+        (generate_imazu_missions.py's CRITERIA_MAP, generate_impossible_missions.py's IMP04)
+        already states the overtaking give-way vessel "does not cut in front until finally
+        past and clear", but nothing enforced it here before this addition."""
     from pipeline.oow_agent_spec import classify_encounter
 
     by_vehicle: dict[str, list[dict]] = {}
@@ -134,7 +140,9 @@ def _check_wrong_side_pass(trajectory_rows: list[dict], own_vehicle: str) -> lis
         if enc == "head_on":
             if rel >= 0:  # contact ended up on own's STARBOARD side at closest approach
                 findings.append(("P_wrong_side_pass", vname))
-        elif enc == "crossing_target_on_starboard":  # own is the give-way vessel
+        elif enc in ("crossing_target_on_starboard", "we_are_overtaking_target"):
+            # own is the give-way vessel in both cases (crossing give-way, or the
+            # overtaking vessel) -- must not still be ahead of the contact along-track.
             oh = math.radians(best_own["heading"])
             course_x, course_y = math.sin(oh), math.cos(oh)
             dx, dy = best_tgt["x"] - best_own["x"], best_tgt["y"] - best_own["y"]

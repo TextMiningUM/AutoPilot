@@ -133,6 +133,11 @@ def decide(mission: Mission, own: Vessel, targets: list[Vessel],
 
     decision = {
         "action": action, "degrees": degrees,
+        # heading_deg (2026-09-28): ABSOLUTE commanded heading -- best_offset is already
+        # relative to own-ship's CURRENT actual heading (see _rollout_cost's own0.heading
+        # usage), so this is idempotent by construction, unlike applying `degrees` on top
+        # of a possibly-stale commanded target_heading. None while holding course.
+        "heading_deg": round((own.heading + best_offset) % 360, 1) if action != "hold_course" else None,
         "encounter_rule": encounter_rule, "conduct_rule": conduct_rule,
         "reasoning": reasoning,
     }

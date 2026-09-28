@@ -508,7 +508,7 @@ def build_oow_prompt(mission: Mission, own: Vessel, targets: list[Vessel], confi
             f"(~{accel_kt_per_min:.2f} kt/min up / ~{decel_kt_per_min:.2f} kt/min down) -- "
             "speed_up/slow_down are not instant. "
         )
-        if getattr(constraints, "kinematics_model", "kinematics") == "nomoto":
+        if getattr(constraints, "kinematics_model", "kinematics") in ("nomoto", "nomoto_v2"):
             # 2026-09-26: Nomoto is a 2nd-order system (rudder-servo lag + yaw-rate lag) --
             # unlike the legacy slew, NO constant deg/s figure describes it honestly, and
             # the turn-time/reference-angle relationship is NOT linear (measured: a 10 deg

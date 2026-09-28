@@ -110,6 +110,11 @@ def decide(mission: Mission, own: Vessel, targets: list[Vessel],
 
     decision = {
         "action": action, "degrees": degrees,
+        # heading_deg (2026-09-28): ABSOLUTE commanded heading -- winning_heading is
+        # already absolute (candidates built around own.heading, see heading_candidates
+        # above), so applying it directly is idempotent, unlike stacking `degrees` on a
+        # possibly-stale commanded target_heading. None for a speed-only/hold_course pick.
+        "heading_deg": round(winning_heading, 1) if action in ("turn_left", "turn_right") else None,
         "encounter_rule": encounter_rule, "conduct_rule": conduct_rule,
         "reasoning": reasoning,
     }

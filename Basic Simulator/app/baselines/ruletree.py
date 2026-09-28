@@ -13,7 +13,8 @@ from app.missions import Mission, Vessel
 from app.narrate import contact_line, narrate
 from app.simulation import VesselConstraints
 from pipeline.oow_agent_spec import (
-    classify_rules, derive_risk_horizon_s, goal_course_action, real_risk, risk_band,
+    bearing_and_range, classify_rules, derive_risk_horizon_s, goal_course_action,
+    real_risk, risk_band,
 )
 
 # Fixed avoidance-turn size for any collision-avoidance manoeuvre this tree orders --
@@ -45,12 +46,23 @@ def decide_action(mission: Mission, own: Vessel, targets: list[Vessel],
     at_risk.sort(key=lambda c: (c["tcpa_s"], c["cpa_m"]))  # most urgent (soonest TCPA) first
     decisive = at_risk[0] if at_risk else None
 
+    # heading_deg (2026-09-28): the ABSOLUTE commanded heading this decision implies,
+    # computed fresh from own-ship's CURRENT ACTUAL heading every call (never from a
+    # possibly-still-in-progress, already-commanded target_heading) -- see
+    # Simulation.apply_action()'s docstring for why this fixes stacking/zigzag under slow
+    # (Nomoto) kinematics: re-deciding "the same" avoidance turn while a prior order hasn't
+    # finished converges toward one stable heading instead of adding another full
+    # AVOIDANCE_TURN_DEG on top each time. None whenever no heading change is ordered.
+    heading_deg = None
     if decisive is None:
         action, degrees = goal_course_action(own.x, own.y, own.heading, mission.goal[0], mission.goal[1],
                                             target_heading=own.target_heading)
         encounter_rule, conduct_rule = "none", "none"
         reasoning = ("No contact meets real_risk() (CPA below safe distance AND TCPA "
                     "inside the risk horizon) -- following GOAL COURSE CHECK.")
+        if action != "hold_course":
+            goal_brg, _ = bearing_and_range(own.x, own.y, mission.goal[0], mission.goal[1])
+            heading_deg = round(goal_brg, 1)
     else:
         band = risk_band(decisive["cpa_m"], decisive["tcpa_s"], safe_distance_m, risk_horizon_s)
         role = _ENCOUNTER_TO_ROLE[decisive["encounter"]]
@@ -72,9 +84,12 @@ def decide_action(mission: Mission, own: Vessel, targets: list[Vessel],
         reasoning = (f"Contact {decisive['name']!r}: {decisive['encounter']} at CPA "
                     f"{decisive['cpa_m']:.0f}m/TCPA {decisive['tcpa_s']:.0f}s (band={band}). "
                     f"Rule-based tree: role={role} -> action={action}.")
+        if action in ("turn_left", "turn_right"):
+            signed = degrees if action == "turn_right" else -degrees
+            heading_deg = round((own.heading + signed) % 360, 1)
 
     return {
-        "action": action, "degrees": degrees,
+        "action": action, "degrees": degrees, "heading_deg": heading_deg,
         "encounter_rule": encounter_rule, "conduct_rule": conduct_rule,
         "reasoning": reasoning,
     }

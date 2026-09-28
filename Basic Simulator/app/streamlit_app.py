@@ -737,13 +737,17 @@ with st.sidebar:
     st.number_input("Turn rate (deg/s)", min_value=0.0, value=3.0, step=0.5, key="ship_turn_rate_deg_s",
                     help="The only actively-enforced limit on how many degrees own-ship's "
                          "heading may change per simulation step.")
-    st.selectbox("Kinematics model", options=["kinematics", "nomoto"], index=0,
+    st.selectbox("Kinematics model", options=["kinematics", "nomoto", "nomoto_v2"], index=0,
                 key="ship_kinematics_model",
                 help="'kinematics' = the turn-rate slew model above (unchanged default). "
                      "'nomoto' = Sawada et al. (2021)'s 2nd-order Nomoto + rudder-servo model "
                      "-- much slower to complete a turn (a 60 deg turn takes ~155s vs ~20s "
-                     "under the slew model). See Docs/nomoto_dynamics_design_and_verification.md.")
-    if st.session_state.get("ship_kinematics_model", "kinematics") == "nomoto":
+                     "under the slew model). 'nomoto_v2' = IDENTICAL Nomoto physics, but a "
+                     "distinct label for runs generated with this session's absolute "
+                     "steering/adaptive-cadence changes (2026-09-28), so they're never "
+                     "confused with the frozen 'nomoto' reference numbers already on disk. "
+                     "See Docs/nomoto_dynamics_design_and_verification.md.")
+    if st.session_state.get("ship_kinematics_model", "kinematics") in ("nomoto", "nomoto_v2"):
         np1, np2 = st.columns(2)
         np1.number_input("Nomoto K (1/s)", min_value=0.001, value=0.05, step=0.01, key="nomoto_K_per_s",
                          format="%.3f")

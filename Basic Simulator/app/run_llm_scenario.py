@@ -156,12 +156,18 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
             # changes `decision`/`sim.apply_action()` below -- purely counted and logged.
             contacts_now = [contact_line(sim.own, t, constraints.min_cpa_m, constraints.max_rudder_angle_deg)
                            for t in sim.targets]
+            sim.apply_action(decision)
             checkpoints.append({
                 "step": step, "time": sim.t,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "latency_s": cp_latency_s,
                 "situation_report": debug.get("situation"),
                 "decision": decision,
+                # The resulting ABSOLUTE commanded heading AFTER this decision was applied
+                # (2026-09-28) -- sim.target_heading, so a zigzag/stacking pattern in the
+                # agent's own relative turn_left/turn_right orders is directly visible in
+                # the report, not just the raw per-step action name.
+                "commanded_heading_deg": round(sim.target_heading, 1),
                 # The FULL raw model output -- every "Wait, ..." / self-correction inside
                 # Qwen3's <think> block, not just the final action -- as its OWN top-level
                 # field (a sibling of "decision", never buried inside "debug"'s grab-bag of
@@ -177,7 +183,6 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
                 "decision_interval_steps": next_interval_steps,
                 "decision_interval_s": next_decision_in_s,
             })
-            sim.apply_action(decision)
             next_decision_step = step + max(1, next_interval_steps)
         sim.step(dt)
         # Check the step JUST recorded (not a forward prediction -- see
@@ -304,10 +309,14 @@ def main() -> None:
                     help="path to a text file with a custom system prompt override "
                          "(default: agents.SYSTEM_OOW_AGENT)")
     ap.add_argument("--force", action="store_true", help="overwrite existing logs")
-    ap.add_argument("--kinematics-model", default="kinematics", choices=["kinematics", "nomoto"],
+    ap.add_argument("--kinematics-model", default="kinematics", choices=["kinematics", "nomoto", "nomoto_v2"],
                     help="own-ship heading dynamics: legacy turn-rate slew (default, "
-                         "unchanged) or Sawada et al. (2021)'s Nomoto model (opt-in, see "
-                         "app.simulation.VesselConstraints)")
+                         "unchanged), Sawada et al. (2021)'s Nomoto model (opt-in, see "
+                         "app.simulation.VesselConstraints), or 'nomoto_v2' -- IDENTICAL "
+                         "Nomoto physics to 'nomoto', but a distinct label for runs "
+                         "generated with this session's absolute steering/adaptive-cadence "
+                         "changes, so they're never confused with the frozen 'nomoto' "
+                         "reference numbers already on disk")
     ap.add_argument("--explain", action="store_true",
                     help="also ask Anthropic Claude for a plain-language explanation of the "
                          "deterministic compliance findings (one network call + latency per run, "

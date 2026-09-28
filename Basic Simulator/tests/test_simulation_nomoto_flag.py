@@ -53,3 +53,18 @@ def test_unrecognised_kinematics_model_value_falls_back_to_legacy():
     sim.turn_right(90.0)
     sim.step(dt=10.0)
     assert sim.own.heading == pytest.approx((start_heading + 30.0) % 360, abs=1e-6)
+
+
+def test_nomoto_v2_is_a_label_with_identical_physics_to_nomoto():
+    """2026-09-28: "nomoto_v2" is a distinct kinematics_model VALUE (so it gets its own
+    dashboard/run-log grouping) but deliberately uses the EXACT SAME Nomoto physics as
+    "nomoto" -- no new equations, matching the explicit "we don't need parallel models"
+    decision. Byte-identical trajectory for the same commands/dt."""
+    mission = load_mission("Imazu01")
+    nomoto = Simulation(mission, VesselConstraints(kinematics_model="nomoto"))
+    nomoto_v2 = Simulation(mission, VesselConstraints(kinematics_model="nomoto_v2"))
+    nomoto.turn_right(90.0)
+    nomoto_v2.turn_right(90.0)
+    nomoto.step(dt=10.0)
+    nomoto_v2.step(dt=10.0)
+    assert nomoto_v2.own.heading == pytest.approx(nomoto.own.heading, abs=1e-9)

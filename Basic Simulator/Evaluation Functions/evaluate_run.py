@@ -271,6 +271,13 @@ def manoeuvre_axis_from_decisions(decisions, n_contacts=1, max_reasonable_rate=0
 # run-level codes: P_wrong_side_pass (per offending contact) and cpa_violation (once, if
 # min separation anywhere in the run fell below safe_distance_m without an actual
 # collision) -- "collision" is a separate hard gate, not a weighted deduction (see below).
+# Decision-opportunity count COMPLIANCE_WEIGHTS was originally calibrated against (a
+# typical calm/short Imazu-scale mission's own checkpoint count -- matches
+# app.narrate.recommended_decision_interval()'s own 20-step quiet-mission base) -- see
+# _scored_axis()'s docstring (2026-09-28) for how this is used to normalize a deduped
+# episode's deduction by how many decision opportunities the run actually had.
+REFERENCE_OPPORTUNITIES = 20.0
+
 COMPLIANCE_WEIGHTS = {
     "B_wrong_direction": 0.15,
     "P_port_toward_contact": 0.15,
@@ -334,24 +341,57 @@ COMPLIANCE_CATEGORY = {
 }
 
 
-def _scored_axis(checkpoint_codes, run_level_codes, collided, category):
-    """Shared implementation for compliance_axis()/explanation_axis() -- identical
-    deduction mechanics (one weighted deduction per occurrence, starting from 1.0,
-    clipped to [0,1]), differing only in which codes' category is being scored."""
+def _scored_axis(checkpoint_codes, run_level_codes, collided, category, n_opportunities=None):
+    """Shared implementation for compliance_axis()/explanation_axis().
+
+    2026-09-28 fix (episode dedup + decision-opportunity normalization): previously ONE
+    weighted deduction was applied per RAW checkpoint occurrence of a code -- a single,
+    never-corrected mistake that happened to persist across every checkpoint of a long
+    quiet mission (e.g. the model keeps citing the same fabricated rule at 40 straight
+    checkpoints) deducted its weight 40 TIMES, crashing the score to its floor regardless
+    of how mild the underlying mistake actually was, and regardless of how that same
+    persistent mistake would have scored on a SHORTER mission with fewer checkpoints. Two
+    changes fix this:
+      1. DEDUP: a maximal run of CONSECUTIVE checkpoint_codes entries (sorted by step) all
+         containing the SAME code collapses into one "episode" (see
+         _episode_codes_by_step()) -- a persistent, uncorrected mistake now counts once,
+         not once per checkpoint it spans. A code that recurs after being genuinely absent
+         from at least one intervening entry still counts as a SEPARATE episode, same as
+         the original per-occurrence design intended.
+      2. NORMALIZE: each episode's weight is scaled by
+         `min(1.0, REFERENCE_OPPORTUNITIES / n_opportunities)` -- COMPLIANCE_WEIGHTS was
+         calibrated against a "typical" short/calm mission's own checkpoint count
+         (REFERENCE_OPPORTUNITIES); a run with substantially MORE decision opportunities
+         than that (e.g. a baseline re-deciding every simulation step vs. an LLM's sparse
+         adaptive cadence -- see app.narrate.live_decision_interval()) deducts
+         proportionally LESS per distinct episode, so two systems making "the same number
+         of distinct mistakes" score comparably regardless of how dense their own decision
+         cadence happens to be. `n_opportunities=None` (any pre-existing caller that never
+         passes it, e.g. a bare-CSV CLI invocation with no decision_events) falls back to
+         `normalize=1.0` -- byte-identical to the old per-occurrence-not-episode behavior
+         MINUS the dedup fix, which always applies regardless.
+
+    run_level_codes (P_wrong_side_pass/cpa_violation) are already "once per run", never
+    per-checkpoint, so neither dedup nor opportunity-normalization applies to them --
+    unchanged from before."""
     if collided:
         return 0.0, [{"code": "collision", "label": COMPLIANCE_LABELS["collision"],
                       "at": None, "deduction": -1.0}]
     breakdown = []
     score = 1.0
-    for step, codes in checkpoint_codes:
-        for code in codes:
-            if COMPLIANCE_CATEGORY.get(code) != category:
-                continue
+    normalize = (min(1.0, REFERENCE_OPPORTUNITIES / n_opportunities)
+                if n_opportunities and n_opportunities > 0 else 1.0)
+    prev_present: set = set()
+    for step, codes in sorted(checkpoint_codes, key=lambda sc: sc[0]):
+        present = {c for c in codes if COMPLIANCE_CATEGORY.get(c) == category}
+        for code in present - prev_present:  # new episode starting at this checkpoint
             weight = COMPLIANCE_WEIGHTS.get(code)
             if weight:
-                score -= weight
+                deduction = weight * normalize
+                score -= deduction
                 breakdown.append({"code": code, "label": COMPLIANCE_LABELS.get(code, code),
-                                 "at": step, "deduction": -weight})
+                                 "at": step, "deduction": -deduction})
+        prev_present = present
     for code, detail in run_level_codes:
         if COMPLIANCE_CATEGORY.get(code) != category:
             continue
@@ -363,7 +403,7 @@ def _scored_axis(checkpoint_codes, run_level_codes, collided, category):
     return max(0.0, min(1.0, score)), breakdown
 
 
-def compliance_axis(checkpoint_codes, run_level_codes, collided=False):
+def compliance_axis(checkpoint_codes, run_level_codes, collided=False, n_opportunities=None):
     """Deterministic MANOEUVRE-compliance score -- no LLM call, always computable.
     Answers "was the physical action own-ship took COLREG-correct and safe", using only
     the "manoeuvre"-category codes (B_wrong_direction, C_degrees_over_limit,
@@ -373,9 +413,13 @@ def compliance_axis(checkpoint_codes, run_level_codes, collided=False):
     own comment above COMPLIANCE_CATEGORY for why).
 
     checkpoint_codes: list of (step_label, [code, ...]) -- one entry per audited
-    checkpoint, each code in COMPLIANCE_WEIGHTS deducted once per occurrence.
+    checkpoint. A code in COMPLIANCE_WEIGHTS deducts once per DEDUPED episode (a maximal
+    run of consecutive checkpoints all reporting it), each episode's weight scaled by how
+    many total decision opportunities (`n_opportunities`) the run had -- see
+    _scored_axis()'s docstring for why (2026-09-28).
     run_level_codes: list of (code, detail) -- trajectory-level findings (detail is
-    typically a contact name or None), same deduction table.
+    typically a contact name or None), same deduction table, never deduped/normalized
+    (already "once per run" by construction).
     collided=True is a HARD GATE: returns (0.0, [{"code": "collision", ...}]) regardless
     of every other input -- an actual collision makes the rest of the audit moot, exactly
     like safety_axis()'s own gate on the composite score.
@@ -384,10 +428,10 @@ def compliance_axis(checkpoint_codes, run_level_codes, collided=False):
     (step_or_detail), "deduction"} dicts) -- breakdown's deductions always sum to
     score - 1.0 (before the final clip), so every score is traceable back to the specific
     findings that produced it."""
-    return _scored_axis(checkpoint_codes, run_level_codes, collided, "manoeuvre")
+    return _scored_axis(checkpoint_codes, run_level_codes, collided, "manoeuvre", n_opportunities)
 
 
-def explanation_axis(checkpoint_codes, run_level_codes, collided=False):
+def explanation_axis(checkpoint_codes, run_level_codes, collided=False, n_opportunities=None):
     """Deterministic EXPLANATION-compliance score -- the counterpart to compliance_axis().
     Answers "did the model's own stated encounter_rule/conduct_rule/'real risk' claim
     match the geometric ground truth", using only the "explanation"-category codes
@@ -395,10 +439,10 @@ def explanation_axis(checkpoint_codes, run_level_codes, collided=False):
     E_8c) -- see COMPLIANCE_CATEGORY. Deliberately independent of whether the physical
     manoeuvre itself was safe: a benign, safe hold_course mislabelled with a fabricated
     rule scores badly HERE, not on compliance_axis(), and vice versa. Same signature/
-    mechanics as compliance_axis() (see its docstring) -- same collision hard-gate too,
-    since there is no meaningful citation-accuracy story left to tell once a run has
-    actually collided."""
-    return _scored_axis(checkpoint_codes, run_level_codes, collided, "explanation")
+    mechanics as compliance_axis() (see its docstring, including the 2026-09-28 episode-
+    dedup/opportunity-normalization fix) -- same collision hard-gate too, since there is no
+    meaningful citation-accuracy story left to tell once a run has actually collided."""
+    return _scored_axis(checkpoint_codes, run_level_codes, collided, "explanation", n_opportunities)
 
 
 # ---------------------------------------------------------------------
@@ -451,15 +495,20 @@ def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
     all_run_level_codes = list(run_level_codes)
     if passed and min_cpa < safe_distance_m:
         all_run_level_codes.append(("cpa_violation", None))
+    # n_opportunities (2026-09-28): the SAME decision_events length manoeuvre_axis_from_
+    # decisions() already normalizes by -- None when omitted, which _scored_axis() treats
+    # as "no normalization" (byte-identical to the old per-occurrence-not-episode
+    # behavior, minus the always-applied episode dedup).
+    n_opportunities = len(decision_events) if decision_events else None
     compliance_score, compliance_breakdown = compliance_axis(
-        checkpoint_codes, all_run_level_codes, collided=not passed)
+        checkpoint_codes, all_run_level_codes, collided=not passed, n_opportunities=n_opportunities)
     # 2026-09-24 split (see COMPLIANCE_CATEGORY's comment): explanation_score never feeds
     # the composite/verdict below -- it's reported alongside compliance purely as a
     # SEPARATE signal (was the model's stated reasoning/rule-citation accurate), so a run
     # with a perfectly safe, COLREG-correct manoeuvre but sloppy self-reported labelling
     # no longer gets its PASS/FAIL and composite score dragged down for that alone.
     explanation_score, explanation_breakdown = explanation_axis(
-        checkpoint_codes, all_run_level_codes, collided=not passed)
+        checkpoint_codes, all_run_level_codes, collided=not passed, n_opportunities=n_opportunities)
 
     if not passed:
         composite = 0.0

@@ -45,6 +45,19 @@ def test_wrong_side_pass_does_not_fire_on_port_to_port_head_on() -> None:
     assert findings == []
 
 
+def test_wrong_side_pass_fires_on_we_are_overtaking_target_crossing_ahead() -> None:
+    """2026-09-28 addition: own is the give-way OVERTAKING vessel (Rule 13) -- geometry
+    verified (via pipeline.oow_agent_spec.classify_encounter) to classify as
+    "we_are_overtaking_target", same as test_oow_agent_spec.py's own overtaking-
+    classification test but shifted so the along-track dot product is positive (target
+    still ahead of own along own's course at the recorded "closest approach" instant --
+    the SAME sign convention the pre-existing crossing_target_on_starboard branch already
+    used, just previously never checked for this encounter type at all)."""
+    rows = [_row("own_ship", 0.0, -10.0, 0.0), _row("ts1", 20.0, 0.0, 0.0)]
+    findings = _check_wrong_side_pass(rows, "own_ship")
+    assert ("P_wrong_side_pass", "ts1") in findings
+
+
 def test_collision_gates_score_to_zero_regardless_of_findings() -> None:
     """collided=True must force 0.0 no matter what other codes are present, for BOTH axes."""
     checkpoint_codes = [(0.0, ["B_wrong_direction", "E_role_fabrication"])]
@@ -101,8 +114,40 @@ def test_every_weighted_code_has_a_label() -> None:
 
 
 def test_score_clips_at_zero_never_negative() -> None:
-    """Enough deductions to overshoot 1.0 in magnitude must clip to 0.0, not go negative."""
-    checkpoint_codes = [(t, ["B_wrong_direction", "D_no_action_when_required", "E_role_fabrication"])
-                        for t in range(10)]
+    """Enough DISTINCT (non-consecutive -- see test_consecutive_same_code_dedups_to_one_
+    episode below for why consecutive repeats no longer count separately) episodes to
+    overshoot 1.0 in magnitude must clip to 0.0, not go negative."""
+    checkpoint_codes = []
+    for t in range(10):
+        # Empty codes on odd steps forces the NEXT even step's codes to be treated as a
+        # fresh episode (not a continuation) -- 5 separate episodes of each code.
+        checkpoint_codes.append((t, ["B_wrong_direction", "D_no_action_when_required"] if t % 2 == 0 else []))
     score, _ = compliance_axis(checkpoint_codes, [], collided=False)
     assert score == 0.0
+
+
+def test_consecutive_same_code_dedups_to_one_episode() -> None:
+    """2026-09-28 fix: a code firing at EVERY checkpoint of a long run (never corrected)
+    must deduct its weight ONCE, not once per checkpoint -- the exact bug that used to
+    crash a long quiet mission's score regardless of how mild the underlying mistake was."""
+    checkpoint_codes = [(t, ["B_wrong_direction"]) for t in range(40)]
+    score, breakdown = compliance_axis(checkpoint_codes, [], collided=False)
+    assert len(breakdown) == 1
+    assert round(score, 6) == round(1.0 - COMPLIANCE_WEIGHTS["B_wrong_direction"], 6)
+
+
+def test_same_deduped_episode_count_scores_better_with_more_opportunities() -> None:
+    """2026-09-28 fix: the SAME number of distinct (deduped) episodes deducts LESS when
+    n_opportunities is large relative to REFERENCE_OPPORTUNITIES -- a baseline re-deciding
+    every simulation step (many opportunities) making one bad call is scored more leniently
+    than an LLM's sparse cadence (few opportunities) making the identical single mistake,
+    matching this project's own decision-cadence-fairness rationale (see
+    manoeuvre_axis_from_decisions())."""
+    checkpoint_codes = [(0.0, ["B_wrong_direction"])]
+    score_reference, _ = compliance_axis(checkpoint_codes, [], collided=False,
+                                         n_opportunities=_mod.REFERENCE_OPPORTUNITIES)
+    score_many, _ = compliance_axis(checkpoint_codes, [], collided=False,
+                                    n_opportunities=_mod.REFERENCE_OPPORTUNITIES * 10)
+    score_unset, _ = compliance_axis(checkpoint_codes, [], collided=False)  # n_opportunities=None
+    assert score_many > score_reference
+    assert round(score_reference, 6) == round(score_unset, 6)  # reference count == old behavior

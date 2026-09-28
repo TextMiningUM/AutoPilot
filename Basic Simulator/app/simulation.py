@@ -57,8 +57,13 @@ class VesselConstraints:
     # "kinematics" (default) = the turn-rate slew model above, unchanged. "nomoto" =
     # Sawada et al. (2021)'s 2nd-order Nomoto + rudder-servo model (app/nomoto.py) --
     # opt-in only, own-ship heading dynamics ONLY (speed still uses max_acceleration_mps2/
-    # max_deceleration_mps2 above either way). Any value other than "nomoto" falls back
-    # to "kinematics", so an unrecognised/typo'd value never silently changes physics.
+    # max_deceleration_mps2 above either way). "nomoto_v2" (2026-09-28) uses the EXACT SAME
+    # Nomoto physics/equations as "nomoto" -- it is a separate LABEL, not new physics, so
+    # runs generated under it (going forward, with this session's absolute/idempotent
+    # steering + adaptive baseline cadence) are never confused with the frozen, archived
+    # "nomoto" (Baseline Nomoto) reference numbers already on disk. Any value other than
+    # "nomoto"/"nomoto_v2" falls back to "kinematics", so an unrecognised/typo'd value
+    # never silently changes physics.
     kinematics_model: str = "kinematics"
     nomoto_K_per_s: float = 0.05
     nomoto_T_s: float = 50.0
@@ -136,7 +141,7 @@ class Simulation:
         by at most this step's turn-rate/acceleration allowance -- never jumps
         straight to the target unless the target is already closer than one
         step's limit (in which case it snaps there exactly, no overshoot)."""
-        if self.constraints.kinematics_model == "nomoto":
+        if self.constraints.kinematics_model in ("nomoto", "nomoto_v2"):
             self._advance_own_kinematics_nomoto(dt)
             return
         c = self.constraints
@@ -156,7 +161,9 @@ class Simulation:
 
     def _advance_own_kinematics_nomoto(self, dt: float) -> None:
         """Sawada et al. (2021)'s Nomoto + rudder-servo heading dynamics (app/nomoto.py),
-        opt-in via constraints.kinematics_model=="nomoto". Speed still uses the SAME
+        opt-in via constraints.kinematics_model in ("nomoto", "nomoto_v2") -- both use
+        IDENTICAL physics here, "nomoto_v2" is a labeling distinction only (see
+        VesselConstraints.kinematics_model's own docstring). Speed still uses the SAME
         accel/decel rate-limiting as the legacy "kinematics" model above -- Nomoto only
         replaces the heading/rudder dynamics, not the speed dynamics."""
         c = self.constraints
@@ -221,6 +228,16 @@ class Simulation:
         self.target_heading = (self.target_heading + degrees) % 360
         self.own.target_heading = self.target_heading
 
+    def steer_heading(self, heading_deg: float) -> None:
+        """ABSOLUTE, idempotent counterpart to turn_left/turn_right -- sets target_heading
+        directly to `heading_deg` rather than adding a delta to whatever it already was.
+        Ordering the SAME heading twice in a row is therefore a genuine no-op (unlike
+        turn_left/turn_right, which always stack), which is what a decision function that
+        recomputes its intended heading fresh from the CURRENT situation every call (e.g.
+        app/baselines/*.py) actually wants -- see apply_action()'s `heading_deg` handling."""
+        self.target_heading = heading_deg % 360
+        self.own.target_heading = self.target_heading
+
     def set_speed(self, new_speed: float) -> None:
         self.target_speed = max(0.0, min(new_speed, self.constraints.max_speed_mps))
 
@@ -234,12 +251,24 @@ class Simulation:
         self.target_speed = 0.0
 
     def apply_action(self, action: dict) -> None:
-        act = (action or {}).get("action")
-        if act == "turn_left":
+        action = action or {}
+        act = action.get("action")
+        # `heading_deg` (absolute, optional -- 2026-09-28) takes priority over a
+        # turn_left/turn_right action name+degrees when both are present: every one of
+        # app/baselines/*.py's decide() functions now supplies it (their own already-
+        # computed absolute candidate heading), fixing the stacking/zigzag that resulted
+        # from applying a heading recomputed from own-ship's CURRENT actual heading as if
+        # it were a delta on top of the possibly-already-in-progress COMMANDED heading.
+        # Omitted entirely by the LLM agent path (ask_oow() has no such field in its JSON
+        # schema) -- turn_left/turn_right below are completely unaffected for that caller.
+        heading_deg = action.get("heading_deg")
+        if heading_deg is not None:
+            self.steer_heading(heading_deg)
+        elif act == "turn_left":
             self.turn_left(action.get("degrees", 10.0))
         elif act == "turn_right":
             self.turn_right(action.get("degrees", 10.0))
-        elif act == "speed_up":
+        if act == "speed_up":
             self.speed_up()
         elif act == "slow_down":
             self.slow_down()

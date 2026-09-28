@@ -77,6 +77,10 @@ def decide(mission: Mission, own: Vessel, targets: list[Vessel],
 
     decision = {
         "action": action, "degrees": degrees,
+        # heading_deg (2026-09-28): ABSOLUTE commanded heading -- desired_heading is
+        # already absolute (net attractive+repulsive force direction), so this is
+        # idempotent by construction. None while holding course.
+        "heading_deg": round(desired_heading, 1) if action in ("turn_left", "turn_right") else None,
         "encounter_rule": encounter_rule, "conduct_rule": conduct_rule,
         "reasoning": reasoning,
     }
