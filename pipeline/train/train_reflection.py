@@ -102,31 +102,45 @@ REFL_FILES   = {
         CACHE / "oow_outcome_reflection.jsonl",
         # Track 2 -- applied helm/engine-order decisions (build_reflection.py run against
         # the deterministic MOOS-scenario reasoning traces, notebook § 6.5).
-        CACHE / "oow_scenario_reflection.jsonl",
-        # Ship-dynamics-aware sibling (Nomoto-derived manoeuvre-time facts, 2026-09-26) --
-        # trained MIXED alongside the legacy file above, same rationale as train_sft.py.
+        # Ship-dynamics-aware, Nomoto-derived manoeuvre-time facts (2026-09-26).
+        # 2026-09-28 quality review: the legacy (non-Nomoto) oow_scenario_reflection.jsonl
+        # sibling is dropped from the mix entirely, same rationale as train_sft.py.
         CACHE / "oow_scenario_reflection_nomoto.jsonl",
         # Track 2 (continued) -- Leo MOOS-trajectory sample (notebook § 6.5.1),
         # kept separate from the plain oow_scenario_* reflection above for traceability.
         # Fase B5: capped at LEO_REFLECTION_CAP below, same rationale as train_sft.py's LEO_SFT_CAP.
-        CACHE / "oow_scenario_Leo_reflection.jsonl",
-        # Nomoto-aware sibling, same rationale as the plain oow_scenario_*_nomoto pair above.
+        # 2026-09-28: legacy (non-Nomoto) oow_scenario_Leo_reflection.jsonl sibling dropped.
         CACHE / "oow_scenario_Leo_reflection_nomoto.jsonl",
     ],
 }[paths.domain]
 
-LEO_REFLECTION_CAP = 500
+# 2026-09-28 quality review: replaced the fixed LEO_REFLECTION_CAP=500 with a cap computed
+# as a fraction of the non-Leo Track 2 ("agentic") reflection row count, same rationale/
+# mechanism as train_sft.py's _leo_sft_cap_per_file(). Only one Leo reflection file remains
+# after dropping the legacy sibling above, so no need to split a budget across files.
+LEO_CAP_FRACTION = 0.15
+_NON_LEO_SCENARIO_REFLECTION_FILE = CACHE / "oow_scenario_reflection_nomoto.jsonl"
+
+
+def _leo_reflection_cap() -> int:
+    """15% of the non-Leo Track 2 ("agentic") reflection row count."""
+    if not _NON_LEO_SCENARIO_REFLECTION_FILE.exists():
+        return 0
+    non_leo_rows = sum(1 for _ in _NON_LEO_SCENARIO_REFLECTION_FILE.open(encoding="utf-8"))
+    return max(1, round(LEO_CAP_FRACTION * non_leo_rows))
 
 
 def load_reflection() -> Dataset:
     """Load and shuffle the reflection JSONL files (Track 1 + Track 2) into one Dataset.
-    Leo's file is deterministically subsampled to LEO_REFLECTION_CAP rows (Fase B5)."""
+    Leo's file is deterministically subsampled (Fase B5, 2026-09-28: capped at
+    LEO_CAP_FRACTION of the non-Leo Track 2 row count)."""
+    leo_cap = _leo_reflection_cap() if paths.domain == "OOW" else 0
     rows = []
     for path in REFL_FILES:
         if not path.exists():
             print(f"  (skipping {path.name} -- not found)")
             continue
-        raw = load_jsonl_rows_capped(path, LEO_REFLECTION_CAP, seed=42) if "_Leo_" in path.name \
+        raw = load_jsonl_rows_capped(path, leo_cap, seed=42) if "_Leo_" in path.name \
             else list(json.loads(line) for line in path.open("r", encoding="utf-8"))
         for r in raw:
             rows.append({"messages": r["messages"]})

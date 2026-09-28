@@ -131,24 +131,23 @@ SFT_DATASETS = {
         # MOOS-scenario reasoning traces (build_oow_scenarios.py), own file for
         # traceability like VHF's Track 1/Track 2 split (notebook § 6.5). No _rag
         # variant: there's no Track 2 retrieval corpus for this data to ground against.
-        CACHE / "oow_scenario_sft_direct.jsonl",
-        CACHE / "oow_scenario_sft_cot.jsonl",
-        # Ship-dynamics-aware siblings (same rows, Nomoto-derived manoeuvre-time facts
-        # instead of legacy turn-rate-slew facts -- sample_row_limits_nomoto(), 2026-09-26).
-        # Trained MIXED alongside the legacy files above (not a replacement) so the model
-        # learns to reason from WHATEVER ship-dynamics facts are stated, rather than
-        # overfitting to either physics model.
+        # Ship-dynamics-aware Nomoto-derived manoeuvre-time facts (sample_row_limits_nomoto(),
+        # 2026-09-26). 2026-09-28 quality review: the legacy (non-Nomoto, turn-rate-slew-fact)
+        # siblings oow_scenario_sft_direct.jsonl/_cot.jsonl are dropped from the mix entirely
+        # (were previously trained MIXED alongside these) -- Nomoto is now the only ship-
+        # dynamics model this project's simulator/eval actually exercises, so mixing in facts
+        # from a physics model nothing downstream uses just adds noise.
         CACHE / "oow_scenario_sft_direct_nomoto.jsonl",
         CACHE / "oow_scenario_sft_cot_nomoto.jsonl",
         # Track 2 (continued) -- same, but from the Leo MOOS-trajectory dataset (7928
         # real bridge states, richer situations -- build_oow_scenarios_leo.py, notebook
         # § 6.5.1). Kept in its own oow_scenario_Leo_* files (never merged into the
         # plain oow_scenario_* files) for independent traceability, per explicit user
-        # direction. Fase B5: capped at LEO_SFT_CAP rows below (Leo's raw pool is far
-        # bigger than every other Track 2 source and previously dominated the mix at 69%).
-        CACHE / "oow_scenario_Leo_sft_direct.jsonl",
-        CACHE / "oow_scenario_Leo_sft_cot.jsonl",
-        # Nomoto-aware siblings, same rationale as the plain oow_scenario_*_nomoto pair above.
+        # direction. Fase B5: capped at LEO_SFT_CAP_TOTAL rows (summed across both files
+        # below) at load time (Leo's raw pool is far bigger than every other Track 2
+        # source and previously dominated the mix at 69%). 2026-09-28: legacy (non-Nomoto)
+        # oow_scenario_Leo_sft_direct.jsonl/_cot.jsonl siblings dropped from the mix, same
+        # rationale as the plain oow_scenario_* pair above.
         CACHE / "oow_scenario_Leo_sft_direct_nomoto.jsonl",
         CACHE / "oow_scenario_Leo_sft_cot_nomoto.jsonl",
         # Procedural-graph step-order data: merged graph (rule+incident+scenario
@@ -163,9 +162,28 @@ SFT_DATASETS = {
 
 # Fase B5: Leo's MOOS-trajectory pool (7928 raw states) is far bigger than every other
 # Track 2 source (390 synthetic rows) and previously dominated the SFT mix at 69% of
-# ALL rows -- cap its per-file row count at load time, independent of how many rows
-# Fase B3's full-population run actually wrote to disk.
-LEO_SFT_CAP = 500
+# ALL rows. 2026-09-28 quality review: replaced the fixed LEO_SFT_CAP=500-per-file cap
+# with a cap computed as a fraction of the non-Leo Track 2 ("agentic") row count, so it
+# self-adjusts if that pool's size changes instead of silently drifting stale. The total
+# budget is split evenly across however many oow_scenario_Leo_*_nomoto SFT files are
+# loaded (currently 2: direct + cot), so the SUM across Leo files stays <= the 15% budget
+# rather than each file getting the full budget independently.
+LEO_CAP_FRACTION = 0.15
+_NON_LEO_SCENARIO_SFT_FILES = [
+    CACHE / "oow_scenario_sft_direct_nomoto.jsonl",
+    CACHE / "oow_scenario_sft_cot_nomoto.jsonl",
+]
+
+
+def _leo_sft_cap_per_file() -> int:
+    """15% of the non-Leo Track 2 ("agentic") SFT row count, split evenly across the
+    Leo SFT files present in SFT_DATASETS so their combined contribution stays <= 15%."""
+    non_leo_rows = sum(sum(1 for _ in p.open(encoding="utf-8")) for p in _NON_LEO_SCENARIO_SFT_FILES if p.exists())
+    n_leo_files = sum(1 for p in SFT_DATASETS if "_Leo_" in p.name)
+    if non_leo_rows == 0 or n_leo_files == 0:
+        return 0
+    return max(1, round(LEO_CAP_FRACTION * non_leo_rows / n_leo_files))
+
 
 
 # ── Data loading ─────────────────────────────────────────────────────────
@@ -181,14 +199,16 @@ def load_jsonl_dataset(path: Path) -> Dataset:
 
 def load_all_sft() -> Dataset:
     """Load, print row counts for, and shuffle all SFT JSONL files (Track 1 + Track 2) into one
-    Dataset. Leo's oow_scenario_Leo_* files are deterministically subsampled to LEO_SFT_CAP rows
-    each (Fase B5) so Leo's much larger raw pool can't dominate the final mix."""
+    Dataset. Leo's oow_scenario_Leo_* files are deterministically subsampled (Fase B5, 2026-09-28:
+    capped at LEO_CAP_FRACTION of the non-Leo Track 2 row count, split across Leo files) so
+    Leo's much larger raw pool can't dominate the final mix."""
     parts = []
+    leo_cap = _leo_sft_cap_per_file() if paths.domain == "OOW" else 0
     for p in SFT_DATASETS:
         if "_Leo_" in p.name:
-            rows = load_jsonl_rows_capped(p, LEO_SFT_CAP, seed=42)
+            rows = load_jsonl_rows_capped(p, leo_cap, seed=42)
             d = Dataset.from_list([{"messages": r["messages"]} for r in rows])
-            print(f"  {p.name:<30} {len(d):>5} rows  (capped at {LEO_SFT_CAP})")
+            print(f"  {p.name:<30} {len(d):>5} rows  (capped at {leo_cap})")
         else:
             if not p.exists():
                 raise FileNotFoundError(f"Missing training file: {p}")

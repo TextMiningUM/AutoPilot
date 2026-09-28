@@ -548,6 +548,23 @@ def leo_choose_action(state: dict, limits: dict | None = None) -> dict:
                                           "(closing_speed<=0) despite CPA/TCPA real_risk"}
             c["own_role"], c["encounter_type"] = geo
 
+    # Quality-review fix (2026-09-28, filter 1 -- "stilliggende contacten met een Rule
+    # 13-label"): a contact whose own_role/geometry suggests a MOVING give-way/overtaking
+    # encounter but whose actual recorded speed is near-zero is not really "overtaking" a
+    # vessel at all -- Rule 13 presupposes two underway vessels; a near-stationary object
+    # is an obstacle (Rule 6/Rule 8), never an overtaking encounter. Found via real-data
+    # inspection: MOOS RANDOM_TS contacts often sit at speed 0.00 while still bearing
+    # abaft the beam, which the geometry-only own_role/encounter_type labels then read as
+    # "overtaking" (222/6317 rows). Reclassifying to "stationary_contact" BEFORE the
+    # stationary/give_way/stand_on split below routes these into the stationary branch
+    # instead (encounter_rule="none"/conduct_rule="Rule 8"), same as a genuine anchored/
+    # fixed object -- reuses the same MOVING_SPEED_THRESHOLD already used elsewhere in
+    # this file for "effectively stationary/noise" contacts.
+    for c in contacts:
+        if (c["own_role"] in ("give_way", "both_give_way") and c.get("encounter_type") != "stationary_contact"
+                and c.get("speed") is not None and c["speed"] < MOVING_SPEED_THRESHOLD):
+            c["encounter_type"] = "stationary_contact"
+
     # Quality-review STOP-1-blocking-bug fix (2026-09-23): filter on band "acute" OR
     # "early" -- NOT `_real_risk()` (=="acute" only) as before. A contact whose CPA is
     # below the safe distance but whose TCPA sits beyond the horizon ("early") is STILL a
@@ -717,6 +734,41 @@ def leo_choose_action(state: dict, limits: dict | None = None) -> dict:
 
 
 FIXED_QUESTION = "Recommend exactly ONE manoeuvre as the specified JSON object."
+
+# Quality-review fix (2026-09-28, filter 3 -- "inconsistente geschiedenis-preambule"):
+# render_previous_decisions()'s preamble states what actions were LABELED for the
+# immediately preceding frames, independently of the CURRENT frame's own (raw-MOOS-
+# telemetry-derived) situation report -- these can genuinely disagree when the real
+# trajectory's actual heading response didn't match what the label implied (Leo's history
+# is threaded from LABELS, see compute_all_decisions(), never re-simulated). A net turn of
+# >= HISTORY_CONSISTENCY_THRESHOLD_DEG immediately followed by "heading is ALREADY on the
+# goal bearing" is physically impossible (the ship can't have both just turned that much
+# AND still be exactly on the goal bearing) -- found via real-data inspection, 697/6317
+# rows in oow_scenario_Leo_sft_direct_nomoto.jsonl. 10 deg (not the GOAL_DEADBAND_DEG=5
+# the report text itself uses) leaves margin for legitimate small corrections.
+HISTORY_CONSISTENCY_THRESHOLD_DEG = 10.0
+_ON_GOAL_BEARING_TEXT = "heading is ALREADY on the goal bearing"
+
+
+def history_preamble_is_consistent(prev_decisions: list[dict] | None, situation_report: str,
+                                   threshold_deg: float = HISTORY_CONSISTENCY_THRESHOLD_DEG) -> bool:
+    """False iff the net course change implied by `prev_decisions` (turn_right positive,
+    turn_left negative) is >= `threshold_deg` degrees AND `situation_report` says the
+    heading is already on the goal bearing -- see module-level comment above for why this
+    combination is physically impossible. True (consistent) whenever there's no history,
+    no turns in the history, or the report doesn't claim an on-goal-bearing heading."""
+    if not prev_decisions:
+        return True
+    net = 0.0
+    for d in prev_decisions:
+        degrees = d.get("degrees")
+        if not degrees:
+            continue
+        if d.get("action") == "turn_right":
+            net += degrees
+        elif d.get("action") == "turn_left":
+            net -= degrees
+    return not (abs(net) >= threshold_deg and _ON_GOAL_BEARING_TEXT in situation_report)
 
 
 def build_user_message(situation_report: str) -> str:
@@ -1228,11 +1280,35 @@ def main() -> None:
 
     sft_rows, dpo_rows, reflect_rows, trace_rows = [], [], [], []
     n_with_history = 0
+    n_dropped_none_rule8 = 0        # filter 2
+    n_preamble_stripped = 0         # filter 3
+    n_dropped_17b_turn_left = 0     # filter 4
     for r in final_recs:
         if not r.get("reasoning"):
             continue
+        # Filter 2 (2026-09-28): "none"/"Rule 8" (stationary-avoidance) rows dropped
+        # entirely -- citing NO encounter rule while still manoeuvring reads as
+        # contradictory training signal (matches this project's live-run E_8c/"Rule
+        # 8/Rule 8" default-answer findings). 694/6317 rows.
+        if r["encounter_rule"] == "none" and r["conduct_rule"] == "Rule 8":
+            n_dropped_none_rule8 += 1
+            continue
+        # Filter 4 (2026-09-28): turn_left in a 17(b) emergency-stand-on category dropped
+        # -- Rule 17(c) forbids a stand-on vessel altering to port for a contact on her
+        # own port side; these residual cases (21/6317, down from 85 pre-_rule17c_guard())
+        # are exactly the ones that guard doesn't (and per its own design, shouldn't
+        # always) force to starboard. Simpler to drop than relabel here.
+        if r["category"].endswith("17b") and r["action"] == "turn_left":
+            n_dropped_17b_turn_left += 1
+            continue
         # Fase B4: prepend the real-history preamble for rows that have one.
         history_prefix = render_previous_decisions(r.get("prev_decisions"))
+        # Filter 3 (2026-09-28): strip (not drop the row for) an internally-inconsistent
+        # preamble -- see history_preamble_is_consistent()'s docstring. The row stays
+        # usable as a single-snapshot instance. 697/6317 rows affected.
+        if history_prefix and not history_preamble_is_consistent(r.get("prev_decisions"), r["situation_report"]):
+            history_prefix = ""
+            n_preamble_stripped += 1
         if history_prefix:
             n_with_history += 1
         user_msg = build_user_message(history_prefix + r["situation_report"])
@@ -1301,6 +1377,9 @@ def main() -> None:
     print("category distribution:", Counter(r["category"] for r in final_recs))
     print(f"Fase B4: {n_with_history}/{len(sft_rows)} SFT rows include a real previous-decisions "
          "history preamble")
+    print(f"Quality filters (2026-09-28): dropped {n_dropped_none_rule8} none/Rule-8 rows, "
+         f"dropped {n_dropped_17b_turn_left} turn_left-in-17b rows, "
+         f"stripped {n_preamble_stripped} inconsistent history preambles (row kept)")
 
 
 if __name__ == "__main__":

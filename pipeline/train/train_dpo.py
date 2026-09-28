@@ -129,15 +129,14 @@ DPO_FILES   = {
         CACHE / "oow_incident_dpo_pairs_real.jsonl",
         # Track 2 -- applied helm/engine-order decisions (build_rlhf.py run against
         # the deterministic MOOS-scenario reasoning traces, notebook § 6.5).
-        CACHE / "oow_scenario_dpo_pairs.jsonl",
-        # Ship-dynamics-aware sibling (Nomoto-derived manoeuvre-time facts, 2026-09-26) --
-        # trained MIXED alongside the legacy file above, same rationale as train_sft.py.
+        # Ship-dynamics-aware, Nomoto-derived manoeuvre-time facts (2026-09-26).
+        # 2026-09-28 quality review: the legacy (non-Nomoto) oow_scenario_dpo_pairs.jsonl
+        # sibling is dropped from the mix entirely, same rationale as train_sft.py.
         CACHE / "oow_scenario_dpo_pairs_nomoto.jsonl",
         # Track 2 (continued) -- Leo MOOS-trajectory sample (notebook § 6.5.1),
         # kept separate from the plain oow_scenario_* pairs above for traceability.
         # Fase B5: capped at LEO_DPO_CAP below, same rationale as train_sft.py's LEO_SFT_CAP.
-        CACHE / "oow_scenario_Leo_dpo_pairs.jsonl",
-        # Nomoto-aware sibling, same rationale as the plain oow_scenario_*_nomoto pair above.
+        # 2026-09-28: legacy (non-Nomoto) oow_scenario_Leo_dpo_pairs.jsonl sibling dropped.
         CACHE / "oow_scenario_Leo_dpo_pairs_nomoto.jsonl",
         # Fase C2(ii) -- "anti-fabricated-risk" pairs mined deterministically (no LLM)
         # from real model mistakes in the archived units_v1 mission checkpoints
@@ -152,7 +151,20 @@ DPO_FILES   = {
     ],
 }[paths.domain]
 
-LEO_DPO_CAP = 500
+# 2026-09-28 quality review: replaced the fixed LEO_DPO_CAP=500 with a cap computed as a
+# fraction of the non-Leo Track 2 ("agentic") DPO row count, same rationale/mechanism as
+# train_sft.py's _leo_sft_cap_per_file(). Only one Leo DPO file remains after dropping the
+# legacy sibling above, so no need to split a budget across multiple files.
+LEO_CAP_FRACTION = 0.15
+_NON_LEO_SCENARIO_DPO_FILE = CACHE / "oow_scenario_dpo_pairs_nomoto.jsonl"
+
+
+def _leo_dpo_cap() -> int:
+    """15% of the non-Leo Track 2 ("agentic") DPO row count."""
+    if not _NON_LEO_SCENARIO_DPO_FILE.exists():
+        return 0
+    non_leo_rows = sum(1 for _ in _NON_LEO_SCENARIO_DPO_FILE.open(encoding="utf-8"))
+    return max(1, round(LEO_CAP_FRACTION * non_leo_rows))
 
 
 # ── Data ─────────────────────────────────────────────────────────────────
@@ -165,14 +177,16 @@ def load_dpo() -> Dataset:
 
     Our JSONL is already conversational (list of messages), which is what
     build_rlhf.py emitted, so we can pass through unchanged. Leo's file is
-    deterministically subsampled to LEO_DPO_CAP pairs (Fase B5).
+    deterministically subsampled (Fase B5, 2026-09-28: capped at LEO_CAP_FRACTION of
+    the non-Leo Track 2 row count).
     """
+    leo_cap = _leo_dpo_cap() if paths.domain == "OOW" else 0
     rows = []
     for path in DPO_FILES:
         if not path.exists():
             print(f"  (skipping {path.name} -- not found)")
             continue
-        raw = load_jsonl_rows_capped(path, LEO_DPO_CAP, seed=42) if "_Leo_" in path.name \
+        raw = load_jsonl_rows_capped(path, leo_cap, seed=42) if "_Leo_" in path.name \
             else list(json.loads(line) for line in path.open("r", encoding="utf-8"))
         for r in raw:
             rows.append({
