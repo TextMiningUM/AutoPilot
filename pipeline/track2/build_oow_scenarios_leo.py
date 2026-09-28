@@ -1111,7 +1111,10 @@ def filter_contamination_batch(batch: list[dict], gold_embs, model) -> list[dict
     (~530 times for a full --n 7928 run) instead of once for the whole sample."""
     if not batch:
         return batch
-    texts = [r.get("reasoning", "") for r in batch]
+    # `.get(key, "")` only substitutes when the key is MISSING, not when it's present but
+    # None -- Fase B3-rejected rows keep an explicit `"reasoning": None` -- so `or ""` is
+    # required here, not just a default arg.
+    texts = [r.get("reasoning") or "" for r in batch]
     q_embs = model.encode(texts, normalize_embeddings=True, batch_size=64, show_progress_bar=False)
     kept, dropped = [], 0
     for rec, emb in zip(batch, q_embs):
@@ -1277,6 +1280,23 @@ def main() -> None:
         print("--skip-llm: situation_report/action/degrees/encounter_rule/conduct_rule are set; "
              "reasoning left None pending Fase B3.")
     final_recs = recs
+
+    # Filter 1 (2026-09-28, closing a gap open since Fase B2/commit f927f97):
+    # filter_contamination_batch() existed since Fase B2 but was NEVER actually called
+    # anywhere in this file (confirmed via grep + `git log -S`) -- no Leo-generated row
+    # has ever been checked against Track 1's held-out exam questions. Applied once here,
+    # over the full accepted population, mirroring build_oow_scenarios.py's own
+    # single-pass filter_contamination() call (same gold-question source, same threshold).
+    if not args.skip_llm:
+        from sentence_transformers import SentenceTransformer
+        gold_questions = [g["question"] for g in json.loads(Path(args.gold_file).read_text(encoding="utf-8"))]
+        _contam_model = SentenceTransformer(EMBEDDER_MODEL)
+        _gold_embs = _contam_model.encode(gold_questions, normalize_embeddings=True, batch_size=64,
+                                          show_progress_bar=False)
+        n_before_contam = len(final_recs)
+        final_recs = filter_contamination_batch(final_recs, _gold_embs, _contam_model)
+        print(f"Filter 1 (contamination, whole-population pass): kept={len(final_recs)} "
+             f"dropped={n_before_contam - len(final_recs)} (thresh={CONTAM_THRESH})")
 
     sft_rows, dpo_rows, reflect_rows, trace_rows = [], [], [], []
     n_with_history = 0
