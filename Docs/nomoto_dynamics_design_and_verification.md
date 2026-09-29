@@ -206,7 +206,7 @@ design so this module can be imported from anywhere without pulling in torch/str
 
 **File:** `Basic Simulator/app/simulation.py`.
 
-`VesselConstraints` gained a `kinematics_model: str = "kinematics"` field. Two values:
+`VesselConstraints` gained a `kinematics_model: str = "kinematics"` field. Three values:
 
 - `"kinematics"` (default): the ORIGINAL turn-rate slew model — completely unchanged
   behaviour, byte-for-byte, for every existing caller. Any unrecognised/typo'd value also
@@ -218,6 +218,9 @@ design so this module can be imported from anywhere without pulling in torch/str
   `nomoto_autopilot_kp`, `nomoto_substep_s`) that default to Sawada's own published
   values. **Speed dynamics are untouched** by this flag — Nomoto only replaces heading
   dynamics; the existing accel/decel rate-limiting logic runs identically either way.
+- `"nomoto_v2"` (2026-09-28): **identical physics** to `"nomoto"` — a separate LABEL only,
+  see §14 for why runs need it distinguished from the frozen, already-archived `"nomoto"`
+  reference numbers.
 
 Persistent Nomoto state (`self._nomoto_state: NomotoState`) is carried on the
 `Simulation` object across steps, initialised once in `__init__`.
@@ -229,13 +232,14 @@ closest match to this project's design) gives its agent a **target course only**
 paper's own published action space never lets the RL agent alter speed. This project's
 own-ship instead keeps `speed_up`/`slow_down`/`set_speed` (`Basic
 Simulator/app/simulation.py`, unchanged since before this Nomoto work) fully available to
-every agent/baseline, **regardless of `kinematics_model`** ("kinematics" and "nomoto"
-alike) — own-ship's speed may range anywhere up to `constraints.max_speed_mps`, but
-never instantaneously: every change is rate-limited by `max_acceleration_mps2`/
-`max_deceleration_mps2`, the exact same accel/decel model on both branches (see the bullet
-above). Nomoto's own equations (§2) only govern heading/rudder — no speed equation was
-added or changed; this project simply never restricted the pre-existing, already
-accel/decel-limited speed-control interface once Nomoto became an option for heading.
+every agent/baseline, **regardless of `kinematics_model`** (`"kinematics"`, `"nomoto"`,
+and `"nomoto_v2"` alike) — own-ship's speed may range anywhere up to
+`constraints.max_speed_mps`, but never instantaneously: every change is rate-limited by
+`max_acceleration_mps2`/`max_deceleration_mps2`, the exact same accel/decel model on
+every branch (see the bullet above). Nomoto's own equations (§2) only govern
+heading/rudder — no speed equation was added or changed; this project simply never
+restricted the pre-existing, already accel/decel-limited speed-control interface once
+Nomoto became an option for heading.
 
 **Why we diverge on purpose:** COLREG Rule 8(a) explicitly names speed alteration
 ("slackening speed") as a legitimate collision-avoidance action alongside a course
@@ -244,14 +248,29 @@ it (e.g. `IMP04`'s Rule 17(b) — reduce speed rather than turn, once an overtak
 vessel's passing distance is too small; `IMP09`'s Rule 8(e) — slacken speed when a turn
 alone cannot clear an obstruction). Restricting own-ship to course-only would silently
 remove this whole class of correct COLREG behaviour from every evaluation. Consequently
-this project runs a single, combined course-and-speed benchmark throughout — there is no
-separate course-only evaluation variant.
+this project has run a single, combined course-and-speed benchmark throughout so far —
+there is no separate course-only evaluation variant **live in the codebase yet**.
+
+> **Status update (2026-09-28, proposed, NOT YET IMPLEMENTED):** a follow-up plan was
+> discussed (same day as §14's changes) to (a) cap `speed_up`/`set_speed` at
+> `cruise_speed_mps` (the mission's own nominal/rated speed) instead of
+> `max_speed_mps`, and (b) run every config/variant/mission **twice** — a primary
+> `speed_mode="course_only"` benchmark (speed_up/slow_down disabled for every
+> agent/baseline, matching Sawada's own course-only action space) plus a secondary
+> `speed_mode="course_speed"` benchmark (current behaviour, with the new nominal cap).
+> **Checked directly against the code and against today's freshly-generated `nomoto_v2`
+> run logs while writing this note: neither change is present.** Every current prompt
+> (including today's `nomoto_v2` batch) still states *"Speed is capped at 19.4 kt"* —
+> i.e. `max_speed_mps` (10.0 m/s), not the mission's own nominal/cruise speed (12.0 kt
+> for the Imazu set) — and no `speed_mode`/`course_only` concept exists anywhere in
+> `Basic Simulator/`. Tracked as a real, still-open TODO in §15 rather than documented
+> as done.
 
 CLI flags added to the two run-orchestration scripts, in both cases defaulting to
 `"kinematics"` (zero behaviour change unless explicitly requested):
 
-- `Basic Simulator/app/run_baseline_scenario.py --kinematics-model {kinematics,nomoto}`
-- `Basic Simulator/app/run_llm_scenario.py --kinematics-model {kinematics,nomoto}`
+- `Basic Simulator/app/run_baseline_scenario.py --kinematics-model {kinematics,nomoto,nomoto_v2}`
+- `Basic Simulator/app/run_llm_scenario.py --kinematics-model {kinematics,nomoto,nomoto_v2}`
 
 ---
 
@@ -643,105 +662,129 @@ about which design pattern is more Nomoto-resistant, not a gap in the search.
 
 ---
 
-## 13. Evaluation-function composite formula: fixes and rationale (2026-09-26)
+## 13. Evaluation-function composite formula: fixes and rationale
 
-Two independent bugs in `Evaluation Functions/evaluate_run.py`'s composite score were
-found and fixed while investigating why the IMP01-10 missions (§built separately, see
-`generate_impossible_missions.py`) produced suspiciously high composite scores for runs
-that had come within tens of metres of an actual collision. Both fixes are documented
-here because they retroactively change the meaning of every composite score in every
-existing run log, not just the IMP set — **all existing `_llm_runs/*.json` files (local
-and cloud) were rescored in place** from their own already-stored per-axis data (no
-resimulation needed) once each fix landed.
+> **Source of truth moved (2026-09-29):** the full mechanics of every axis, weight table,
+> and the composite/verdict formula itself live in
+> [`Docs/evaluation_function_design_and_verification.md`](evaluation_function_design_and_verification.md)
+> — that document is now the single canonical reference for the evaluation function, kept
+> in sync with `Evaluation Functions/evaluate_run.py` directly. This section keeps only
+> the **dynamics-side justification**: which of that document's fixes were specifically
+> *discovered because of* Nomoto, and why.
 
-### 13.1 Bug 1 — `safety_score` was computed but never fed into the composite
+### 13.1 Safety became a weighted term, not just a collision gate (2026-09-26)
 
-`safety_axis()` already computed a continuous `safety_score` (`min_cpa_m /
-safe_distance_m`, clipped to `[0, 1]`) reflecting exactly how close a near-miss was. But
-the composite formula for `PASS`/`PASS_WITH_CPA_VIOLATION` runs never used it — a
-collision was (correctly) a hard gate to `composite=0`, but anything short of an actual
-hull-to-hull collision only affected the composite through a **flat, one-time -0.30
-"cpa_violation" compliance deduction**, identical whether the near-miss was 490 m or 5 m
-short of the collision radius. Concrete example that surfaced this
-(`IMP02__baseline_ruletree`): `min_cpa_m=26.5` (`safety_score=0.053`, i.e. this was
-seconds from an actual collision) still scored `composite=0.900`.
+Not itself a Nomoto-specific bug (it would have affected the legacy kinematics model
+identically), but it was **found** while investigating suspiciously high composite
+scores on the Nomoto-run IMP01-10 missions that had come within tens of metres of an
+actual collision (`IMP02__baseline_ruletree`: `min_cpa_m=26.5` still scored
+`composite=0.900`). See the eval doc's §3.1 for the actual fix (`DEFAULT_WEIGHTS`
+rebalance, `safety_score` now a real weighted term).
 
-**Fix**: `safety` is now a real weighted term in the composite (not just the collision
-hard-gate it already was). `DEFAULT_WEIGHTS` changed from
-`{compliance: 0.30, temporal: 0.15, spatial: 0.15, manoeuvre: 0.15, smoothness: 0.25}` to
-`{safety: 0.35, compliance: 0.20, temporal: 0.10, spatial: 0.10, manoeuvre: 0.10,
-smoothness: 0.15}` (still sums to 1.0). The collision hard-gate (`composite=0`) and the
-did-not-reach-goal cap (`composite <= 0.2`) branches are unchanged. Re-running the same
-`IMP02__baseline_ruletree` example: `composite` drops from 0.900 to 0.602 — a razor-thin
-near-miss is no longer scored almost as well as a comfortably clear pass. (Commit
-`5922d30`.)
+### 13.2 Manoeuvre-count moved off the trajectory — a genuinely Nomoto-specific bug (2026-09-26)
 
-### 13.2 Bug 2 — `manoeuvre_score` was inferred from the realized trajectory, not the decisions, and broke under Nomoto specifically
+This one **only exists because of Nomoto's own physical inertia**, and is worth keeping
+here in detail for that reason. The old manoeuvre-count method inferred "manoeuvre
+events" from the own-ship trajectory's realized heading-rate crossing a fixed deadband —
+under the legacy instant-turn engine a helm order shows up almost immediately as a
+heading-rate spike, so counting rate-crossings ≈ counting orders. Under Nomoto (§2–§6
+above), the ship's physical inertia **smooths a rapid succession of contradictory helm
+orders into one slow, continuous heading curve that never crosses the deadband as
+discrete events** — confirmed directly: replaying the *identical* `ruletree`/`sawada`
+decisions for `Imazu01` gave `manoeuvre_count=37-40` under the legacy engine vs.
+`manoeuvre_count=0` under Nomoto, a pure kinematics-engine artifact, not a difference in
+decision quality. The fix (rescoring from the **decided actions themselves**, never the
+resulting hull motion — `manoeuvre_axis_from_decisions()`) is documented in full,
+including the normalization formula and weight tuning, in the eval doc's §5.1–§5.2.
 
-The pre-existing `manoeuvre_and_smoothness_axes()` counted "manoeuvre events" from the
-own-ship trajectory's realized heading-rate crossing a fixed 0.6°/s deadband. Under the
-**legacy instant-turn kinematics engine** this worked: a helm order shows up almost
-immediately as a heading-rate spike, so counting rate-crossings ≈ counting orders. Under
-**Nomoto** (§2-§6 above) it silently broke: the same underlying decision-making (e.g.
-`ruletree`/`sawada` issuing an oscillating `turn_right(30°)` / `turn_left(30°)` /
-`turn_right(30°)`/... sequence every re-decision cycle) gets physically smoothed by the
-ship's inertia into a slow, continuous curve that never crosses the deadband as discrete
-events — `manoeuvre_count` silently read `0` (`manoeuvre_score=1.000`) regardless of how
-indecisive the actual decisions were. Confirmed directly: replaying the identical
-`ruletree`/`sawada` decisions for `Imazu01` under the legacy engine gave
-`manoeuvre_count=37-40` (`manoeuvre_score=0.000`); the exact same decisions replayed
-under Nomoto gave `manoeuvre_count=0` (`manoeuvre_score=1.000`) — a pure kinematics-engine
-artifact, not a difference in decision quality. Critically, this wasn't unique to the
-baselines: the LLM's own decisions showed the same masking (e.g. `IMP01/v0_base` had 9
-direct direction-reversals across only 33 checkpoints, invisible to the old trajectory-
-based method).
+### 13.3 Compliance/explanation-axis episode dedup + decision-opportunity normalization (2026-09-28)
 
-**Fix**: manoeuvre-count scoring is now computed from the **decided actions themselves**
-(`checkpoints[i].decision.action`, already recorded per run — no resimulation needed to
-rescore existing logs), not the resulting trajectory. New
-`manoeuvre_axis_from_decisions()`:
-- Counts **contradictions** only — a `turn_right` reversing the last commanded turn
-  direction (or vice versa), or a `speed_up`/`slow_down` reversing the last commanded
-  speed direction — not just any alteration. This directly targets Rule 8(b)'s actual
-  wording ("a *succession* of small alterations... should be avoided"), i.e. flip-
-  flopping, not a single decisive correction. `hold_course` entries do not reset "last
-  commanded direction", so a reversal separated by holds still counts as a reversal of
-  intent.
-- Normalizes by **this run's own number of decision opportunities**
-  (`n_contradictions / (n_checkpoints - 1)`), not a fixed absolute count. This makes the
-  score fair across algorithms with very different decision cadences without needing a
-  separate time-based weighting: a reversal "at the very next decision" is scored the
-  same way whether that next decision came 10 s later (a baseline re-deciding every
-  step) or ~80 s later (an LLM deciding only at sparse checkpoints).
-- Further divides by **the number of contacts present** in the mission, since a busier
-  multi-contact scene gives legitimately more reasons to change course than a single
-  1-on-1 pass; the same raw contradiction count should count for less in a 6-contact
-  encirclement (IMP05) than in a 1-on-1 mission.
-- `manoeuvre_score = max(0, 1 - rate / 0.30)`. The `0.30` cap (and an earlier, too-strict
-  `0.15`) were both empirically tuned against the 10 IMP missions until baselines stayed
-  high (0.96-1.00, since their per-decision contradiction rate is genuinely tiny) while
-  the LLM's rate produced meaningfully differentiated, non-degenerate scores (0.06-0.88
-  across IMP01-08, rather than every run collapsing to a flat 0.000).
-
-**A weighting attempt that was tried and explicitly rejected**: scaling each
-contradiction's cost by the elapsed time since the previous opposing order (intending to
-penalize "quick" flip-flops more than slow ones). This was backwards in practice: it made
-a single, well-separated, considered late correction (e.g. one turn ordered at t=10s, one
-opposite correction after 30 minutes of otherwise straight sailing) score as the *worst*
-kind of contradiction — when that's actually the most defensible kind of behaviour. The
-per-decision-opportunity, un-weighted-by-time count above does not have this problem, so
-the time-weighting was dropped rather than fixed.
-
-`smoothness_score` (heading-rate/speed-rate control-effort penalty) is unaffected and
-intentionally stays trajectory-based: how gently the hull physically moved is a
-legitimate, genuinely engine-dependent fact (Nomoto really does produce a smoother ride
-for the same orders), not an artifact worth removing.
-
-(Commit: same rescore pass as §13.1, immediately following.)
+Also a genuinely dynamics-motivated fix, this time from **cadence**, not heading inertia.
+Once baselines moved to the same *adaptive* decision cadence as the LLM agent (§14.2
+below), every system's own number of decision opportunities per mission became
+comparable *in principle* — but `compliance_axis()`/`explanation_axis()` still deducted
+one fixed weight **per raw checkpoint occurrence** of a code, so a single, never-
+corrected mistake that happened to persist across many checkpoints of a long or densely-
+sampled run (denser cadence = more checkpoints spanning the same underlying mistake)
+deducted its weight once per checkpoint — crashing the score to its floor in proportion
+to decision *density*, not in proportion to how mild the underlying mistake actually was.
+This made two systems making "the same number of distinct mistakes" score very
+differently purely because of how often each one happens to re-decide. Fixed by (1)
+collapsing a maximal run of consecutive checkpoints reporting the same code into one
+"episode", and (2) scaling each episode's deduction by
+`REFERENCE_OPPORTUNITIES / n_opportunities` (a run with more decision opportunities than
+the calibration reference deducts proportionally less per episode). Full mechanics,
+weight table, and code are in the eval doc's §6.3 (episode dedup) — kept there, not
+duplicated here, since the fix itself is engine-agnostic (any two systems with different
+decision cadences trigger the same problem, Nomoto or not — Nomoto's adaptive-cadence
+change is simply what exposed it in practice).
 
 ---
 
-## 14. Known gaps / next steps (explicitly not done yet)
+## 14. nomoto_v2: absolute steering, adaptive baseline cadence, apf/mpc/vo exclusion (2026-09-28)
+
+Four changes landed together (commit `4ae6574`), all downstream of the same root
+observation: comparing systems fairly requires their **decision timing and heading
+commands to behave the same way relative to the physics**, not just produce the same
+JSON schema.
+
+### 14.1 Absolute, idempotent heading commands
+
+The §6 heading-runaway bug (re-deriving a correction from `own.heading` and stacking it
+onto `target_heading` via `turn_left`/`turn_right`) was fixed there for the LLM/rule-tree
+path via `target_heading`-aware `goal_course_action()`, but the other deterministic
+baselines (`dwa`/`mpc`/`potential_field`/`velocity_obstacle`) each independently compute
+their own already-absolute candidate heading every re-decision — applying it as a
+`degrees` delta on top of a **possibly still-in-progress, Nomoto-lagged** commanded
+heading re-introduces the same class of stacking/zigzag bug, just per-baseline instead
+of in the shared goal-course helper. Fix: `Simulation.steer_heading(heading_deg)` — an
+absolute, idempotent counterpart to `turn_left`/`turn_right` — plus an optional
+`heading_deg` key in every baseline's (and `ruletree`'s) decision dict, which
+`apply_action()` prefers over `action`/`degrees` when present. The LLM agent path is
+unaffected (its JSON schema has no `heading_deg` field). Every checkpoint also now
+records the resulting `commanded_heading_deg` (`sim.target_heading` *after* the decision
+was applied) directly in the run log, so a stacking/zigzag pattern is visible in the
+report itself regardless of which decision function produced it — previously only the
+raw per-step action name was recorded, not the cumulative commanded state.
+
+### 14.2 Adaptive baseline cadence (matching the LLM agent's own cadence)
+
+`app/run_baseline_scenario.py` used to re-decide **every single simulation step**
+(`decision_interval=1`, justified at the time as "cheap, unlike LLM calls") — under
+Nomoto's much slower physical response, this gave every baseline vastly more decision
+opportunities than the LLM's sparse, adaptive cadence (`app.narrate.
+live_decision_interval()`, §7), an unfair comparison once the two are placed side by side
+(the dashboard's Baselines-vs-LLM tab). Baselines now default to the SAME
+`live_decision_interval()` cadence as the LLM path; `--decision-interval N` remains
+available as an explicit fixed-cadence override. This is also what makes §13.3's
+compliance/explanation-metric normalization necessary in the first place — before this
+change, baselines and the LLM never had comparable decision-opportunity counts to begin
+with.
+
+### 14.3 `apf`/`mpc`/`vo` excluded from Nomoto-tagged dashboard comparisons
+
+Per §6.4/§12's finding that `apf`/`dwa`/`mpc`'s own internal candidate-heading rollout
+assumes the legacy instant-turn-rate model (never updated to account for Nomoto's
+rudder-servo/yaw-rate lag), `app/sweep_dashboard.py`'s Baselines-vs-LLM tab now excludes
+`apf`/`mpc`/`vo` from any comparison table whose active tag resolves to a Nomoto kinematics
+model (`"nomoto"` or `"nomoto_v2"`) — comparing them there would be comparing against a
+baseline whose own internal assumption about ship response time is simply wrong under
+Nomoto, not a fair reflection of the algorithm's real design quality. `dwa` is kept (its
+own rollout horizon is short enough that the mismatch is smaller in practice, see §12's
+non-monotonicity finding) — this is a dashboard *display* filter, not a change to which
+baseline runs exist on disk.
+
+### 14.4 `nomoto_v2`: a distinct label for the same physics
+
+`kinematics_model="nomoto_v2"` (§4) uses **byte-identical** Nomoto equations to
+`"nomoto"` — introduced purely so that runs generated with the four changes above (which
+change *behaviour*, not physics: less stacking, different cadence, different eval
+normalization) are never silently averaged together with the frozen, already-archived
+`"nomoto"`-tagged reference numbers from before this session.
+
+---
+
+## 15. Known gaps / next steps (explicitly not done yet)
 
 1. ~~**Track-2 training-data regeneration**~~ — **DONE** (commit `fd72980`). Both
    `pipeline/track2/build_oow_scenarios.py` and `build_oow_scenarios_leo.py` gained an
@@ -769,3 +812,13 @@ for the same orders), not an artifact worth removing.
    assuming the legacy model's fast response — under Nomoto its learned "when to start
    acting" may be miscalibrated even where its chosen action type is nominally correct.
    Not yet quantified.
+6. **Speed-cap + course-only/course+speed dual benchmark** (proposed 2026-09-28, see
+   §4.1's status note) — cap `speed_up`/`set_speed` at `cruise_speed_mps` (nominal)
+   instead of `max_speed_mps`, and run every config/variant/mission twice: a primary
+   `speed_mode="course_only"` benchmark (speed_up/slow_down disabled for every
+   agent/baseline, Sawada-style) plus a secondary `speed_mode="course_speed"` benchmark
+   (current behaviour, with the new nominal cap). **Discussed and agreed in principle,
+   but NOT implemented** — verified directly against the code and against a freshly-
+   generated `nomoto_v2` run log (2026-09-29): no `speed_mode` concept exists anywhere in
+   `Basic Simulator/`, and the live prompt still states the OLD `max_speed_mps` cap
+   ("Speed is capped at 19.4 kt", not the mission's own 12.0 kt nominal/cruise speed).
