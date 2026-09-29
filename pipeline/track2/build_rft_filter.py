@@ -48,8 +48,14 @@ from pipeline.track2.build_oow_scenarios_rnd import FIXED_QUESTION, _bucket, bui
 paths = AgentPaths.oow()
 CACHE = paths.cache_dir
 MODEL_ID = "Qwen/Qwen3-8B"
-MAX_THINK_TOKENS = 500
-MAX_NEW_TOKENS = 1024
+# Empirically measured via a diagnostic sample (see repo memory): Qwen3-8B's OWN unaided
+# <think> traces on this facts-only prompt commonly run 1500-2800 tokens -- MAX_NEW_TOKENS
+# used to be 1024, which truncated almost every completion before it ever closed </think>
+# or emitted the JSON answer, producing a false ~0% pilot pass rate that looked like (but
+# was NOT) a genuine model-incapability finding. MAX_THINK_TOKENS is now a generous safety
+# ceiling against runaway/degenerate repetition, not a tight quality filter.
+MAX_THINK_TOKENS = 3000
+MAX_NEW_TOKENS = 3584
 _THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
 # "Basic Simulator" has a space in its name -- same sys.path trick every pipeline/track2/
