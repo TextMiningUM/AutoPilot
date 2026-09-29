@@ -37,7 +37,7 @@ for p in (ROOT, ROOT.parent):
         sys.path.insert(0, str(p))
 
 from app.evaluation import compliance_finding_parts, score_trajectory
-from app.llm_runs import parse_run_filename
+from app.llm_runs import CANONICAL_BASELINE_TAG_BY_KINEMATICS, parse_run_filename
 from app.missions import duplicate_of, list_mission_ids, load_mission
 from app.model_variants import MODEL_VARIANTS, variant_label
 from app.simulation import VesselConstraints
@@ -916,9 +916,17 @@ def _render_audit_tab() -> None:
 # anything itself (unlike the Audit tab's subprocess call).
 # ─────────────────────────────────────────────────────────────────────────────
 def _available_baseline_tags() -> list[str]:
-    tags = {parse_run_filename(p)["tag"] for p in RUNS_DIR.glob("*.json")
-           if not p.name.startswith("_sweep_") and parse_run_filename(p)["config"] in BASELINE_CONFIGS}
-    return sorted(tags)
+    """Only the 3 canonical tags (app.llm_runs.CANONICAL_BASELINE_TAG_BY_KINEMATICS) that
+    actually have at least one baseline run on disk -- NEVER an arbitrary tag string found
+    in a filename. This is a hard cap, not just a default/sort: a mistakenly- or
+    differently-tagged baseline run (e.g. a stray copy, a one-off --tag override, a manual
+    scp of someone else's in-progress files -- all of which have happened) can never again
+    silently add a 4th+ entry to this dropdown (2026-09-29: happened twice for IMP14
+    alone). Such stray files still exist on disk and are still readable directly; they are
+    just excluded from this picker."""
+    found = {parse_run_filename(p)["tag"] for p in RUNS_DIR.glob("*.json")
+            if not p.name.startswith("_sweep_") and parse_run_filename(p)["config"] in BASELINE_CONFIGS}
+    return [t for t in CANONICAL_BASELINE_TAG_BY_KINEMATICS.values() if t in found]
 
 
 def _baseline_tag_kinematics_model(tag: str) -> str:

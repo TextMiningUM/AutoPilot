@@ -21,6 +21,20 @@ ROOT = APP_DIR.parent
 BASE_RUNS_DIR = ROOT / "Data" / "missions"
 RUNS_DIR = BASE_RUNS_DIR / "_llm_runs"
 
+# The 3 kinematics models deterministic baselines ever run under (app.simulation.
+# VesselConstraints) each map to exactly ONE tag, shared across EVERY mission's baseline
+# runs -- NEVER a per-mission or ad-hoc tag. Single source of truth for both the writer
+# (app.run_baseline_scenario.py derives --tag from --kinematics-model by default) and every
+# reader (app.sweep_dashboard.py's Baseline-tag dropdown, tests/test_baseline_tag_
+# convention.py) so a new mission can't reintroduce mission-specific baseline tags by
+# accident (2026-09-29: happened twice for IMP14 alone, cluttering the dashboard's
+# Baseline-tag dropdown with 3 duplicate entries of the same underlying system).
+CANONICAL_BASELINE_TAG_BY_KINEMATICS: dict[str, str] = {
+    "kinematics": "baseline",
+    "nomoto": "baseline_Nomoto_all",
+    "nomoto_v2": "nomoto_v2",
+}
+
 
 def run_log_path(mission_id: str, config: str, weights: str = "W0_base", tag: str = "default") -> Path:
     """One JSON file per (mission, config, weights) in the common case. Filename ALWAYS

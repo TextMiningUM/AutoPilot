@@ -43,7 +43,7 @@ for p in (ROOT, REPO_ROOT):
 
 from app.baselines import BASELINE_CONFIGS, DECISION_FUNCS
 from app.evaluation import score_trajectory
-from app.llm_runs import RUNS_DIR, run_log_path
+from app.llm_runs import CANONICAL_BASELINE_TAG_BY_KINEMATICS, RUNS_DIR, run_log_path
 from app.measurement import measure_decision_quality
 from app.missions import list_mission_ids, load_mission, mission_to_dict
 from app.narrate import (
@@ -171,8 +171,15 @@ def main() -> None:
     ap.add_argument("--configs", nargs="+", default=list(BASELINE_CONFIGS),
                     choices=list(BASELINE_CONFIGS),
                     help="one or more baseline configs (see app.baselines.BASELINE_CONFIGS)")
-    ap.add_argument("--tag", default="baseline",
-                    help="distinguishes variations of the same mission+config")
+    ap.add_argument("--tag", default=None,
+                    help="override the canonical tag derived from --kinematics-model "
+                         "(app.llm_runs.CANONICAL_BASELINE_TAG_BY_KINEMATICS: kinematics-> "
+                         "'baseline', nomoto->'baseline_Nomoto_all', nomoto_v2->'nomoto_v2') "
+                         "-- baselines have no other axis to vary (no model/prompt variant), "
+                         "so this should almost never be passed; every mission's baseline "
+                         "runs must share these SAME 3 tags for app.sweep_dashboard.py's "
+                         "Baseline-tag dropdown to group them correctly instead of growing "
+                         "a new per-mission entry")
     ap.add_argument("--dt", type=float, default=10.0, help="simulation time step (s)")
     ap.add_argument("--max-steps", type=int, default=None,
                     help="total step budget -- default: per-mission recommendation, see "
@@ -194,14 +201,22 @@ def main() -> None:
     ap.add_argument("--force", action="store_true", help="overwrite existing logs")
     args = ap.parse_args()
 
+    canonical_tag = CANONICAL_BASELINE_TAG_BY_KINEMATICS[args.kinematics_model]
+    tag = args.tag if args.tag is not None else canonical_tag
+    if args.tag is not None and args.tag != canonical_tag:
+        print(f"WARNING: --tag {args.tag!r} overrides the canonical tag {canonical_tag!r} "
+             f"for kinematics_model={args.kinematics_model!r} -- these runs will NOT be "
+             "picked up as part of the standard 3-tag Baseline-tag comparison unless you "
+             "know exactly what you're doing.")
+
     missions = args.missions or list_mission_ids()
     jobs = [(m, c) for m in missions for c in args.configs]
     print(f"Queued {len(jobs)} run(s): {len(missions)} mission(s) x {len(args.configs)} config(s), "
-         f"tag={args.tag!r}, kinematics_model={args.kinematics_model!r}")
+         f"tag={tag!r}, kinematics_model={args.kinematics_model!r}")
     for i, (mission_id, config) in enumerate(jobs, 1):
         print(f"[{i}/{len(jobs)}] {mission_id} / {config}")
         t0 = time.time()
-        run_one(mission_id, config, tag=args.tag, dt=args.dt, max_steps=args.max_steps,
+        run_one(mission_id, config, tag=tag, dt=args.dt, max_steps=args.max_steps,
                 decision_interval=args.decision_interval, force=args.force,
                 kinematics_model=args.kinematics_model)
         print(f"  took {time.time() - t0:.3f}s")
