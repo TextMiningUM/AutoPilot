@@ -111,6 +111,10 @@ REFL_FILES   = {
         # Fase B5: capped at LEO_REFLECTION_CAP below, same rationale as train_sft.py's LEO_SFT_CAP.
         # 2026-09-28: legacy (non-Nomoto) oow_scenario_Leo_reflection.jsonl sibling dropped.
         CACHE / "oow_scenario_Leo_reflection_nomoto.jsonl",
+        # Stap 2 Step 3 (2026-09-29) -- oracle-planner-labeled reflection triples from the
+        # new random-geometry RND01-60 mission pool, same convention as the plain/Leo
+        # reflection files above -- own file for traceability, never merged into them.
+        CACHE / "oow_scenario_RND_reflection_nomoto.jsonl",
     ],
 }[paths.domain]
 

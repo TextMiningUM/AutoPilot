@@ -138,6 +138,10 @@ DPO_FILES   = {
         # Fase B5: capped at LEO_DPO_CAP below, same rationale as train_sft.py's LEO_SFT_CAP.
         # 2026-09-28: legacy (non-Nomoto) oow_scenario_Leo_dpo_pairs.jsonl sibling dropped.
         CACHE / "oow_scenario_Leo_dpo_pairs_nomoto.jsonl",
+        # Stap 2 Step 3 (2026-09-29) -- oracle-planner-labeled DPO pairs from the new
+        # random-geometry RND01-60 mission pool, same convention as the plain/Leo pairs
+        # above -- own file for traceability, never merged into them.
+        CACHE / "oow_scenario_RND_dpo_pairs_nomoto.jsonl",
         # Fase C2(ii) -- "anti-fabricated-risk" pairs mined deterministically (no LLM)
         # from real model mistakes in the archived units_v1 mission checkpoints
         # (build_measurement_dpo.py against app/measurement.py's Check A hits).

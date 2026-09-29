@@ -150,6 +150,17 @@ SFT_DATASETS = {
         # rationale as the plain oow_scenario_* pair above.
         CACHE / "oow_scenario_Leo_sft_direct_nomoto.jsonl",
         CACHE / "oow_scenario_Leo_sft_cot_nomoto.jsonl",
+        # Stap 2 Step 3 (2026-09-29) -- oracle-planner-labeled closed-loop rollouts over
+        # the new random-geometry RND01-60 mission pool (generate_random_imazu_missions.py),
+        # Claude reasoning gated the same way as the Leo/plain scenario files above.
+        # Own file (never merged into the plain oow_scenario_*/Leo_* pairs) for traceability.
+        CACHE / "oow_scenario_RND_sft_direct_nomoto.jsonl",
+        CACHE / "oow_scenario_RND_sft_cot_nomoto.jsonl",
+        # Stap 2 Step 5 (2026-09-29) -- RFT self-consistency rows: base Qwen3-8B's OWN
+        # sampled <think> completions that independently passed every b3_reasoning_gates
+        # check (build_rft_filter.py), not a teacher-generated trace -- kept as its own
+        # small file (28 rows) for traceability, same convention as every other source here.
+        CACHE / "oow_rft_sft.jsonl",
         # Procedural-graph step-order data: merged graph (rule+incident+scenario
         # traces, build_pg.py) plus a dedicated incident-only file so its "what
         # actually went wrong" pitfalls stay traceable, same Track1/Track2 convention.
