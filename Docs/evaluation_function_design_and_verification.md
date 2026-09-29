@@ -442,16 +442,48 @@ every deterministic baseline (`ruletree`/`sawada`/`dwa`/`mpc`/`apf`/`vo`) comput
 `encounter_rule`/`conduct_rule` via a *direct call* to the same `classify_rules()`
 ground-truth classifier `explanation_axis()` checks against — they are not "self-reporting"
 in the same sense the LLM is, so they tend to score well on citation accuracy close to "for
-free" (measured on one real example: baselines 0.85–0.89 vs. LLM configs 0.75–0.89 — the
-gap is real but smaller than a naive "baselines get it free" argument would suggest, since
-the auditor's explanation codes check more than the bare rule number).
+free". Measured across all 46 real Imazu missions (`nomoto_v2` tag, `baseline_sawada` vs.
+two LLM configs):
+
+| System | mean explanation | min | max | total explanation findings (46 missions) |
+|---|---|---|---|---|
+| `sawada` | 0.917 | 0.824 | 1.000 | 83 |
+| LLM `v0_base` | 0.717 | 0.000 | 1.000 | 168 |
+| LLM `v11_super_colreg_rag_cot` | 0.788 | 0.567 | 0.927 | 320 |
+
+`sawada`'s 83 findings are almost entirely genuine *edge-case* timing disagreements
+(`E_unclassified_encounter`/`E_role_fabrication` — its own risk-band computation vs. the
+auditor's independently-recomputed ground truth), never a wrong rule NUMBER, because it
+never has to infer one. The LLM configs' findings are dominated by two different, genuine
+reasoning failures instead:
+- **`v0_base`**: 84× `E_encounter_mismatch` — cites *a* rule, but the wrong one (the
+  documented Rule-13-over-citation bias, §9 of `Docs/nomoto_dynamics_design_and_
+  verification.md` history).
+- **`v11_super_colreg_rag_cot`**: 112× `E_8c` — a distinct, CoT-specific pattern: it
+  repeatedly cites **"Rule 8"** (the general collision-avoidance-action rule) as a
+  catch-all justification instead of the actual applicable rule. Real example (Imazu01,
+  head-on with `ts1`): *"COLREG Rule 8 mandates decisive action to avoid collision;
+  head-on encounter requires starboard-side passage"* — the chosen action (turn_right
+  30°) is correct, matching `ruletree`'s own Rule-14 citation for the same contact, but
+  "Rule 8" is not the right citation for a head-on encounter (Rule 14 is). Plus 108 more
+  `E_encounter_mismatch` findings on top of that.
+
+So `sawada` scoring higher here does not mean it explains itself better in any human
+sense — it cannot be wrong about the *label* because it is not really reasoning about
+which rule applies, just echoing the same lookup table the grader itself uses. The LLM is
+doing the strictly harder task (inferring the rule from a prose situation report) and
+measurably gets it wrong more often, including this newly-identified `E_8c`
+"Rule-8-as-catch-all" habit specific to the CoT config. **Not currently being fixed
+(explicit decision, 2026-09-29)** — recorded here as a known, quantified finding for
+future reference, not a bug being tracked for remediation right now.
 
 **All existing `_llm_runs/*.json` run logs (1518 files, local) were rescored in place**
 for this weight change — every per-axis score was already stored (nothing needed
 resimulating), only the weighted sum combining them changed; 1224 files' `composite_score`
 actually changed (mean delta −0.062, since every axis's typical score was higher than
-`smoothness`'s near-ceiling ~0.99–0.996 that lost weight). The cloud copy has **not** yet
-been synced with this rescore as of this note.
+`smoothness`'s near-ceiling ~0.99–0.996 that lost weight). The cloud copy was synced with
+this rescore the same day (scoped `git reset --hard origin/main` on the pod, which was
+already 4 commits stale with no unique local work).
 
 ### 8.3 Final result shape
 
