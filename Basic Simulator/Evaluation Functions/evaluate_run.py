@@ -441,7 +441,13 @@ def explanation_axis(checkpoint_codes, run_level_codes, collided=False, n_opport
     rule scores badly HERE, not on compliance_axis(), and vice versa. Same signature/
     mechanics as compliance_axis() (see its docstring, including the 2026-09-28 episode-
     dedup/opportunity-normalization fix) -- same collision hard-gate too, since there is no
-    meaningful citation-accuracy story left to tell once a run has actually collided."""
+    meaningful citation-accuracy story left to tell once a run has actually collided.
+
+    NOTE this only scores citation ACCURACY (does the label match ground truth), not
+    explanatory RICHNESS/narrative quality -- a terse but correctly-labelled decision
+    scores the same as a detailed, well-reasoned one here. Since 2026-09-29 this score
+    DOES feed the composite (weight 0.10, see DEFAULT_WEIGHTS) -- no longer purely
+    informational."""
     return _scored_axis(checkpoint_codes, run_level_codes, collided, "explanation", n_opportunities)
 
 
@@ -455,13 +461,22 @@ def explanation_axis(checkpoint_codes, run_level_codes, collided=False, n_opport
 # let PASS_WITH_CPA_VIOLATION runs that were seconds from an actual collision
 # still score ~0.9. safety_score is continuous (min_cpa/safe_distance_m) and now
 # directly drags the composite down in proportion to how close the call was.
+# 2026-09-29: "explanation" now also feeds the composite (was informational-only
+# since the 2026-09-24 manoeuvre/explanation split) -- self-reported reasoning
+# accuracy/transparency is a real, distinct signal worth rewarding on its own, not
+# just a diagnostic. Given a real, non-trivial weight (0.10, matching compliance's
+# broad severity range) rather than a token one, taken entirely out of
+# `smoothness` (0.15 -> 0.05) -- smoothness is a pure control-effort/comfort proxy
+# that feeds no hard gate and carries no COLREG-correctness signal, making it the
+# least safety-relevant term to shrink; every other weight is unchanged.
 DEFAULT_WEIGHTS = {
     "safety": 0.35,
     "compliance": 0.20,
     "temporal": 0.10,
     "spatial": 0.10,
     "manoeuvre": 0.10,
-    "smoothness": 0.15,
+    "smoothness": 0.05,
+    "explanation": 0.10,
 }
 
 def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
@@ -502,11 +517,9 @@ def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
     n_opportunities = len(decision_events) if decision_events else None
     compliance_score, compliance_breakdown = compliance_axis(
         checkpoint_codes, all_run_level_codes, collided=not passed, n_opportunities=n_opportunities)
-    # 2026-09-24 split (see COMPLIANCE_CATEGORY's comment): explanation_score never feeds
-    # the composite/verdict below -- it's reported alongside compliance purely as a
-    # SEPARATE signal (was the model's stated reasoning/rule-citation accurate), so a run
-    # with a perfectly safe, COLREG-correct manoeuvre but sloppy self-reported labelling
-    # no longer gets its PASS/FAIL and composite score dragged down for that alone.
+    # 2026-09-29: explanation_score now DOES feed the composite (see DEFAULT_WEIGHTS'
+    # own comment above for the weight/rationale) -- reported the same way as before
+    # (result["explanation_compliance"]), just no longer purely a side diagnostic.
     explanation_score, explanation_breakdown = explanation_axis(
         checkpoint_codes, all_run_level_codes, collided=not passed, n_opportunities=n_opportunities)
 
@@ -524,10 +537,12 @@ def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
         # (confirmed in testing: without this cap, a stopped vessel scored
         # 0.70, which does not reflect "never completed the mission" as a
         # serious failure). Capped low regardless of how clean the partial
-        # trajectory looked.
+        # trajectory looked. explanation included (2026-09-29) since a run can
+        # still have real decisions/citations to judge even without arriving.
         composite = min(0.2, weights["compliance"] * compliance_score +
                              weights["manoeuvre"] * man["manoeuvre_score"] +
-                             weights["smoothness"] * man["smoothness_score"])
+                             weights["smoothness"] * man["smoothness_score"] +
+                             weights["explanation"] * explanation_score)
         verdict = "FAIL -- did not reach the goal"
     else:
         composite = (
@@ -536,7 +551,8 @@ def evaluate_run(csv_path, own_vehicle, start_xy, goal_xy, nominal_speed,
             weights["temporal"] * eff["temporal_score"] +
             weights["spatial"] * eff["spatial_score"] +
             weights["manoeuvre"] * man["manoeuvre_score"] +
-            weights["smoothness"] * man["smoothness_score"]
+            weights["smoothness"] * man["smoothness_score"] +
+            weights["explanation"] * explanation_score
         )
         # No literal collision and the goal was reached, but a genuine COLREG-relevant
         # near-miss (min separation below this mission's own safe_distance_m, just not

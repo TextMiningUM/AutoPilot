@@ -54,7 +54,7 @@ comparison scripts) — nothing computes its own, second copy of any of this.
 |---|---|---|---|
 | 1 | **Safety** | Yes (hard gate + weighted) | Did own-ship actually collide, and how close was the nearest miss? |
 | 2 | **Compliance** | Yes | Was the physical manoeuvre itself safe and COLREG-correct? |
-| 3 | **Explanation compliance** | **No** (informational only) | Did the model's *stated* rule citation/risk claim match the geometric truth? |
+| 3 | **Explanation compliance** | **Yes** (since 2026-09-29, weight 0.10 -- see §8.2) | Did the model's *stated* rule citation/risk claim match the geometric truth? |
 | 4 | **Temporal efficiency** | Yes | Did it reach the goal in a reasonable time vs. a straight-line baseline? |
 | 5 | **Spatial efficiency** | Yes | Did it sail a reasonable distance vs. the straight-line distance? |
 | 6 | **Manoeuvre (decisiveness)** | Yes | Did it flip-flop between contradictory helm orders? |
@@ -267,8 +267,8 @@ Every one of the ten codes above is tagged **exactly one** of two categories:
 
 | Category | Codes | Answers |
 |---|---|---|
-| **`manoeuvre`** (→ `compliance_axis()`, feeds composite) | `B_wrong_direction`, `C_degrees_over_limit`, `D_no_action_when_required`, `B_17c`, `P_port_toward_contact`, `P_wrong_side_pass`, `cpa_violation` | Was the **physical action** own-ship took safe and COLREG-correct? |
-| **`explanation`** (→ `explanation_axis()`, informational only) | `A_fabricated_risk`, `E_encounter_mismatch`, `E_role_fabrication`, `E_unclassified_encounter`, `E_8c` | Did the model's own **stated** encounter_rule/conduct_rule/"real risk" claim match the geometric ground truth? |
+| **`manoeuvre`** (→ `compliance_axis()`, feeds composite via `weights["compliance"]`) | `B_wrong_direction`, `C_degrees_over_limit`, `D_no_action_when_required`, `B_17c`, `P_port_toward_contact`, `P_wrong_side_pass`, `cpa_violation` | Was the **physical action** own-ship took safe and COLREG-correct? |
+| **`explanation`** (→ `explanation_axis()`, feeds composite via `weights["explanation"]` since 2026-09-29 -- see §6.4/§8.2) | `A_fabricated_risk`, `E_encounter_mismatch`, `E_role_fabrication`, `E_unclassified_encounter`, `E_8c` | Did the model's own **stated** encounter_rule/conduct_rule/"real risk" claim match the geometric ground truth? |
 
 **Algorithm (`_scored_axis()`, shared by both axes):**
 1. If the run collided: return `(0.0, [{"code": "collision", "deduction": -1.0}])` — a hard
@@ -336,8 +336,19 @@ runs crushed to exactly 0.0 — dominated by `explanation`-category noise
 `B_wrong_direction` and 52 `D_no_action_when_required` occurrences across the same batch).
 After the split: average **manoeuvre** compliance rose to 0.556 and only 15/69 runs were
 still at 0.0 — a much more faithful signal of actual physical safety.
-`explanation_axis()`'s score is reported alongside compliance (`result["explanation_compliance"]`)
-purely as a **separate**, non-scoring diagnostic of citation accuracy.
+`explanation_axis()`'s score is reported alongside compliance (`result["explanation_compliance"]`).
+
+> **Update (2026-09-29):** the split itself (two independently-scored axes, never blended
+> back into one number) is unchanged and remains the reason `explanation_compliance` can
+> never crash `compliance_axis()`'s score. What changed is whether `explanation_axis()`'s
+> own score feeds the *composite* — it now does, with its own dedicated weight (0.10),
+> after a deliberate design discussion (transparency/self-explanation is itself a
+> meaningful signal, not just diagnostic noise). See §8.2 for the weight and rationale.
+> Both a citation-accuracy check and (informally, via a one-off Claude-judged experiment)
+> a narrative-*richness* check were considered — only the existing deterministic accuracy
+> check (`explanation_axis()`) was actually wired in; richness/quality scoring is not
+> implemented (would need an LLM-judge call, i.e. real per-checkpoint cost/latency, not a
+> free deterministic recompute like everything else in this document).
 
 ### 6.5 The weight table
 
@@ -383,12 +394,13 @@ the scoring pipeline described in this document.
 
 ```python
 DEFAULT_WEIGHTS = {
-    "safety":      0.35,
-    "compliance":  0.20,
-    "temporal":    0.10,
-    "spatial":     0.10,
-    "manoeuvre":   0.10,
-    "smoothness":  0.15,
+    "safety":       0.35,
+    "compliance":   0.20,
+    "temporal":     0.10,
+    "spatial":      0.10,
+    "manoeuvre":    0.10,
+    "smoothness":   0.05,
+    "explanation":  0.10,
 }
 ```
 
@@ -398,20 +410,50 @@ DEFAULT_WEIGHTS = {
    `composite = 0.0`, verdict `"FAIL -- collision occurred"`. No other axis matters.
 2. **Did not reach the goal** (`efficiency_axes()`'s `arrived == False`, §4) → capped low
    regardless of how clean the partial trajectory looked:
-   $$\text{composite} = \min\Big(0.2,\; w_{\text{compliance}}\!\cdot\!\text{compliance} + w_{\text{manoeuvre}}\!\cdot\!\text{manoeuvre} + w_{\text{smoothness}}\!\cdot\!\text{smoothness}\Big)$$
+   $$\text{composite} = \min\Big(0.2,\; w_{\text{compliance}}\!\cdot\!\text{compliance} + w_{\text{manoeuvre}}\!\cdot\!\text{manoeuvre} + w_{\text{smoothness}}\!\cdot\!\text{smoothness} + w_{\text{explanation}}\!\cdot\!\text{explanation}\Big)$$
    verdict `"FAIL -- did not reach the goal"`. (Without this cap a vessel that never moves
    trivially earns full marks on manoeuvre-count and smoothness — confirmed in testing to
    otherwise still score ~0.70.)
 3. **Reached the goal, no collision** — the normal case:
-   $$\text{composite} = w_{\text{safety}}\!\cdot\!\text{safety} + w_{\text{compliance}}\!\cdot\!\text{compliance} + w_{\text{temporal}}\!\cdot\!\text{temporal} + w_{\text{spatial}}\!\cdot\!\text{spatial} + w_{\text{manoeuvre}}\!\cdot\!\text{manoeuvre} + w_{\text{smoothness}}\!\cdot\!\text{smoothness}$$
+   $$\text{composite} = w_{\text{safety}}\!\cdot\!\text{safety} + w_{\text{compliance}}\!\cdot\!\text{compliance} + w_{\text{temporal}}\!\cdot\!\text{temporal} + w_{\text{spatial}}\!\cdot\!\text{spatial} + w_{\text{manoeuvre}}\!\cdot\!\text{manoeuvre} + w_{\text{smoothness}}\!\cdot\!\text{smoothness} + w_{\text{explanation}}\!\cdot\!\text{explanation}$$
    verdict is `"PASS"` if the realized `min_cpa_overall` never fell below `safe_distance_m`,
    else `"PASS_WITH_CPA_VIOLATION"` — a genuine near-miss (e.g. 359–395 m against a 500 m
    safe distance) must never be silently reported as a bare, unqualified `"PASS"`.
 
-Note that **`explanation_compliance` never appears in this formula** — it is computed and
-reported (`result["explanation_compliance"]`) purely as an additional diagnostic (§6.4).
+### 8.2 `explanation` joined the composite (2026-09-29)
 
-### 8.1 Final result shape
+From 2026-09-24 (§6.4) until 2026-09-29, `explanation_compliance` was purely informational
+— computed and reported but never summed into `composite_score`. Reintroduced with its
+own dedicated weight (0.10) after a deliberate discussion: self-reported reasoning
+accuracy/transparency is a real, distinct signal worth rewarding on its own (not just a
+diagnostic), especially since LLM configs can articulate a genuine causal chain
+(geometry → rule → action) that deterministic baselines' terse computation-traces never
+attempt — though note `explanation_axis()` itself only scores citation *accuracy* against
+ground truth, not narrative *richness* (see §6.4's update box).
+
+The 0.10 weight was taken entirely out of `smoothness` (0.15 → 0.10 → **0.05** final),
+not spread across other axes — `smoothness` is a pure control-effort/comfort proxy that
+feeds no hard gate and carries no COLREG-correctness signal, making it the least
+safety-relevant term to shrink. Every other weight (`safety`, `compliance`, `temporal`,
+`spatial`, `manoeuvre`) is unchanged.
+
+**Known asymmetry, worth remembering when comparing baselines to the LLM on this axis:**
+every deterministic baseline (`ruletree`/`sawada`/`dwa`/`mpc`/`apf`/`vo`) computes its own
+`encounter_rule`/`conduct_rule` via a *direct call* to the same `classify_rules()`
+ground-truth classifier `explanation_axis()` checks against — they are not "self-reporting"
+in the same sense the LLM is, so they tend to score well on citation accuracy close to "for
+free" (measured on one real example: baselines 0.85–0.89 vs. LLM configs 0.75–0.89 — the
+gap is real but smaller than a naive "baselines get it free" argument would suggest, since
+the auditor's explanation codes check more than the bare rule number).
+
+**All existing `_llm_runs/*.json` run logs (1518 files, local) were rescored in place**
+for this weight change — every per-axis score was already stored (nothing needed
+resimulating), only the weighted sum combining them changed; 1224 files' `composite_score`
+actually changed (mean delta −0.062, since every axis's typical score was higher than
+`smoothness`'s near-ceiling ~0.99–0.996 that lost weight). The cloud copy has **not** yet
+been synced with this rescore as of this note.
+
+### 8.3 Final result shape
 
 ```python
 {
