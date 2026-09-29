@@ -75,6 +75,25 @@ def _reaim_heading(target_pos_at_trigger: tuple[float, float], v_ts: float,
     return heading
 
 
+def _reaim_heading_offset(target_pos_at_trigger: tuple[float, float], v_ts: float,
+                          trigger_t: float, lateral_offset_m: float,
+                          own_v: float = V_OS) -> float:
+    """IMP14 (2026-09-29): like _reaim_heading(), but aims at a PLAUSIBLE AVOIDED
+    own-ship position (x=lateral_offset_m, still progressing up-track at own_v) instead
+    of the untouched nominal track (x=0). _reaim_heading()'s own guarantee only holds if
+    own-ship did nothing -- the moment own-ship takes the textbook-correct avoidance turn
+    away from a left-side cluster (exactly what every one of these missions provokes), it
+    is no longer where a nominal-track reaim is aiming, which is why IMP11-13's "chaos at
+    the mark" concept was found too easy to dodge with one early turn. Aiming at a fixed
+    lateral offset (a bounded, single-avoidance-turn-sized displacement, not an
+    ever-diverging heading) instead guarantees the SECOND crossing threatens a ship that
+    already reacted once, not an empty patch of water."""
+    own_pos_at_trigger = (lateral_offset_m, own_v * trigger_t)
+    rel = (target_pos_at_trigger[0] - own_pos_at_trigger[0], target_pos_at_trigger[1] - own_pos_at_trigger[1])
+    _, heading = solve_intercept(rel, v_ts, own_v, 0.0)
+    return heading
+
+
 def _target_direct(name: str, bearing_deg: float, range_m: float, heading_deg: float, v_ts: float) -> dict:
     """Places a target directly at (bearing, range) with a GIVEN heading/speed -- no
     collision-guarantee construction. Used for near-stationary 'blocker' obstacles (e.g.
@@ -96,14 +115,18 @@ def build(mission_id: str, name: str, rule_refs: list[str], own_ship_role: str,
          description: str, pass_criteria: list[str],
          targets_spec: list[tuple[str, float, float, float]],
          maneuvers: list[tuple[str, float, float | None, float | None]] | None = None,
-         reaim_maneuvers: list[tuple[str, float, float]] | None = None,
+         reaim_maneuvers: list[tuple[str, float, float] | tuple[str, float, float, float]] | None = None,
          direct_targets: list[tuple[str, float, float, float, float]] | None = None) -> dict:
     """maneuvers: list of (target_name, trigger_time_s, delta_heading_deg|None,
     new_speed_kn|None) -- delta_heading_deg is ADDED to that target's own constructed
-    heading. reaim_maneuvers: list of (target_name, trigger_time_s, target_speed_mps) --
-    computes a REAL fresh guaranteed-collision heading via _reaim_heading() instead of a
-    blind delta (see that function's docstring for why). direct_targets: list of (name,
-    bearing_deg, range_m, heading_deg, speed_mps) for targets placed directly."""
+    heading. reaim_maneuvers: list of (target_name, trigger_time_s, target_speed_mps)
+    [+ optional 4th element lateral_offset_m] -- computes a REAL fresh guaranteed-
+    collision heading via _reaim_heading() (aims at own-ship's untouched nominal track)
+    instead of a blind delta (see that function's docstring for why); giving a 4th
+    lateral_offset_m switches to _reaim_heading_offset() instead (aims at a plausible
+    AVOIDED own-ship position, see its own docstring -- used by IMP14). direct_targets:
+    list of (name, bearing_deg, range_m, heading_deg, speed_mps) for targets placed
+    directly."""
     print(f"{mission_id}: {name}")
     own, goal = _own_and_goal()
     built = [_target(n, b, v, t) for n, b, v, t in targets_spec]
@@ -126,15 +149,22 @@ def build(mission_id: str, name: str, rule_refs: list[str], own_ship_role: str,
         new_heading = (heading_by_name[tname] + delta_heading) % 360 if delta_heading is not None else None
         target_maneuvers.append({"target": tname, "trigger_time_s": trigger_t,
                                  "new_heading_deg": new_heading, "new_speed_kn": new_speed_kn})
-    for tname, trigger_t, v_ts in (reaim_maneuvers or []):
+    for reaim_spec in (reaim_maneuvers or []):
+        tname, trigger_t, v_ts = reaim_spec[0], reaim_spec[1], reaim_spec[2]
+        lateral_offset_m = reaim_spec[3] if len(reaim_spec) > 3 else None
         x0, y0, heading0 = state_by_name[tname]
         h0 = math.radians(heading0)
         original_speed = speed_mps_by_name[tname]
         pos_at_trigger = (x0 + original_speed * math.sin(h0) * trigger_t,
                          y0 + original_speed * math.cos(h0) * trigger_t)
-        new_heading = _reaim_heading(pos_at_trigger, v_ts, trigger_t)
-        print(f"  [reaim] {tname} @t={trigger_t:.0f}s -> new heading {new_heading:.1f} deg "
-             f"(fresh guaranteed collision)")
+        if lateral_offset_m is not None:
+            new_heading = _reaim_heading_offset(pos_at_trigger, v_ts, trigger_t, lateral_offset_m)
+            print(f"  [reaim-offset] {tname} @t={trigger_t:.0f}s -> new heading {new_heading:.1f} deg "
+                 f"(fresh guaranteed collision vs. own-ship offset {lateral_offset_m:.0f}m)")
+        else:
+            new_heading = _reaim_heading(pos_at_trigger, v_ts, trigger_t)
+            print(f"  [reaim] {tname} @t={trigger_t:.0f}s -> new heading {new_heading:.1f} deg "
+                 f"(fresh guaranteed collision)")
         target_maneuvers.append({"target": tname, "trigger_time_s": trigger_t,
                                  "new_heading_deg": new_heading, "new_speed_kn": mps_to_kn(v_ts)})
     return {
@@ -376,6 +406,53 @@ MISSIONS = [
             ("ts6_beat_f", 260.0, 6.0),
         ],
         direct_targets=[("ts7_becalmed", 0.0, 1900.0, 250.0, 0.3)],
+    ),
+    # IMP14 (2026-09-29): fixes IMP11-13's "too easy to dodge with one early turn" gap.
+    # Root cause: _reaim_heading() only guarantees a fresh collision if own-ship did
+    # NOTHING -- once own-ship takes the textbook-correct avoidance turn away from the
+    # left-side cluster (exactly what these missions provoke), it is no longer where a
+    # nominal-track reaim is aiming. Two changes, same underlying build() machinery:
+    #   1. Much longer gap between each boat's own T_collision and its reaim trigger_t
+    #      (+80-120s here, vs. IMP11-13's +20-30s) -- each boat now travels well PAST
+    #      the centerline into real starboard territory before rounding, making the
+    #      outbound (left-to-right) crossing genuinely wide/deep, not a shallow flick.
+    #   2. reaim_maneuvers' new 4th element (lateral_offset_m, see
+    #      _reaim_heading_offset()) aims the return (right-to-left) crossing at a
+    #      PLAUSIBLE AVOIDED own-ship position (400m to starboard of nominal, still
+    #      progressing up-track) instead of the untouched centerline -- so the return
+    #      sweep threatens a ship that already reacted once, not empty water. The long
+    #      trigger delay also means own-ship's own adaptive decision cadence will likely
+    #      have relaxed (phase-1 contacts read as resolved) by the time this fires --
+    #      the reversal should land as a genuine surprise requiring a fresh manoeuvre,
+    #      not a continuation of the same turn.
+    build(
+        "IMP14", "Chaos at the windward mark, wide double-crossing (5 vessels)",
+        ["Rule 8", "Rule 13", "Rule 14", "Rule 15", "Rule 17"], "mixed",
+        "Four vessels beat upwind toward the same mark on a genuine collision course with "
+        "own-ship, continue WELL PAST the centerline into real starboard territory before "
+        "each rounds at its own staggered moment, then bears away on a FRESH collision "
+        "course aimed at a plausible AVOIDED own-ship position (not the untouched nominal "
+        "track) -- plus one becalmed/dead-in-the-water vessel at the mark. Own-ship must "
+        "cross this fleet TWICE, each crossing wide and deep: once left-to-right on their "
+        "approach, once right-to-left on their return, timed so the return lands as a "
+        "surprise after the first crossing already looks resolved. Correct: Rule 8 -- a "
+        "single holistic plan with due regard to ALL vessels present, continuously "
+        "re-checked as each one rounds and re-threatens, never assuming one early "
+        "avoidance turn is the end of the story.",
+        ["Own-ship avoids collision with all 5 contacts.", "Reach the goal."],
+        [
+            ("ts1_beat_a", -50.0, 7.0, 190.0),
+            ("ts2_beat_b", -80.0, 8.5, 220.0),
+            ("ts3_beat_c", -100.0, 8.0, 240.0),
+            ("ts4_beat_d", -145.0, 9.8, 170.0),
+        ],
+        reaim_maneuvers=[
+            ("ts1_beat_a", 290.0, 8.0, 400.0),
+            ("ts2_beat_b", 320.0, 8.0, 400.0),
+            ("ts3_beat_c", 340.0, 8.0, 400.0),
+            ("ts4_beat_d", 270.0, 6.0, 400.0),
+        ],
+        direct_targets=[("ts5_becalmed", 0.0, 1900.0, 250.0, 0.3)],
     ),
 ]
 
