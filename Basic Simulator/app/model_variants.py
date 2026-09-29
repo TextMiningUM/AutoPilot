@@ -51,6 +51,18 @@ MODEL_VARIANTS: dict[str, dict[str, str]] = {
     # mission quality exists (see repo memory: the 2026-09-25 reflection retrain fixed the
     # Draft/Critique/Refined format-leak bug but still underperforms qwen_sftdpo on real
     # missions -- not registered as a variant until that's resolved).
+    "qwen_sftdpo_nomoto_v2": {
+        "label": "QWEN-SFT-DPO (Nomoto v2)",
+        "weights": "MERGED:OOW-QWEN_nomoto_v2_sftdpo",
+        "description": "SFT+DPO merged checkpoint (2026-09-29, Stap 2) -- adds oracle-"
+                       "planner-labeled RND01-60 rollouts (Step 3), expanded outcome-"
+                       "verdict DAgger mining (Step 4, 5322 pairs), and a small RFT self-"
+                       "consistency SFT set (Step 5, 28 rows) on top of qwen_sftdpo_"
+                       "nomoto's original mix. Reflection deliberately excluded, same "
+                       "composition convention as qwen_sftdpo/qwen_sftdpo_nomoto for a "
+                       "direct comparison. Intended for use under kinematics_model="
+                       "'nomoto_v2'.",
+    },
 }
 
 DEFAULT_VARIANT = "qwen_base"
