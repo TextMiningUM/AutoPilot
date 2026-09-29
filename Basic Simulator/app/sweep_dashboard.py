@@ -977,11 +977,17 @@ def _llm_signature() -> tuple:
 
 
 @st.cache_data(show_spinner=False)
-def _scan_baseline_runs_all_missions(tag: str, _signature: tuple) -> dict[str, dict[str, dict]]:
+def _scan_baseline_runs_all_missions(tag: str, signature: tuple) -> dict[str, dict[str, dict]]:
     """{mission_id: {config: scored_row}} for every mission, one tag -- cached, keyed on
     _baseline_signature(tag) rather than a time budget, so the Sweep tab's per-render
     baseline reference skips re-scanning+re-scoring 35 missions' worth of files on every
-    rerun UNLESS a matching baseline run was actually added/changed/removed since."""
+    rerun UNLESS a matching baseline run was actually added/changed/removed since.
+    NOTE (2026-09-28 bugfix): `signature` must NOT be underscore-prefixed -- st.cache_data
+    silently excludes underscore-prefixed params from its cache-key hash (that convention
+    exists for UNHASHABLE args), so a leading underscore here made this cache key
+    effectively just `tag` alone, permanently reusing the first result ever computed for a
+    given tag and never noticing new/changed run files (found via the live dashboard
+    showing 0 LLM runs for a tag whose files were added after the tag was first selected)."""
     return {m: _scan_baseline_runs(m, tag) for m in MISSIONS}
 
 
@@ -1026,14 +1032,21 @@ def _tiered_highlight(s: pd.Series, band_frac: float = 0.05, higher_is_better: b
 
 
 @st.cache_data(show_spinner="Scanning baseline + LLM run logs...")
-def _load_comparison_data(tag: str, _baseline_sig: tuple,
-                          _llm_sig: tuple) -> tuple[list[dict], dict[tuple[str, str], dict], dict[str, str]]:
+def _load_comparison_data(tag: str, baseline_sig: tuple,
+                          llm_sig: tuple) -> tuple[list[dict], dict[tuple[str, str], dict], dict[str, str]]:
     """Scans+scores every mission's baseline and LLM run logs ONCE, cached on an explicit
     (baseline files, LLM files) mtime signature -- NOT a time budget -- so this never shows
     a buffered/stale result: any run file being added, changed, or removed invalidates the
     cache immediately, while an unchanged data set still skips re-scanning+re-scoring all
     35 missions on every interaction (including a slow, glitchy native cell-click
-    selection, which made even a slider drag noticeably slow before this was cached at all)."""
+    selection, which made even a slider drag noticeably slow before this was cached at all).
+    NOTE (2026-09-28 bugfix): `baseline_sig`/`llm_sig` must NOT be underscore-prefixed --
+    st.cache_data silently excludes underscore-prefixed params from its cache-key hash
+    (meant for genuinely UNHASHABLE args), so with a leading underscore this cache was keyed
+    on `tag` alone and kept serving whatever result was first computed for a given tag
+    string, even after new run files (e.g. a newly-completed nomoto_v2 LLM sweep) were added
+    on disk -- neither the Refresh button nor a page reload could ever bust it, since both
+    only trigger a rerun, not a code change or cache-key change."""
     gen_at_index = _generated_at_index()
     baseline_configs = list(BASELINE_CONFIGS)
     wanted_km = _baseline_tag_kinematics_model(tag)
@@ -1220,7 +1233,12 @@ def _render_comparison_tab() -> None:
         help="Drag to show more missions at once, or shrink for a smaller screen.",
     )
     row_height_px, header_height_px = 35, 38  # Streamlit's default dataframe row/header height
-    per_mission_df = pd.DataFrame(table_rows).set_index("mission")
+    # _load_comparison_data() itself always scores EVERY BASELINE_CONFIGS entry into
+    # table_rows (it has no kinematics-model awareness of its own) -- so apf/mpc/vo columns
+    # must be dropped here too, not just left out of system_keys/agg above, or they'd still
+    # leak into this grid under a Nomoto tag despite being excluded everywhere else.
+    per_mission_cols = [c for c in short_to_system if c != "mission"]
+    per_mission_df = pd.DataFrame(table_rows).set_index("mission")[per_mission_cols]
     per_mission_styler = (per_mission_df.style
                           .format("{:.3f}", na_rep="\u2014")
                           .apply(_tiered_highlight, axis=1))
