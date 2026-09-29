@@ -219,4 +219,9 @@ def plan(mission: Mission, own: Vessel, targets: list[Vessel], constraints: Vess
         "heading_deg": round((own.heading + best_offset) % 360, 1) if action != "hold_course" else None,
         "encounter_rule": encounter_rule, "conduct_rule": conduct_rule, "reasoning": reasoning,
         "rejected_candidates": [s for s in scored if s is not best],
+        # Additive (Stap 2 Step 3): the same decisive-contact facts a Track-2 generator's
+        # Fase B3 teacher payload needs (name/cpa_m/tcpa_s) -- None when no contact poses
+        # a real risk, mirroring build_oow_scenarios_leo.py's own decisive_contact_name.
+        "decisive_contact": ({"name": decisive["name"], "cpa_m": decisive["cpa_m"], "tcpa_s": decisive["tcpa_s"]}
+                            if decisive is not None else None),
     }
