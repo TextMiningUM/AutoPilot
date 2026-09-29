@@ -247,10 +247,17 @@ def check_1_1_situation_vs_trajectory(run: dict, traj: dict[str, dict[float, dic
     return findings
 
 
-def check_1_2_goal_course_check(run: dict, traj: dict[str, dict[float, dict]]) -> list[dict]:
+def check_1_2_goal_course_check(run: dict, traj: dict[str, dict[float, dict]],
+                                constraints: VesselConstraints) -> list[dict]:
     findings: list[dict] = []
     gx, gy = run["mission"]["goal"]["x"], run["mission"]["goal"]["y"]
-    for cp in run.get("checkpoints") or []:
+    checkpoints = run.get("checkpoints") or []
+    # cp["commanded_heading_deg"] (added 2026-09-28) is recorded AFTER sim.apply_action()
+    # runs for THAT checkpoint's own decision -- so the target_heading actually in effect
+    # when a given checkpoint's prompt was RENDERED is the PREVIOUS checkpoint's value (or
+    # the mission's initial own-ship heading before any decision at all, for checkpoint 0).
+    initial_heading = run.get("mission", {}).get("own_ship", {}).get("heading")
+    for i, cp in enumerate(checkpoints):
         own_row = _nearest(traj.get("own_ship", {}), cp["time"])
         if own_row is None:
             continue
@@ -259,7 +266,14 @@ def check_1_2_goal_course_check(run: dict, traj: dict[str, dict[float, dict]]) -
             findings.append(_f("BLOCKER", "BLOCKER_1_2_goal_course_check_mismatch",
                               cp["step"], "situation_report is missing a GOAL COURSE CHECK line."))
             continue
-        expected = goal_course_check_line(own_row["x"], own_row["y"], own_row["heading"], gx, gy)
+        # target_heading (2026-09-26 fix, see goal_course_check_line()'s own docstring):
+        # the live prompt compares against the already-COMMANDED heading, not raw
+        # trajectory heading, to stay idempotent under slow (Nomoto) kinematics --
+        # omitting this made EVERY checkpoint mid-turn under Nomoto false-positive here.
+        prompt_time_target_heading = checkpoints[i - 1]["commanded_heading_deg"] if i > 0 else initial_heading
+        expected = goal_course_check_line(own_row["x"], own_row["y"], own_row["heading"], gx, gy,
+                                          constraints.max_rudder_angle_deg,
+                                          target_heading=prompt_time_target_heading)
         if m.group(0).strip() != expected.strip():
             findings.append(_f("BLOCKER", "BLOCKER_1_2_goal_course_check_mismatch",
                               cp["step"], "GOAL COURSE CHECK line does not byte-match the "
@@ -997,7 +1011,7 @@ def audit_one_run(run: dict, path: Path) -> dict:
 
     if not schema["is_legacy"]:
         findings += check_1_1_situation_vs_trajectory(run, traj)
-        findings += check_1_2_goal_course_check(run, traj)
+        findings += check_1_2_goal_course_check(run, traj, constraints)
     else:
         findings.append(_f("INFO", "legacy_schema", None,
                           "legacy schema: checks 1.1/1.2/2.1-2.7 (two-field-schema-dependent) "
