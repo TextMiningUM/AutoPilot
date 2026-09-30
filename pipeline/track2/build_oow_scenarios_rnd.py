@@ -269,19 +269,19 @@ def build_assistant_json(decision: dict, reasoning: str) -> dict:
             "reasoning": reasoning}
 
 
-def load_checkpoint() -> dict[str, dict]:
-    if not CHECKPOINT_FILE.exists():
+def load_checkpoint(path: Path = CHECKPOINT_FILE) -> dict[str, dict]:
+    if not path.exists():
         return {}
     out: dict[str, dict] = {}
-    for line in CHECKPOINT_FILE.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         rec = json.loads(line)
         out[rec["_id"]] = rec
     return out
 
 
-def append_checkpoint(recs: list[dict]) -> None:
-    CHECKPOINT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with CHECKPOINT_FILE.open("a", encoding="utf-8") as f:
+def append_checkpoint(recs: list[dict], path: Path = CHECKPOINT_FILE) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
         for r in recs:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
             f.flush()
@@ -330,6 +330,15 @@ def main() -> None:
                         "baseline instead of passively coasting -- see rollout_mission()'s own "
                         "docstring for the full rationale")
     args = ap.parse_args()
+
+    # A low-level-controller-enabled rollout produces GENUINELY DIFFERENT trajectories
+    # (different row _ids/positions, see rollout_mission()'s own docstring) -- reusing the
+    # existing checkpoint/production filenames would risk silently attaching stale
+    # reasoning (generated against the OLD, no-controller trajectory) to a same-named but
+    # actually-different situation. Own checkpoint + output filenames instead, coexisting
+    # with the existing _nomoto files rather than overwriting them.
+    suffix = "_llc" if args.low_level_controller else ""
+    checkpoint_file = CACHE / f"oow_scenario_RND{suffix}_b3_checkpoint.jsonl"
 
     all_ids = [m for m in list_mission_ids() if m.startswith("RND")]
     missions = [load_mission(m) for m in all_ids]
@@ -392,7 +401,7 @@ def main() -> None:
         ws = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
         headers = {"anthropic-workspace-id": ws} if ws else None
         client = anthropic.Anthropic(api_key=key, default_headers=headers)
-        checkpoint = load_checkpoint()
+        checkpoint = load_checkpoint(checkpoint_file)
         gate_rejection_counts = {name: 0 for name in GATE_NAMES}
         n_accepted = n_rejected = 0
         for i, r in enumerate(recs):
@@ -415,7 +424,7 @@ def main() -> None:
                 n_accepted += 1
             else:
                 n_rejected += 1
-            append_checkpoint([{"_id": r["_id"], "reasoning": r.get("reasoning")}])
+            append_checkpoint([{"_id": r["_id"], "reasoning": r.get("reasoning")}], checkpoint_file)
             if (i + 1) % 20 == 0 or i + 1 == len(recs):
                 print(f"  [B3] {i + 1}/{len(recs)} processed ({n_accepted} accepted, {n_rejected} dropped)", flush=True)
         print(f"Fase B3 done: {n_accepted} accepted, {n_rejected} dropped")
@@ -473,11 +482,11 @@ def main() -> None:
         })
 
     outputs = {
-        "oow_scenario_RND_sft_direct_nomoto.jsonl": sft_rows,
-        "oow_scenario_RND_sft_cot_nomoto.jsonl": sft_rows,
-        "oow_scenario_RND_dpo_pairs_nomoto.jsonl": dpo_rows,
-        "oow_scenario_RND_reflection_nomoto.jsonl": reflect_rows,
-        "oow_scenario_RND_reasoning_traces_nomoto.jsonl": trace_rows,
+        f"oow_scenario_RND_sft_direct_nomoto{suffix}.jsonl": sft_rows,
+        f"oow_scenario_RND_sft_cot_nomoto{suffix}.jsonl": sft_rows,
+        f"oow_scenario_RND_dpo_pairs_nomoto{suffix}.jsonl": dpo_rows,
+        f"oow_scenario_RND_reflection_nomoto{suffix}.jsonl": reflect_rows,
+        f"oow_scenario_RND_reasoning_traces_nomoto{suffix}.jsonl": trace_rows,
     }
     for name, rows in outputs.items():
         prod_path = CACHE / name
