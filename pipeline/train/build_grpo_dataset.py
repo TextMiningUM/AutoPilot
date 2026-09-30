@@ -41,6 +41,7 @@ if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
 from app import oracle_planner  # noqa: E402
+from app.baselines import DECISION_FUNCS  # noqa: E402
 from app.missions import list_mission_ids, load_mission  # noqa: E402
 from app.narrate import live_decision_interval, narrate, recommended_decision_interval  # noqa: E402
 from app.simulation import Simulation, VesselConstraints  # noqa: E402
@@ -54,13 +55,14 @@ def _bucket_is_acute(action: str) -> bool:
     return action in ("turn_left", "turn_right", "stop")
 
 
-def rollout_mission_for_grpo(mission) -> list[dict]:
+def rollout_mission_for_grpo(mission, low_level_controller: str | None = None) -> list[dict]:
     """Same decision-cadence/apply_action pattern as build_oow_scenarios_rnd.py's
     rollout_mission(), but the oracle here is used ONLY to decide when/whether a
     checkpoint is acute (bucket filter) -- what gets WRITTEN OUT is the raw own/targets/
     constraints/mission state, not the oracle's own chosen action, since train_grpo.py's
     reward functions need to score whatever the POLICY samples, not replay the oracle's
-    single fixed choice."""
+    single fixed choice. `low_level_controller` -- see build_oow_scenarios_rnd.py's own
+    parameter of the same name for the full rationale (opt-in, default None=unchanged)."""
     constraints = VesselConstraints(kinematics_model="nomoto_v2")
     sim = Simulation(mission, constraints)
     dt = constraints.time_step_s
@@ -103,6 +105,12 @@ def rollout_mission_for_grpo(mission) -> list[dict]:
             history = history[-HISTORY_N:]
             sim.apply_action(result)
             next_decision_step = step + next_interval_steps
+        elif low_level_controller is not None:
+            # Same rationale as build_oow_scenarios_rnd.py's own low_level_controller
+            # branch -- never a training-prompt candidate, only keeps the trajectory the
+            # next oracle decision sees consistent with a low-level-controller-enabled run.
+            ll_decision, _ll_debug = DECISION_FUNCS[low_level_controller](mission, sim.own, sim.targets, constraints)
+            sim.apply_action(ll_decision)
         sim.step(dt)
     return rows
 
@@ -112,14 +120,14 @@ def _system_prompt() -> str:
     return SYSTEM_OOW_AGENT
 
 
-def build_dataset(mission_ids: list[str] | None = None) -> list[dict]:
+def build_dataset(mission_ids: list[str] | None = None, low_level_controller: str | None = None) -> list[dict]:
     ids = mission_ids or [m for m in list_mission_ids() if m.startswith("RND")]
     missions = [load_mission(i) for i in ids]
     trainable = [m for m in missions if not json.loads(
         (APP_ROOT / "Data" / "missions" / f"{m.id}.json").read_text(encoding="utf-8")).get("held_out")]
     rows: list[dict] = []
     for m in trainable:
-        rows.extend(rollout_mission_for_grpo(m))
+        rows.extend(rollout_mission_for_grpo(m, low_level_controller=low_level_controller))
     print(f"{len(rows)} acute_action GRPO rows across {len(trainable)} trainable missions")
     return rows
 
@@ -128,9 +136,14 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     ap.add_argument("--out-file", type=str, default=str(CACHE / "oow_grpo_dataset.jsonl"))
     ap.add_argument("--missions", nargs="+", default=None)
+    ap.add_argument("--low-level-controller", default=None, choices=list(DECISION_FUNCS),
+                    help="Stap 2 Step 11 (opt-in): fill the gaps between oracle decision "
+                         "points with this deterministic baseline (e.g. baseline_ruletree) "
+                         "instead of passively coasting -- keeps this dataset's trajectories "
+                         "consistent with a low-level-controller-enabled live run")
     args = ap.parse_args()
 
-    rows = build_dataset(args.missions)
+    rows = build_dataset(args.missions, low_level_controller=args.low_level_controller)
     out_path = Path(args.out_file)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8") as f:

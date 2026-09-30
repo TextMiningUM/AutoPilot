@@ -27,6 +27,16 @@ Run one:
 
 Run a batch overnight (sequential -- only one GPU):
     python -m app.run_llm_scenario --configs bare_qwen v3_rag_cot v4_pg --tag baseline
+
+STAP 2 STEP 11 (2026-09-30, opt-in, default unchanged -- see chat design discussion):
+--low-level-controller ruletree fills the gaps BETWEEN LLM decision points with an
+active deterministic baseline instead of passively coasting on the last commanded
+heading/speed -- closes a real mismatch where app.oracle_planner._rollout_cost() already
+ASSUMES active low-level infill (via ruletree.decide_action()) when scoring DAgger/GRPO
+training data, but the live loop never did. Every low-level tick gets its own FULL
+checkpoint (tagged "low_level": True) -- never silently absorbed into the trajectory
+without a record. Omitting the flag (default None) is BYTE-IDENTICAL to the old
+behaviour -- no existing run/sweep is invalidated by this change.
 """
 from __future__ import annotations
 import argparse
@@ -48,6 +58,7 @@ for p in (ROOT, REPO_ROOT):
 from app.missions import list_mission_ids, load_mission, mission_to_dict
 from app.simulation import Simulation, VesselConstraints, find_collision
 from app.agents import ask_oow, MODEL_CONFIGS, SYSTEM_OOW_AGENT, effective_generation_params
+from app.baselines import DECISION_FUNCS
 from app.evaluation import llm_compliance_check, score_trajectory
 from app.llm_runs import RUNS_DIR, run_log_path
 from app.model_variants import MODEL_VARIANTS, resolve_weights, variant_for_weights
@@ -76,7 +87,7 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
            max_new_tokens: int = 256, k: int = 2, use_rag: bool = True,
            system_prompt: str | None = None, force: bool = False,
            decision_interval: int | None = None, explain: bool = False,
-           kinematics_model: str = "kinematics") -> Path:
+           kinematics_model: str = "kinematics", low_level_controller: str | None = None) -> Path:
     # The FILENAME always carries the clean, filesystem-safe model-variant id (never the
     # raw `weights` string -- "+"/":" break on Windows, see model_variants.py's docstring),
     # resolved via a reverse lookup so this stays correct even for an ad-hoc weights combo
@@ -182,8 +193,34 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
                 # the run's INITIAL value).
                 "decision_interval_steps": next_interval_steps,
                 "decision_interval_s": next_decision_in_s,
+                "low_level": False,
             })
             next_decision_step = step + max(1, next_interval_steps)
+        elif low_level_controller is not None:
+            # Stap 2 Step 11 (2026-09-30, opt-in -- see module docstring): between LLM
+            # decision points, actively re-evaluate via a fast deterministic baseline
+            # instead of passively coasting on the last commanded heading/speed. Closes a
+            # real train/inference mismatch: app.oracle_planner._rollout_cost() already
+            # ASSUMES active low-level infill (it calls ruletree.decide_action() for the
+            # steps between its own candidate's first move) when scoring DAgger/GRPO
+            # training data, but the live loop never did until now.
+            ll_decision, ll_debug = DECISION_FUNCS[low_level_controller](mission, sim.own, sim.targets, constraints)
+            sim.apply_action(ll_decision)
+            checkpoints.append({
+                "step": step, "time": sim.t,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "latency_s": 0.0,
+                "situation_report": ll_debug.get("situation"),
+                "decision": ll_decision,
+                "commanded_heading_deg": round(sim.target_heading, 1),
+                "reasoning_raw": ll_debug.get("raw_response"),
+                "measurement": measure_decision_quality(
+                    ll_decision, [contact_line(sim.own, t, constraints.min_cpa_m, constraints.max_rudder_angle_deg)
+                                 for t in sim.targets], constraints),
+                "debug": {kk: vv for kk, vv in ll_debug.items() if kk not in ("situation", "raw_response")},
+                "decision_interval_steps": 1, "decision_interval_s": dt,
+                "low_level": True,
+            })
         sim.step(dt)
         # Check the step JUST recorded (not a forward prediction -- see
         # Simulation.min_cpa_now()'s docstring for why a predictive check is unsafe here)
@@ -245,6 +282,7 @@ def run_one(mission_id: str, config: str, weights: str = "W0_base", tag: str = "
             "prompt_hash": _PROMPT_HASH,
             "prompt_version": PROMPT_VERSION,
             "kinematics_model": kinematics_model,
+            "low_level_controller": low_level_controller,
         },
         "outcome": {"verdict": outcome, "final_step": step, "final_time_s": sim.t},
         "trajectory": sim.trajectory,
@@ -322,6 +360,11 @@ def main() -> None:
                          "deterministic compliance findings (one network call + latency per run, "
                          "needs ANTHROPIC_API_KEY in .env) -- never affects the score itself, off "
                          "by default in a sweep")
+    ap.add_argument("--low-level-controller", default=None, choices=list(DECISION_FUNCS),
+                    help="Stap 2 Step 11 (opt-in, default None=unchanged legacy behaviour): fill "
+                         "the gaps between LLM decision points with this deterministic baseline "
+                         "(e.g. baseline_ruletree) instead of passively coasting on the last "
+                         "commanded heading/speed")
     args = ap.parse_args()
     weights = resolve_weights(args.model) if args.model else args.weights
 
@@ -342,6 +385,7 @@ def main() -> None:
             system_prompt=system_prompt, force=args.force,
             decision_interval=args.decision_interval,
             explain=args.explain, kinematics_model=args.kinematics_model,
+            low_level_controller=args.low_level_controller,
         )
         print(f"  took {time.time() - t0:.1f}s")
 

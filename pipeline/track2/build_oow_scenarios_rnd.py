@@ -61,6 +61,7 @@ if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
 from app import oracle_planner  # noqa: E402
+from app.baselines import DECISION_FUNCS  # noqa: E402
 from app.missions import list_mission_ids, load_mission  # noqa: E402
 from app.narrate import live_decision_interval, narrate, recommended_decision_interval  # noqa: E402
 from app.simulation import Simulation, VesselConstraints  # noqa: E402
@@ -110,11 +111,19 @@ def stratify_mission_rows(rows: list[dict], quiet_cap: int = QUIET_CAP_PER_MISSI
     return kept
 
 
-def rollout_mission(mission) -> list[dict]:
+def rollout_mission(mission, low_level_controller: str | None = None) -> list[dict]:
     """Closed-loop rollout of ONE mission, oracle_planner.plan() deciding every step --
     same decision-cadence/apply_action pattern as Basic Simulator/app/run_llm_scenario.py
     (adaptive live_decision_interval, initial value from recommended_decision_interval),
-    but with the oracle instead of an LLM call, and no LLM latency to log."""
+    but with the oracle instead of an LLM call, and no LLM latency to log.
+
+    `low_level_controller` (opt-in, default None -- see run_llm_scenario.py's own Step 11
+    docstring for the full rationale): between oracle decision points, actively apply this
+    deterministic baseline's own action instead of passively coasting -- keeps this
+    generator's trajectories consistent with what a live low-level-controller-enabled run
+    would actually produce. Omitting it is BYTE-IDENTICAL to the pre-Step-11 behaviour --
+    the already-committed production oow_scenario_RND_*.jsonl files were generated without
+    it and remain valid; regenerating WITH it is a separate, explicit follow-up."""
     constraints = VesselConstraints(kinematics_model="nomoto_v2")
     sim = Simulation(mission, constraints)
     dt = constraints.time_step_s
@@ -163,6 +172,16 @@ def rollout_mission(mission) -> list[dict]:
             history = history[-HISTORY_N:]
             sim.apply_action(result)
             next_decision_step = step + next_interval_steps
+        elif low_level_controller is not None:
+            # Deliberately NOT appended to `rows` -- unlike run_llm_scenario.py's live
+            # checkpoints (logged in full for audit/dashboard traceability), a low-level
+            # infill tick is never a training-data CANDIDATE here (it would explode the row
+            # count with low-value physics-infill ticks, exactly what QUIET_CAP_PER_MISSION/
+            # stratify_mission_rows() elsewhere in this file exists to avoid) -- it only
+            # needs to happen so the SIMULATED TRAJECTORY the next real oracle decision sees
+            # matches what a low-level-controller-enabled live run would actually produce.
+            ll_decision, _ll_debug = DECISION_FUNCS[low_level_controller](mission, sim.own, sim.targets, constraints)
+            sim.apply_action(ll_decision)
         sim.step(dt)
     return rows
 
@@ -305,6 +324,11 @@ def main() -> None:
                     help="generate this many REAL Anthropic reasoning calls from the first "
                         "non-held-out rows and write them to _review/ for human review, then "
                         "exit -- never touches the full population or the checkpoint file")
+    ap.add_argument("--low-level-controller", default=None, choices=list(DECISION_FUNCS),
+                    help="Stap 2 Step 11 (opt-in, default None=unchanged legacy behaviour): "
+                        "fill the gaps between oracle decision points with this deterministic "
+                        "baseline instead of passively coasting -- see rollout_mission()'s own "
+                        "docstring for the full rationale")
     args = ap.parse_args()
 
     all_ids = [m for m in list_mission_ids() if m.startswith("RND")]
@@ -315,7 +339,7 @@ def main() -> None:
 
     recs: list[dict] = []
     for m in trainable:
-        recs.extend(rollout_mission(m))
+        recs.extend(rollout_mission(m, low_level_controller=args.low_level_controller))
     n_before_strat = len(recs)
     recs = [r for m in trainable for r in stratify_mission_rows([x for x in recs if x["rnd_id"] == m.id])]
     print(f"Rolled out {len(trainable)} missions -> {n_before_strat} decision checkpoints, "
