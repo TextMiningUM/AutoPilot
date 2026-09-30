@@ -476,14 +476,14 @@ def _render() -> None:
         # rather than one column silently switching between them based on the Baseline
         # tab's selection (which made a Nomoto run outscoring its own legacy counterpart
         # indistinguishable from a legacy-only result, see prior session note). Grouped by
-        # kinematics model (all legacy columns, THEN all Nomoto columns) rather than
-        # interleaved per variant, with a spacer column marking the boundary, so the two
-        # ship-dynamics regimes read as two visually separate blocks. Only a (variant, km)
-        # pair that ACTUALLY has at least one run somewhere gets a column at all -- e.g.
-        # qwen_sftdpo_nomoto is Nomoto-only by design (see repo notes), so it never gets a
-        # pointless always-"\u2014" [kinematics] column, and the old qwen_sftdpo never gets
-        # one for [nomoto] either.
-        DIVIDER_COL = "\u2551"  # double vertical bar -- visually heavier than a plain "|"
+        # kinematics model (all legacy columns, THEN all Nomoto columns) so the two
+        # ship-dynamics regimes still read as two visually separate blocks (2026-09-30:
+        # dropped the divider-column spacer that used to mark the boundary explicitly --
+        # it rendered as a stray blank column rather than a clean separator). Only a
+        # (variant, km) pair that ACTUALLY has at least one run somewhere gets a column at
+        # all -- e.g. qwen_sftdpo_nomoto is Nomoto-only by design (see repo notes), so it
+        # never gets a pointless always-"\u2014" [kinematics] column, and the old
+        # qwen_sftdpo never gets one for [nomoto] either.
         cols_by_km = {
             km: [v for v in picked_variants if (v, km) in existing_variant_km]
             for km in KINEMATICS_MODELS
@@ -492,14 +492,10 @@ def _render() -> None:
         for mission_id in MISSIONS:
             rows = rows_by_mission[mission_id]
             row_out = {"mission": mission_id}
-            first_group_done = False
             for km in KINEMATICS_MODELS:
                 variants_for_km = cols_by_km[km]
                 if not variants_for_km:
                     continue
-                if first_group_done:
-                    row_out[DIVIDER_COL] = ""
-                first_group_done = True
                 for variant in variants_for_km:
                     label = variant_label(variant)
                     km_rows = {k: r for k, r in rows.items()
@@ -515,8 +511,7 @@ def _render() -> None:
                         cfg_suffix = f" ({cell['config']})" if picked_setup == "(best across configs)" else ""
                         row_out[col_label] = f"{cell['composite_score']:.3f}{cfg_suffix}"
             grid_rows.append(row_out)
-        st.dataframe(grid_rows, width="stretch", hide_index=True,
-                    column_config={DIVIDER_COL: st.column_config.TextColumn(DIVIDER_COL, width="small")})
+        st.dataframe(grid_rows, width="stretch", hide_index=True)
         st.caption("Cel = composite score" +
                   (" van de best-scorende config voor die (missie, variant)-combinatie."
                    if picked_setup == "(best across configs)"
