@@ -152,6 +152,13 @@ DPO_FILES   = {
         # like the measurement pairs above), so the model sees real mistakes that were
         # confirmed to matter for the mission's actual result.
         CACHE / "oow_outcome_dpo_pairs.jsonl",
+        # Stap 2 Step 7 (2026-09-30) -- DAgger pairs (build_dagger_dpo.py): mined from real
+        # closed-loop LLM run logs (not oracle-only rollouts like the RND pairs above) by
+        # recomputing app.oracle_planner.plan() at every checkpoint the CURRENT model
+        # actually visited and diffing against its own real action -- the states a fixed
+        # generator/oracle rollout would never produce, since they only exist because the
+        # model itself made a mistake to get there.
+        CACHE / "oow_dagger_dpo_pairs.jsonl",
     ],
 }[paths.domain]
 
