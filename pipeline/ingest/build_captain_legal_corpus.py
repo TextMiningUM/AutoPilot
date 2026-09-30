@@ -158,13 +158,47 @@ ECFR_QUERIES = [
     ("ecfr_stcw", "training certification watchkeeping", "46"),
 ]
 
+# Known, directly-confirmed eCFR parts -- not discovered via search, but via a real
+# CROSS-REFERENCE found inside an already-fetched document (46 CFR 138.225 itself names
+# "33 CFR part 96" as the actual US implementation of the ISM Code), so no guessing.
+ECFR_KNOWN_PARTS = [
+    ("ecfr_ism_implementation", "33", "96", "ISM Code US implementation, cross-referenced from 46 CFR 138.225"),
+]
+
+
+def _ecfr_fetch_part(dest_dir: Path, manifest: list[dict], title_as_of: dict[str, str],
+                      *, slug: str, title: str, part: str, license_note: str) -> None:
+    if title not in title_as_of:
+        titles_meta = json.loads(_fetch("https://www.ecfr.gov/api/versioner/v1/titles.json"))
+        match = next((t for t in titles_meta.get("titles", []) if str(t.get("number")) == title), None)
+        if match is None:
+            print(f"  [ecfr] could not resolve a valid as_of date for title {title}, skipping fetch")
+            return
+        title_as_of[title] = match["up_to_date_as_of"]
+    as_of = title_as_of[title]
+    xml_url = f"https://www.ecfr.gov/api/versioner/v1/full/{as_of}/title-{title}.xml?part={part}"
+    dest = dest_dir / f"{slug}_title{title}_part{part}.xml"
+    try:
+        data = _fetch(xml_url, timeout=60.0, accept_encoding_gzip=True)
+    except urllib.error.HTTPError as exc:
+        print(f"  [ecfr] fetch failed for title {title} part {part}: HTTP {exc.code}")
+        return
+    dest.write_bytes(data)
+    _record(manifest, source="ecfr", url=xml_url, dest=dest, license_note=license_note)
+    print(f"  [ecfr] saved {dest.relative_to(WORKSPACE)} ({len(data)} bytes) -- title {title} part {part}")
+
 
 def fetch_ecfr(manifest: list[dict]) -> None:
     """Discover + fetch US CFR sections implementing the same substance, via eCFR's real search API
-    (never a guessed title/part number)."""
+    (never a guessed title/part number), plus a short list of already-confirmed known parts."""
     dest_dir = OUT_DIR / "ecfr"
     dest_dir.mkdir(parents=True, exist_ok=True)
     title_as_of: dict[str, str] = {}
+
+    for slug, title, part, note in ECFR_KNOWN_PARTS:
+        _ecfr_fetch_part(dest_dir, manifest, title_as_of, slug=slug, title=title, part=part,
+                          license_note=f"US Government Work (public domain) -- {note}")
+
     for slug, query, title in ECFR_QUERIES:
         search_url = (
             "https://www.ecfr.gov/api/search/v1/results"
@@ -185,29 +219,8 @@ def fetch_ecfr(manifest: list[dict]) -> None:
         if not part:
             print(f"  [ecfr] top hit for {query!r} has no part number, skipping fetch")
             continue
-        # The versioner "full" endpoint needs a real SNAPSHOT date it actually has content
-        # for -- a search hit's own (historical amendment) `starts_on` or the local clock's
-        # "today" both 404 here. The titles.json endpoint reports the real current edition
-        # date; fetched once per title, cached across queries in this run.
-        if title not in title_as_of:
-            titles_meta = json.loads(_fetch("https://www.ecfr.gov/api/versioner/v1/titles.json"))
-            match = next((t for t in titles_meta.get("titles", []) if str(t.get("number")) == title), None)
-            if match is None:
-                print(f"  [ecfr] could not resolve a valid as_of date for title {title}, skipping fetch")
-                continue
-            title_as_of[title] = match["up_to_date_as_of"]
-        as_of = title_as_of[title]
-        xml_url = f"https://www.ecfr.gov/api/versioner/v1/full/{as_of}/title-{title}.xml?part={part}"
-        dest = dest_dir / f"{slug}_title{title}_part{part}.xml"
-        try:
-            data = _fetch(xml_url, timeout=60.0, accept_encoding_gzip=True)
-        except urllib.error.HTTPError as exc:
-            print(f"  [ecfr] fetch failed for title {title} part {part}: HTTP {exc.code}")
-            continue
-        dest.write_bytes(data)
-        _record(manifest, source="ecfr", url=xml_url, dest=dest,
-                 license_note=f"US Government Work (public domain) -- discovered via search query {query!r}")
-        print(f"  [ecfr] saved {dest.relative_to(WORKSPACE)} ({len(data)} bytes) -- title {title} part {part}")
+        _ecfr_fetch_part(dest_dir, manifest, title_as_of, slug=slug, title=title, part=part,
+                          license_note=f"US Government Work (public domain) -- discovered via search query {query!r}")
 
 
 SOURCES = {
