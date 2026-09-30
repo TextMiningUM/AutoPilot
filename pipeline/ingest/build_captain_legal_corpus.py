@@ -56,7 +56,15 @@ from pathlib import Path
 WORKSPACE = Path(__file__).resolve().parents[2]
 OUT_DIR = WORKSPACE / "Data" / "Captain" / "Legal_Reference"
 MANIFEST_PATH = OUT_DIR / "manifest.json"
-USER_AGENT = "Mozilla/5.0 (AutoPilot-CaptainDesign-research/1.0)"
+# A bare "Mozilla/5.0 (...)" User-Agent alone isn't enough for some sites' WAF checks
+# (confirmed empirically against TSB Canada, which 403'd until Accept/Accept-Language
+# were also added) -- send a fuller, realistic browser-like header set by default.
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+DEFAULT_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
 
 def _load_manifest() -> list[dict]:
@@ -71,7 +79,7 @@ def _save_manifest(entries: list[dict]) -> None:
 
 
 def _fetch(url: str, timeout: float = 30.0, accept_encoding_gzip: bool = False) -> bytes:
-    headers = {"User-Agent": USER_AGENT}
+    headers = dict(DEFAULT_HEADERS)
     if accept_encoding_gzip:
         # eCFR's versioner "full" endpoint documents this as REQUIRED (not optional) --
         # confirmed empirically: omitting it returns HTTP 406, not a normal response.
@@ -281,11 +289,54 @@ def fetch_atsb(manifest: list[dict]) -> None:
         print(f"  [atsb] saved {dest.relative_to(WORKSPACE)} ({len(data)} bytes) -- {inv_id}")
 
 
+# TSB Canada (Transportation Safety Board) marine investigation reports -- free,
+# public, government-published HTML reports (unlike ATSB/MAIB, the report text is
+# inline HTML on the investigation's own page, no separate PDF fetch step). Reachable
+# from this environment ONLY with a fuller, realistic browser header set (confirmed:
+# a bare "Mozilla/5.0" User-Agent alone 403s, Accept+Accept-Language fixes it -- see
+# DEFAULT_HEADERS). Start small: only the most recent N investigations on listing page 1.
+TSB_LISTING_URL = "https://www.tsb.gc.ca/eng/rapports-reports/marine/index.html"
+TSB_MAX_REPORTS = 8
+_TSB_INVESTIGATION_RE = re.compile(r'href="(/eng/enquetes-investigations/marine/\d{4}/(m\d{2}[a-z]\d+)/m\d{2}[a-z]\d+\.html)"')
+
+
+def fetch_tsb_canada(manifest: list[dict]) -> None:
+    """Fetch the most recent TSB Canada marine investigation report pages (free, Crown
+    copyright, government safety-investigation reports)."""
+    dest_dir = OUT_DIR / "tsb_canada"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        listing_html = _fetch(TSB_LISTING_URL, timeout=60.0).decode("utf-8", errors="replace")
+    except (urllib.error.URLError, TimeoutError) as exc:
+        print(f"  [tsb_canada] listing fetch failed: {exc}")
+        return
+    seen: dict[str, str] = {}
+    for path, inv_id in _TSB_INVESTIGATION_RE.findall(listing_html):
+        seen.setdefault(inv_id.upper(), path)
+    investigations = list(seen.items())[:TSB_MAX_REPORTS]
+    if not investigations:
+        print("  [tsb_canada] no investigations found on listing page")
+        return
+    for inv_id, path in investigations:
+        detail_url = f"https://www.tsb.gc.ca{path}"
+        try:
+            data = _fetch(detail_url, timeout=60.0)
+        except (urllib.error.URLError, TimeoutError) as exc:
+            print(f"  [tsb_canada] {inv_id} fetch failed: {exc}")
+            continue
+        dest = dest_dir / f"{inv_id}.html"
+        dest.write_bytes(data)
+        _record(manifest, source="tsb_canada", url=detail_url, dest=dest,
+                 license_note="Crown copyright (Canada), TSB marine safety investigation report")
+        print(f"  [tsb_canada] saved {dest.relative_to(WORKSPACE)} ({len(data)} bytes) -- {inv_id}")
+
+
 SOURCES = {
     "bmp5": fetch_bmp5,
     "uk_legislation": fetch_uk_legislation,
     "ecfr": fetch_ecfr,
     "atsb": fetch_atsb,
+    "tsb_canada": fetch_tsb_canada,
 }
 
 
