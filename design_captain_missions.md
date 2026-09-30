@@ -61,17 +61,21 @@ This follows on from the existing two-track architecture (see `.github/copilot-i
     - [13.A.3 Resource model](#sec-13-a-3)
     - [13.A.4 Procedure library](#sec-13-a-4)
     - [13.A.5 Evidence, ambiguity, and reporter reliability](#sec-13-a-5)
+    - [13.A.6 Quantifying "safety margin"](#sec-13-a-6)
+    - [13.A.7 Units and time convention](#sec-13-a-7)
   - [13.B Loose contracts](#sec-13-b)
     - [13.B.5 Mission State — formal schema](#sec-13-b-5)
     - [13.B.6 Captain output schema + precedence rules](#sec-13-b-6)
     - [13.B.7 Trigger monitors](#sec-13-b-7)
     - [13.B.8 Route planner with exclusion zones](#sec-13-b-8)
+    - [13.B.9 Event → monitor mapping](#sec-13-b-9)
   - [13.C Data & evaluation](#sec-13-c)
     - [13.C.9 Scenario-generator specification](#sec-13-c-9)
     - [13.C.10 Training-row format](#sec-13-c-10)
     - [13.C.11 Ground-truth functions per evaluation axis](#sec-13-c-11)
     - [13.C.12 Run format & versioning](#sec-13-c-12)
     - [13.C.13 Ground-truth scenario file](#sec-13-c-13)
+    - [13.C.14 OOW evaluator encounter mode](#sec-13-c-14)
 - [14. Approach: walking skeleton first](#sec-14)
 - [15. Concrete data structures & UI controls](#sec-15)
   - [15.1 My assessment](#sec-15-1)
@@ -548,6 +552,11 @@ No new retrieval architecture needs to be invented — this is a second domain i
 
 - **For now**: a mission's route is an ordered list of waypoints (extends the existing `app/missions.py` `Mission.waypoint`/`goal` schema from one optional waypoint to N). **Decided** (2026-09-30): generate a fake route directly — a handful of random waypoints between A and B (e.g. Rotterdam → Den Helder), same procedural pattern as `generate_random_imazu_missions.py`. The route is **provided/faked directly in the Mission Order** (§8), attributed conceptually to "the OOW" (as if the OOW's own planning had produced it), even though for now it is just authored by the scenario generator.
 - **Decided** (2026-09-30): fictional obstacles to route around are best modelled as explicit **exclusion zones** (polygons/areas the route must not cross), not just as waypoint detours — e.g. a storm cell, a piracy corridor, a whale-protection area. Genuinely dangerous/real-world areas can be layered onto the waypoint set later; for now exclusion zones are synthetic/fictional, matching this project's existing "fictional but grounded" scenario convention.
+- **Decided** (2026-09-30): alongside these mission-specific (dynamic) exclusion zones, the route also needs **static geographic no-go areas** — coastlines and shallow water/shoals — which exist independently of any brown envelope and never change mid-mission. Two distinct categories, both represented with the SAME polygon schema as exclusion zones (no new geometry mechanism needed), just tagged differently:
+  - **Coastline** (`type: "coastline"`) — land, always a hard no-go, approximated as a simplified polygon/polyline (a coarse simplification is fine at this abstraction level, exactly the "simple polynomial" level of detail suggested — not full nautical-chart precision).
+  - **Shallow water / shoal** (`type: "shallow_water"`) — no-go **conditional on own-ship's draft**: a zone with `min_depth_m` is only a real obstacle once `min_depth_m < draft_m + a safety margin`; this requires the ship profile (§13.A.3) to carry a `draft_m` field, feeding directly into the route planner's feasibility check (§13.B.8).
+  - **Recommended sourcing**: rather than generating fictional coastlines per mission, maintain a small, reusable library of named **geographic regions** (e.g. `"nl_north_sea_coast"`), each with its own fixed coastline + shoal polygon set; missions reference a `region_id` (§13.C.13) instead of inventing new coastlines every time — cheaper, more consistent, and reusable across many generated missions for the same corridor (e.g. every Rotterdam↔Den Helder mission shares the same coastline data). Real, free, legitimately-sourceable data exists for this: simplified coastline extracts from OpenStreetMap/OpenSeaMap (the same overlay source this project's own early design notes already considered, see `Basic Simulator/generate_moos_scenarios.py`'s history) and bathymetry from GEBCO/EMODnet — decimated down to a coarse polygon, not used at full chart resolution.
+  - Fixed man-made installations (wind farms, platforms) are a third, similarly-static category (`type: "fixed_installation"`) — same polygon schema, no draft-dependence, just a permanent marked no-go area.
 - **Decided** (2026-09-30): brown-envelope density scales with route length — roughly **1 brown envelope per 100 nm** (e.g. a 600 nm route carries ~6 brown envelopes). This gives a simple, tunable scenario-generation knob rather than a fixed count per mission.
 - **Later**: the OOW can generate the route itself via a real, deterministic route-planning algorithm. **Decided direction** (2026-09-30): most likely via the **PredictWind API** (a real commercial weather-routing service) once available/integrated; a manually downloaded/imported real-world route is also an option in the meantime. This is intentionally **more deterministic, less LLM-dependent** — consistent with this project's general philosophy of using a deterministic algorithm for what is determinable, reserving the LLM for judgement calls. Exact integration not designed yet.
 - **Captain's interface to the route**: the Captain does **not** edit waypoints directly. It **instructs** the OOW to avoid a zone / take an alternate route in response to a brown envelope — via the `reroute` tool in `tools.json`, extended with an `avoid_zone` / `preferred_corridor` parameter (see §9). The OOW's own route planner then re-derives the actual new waypoint list. This preserves the real chain-of-command principle: the Captain gives intent/constraint, the OOW executes the actual navigation planning — exactly as a real Master instructs an OOW at a strategic level without dictating exact rudder angles.
@@ -564,7 +573,7 @@ Adapted from the real NATO/allied-navy **Movement Order (MOVORD)** / **Operation
 
 | # | NATO name | Civilian/merchant adaptation |
 |---|---|---|
-| 1 | Header & classification | `mission_id`, date-time issued, issuing authority (the company's Fleet Operations Centre / DPA, not a naval command) — no security classification needed for a civilian mission |
+| 1 | Header & classification | `mission_id`, date-time issued, issuing authority (the company's Fleet Operations Centre / DPA, not a naval command) — no security classification needed for a civilian mission; also carries `t0_utc` (departure wall-clock) and `dt_mission_s` (mission-sim step size, §13.A.1) |
 | 2 | Situation | Operational context: weather forecast, known hazard areas (piracy risk zones, ice, restricted waters), other traffic/friendly-vessel info, any brown-envelope risk flags already known before departure |
 | 3 | Mission | A clear, concise goal statement — who/what/when/where/why (e.g. "deliver 200 refugees safely to Port X"; "deliver cargo Y intact to Port Z by deadline D") + explicit **success criteria** |
 | 4 | Execution | Commander's intent + the **Plan of Intended Movement (PIM)**: waypoint list, Speed of Advance (SOA), restricted zones to avoid, applicable rules of conduct (COLREG + company policy, replacing military ROE) |
@@ -582,6 +591,8 @@ The Mission Order can optionally pre-script known brown envelopes directly into 
   "issued_by": "Fleet Operations Centre",
   "issued_at": "2026-10-12T14:00:00Z",
   "vessel": "MV Example Trader",
+  "t0_utc": "2026-10-12T18:00:00Z",
+  "dt_mission_s": 600,
 
   "situation": {
     "weather_forecast": "Sea state 4, increasing to 6 near the Azores",
@@ -608,7 +619,7 @@ The Mission Order can optionally pre-script known brown envelopes directly into 
         {"id": "WPT3", "lat": 39.50, "lon": -30.00, "note": "Azores passage"},
         {"id": "WPT4", "lat": 36.62, "lon": -6.32, "note": "arrival"}
       ],
-      "speed_of_advance_kn": 16.0,
+      "speed_of_advance_kn": 12.0,
       "restricted_zones": ["Gulf of Guinea piracy corridor (avoid entirely)"],
       "rules_of_conduct": "COLREG 1972 + company Safety Management System"
     }
@@ -844,7 +855,7 @@ mission_run.json
                            interventions
 ```
 
-The OOW's own run-log format is deliberately left untouched — the Captain layer only adds a wrapper around it, so every existing OOW replay/audit/dashboard tool keeps working unmodified on the nested files.
+The OOW's own run-log **schema** is deliberately left untouched — the Captain layer only adds a wrapper around it, so every existing OOW replay/dashboard tool keeps reading the nested files unmodified. **Correction (2026-09-30)**: the run-log *schema* staying unchanged does NOT mean the run-log *evaluator* can stay unchanged too — see §13.C.14, `evaluate_run.py` needs a new encounter mode or these nested evaluations are silently wrong.
 
 ---
 
@@ -874,9 +885,18 @@ The OOW's own run-log format is deliberately left untouched — the Captain laye
 <a id="sec-13-a-1"></a>
 #### 13.A.1 Two-timescale simulator
 
-- **Mission-sim** (new): steps in **minutes**, advances position along the current leg (distance travelled = speed × dt), consumes fuel and time (§13.A.3), advances a simple time-indexed weather schedule, and accumulates rest-hours. This is where a 100–600 nm, multi-hour-to-multi-day mission actually lives.
+- **Mission-sim** (new): steps in **seconds** (`dt_mission_s`), advances position along the current leg (distance travelled = speed × dt), consumes fuel and time (§13.A.3), advances a simple time-indexed weather schedule, and accumulates rest-hours. This is where a 100–600 nm, multi-hour-to-multi-day mission actually lives.
+- **Mission-sim parameters (fixing a real gap, 2026-09-30)**: `dt_mission_s`, referenced elsewhere ("within one mission-sim step", §13.B.7) but never actually fixed. **Decided default: 600 s (10 minutes)**, configurable per mission — mirrors the encounter-sim's own already-adjustable 1–60 s `dt` slider in `app/simulation.py`, one level up. Fine enough for a realistic Mandatory-call response deadline, coarse enough to keep a multi-day mission computationally tractable (a 600 nm/~50 h mission is only ~300 steps at this rate).
+- **Wall clock (fixing a real gap, 2026-09-30)**: the Mission Order gains `t0_utc` (an absolute ISO-8601 departure timestamp, §8.2) — mission-sim time becomes `t0_utc + elapsed_s`, a real calendar/clock reference. This is what makes "night" (Night Orders, §3.2; Look-out staffing realism), a genuinely noon-anchored report (§8.3's `reporting_interval_hours` — a real noon report is anchored to actual local noon, not an arbitrary elapsed-time boundary), and human-readable MPR/log timestamps (§8.3/§13.C.12) actually meaningful, rather than a bare elapsed-seconds counter. The STCW rest-hour ledger (§13.A.3) itself stays a pure rolling elapsed-time window and does not need the wall clock to compute correctly — `t0_utc` is for everything that needs a real calendar/clock reference, not the rolling-window math.
+- **Backward compatibility (explicitly required, 2026-09-30)**: the whole mission-sim layer is strictly **opt-in** — a mission with no `waypoints`/Mission Order metadata (today's existing single-leg missions: Imazu/UM/RND/IMP, the current "Nomoto"-tagged corpus) has no `dt_mission_s`/`t0_utc` at all and **bypasses the mission-sim entirely**, running directly on the unchanged encounter-sim exactly as it does today. Mirrors this project's own established pattern for exactly this kind of change (`Mission.waypoint: tuple[float, float] | None = None`, optional, defaulting to `None` so every existing mission/run is unaffected — see `basic_simulator.md`'s paused-waypoint-feature note). Zero new fields are added to the legacy `Mission` schema; the new fields only ever exist on mission-level scenario files (§13.C.13).
 - **Encounter-sim** (existing, unchanged): `app/simulation.py`'s existing 10 s-step metric simulator, spliced in ONLY when the mission-sim detects a reason to (a scripted contact/hazard within lookahead range, or a scripted event's trigger point). Between encounters the OOW runs on autopilot toward the next waypoint — no LLM calls, no per-step decisions, exactly the "OOW runs autonomously on the Captain's plan between events" behaviour already established in §3.3.
 - **Handoff**: at encounter entry, project the mission-sim's lat/lon position to a local flat-earth metric frame (equirectangular projection centred on the entry point — accurate enough over an encounter's bounded few-nm/few-minute window, NOT used for the whole voyage); run the existing OOW loop unchanged for the encounter's duration, with any active Captain instruction (speed cap, `avoid_zone`) passed in as a `VesselConstraints` override, same mechanism as today; project the encounter's final position/heading/speed back to lat/lon to resume mission-sim leg progression.
+- **Concretising the encounter-sim splice (fixing a real gap, 2026-09-30)** — the paragraph above was still an intention, not a specification. Five concrete decisions close it:
+  1. **Ambient-traffic generator**: `ambient.background_traffic_density` (§13.C.13) becomes a Poisson-process contact-arrival rate along the route (illustrative v1 defaults: light ≈ 0.1/h, moderate ≈ 0.3/h, dense ≈ 1.0/h — tunable, not fixed forever). Each contact's own geometry (bearing/range/course/speed at spawn) is generated with the SAME machinery already used for Imazu-style missions (`app.geometry.compute_target()` / `generate_random_imazu_missions.py`'s pattern) — reused unchanged, not reinvented, just called at the ship's live position/heading/speed at spawn time instead of at a fixed mission start. Overlapping encounters are supported by construction, not a special case: the mission-sim keeps a pool of "currently relevant contacts" and stays spliced into the encounter-sim as long as that pool is non-empty (exactly how today's multi-target missions like Imazu07/IMP05/IMP12 already work) — no separate one-at-a-time restriction.
+  2. **Encounter window bounds**: **start** when any contact reaches TCPA ≤ 30 min OR range ≤ 6 nm (whichever first) — a deliberately earlier/more generous threshold than the encounter-sim's own internal quiet/risk classification (`QUIET_TCPA_S`/`QUIET_CPA_M` in `app/narrate.py`), so the OOW gets control well before real risk, and the existing internal COLREG logic still does the actual risk assessment once inside. **End** when BOTH already-computed facts hold for every tracked contact/leg: every contact is already "past and clear" (the existing `narrate.py`/`contact_line()` fact) AND the Goal Course Check (`goal_course_check_line()`) reports back on the planned track within its existing deadband — both facts already exist in the OOW pipeline today, so ending an encounter needs no new detection logic, only a composite condition over facts that already exist.
+  3. **Mission clock during an encounter: continues, explicitly** — mission-sim time, fuel, and rest-hours (§13.A.3) never pause and are never double-counted; while spliced in, they simply advance at the encounter-sim's own finer step size (its existing `dt`, e.g. 10 s) instead of the coarser `dt_mission_s` (§13.A.1) — same formulas, finer granularity, then back to the coarse step once the encounter ends. Ship time never stops; only how often the loop "checks in" varies.
+  4. **A brown envelope CAN fire mid-encounter — this is the interesting case, and it requires the trigger-checking loop (not just the Captain) to run at whichever granularity is currently active.** Since events (§13.A.2) trigger on mission-sim position/time and those keep advancing per point 3, an event's condition can become true while spliced into an encounter. This means the event-trigger and monitor checks (§13.B.7/§13.B.9) must run at the ENCOUNTER-SIM's own step rate while spliced in, not only at `dt_mission_s` boundaries — the one real architectural consequence of this gap. Once the Captain (or the walking skeleton's deterministic baseline) reacts — e.g. `slow_down` after a mid-crossing engine failure — the resulting `VesselConstraints` change is picked up by the OOW's very next decision inside the SAME, still-running encounter, exactly the same way a Captain instruction is already picked up between encounters (§3.3) — no new plumbing needed there, only the trigger-checking cadence fix. (Flagged as a natural, high-value future test scenario in its own right — engine failure mid-crossing is close to genuine in-extremis COLREG territory — but not built now.)
+  5. **`avoid_zone` polygons inside the encounter frame**: at the SAME handoff step that projects own-ship/target positions into the local metric frame (point above), also project the currently-active exclusion zones relevant to that local area — both dynamic (weather/security/wildlife, §7) and the mission's static region layer (coastline/shoal, §7/§13.B.8) — into the identical local coordinates. `app/oracle_planner.py`'s existing hard rule-legality gate is extended to also exclude any candidate heading/action that would cross one of these projected polygons, exactly alongside its existing COLREG-illegality exclusion — the same hard-gate mechanism, a larger exclusion set, not a new one. This is also what makes a Captain's `avoid_zone` instruction (§7/§9.1) automatically effective at the tactical level with no separate instruction to the OOW: the projection step already carries the active zone set along every time it runs.
 - **Leg** = the route segment between two consecutive waypoints, or between the current position and a Captain-ordered deviation point (a `reroute` ends the current leg early and starts a new one to the revised waypoint list).
 - Coordinate system: WGS84 lat/lon for the route/Mission Order (matches §8.2's schema); local equirectangular metric ONLY inside an encounter window, never for the whole-mission distance/ETA math (that stays in great-circle/rhumb-line nm, standard navigation practice).
 
@@ -900,9 +920,14 @@ The **world-responder** column is the piece that was completely missing: for the
 <a id="sec-13-a-3"></a>
 #### 13.A.3 Resource model
 
-- **Fuel**: `fuel_rate = base_load + k * speed_kn**3` (the real cube-law relationship between ship speed and propulsion power/fuel burn, plus a constant "hotel load" for auxiliary/generator consumption independent of propulsion) — `k` calibrated per mission so the Mission Order's `fuel_tonnes_at_departure` roughly balances the expected voyage duration at `speed_of_advance_kn` (an approximation, not a real ship's exact curve, flagged as such).
+- **Fuel, exact calibration (fixing a real gap, 2026-09-30)**: `fuel_rate(t) = base_load + k * speed_kn(t)**3` (the real cube-law relationship between ship speed and propulsion power/fuel burn, plus a constant "hotel load" for auxiliary/generator consumption independent of propulsion). A single fuel-budget equation cannot determine two unknowns (`base_load`, `k`) at once, so the calibration is now a fixed two-step procedure, not an independent guess for each:
+  1. Fix a **hotel-load fraction** `f_hotel` (default **0.10** — auxiliary/generator load as a fraction of the propulsive fuel rate at the planned cruise speed, a standard simplification): `base_load = f_hotel * k * SOA**3`.
+  2. Solve the Mission Order's own fuel-budget equation for `k`, integrated over the **planned route at constant SOA** (as originally framed): `fuel_tonnes_at_departure * (1 - fuel_reserve_margin_pct/100) = (base_load + k * SOA**3) * T`, where `T = total_route_distance_nm / SOA` (in **hours** — nm ÷ kn is unavoidably hours; see §13.A.7). Substituting `base_load` from step 1 and solving: `k = fuel_budget / (SOA**3 * (1 + f_hotel) * T)`, then `base_load = f_hotel * k * SOA**3`.
+
+  Both constants are now fully determined from the Mission Order's own stated numbers (fuel budget, reserve margin, route distance, SOA), recomputed once per mission at generation time (§13.C.9) — never independently guessed, and never re-derived mid-mission. `fuel_rate(t)` is therefore **tonnes/hour**; fuel consumed over one mission-sim step is `fuel_rate(t) * (dt_mission_s / 3600)`, never a raw multiplication by `dt_mission_s` (§13.A.7).
 - **ETA**: `remaining_distance_nm / current_speed_kn`, recomputed every mission-sim step (reflects live speed changes from Captain/OOW decisions).
-- **Rest-hours**: STCW A-VIII/1's real rule — minimum 10 hours' rest in any 24-hour period, minimum 77 hours in any 7-day period, divisible into no more than 2 periods (one ≥6 hours). Tracked cumulatively (v1: one aggregate "OOW currently on watch" ledger, not per named crew member); a violation feeds the Crew welfare axis (§10.1) directly and can itself spawn a fatigue-error brown envelope (§4.D) if pushed far enough.
+- **Rest-hours, concrete default roster + the Captain's own fatigue (fixing a real gap, 2026-09-30)**: the single aggregated "OOW on watch" ledger now has a concrete default source — a **4-hours-on / 8-hours-off** watch rotation (a standard 3-watch merchant system), advanced mechanically from `t0_utc` (§13.A.1). Under this roster alone, STCW's 10h/24h minimum is comfortably met (8h+8h off > 10h); real violations arise only from **disruptions** to the off-watch period (an emergency, a mandatory drill, doubling up in heavy weather/pilotage), which subtract from the next rest block. **The Captain is not exempt**: a separate `captain_rest_ledger` (same STCW-style rolling-window mechanics) starts fully rested and is decremented by every Mandatory/Emergency engagement (§3.1) that falls outside the Captain's own already-awake periods — being called repeatedly overnight is a real, tracked fatigue cost, not a free action. Both ledgers feed the Crew welfare axis (§10.1) directly, and either one breaching its STCW minimum can itself spawn a fatigue-error brown envelope (§4.D) — exactly the pattern real incident reports (CHIRP/MAIB, §5/§6) already document: a fatigued master, after repeated night calls, making a worse decision.
+- **Ship profile speed consistency (fixing a real inconsistency, 2026-09-30)**: `pipeline/nomoto.py`'s existing `SHIP_PROFILES` (e.g. `sawada2021_default`, 12 kt design speed per the cited paper) need two additional fields so a Mission Order's `speed_of_advance_kn` and a ship profile are always mutually consistent: `nominal_speed_kn` (the design/cruise speed already implied by each profile's own Nomoto constants) and `max_speed_kn` (the absolute top speed the engine can produce, ≥ nominal — a real ship typically has a modest margin above design speed, not a large one). The scenario/mission generator (§13.C.9) must **validate `SOA ≤ max_speed_kn`** for whichever ship profile is sampled, rejecting/resampling any combination that violates it — a hard generation-time check, not a runtime judgement call. §8.2's worked example had exactly this inconsistency (`sawada2021_default` at 12 kt design speed, but `speed_of_advance_kn: 16.0`) — corrected to `12.0`, matching the profile it names.
 - This is what makes "is the goal still achievable" (§9, §10.3) an actual computation rather than a judgement call.
 
 <a id="sec-13-a-4"></a>
@@ -927,7 +952,7 @@ Revised concrete v1 entries:
 - *Fog, regime change*: **mandatory** = none. **Shield** = never exceed the Rule-19 safe speed for conditions. **Decision layer** = degenerate — COLREG mandates the safe speed itself, no real second candidate worth weighing — genuinely table-determined, unlike engine failure.
 - *Distress call*: **mandatory** = notify DPA + flag state (SOLAS reporting), deadline immediate. **Shield** = never ignore the call without logging a reason. **Decision layer** = assist vs. document a valid reason not to — cost trades off time/fuel/mission-goal delay against the legal/moral/reputational cost of not assisting; genuinely a judgement case, as originally identified.
 - *Whale zone*: **mandatory** = none. **Shield** = never exceed the zone's posted speed limit inside the polygon. **Decision layer** = degenerate — a charted, fixed limit, no real second candidate — genuinely table-determined.
-- *Commercial instruction vs. safety*: **mandatory** = log entry + DPA notification of the outcome. **Shield** = never comply with an instruction that breaches a safety margin. **Decision layer** = whether the instruction actually breaches a margin is now a COMPUTED condition against the live Mission State (fuel/rest-hour/COLREG margins) rather than a fixed always-refuse rule — itself a genuine judgement case once "breaches a margin" isn't hard-coded as always-true.
+- *Commercial instruction vs. safety*: **mandatory** = log entry + DPA notification of the outcome. **Shield** = never comply with an instruction that breaches a safety margin (§13.A.6 quantifies exactly what that means). **Decision layer** = whether the instruction actually breaches a margin is now a COMPUTED condition against the live Mission State (fuel/rest-hour/COLREG margins) rather than a fixed always-refuse rule — itself a genuine judgement case once "breaches a margin" isn't hard-coded as always-true.
 
 **Reassessed v1 split** (supersedes the original "4 table-determined, 1 judgement case" claim): Fog and Whale zone are consistently table-determined; Engine failure, Distress call, and Commercial instruction are judgement-capable once properly parameterised. §14's walking skeleton is updated accordingly.
 
@@ -946,6 +971,38 @@ Real captains do exactly what was described: treat a single engine-room sensor a
 
 This gives the walking skeleton (§14) a natural second test scenario once it graduates beyond the single parameterised engine-failure case: the same event, but with a genuinely ambiguous 1-sensor vs. 3-sensor evidence pattern, directly exercises the regret mechanism §13.A.4 was built for.
 
+<a id="sec-13-a-6"></a>
+#### 13.A.6 Quantifying "safety margin", and the missing "complies anyway" outcome
+
+**Without this, "forbidden = complying with an instruction that breaches a safety margin" (§13.A.4) is not executable** — a shield rule needs a concrete function to test, not a phrase. Fixed with `check_safety_margins(candidate_action, mission_state) -> list[MarginViolation]` (proposed home: `pipeline/captain_agent_spec.py`, alongside the procedure library, §13.A.4) — deliberately **general-purpose**, usable by the shield for ANY Captain decision, not hardcoded to the commercial-instruction event alone (the same 4 checks apply just as well to, say, a Captain-issued `speed_up` that happens to breach the fuel reserve regardless of what triggered it):
+
+| Margin | Check |
+|---|---|
+| Engine speed cap | `candidate_action.speed_kn > engine_status.max_speed_kn` (the Chief Engineer's declared cap, §2.5/§13.A.5's `EngineStatus`) |
+| Exclusion zone | the candidate's implied route/position enters an active zone (dynamic or static, §7/§13.B.8) it isn't authorised to be in |
+| Rest-hours | complying would push the OOW watch ledger OR the `captain_rest_ledger` (§13.A.3) below its STCW minimum |
+| Fuel reserve | the recomputed fuel consumption (§13.A.3) at the candidate's implied speed/route breaches the Mission Order's `fuel_reserve_margin_pct` |
+
+The function returns WHICH margins are breached, not just a bare boolean — needed both as an observable fact for the facts-only prompt (§13.B.5, e.g. "this instruction would exceed the declared engine speed cap of 8 kn") and so §13.C.11's regulatory-compliance/citation-accuracy ground truth can check the Captain's own reasoning against the actual breached margin, not just a pass/fail.
+
+**The missing outcome branch, now defined**: §13.B.6's precedence rule (**Shield > active Captain instruction**) already says a shield-violating OOW-facing instruction is rejected/clamped before reaching the OOW — this now explicitly extends to the Captain's own top-level decision too, not only downstream OOW instructions. Two cases:
+
+- **Normal simulation (shield active, the default)**: if the Captain's own proposed decision is "comply" and `check_safety_margins()` finds a real breach, the simulation forcibly substitutes the procedure library's **mandatory** action (refuse/defer, citing ISM Art. 5) before it is ever applied to the Mission State — the ship never actually experiences the bad outcome. The Captain's *original, un-clamped* proposal is still recorded, though: it becomes exactly a category-(a) shield-violation DPO-rejected sample (§13.C.10, already defined), scored against the Procedure/regime selection accuracy axis (§10.1) as a real, negative decision-quality event — a correctly-caught bad decision is not free, it just doesn't sink the ship.
+- **Only if run WITHOUT shield enforcement** (a deliberate ablation, or to generate a genuine negative/failure training example on purpose): the compliance is actually applied, and the consequence is a probabilistic **follow-on brown envelope keyed to which margin was breached** — no new mechanism needed, each margin already maps onto an existing category: a speed-cap breach risks a secondary engine failure (§13.A.2's Engine failure, as a follow-on); a zone breach risks that zone's own inherent hazard (grounding on a shoal, a wind-farm allision, a piracy encounter, a whale strike — whichever `type` the zone carries, §7); a rest-hours breach risks a fatigue-error brown envelope (§4.D, already linked in §13.A.3); a fuel-reserve breach risks a new fuel-shortage event (§4.C's backlog category). If the resulting consequence is severe enough, this is exactly what the real Safety hard gate (§10.1) is for — consistent with, not a special case of, the existing gate.
+
+<a id="sec-13-a-7"></a>
+#### 13.A.7 Units and time convention (fixing a real inconsistency, 2026-09-30)
+
+**Rule**: any field driving the mission-sim/encounter-sim clock, an event trigger, a deadline, or a monitor threshold is in **seconds**, suffixed `_s` (`dt_mission_s`, `t_s`, `elapsed_time_s`, `timeout_s`, `delay_s`, the encounter-sim's own `dt`) — matching `app/simulation.py`'s existing convention, already in use project-wide. Speeds are always **kn**, distances/ranges always **NM**, fuel always **tonnes**. Text that previously said the mission-sim "steps in minutes" (§13.A.1) or the walking-skeleton's `step_mission(n)` "steps (minutes)" (§15.3) was a documentation inconsistency, not a genuine second unit — both now read seconds; "10 minutes" only ever appears as a human-readable gloss on `dt_mission_s=600`, never as a stored/computed unit.
+
+Two **named, deliberate** exceptions, not further inconsistencies — each matches how the real regulation/industry already states that specific quantity, and is converted to/from seconds only at the point it needs to interact with the second-based clock:
+
+- **STCW rest-hours** (`hours_awake`, `hours_rested_last_24h`, the 10h/24h and 77h/7d minimums, §13.A.3) stay in **hours** — exactly how STCW A-VIII/1 itself is always quoted, and how §13.C.13's `rest_hours_ledger` is already written. Checked against the mission-sim's elapsed seconds only via an explicit `/3600` conversion at the comparison point, never mixed in raw form.
+- **Fuel rate and transit time** (§13.A.3): `T = total_route_distance_nm / SOA` is unavoidably in **hours** (nm ÷ kn = hours, standard nautical arithmetic), so `fuel_rate(t)` is **tonnes/hour** (also the real-world convention for reporting bunker consumption). Deducting fuel over one mission-sim step is `fuel_rate(t) * (dt_mission_s / 3600)`, not a raw multiplication by `dt_mission_s`.
+- Mission Order fields that describe a **human-facing policy** the way the actual order/regulation would state it — `reporting_interval_hours`, `deviation_report_threshold: "position >20nm or ETA >6h off PIM"` (§8.2) — also stay in hours for the same reason; read by the reporting logic and converted to seconds internally exactly like the rest-hours ledger, never left ambiguous about which representation is authoritative (seconds always is, for anything computed).
+
+`track_deviation_above(20_nm, within_h=6)` (§13.B.7) was the one genuine **code-level** inconsistency (a monitor function signature, not human-facing policy text) — renamed to `track_deviation_above(20_nm, within_s=21600)` to match the primary rule.
+
 <a id="sec-13-b"></a>
 ### 13.B Loose contracts
 
@@ -954,7 +1011,7 @@ This gives the walking skeleton (§14) a natural second test scenario once it gr
 
 - Schema split: **immutable** (copied once from the Mission Order at mission start: `mission_id`, `success_criteria`, `restricted_zones`, initial resources) vs. **mutable** (everything §8.4 already lists — goals-with-status, current resources, active hazards, active plan, event/decision log).
 - Delta representation: a generic patch entry `{"t": <mission-sim time>, "field_path": "...", "old": ..., "new": ..., "cause": <event_id or decision_id>}` — append-only, so the Mission State at any past time is reconstructable by replaying deltas up to that point (same "log, don't overwrite" principle as this project's existing run-checkpoint files).
-- **Decided (2026-09-30)**: the Captain follows the **same facts-only prompt convention already adopted for OOW** (the project's own 2026-09-24 architecture pivot, see `basic_simulator.md`). Mission State renders to the Captain's prompt as plain facts (fuel remaining, elapsed rest-hours, current regime, distance to next waypoint, active exclusion zones) — the §1.2 priority ladder and "safety beats schedule" live ONCE in the Captain's system prompt, not repeated as an imperative annotation on every situational fact. Exactly mirrors OOW's system-prompt-vs-situation-report split.
+- **Decided (2026-09-30, corrected same day)**: the Captain follows the **same facts-only prompt convention already adopted for OOW** (the project's own 2026-09-24 architecture pivot, see `basic_simulator.md`) — Mission State renders to the Captain's prompt as plain facts (fuel remaining, elapsed rest-hours, current regime, distance to next waypoint, active exclusion zones) **and nothing else**. **Correction**: an earlier version of this bullet said the §1.2 priority ladder / "safety beats schedule" lives "once in the system prompt" — that is itself decision logic, not a fact, and is exactly the kind of hand-written imperative the OOW's own facts-only pivot removed (see `basic_simulator.md`'s "Judgment/timing nuance is now deliberately left to (1) RAG/PG-retrieved real COLREG text, (2) future SFT/DPO/Reflection training data — NOT hand-written prompt rules"). Fixed: the priority ladder does **not** appear anywhere in the Captain's prompt, system prompt included. §1.2 remains a description of the real-world role (documentation, for humans designing this system), not literal prompt text. The system is instead expected to acquire and apply that prioritisation via the same three channels already established for OOW — **RAG** (retrieving the actual ISM Art. 5 / SOLAS text when a commercial-vs-safety brown envelope is active, §6.3), **KG/PG** (the procedural graph structurally encoding "safety precedes schedule" as a traversal property of the mined procedures, §6.3), and **the trained weights** (SFT/DPO/Reflection on scenarios that demonstrate correct prioritisation, §13.C.10) — never a restated rule in the prompt.
 
 <a id="sec-13-b-6"></a>
 #### 13.B.6 Captain output schema + precedence rules
@@ -974,17 +1031,40 @@ Each §3.1 checklist bullet becomes a named, thresholded function over the Missi
 |---|---|
 | Visibility | `visibility_below(threshold_m)` |
 | Position doubt | `position_uncertainty_above(threshold_m)` |
-| Track deviation | `track_deviation_above(20_nm, within_h=6)` |
+| Track deviation | `track_deviation_above(20_nm, within_s=21600)` |
 | Unresolved alarm | `alarm_unresolved(timeout_s)` — an "alarm" is defined, self-referentially but concretely, as any OTHER monitor whose own condition has been true for longer than `timeout_s` without an OOW/Captain action addressing it |
+| Machinery fault | `machinery_fault_reported()` — **discrete**, true only when the Chief Engineer's fact (§2.5/§15.2 `EngineStatus`) reports a fault; carries the §13.A.5 `evidence` list, but the monitor itself only asks "is there ≥ 1 corroborating reading", not "is it real" (that judgement is the decision layer's job, §13.A.4/§13.A.5, not this monitor's) |
+| Distress signal | `distress_signal_received()` — **discrete**, true only when a distress-call event has fired |
+| Company instruction | `company_instruction_received()` — **discrete**, true only when a commercial-vs-safety event has fired |
+
+**Continuous vs. discrete monitors (clarifying a real ambiguity, 2026-09-30)**: the first four monitors are **continuous** — they evaluate a live Mission State value against a threshold, and can legitimately become true from *ambient* causes (§13.C.13's `weather_schedule`, ordinary track-keeping) as well as from a scripted brown envelope. That is correct, not a bug: a real ambient fog bank crossing the visibility threshold SHOULD engage the Captain, and doing so is a true positive, never "crying wolf", regardless of whether a scripted event caused it. The last three are **discrete** — they can only become true because a specific event type fired, by construction; "a discrete monitor fires without its event" is therefore impossible by design, not just unlikely.
 
 - **Concurrent triggers**: the highest-severity unresolved trigger is answered first; all are logged regardless; the Captain's response deadline is keyed to the single most urgent unresolved trigger.
-- **Deadlines per urgency class** (this is what makes §10.3's recall/precision computable): Emergency = same decision epoch (zero elapsed sim time); Mandatory = within one mission-sim step (a few simulated minutes); Routine = by the next scheduled report cycle.
+- **Deadlines per urgency class** (this is what makes §10.3's recall/precision computable): Emergency = same decision epoch (zero elapsed sim time); Mandatory = within one mission-sim step (`dt_mission_s`, default 600 s / 10 min); Routine = by the next scheduled report cycle.
 
 <a id="sec-13-b-8"></a>
 #### 13.B.8 Route planner with exclusion zones
 
 - **v1 algorithm (decided)**: a **visibility graph** over exclusion-zone polygon vertices (nodes = start, goal, every polygon corner; an edge exists where the straight segment crosses no zone; shortest path via Dijkstra/A\*) — geometrically exact for polygon obstacles at this abstraction level, and simpler than a grid-based A\* (which forces a resolution trade-off and produces jagged paths). This is what makes `reroute`/`avoid_zone` (§7/§9.1) actually do something.
+- **Obstacle set (revised 2026-09-30)** = the union of (a) the mission's own dynamic exclusion zones (weather/security/wildlife, §7) and (b) the static geographic layer for the mission's `region_id` (§7/§13.C.13) — coastline always included, shallow-water zones included only when `min_depth_m < draft_m` + safety margin for the current ship profile. Same single algorithm over a larger, mixed-source obstacle set — no separate mechanism needed for "real" vs. "fictional" obstacles.
 - **Feasibility check**: recompute ETA/fuel (§13.A.3) along any candidate new route; reject/flag it if it breaches the Mission Order's resource margins. Running this planner ONCE, unconstrained, at mission start also produces the "feasibility oracle" baseline §13.C.11 needs for the resource-efficiency axis.
+
+<a id="sec-13-b-9"></a>
+#### 13.B.9 Event → monitor mapping (closing the two-ground-truths gap)
+
+**A real gap, now fixed**: scripted events (§13.A.2) and trigger monitors (§13.B.7) are two independent routes to engaging the Captain, but §10.3's recall/precision is computed against monitors only. Without an explicit mapping, an event that happens to trip no monitor is invisible to the metric (an unrecorded miss), and a continuous monitor firing for an ambient reason could be wrongly read as "crying wolf" even when it was correct. Fixed by requiring **every** event type to name exactly which monitor(s) it drives and at what urgency — no event may be added to §4/§13.A.2 without this mapping being extended alongside it, permanently, not just for the v1 set:
+
+| Event type | Monitor(s) it drives | Urgency class |
+|---|---|---|
+| Engine failure | `machinery_fault_reported()` | Mandatory |
+| Fog / restricted visibility | `visibility_below(threshold_m)` | Mandatory |
+| Distress call | `distress_signal_received()` | Mandatory |
+| Whale zone | *(none — see below)* | **Pre-authorised, not a live monitor at all** |
+| Commercial instruction vs. safety | `company_instruction_received()` | Mandatory |
+
+**Whale zone resolved**: neither Routine nor Mandatory — a charted, known-before-departure, fixed-response hazard (§13.A.4's decision layer already called this "degenerate", no real judgement) is exactly what a **Standing Order** (§3.2) is for: pre-authorise the speed reduction once, at mission start, from the Mission Order's own `known_hazards` (§8.2) — mirrors §3.2's own worked example ("reduce to half speed automatically in visibility under 2nm") almost verbatim. The OOW then handles every entry into the zone autonomously under that standing order; the Captain is never re-engaged per instance, and this event is correctly **excluded** from the §10.3 recall/precision metric entirely, rather than forced into an ill-fitting urgency class.
+
+**Two separate questions, two separate metrics** (worth stating explicitly, since §13.A.5's sensor-evidence case makes it easy to conflate them): "was the Captain engaged in time" is §10.3's recall/precision, computed purely from monitor state; "did the Captain correctly judge the engaged situation" (e.g. discount a single uncorroborated sensor reading vs. escalate on three) is §13.A.4/§13.A.5's regret, computed from the decision layer. A monitor firing only ever asks the first question — it never pre-judges whether the underlying alarm turns out to be real.
 
 <a id="sec-13-c"></a>
 ### 13.C Data & evaluation
@@ -994,7 +1074,10 @@ Each §3.1 checklist bullet becomes a named, thresholded function over the Missi
 
 - Category/severity distribution: reuse the existing weighted-category pattern from `generate_random_imazu_missions.py` — §4's category letters as the weighted category set, minor/moderate/serious/catastrophic as a secondary weighted draw.
 - Dependency rules: a small explicit compatibility table (e.g. fog + engine failure allowed to co-occur; piracy excluded on a North-Sea-tagged route) — a geography/category exclusion list, not a full plausibility model.
-- Held-out split at **mission** level: no event-*combination* shared between train and eval sets — mirrors the existing `HELD_OUT_EVAL_PROFILE`/Imazu22 held-out pattern (a fixed, deterministic held-out fraction of mission templates).
+- **Held-out split, revised (2026-09-30)** — the original "no event-*combination* shared" rule is not achievable with only 5 v1 event types (§13.A.2): the combinatorial space (≤5 event types × 4 severities × a handful of legal co-occurrence pairs from this same dependency table) is too small to guarantee non-overlap without either an unusably tiny eval set or silently reusing combinations. Fixed with a **composite held-out key** across 4 dimensions instead of 1: `(route_template_id, event_set, trigger_placement_bucket, severity_set)`.
+  - **Whole route templates held out**: a fixed subset of route templates (e.g. 2 of N) is reserved for eval ONLY — never appears in any training mission regardless of which events/severities are attached — the strongest single guarantee, and a direct extension of the existing `HELD_OUT_EVAL_PROFILE`/Imazu22 pattern (whole-template holdout, not per-field holdout).
+  - **Bucketed trigger placement**: `trigger_placement_bucket` discretises the trigger's distance/time-along-route into a small number of coarse legs (e.g. early/mid/late), rather than the raw continuous value — bucketing is what makes "no combination shared" meaningful at all (two continuous draws are already never bit-identical, so an unbucketed rule would trivially always pass without testing anything real).
+  - For missions built on the REMAINING (non-reserved) route templates, the full 4-part key must still differ between any training and any eval mission — a genuine generalisation test across geography, which events, roughly when, and how severe, not just "which events fired".
 - Seeds: one seed per mission index (matches `generate_random_imazu_missions.py`'s own convention), plus a **separate** seed for the world-responder's own scripted timing/outcome draws (§13.A.2) — a mission is fully reproducible from `(mission_seed, responder_seed)`.
 
 <a id="sec-13-c-10"></a>
@@ -1002,7 +1085,10 @@ Each §3.1 checklist bullet becomes a named, thresholded function over the Missi
 
 - Input: last-N-events window + the current Mission State snapshot (facts-only, §13.B.5) + retrieved RAG/KG/PG chunks (§6.3) — bounded, not the full mission history, mirroring OOW's own bounded situation-report design.
 - Labels, revised (2026-09-30) for the 3-layer model (§13.A.4): for mandatory/shield-only events (fog, whale zone), the deterministic action is a direct SFT label as before; for decision-layer events (engine failure, distress call, commercial instruction), the SFT label is `oracle_best` (§13.A.4) but ONLY when the Captain's actual choice has near-zero regret against it — otherwise the row is better mined as a DPO/reflection pair (chosen vs. `oracle_best`) than force-fit as an SFT positive. The Captain's own free-text `plan`/`reasoning` is CoT training text regardless; the Mission Progress Report (§8.3) is a separate, simpler templated-output row, not mixed with tactical-decision rows.
+- **Where a decision-layer `chosen_action` genuinely comes from (fixing a real gap, 2026-09-30)** — the bullet above presupposed a `chosen_action` already exists to compute regret against, without saying where it originates. If it were generated by just running the cost model itself and writing the result up as prose, every decision-layer row would trivially have zero regret by construction (`chosen_action == oracle_best`) — SFT on well-written prose is still SFT on a lookup, the critique's real point. Fixed with an explicit **third, independent source**: a **teacher model** (same mechanism as §11's existing reasoning-trace extraction — a large model called via API, run locally per this project's local/cloud split) is given the Mission State facts and asked for a plan + justification WITHOUT ever seeing `oracle_best` — never contaminated with the cost model's own answer — so its proposals genuinely vary, matching or departing from `oracle_best` on their own merits. A **checker** then (a) rejects any teacher proposal that fails the shield (layer 2, rule-based, cheap) or skips a mandatory duty (layer 1), and (b) computes `regret` against `oracle_best` via the same `cost()` function (§13.A.4) — the SAME two-way split then applies: near-zero regret → SFT positive using the teacher's OWN prose (not a synthetic rewrite — this is what keeps the reasoning genuinely varied, not a lookup wearing a prose costume); high regret → the DPO-rejected member of a pair, with `oracle_best`'s own action (rendered via the same prose formatter, mirroring `build_rlhf.py`'s existing "re-call the same formatter with one field swapped" rule) as the preferred member.
+- **Explanation-quality rubric (new, 2026-09-30)** — action-correctness (regret) alone is not sufficient: a correct action justified by the wrong or no reasoning is still a bad training row for a model whose whole value proposition is judgement, not lookup. A short rubric — does the explanation (i) cite the actual applicable ISM/SOLAS/STCW article (feeds §13.C.11's explanation/citation-accuracy axis), (ii) name at least one cost dimension it weighed (fuel/time/risk/goal, §13.A.4), (iii) name at least one alternative it considered and rejected — filters teacher rows before they enter the SFT pool: low-regret-but-low-rubric-score rows are excluded rather than force-included just because the action happened to be right.
 - CHIRP (427 unused articles, §5/§6) extraction: **reuses the existing `extract_incident_reasoning.py` schema unchanged** (`situation`/`procedures`/`regulations`/`outcomes`/`key_facts` plus its incident-specific `fault_attribution`/`actual_actions_taken`-vs-`procedures` fields) — this schema already captures exactly "situation, decision, outcome, what should have happened"; no new schema needed.
+- **CHIRP → procedure-library key, the missing link (fixing a real gap, 2026-09-30)**: the schema above captures a narrative, but nothing connected it to `(event_type, severity, context_flags)` — the exact key the procedure library (§13.A.4) is looked up on — so none of the 427 articles could be scored against it. Fixed by extending the SAME extraction call (no extra API cost) with 3 more structured fields: `mapped_event_type` (one of the 5 v1 event types, §13.A.2, or `unmapped` if none genuinely fit), `severity` (§13.C.9's minor/moderate/serious/catastrophic scale), `context_flags` (the mission scenario's own free-list vocabulary, §13.C.13). A lightweight rule-based **checker** cross-validates each mapping against a keyword guard (e.g. an `engine_failure` tag requires a propulsion/machinery keyword somewhere in the source text) — a cheap sanity check against a hallucinated tag, not a full independent classifier. **Most articles will map to `unmapped`, and that's expected, not a failure**: only 5 of §4's ~70 named events are fully specified in v1 (§13.A.2), while CHIRP spans the full ~70 — unmapped rows are not discarded, they still train the general reasoning/citation pool exactly as before, they just can't be scored on the Procedure/regime-selection axis (§13.C.11) until their event type graduates out of the §4 backlog.
 - DPO-rejected construction, revised (2026-09-30) for the 3-layer model: **two categories, split along layer boundaries, not "wrong vs. late"** — (a) a genuine mandatory/shield violation (a required report missed its §13.B.7 deadline, or a forbidden action was taken) — stays exact-match/rule-based, since layers 1–2 are genuinely rule-like; (b) a high-regret decision-layer choice (`regret` above a threshold against `oracle_best`, §13.A.4) — the action was permissible but clearly cost-dominated, a soft/graded rejection, not a rule violation. This replaces the earlier "wrong procedure vs. correct-but-late" split, which implicitly assumed a single correct procedure existed for every event — no longer true once the decision layer is open-ended.
 
 <a id="sec-13-c-11"></a>
@@ -1014,7 +1100,7 @@ Each §3.1 checklist bullet becomes a named, thresholded function over the Missi
 | Mission outcome | Recomputed resource margin (§13.A.3) vs. Mission Order success criteria — already specified in §10.3 |
 | Regulatory/procedural compliance | Direct boolean check against §13.A.4's `reporting_duties` table (report X filed within deadline Y?) |
 | Procedure/regime selection accuracy | Revised (2026-09-30): for mandatory/shield-only events, a direct rule-compliance check; for decision-layer events, **regret** (§13.A.4) against `oracle_best` — a low-regret action scores well even when it differs from the oracle's own candidate, never a bare exact-match check |
-| Explanation/citation accuracy | Needs an **ISM/SOLAS/MARPOL article index** (the Captain's equivalent of `classify_rules()`'s COLREG-rule knowledge) mapping each procedure-library entry to its underlying article/regulation number |
+| Explanation/citation accuracy | Needs an **ISM/SOLAS/MARPOL article index** (the Captain's equivalent of `classify_rules()`'s COLREG-rule knowledge) mapping each procedure-library entry to its underlying article/regulation number; the training-side explanation-quality rubric (§13.C.10) checks the same citation at label-generation time, this is its eval-time counterpart |
 | Decision timeliness / calling discipline | The §13.B.7 trigger monitors ARE this ground truth already |
 | Resource efficiency | The §13.B.8 route planner's own unconstrained minimum-resource run, taken once per mission as the reference |
 | Crew welfare | Directly read off the §13.A.3 rest-hour ledger |
@@ -1024,7 +1110,7 @@ Without these, the §10 composite is, as put, "a number without meaning" — thi
 <a id="sec-13-c-12"></a>
 #### 13.C.12 Run format & versioning
 
-- Mission-level run JSON nests ordinary, unchanged OOW run-log files exactly as already proposed in §11.6's `mission_run.json` wrapper.
+- Mission-level run JSON nests ordinary OOW run-log files, same **schema** as today, exactly as already proposed in §11.6's `mission_run.json` wrapper — but see §13.C.14: the *evaluator* run over each nested file is NOT unchanged, only the file format is.
 - Add a `captain_prompt_hash` alongside OOW's existing `prompt_hash` mechanism (the exact existing pattern in `run_llm_scenario.py`/`build_outcome_dpo.py`) — any change to the Captain's system prompt or Mission-State-to-text renderer bumps this hash, so DAgger/outcome-mining correctly skips stale-prompt runs, exactly as already done for OOW.
 - Deterministic mission replay: `(mission_seed, responder_seed, captain_prompt_hash, oow_prompt_hash)` fully determines a reproducible run (assumes greedy/deterministic decoding, matching this project's existing convention).
 
@@ -1033,7 +1119,7 @@ Without these, the §10 composite is, as put, "a number without meaning" — thi
 
 Answering directly: **Mission Order + route + brown envelopes + resources is the right core, but 4 more elements are needed** for the file to be genuinely computable and scoreable end-to-end, not just readable:
 
-1. **Exclusion zones as their own element** (§7) — the route is "waypoints + exclusion-zone polygons" together, not waypoints alone.
+1. **Exclusion zones as their own element** (§7) — the route is "waypoints + exclusion-zone polygons" together, not waypoints alone. Revised (2026-09-30): this now spans both DYNAMIC zones (weather/security/wildlife, mission-specific) and STATIC geographic zones (coastline, shallow water, fixed installations — reused across missions via a shared `region_id`, §7), tagged with a `type` field so the route planner (§13.B.8) treats them uniformly while the scenario generator (§13.C.9) only ever varies the dynamic ones.
 2. **Per-brown-envelope severity + context flags**, not just (type, time) — this is exactly the key the procedure library (§13.A.4) looks up on; without it there is no way to derive the correct required action at all.
 3. **A world-responder script** for every event that needs one (§13.A.2) — a distress call or a commercial instruction is otherwise unresolvable (nothing ever answers it).
 4. **Starting resource STATE**, not a budget list — the actual values at t=0 (fuel quantity, rest-hour ledger — possibly already partially fatigued as a deliberately harder variant, ship performance/Nomoto profile), since §13.A.3's formulas need a starting point to integrate from.
@@ -1056,9 +1142,11 @@ Combined schema (extends §8.2's Mission Order):
   "mission_order": { "...": "§8.2, unchanged" },
 
   "route": {
+    "region_id": "nl_north_sea_coast",
     "waypoints": [ "...WPT1..WPT4, as in §8.2..." ],
     "exclusion_zones": [
-      {"id": "whale_zone_1", "polygon": [[0,0],[0,1],[1,1],[1,0]], "speed_limit_kn": 10}
+      {"id": "whale_zone_1", "type": "dynamic_hazard", "polygon": [[0,0],[0,1],[1,1],[1,0]], "speed_limit_kn": 10},
+      {"id": "shoal_1", "type": "shallow_water", "polygon": [[2,0],[2,1],[3,1],[3,0]], "min_depth_m": 8}
     ]
   },
 
@@ -1073,7 +1161,8 @@ Combined schema (extends §8.2's Mission Order):
   "resources_initial": {
     "fuel_tonnes": 850,
     "rest_hours_ledger": {"hours_awake": 4, "hours_rested_last_24h": 8},
-    "ship_profile": "sawada2021_default"
+    "ship_profile": "sawada2021_default",
+    "draft_m": 7.5
   },
 
   "brown_envelopes": [
@@ -1101,6 +1190,17 @@ Combined schema (extends §8.2's Mission Order):
 ```
 
 **Decided (2026-09-30)**: the "correct answer" for each brown envelope is **derived at eval time from the procedure library (§13.A.4)**, not stored redundantly in the scenario file itself — avoids the scenario's label and the procedure library silently diverging if the latter is later revised. The scenario file only stores what actually happened (type/severity/context/trigger/world-responder), never the expected response.
+
+<a id="sec-13-c-14"></a>
+#### 13.C.14 OOW evaluator needs an encounter mode (fixing a real gap, 2026-09-30)
+
+**A real gap, not to be waved away**: §11.6/§13.C.12 said nested OOW run-logs are evaluated "unchanged" by `Evaluation Functions/evaluate_run.py` — but that evaluator assumes a fixed-position mission goal and an `arrived`/`reached_goal` criterion. Inside a mission, an encounter's "goal" is only the projected leg endpoint (a direction to head in, not a destination to arrive at — the encounter simply ENDS once §13.A.1's own end condition is met: every contact past-and-clear and back on the planned track), so directly reusing the standalone arrival/temporal/spatial logic would silently produce wrong numbers (e.g. a spurious mission-incomplete cap firing on every single encounter, since nothing is ever meant to "arrive"). Not accepting that as a known-wrong number — fixed with an explicit **encounter mode**:
+
+- **Kept as-is** (none of these depend on arrival at a fixed goal, only on behaviour during the window): `safety_score` (CPA/collision hard gate), `compliance_axis()` (COLREG rule-following), `explanation_axis()` (citation accuracy), `manoeuvre_and_smoothness_axes()` (turn-count/zigzag detection over the bounded window).
+- **Replaced**: the `reached_goal`/mission-incomplete hard gate becomes an **"encounter resolved" gate** — success = the encounter ended via §13.A.1's own end condition without a collision; failure = the encounter's own step budget is exhausted without resolving (own-ship perpetually still avoiding, the same failure signature already seen for VO/DWA in the Nomoto falsification work) OR a literal collision (the existing hard gate, unchanged).
+- **Dropped from the per-encounter score entirely, computed ONCE at the whole-mission level instead**: `temporal_efficiency`/`spatial_efficiency` — comparing a bounded encounter segment's path to a straight line toward a temporary leg endpoint isn't meaningful; the mission's own Resource efficiency axis (§10.1), measured against the whole-mission feasibility oracle (§13.B.8/§13.C.11), already covers this at the level it's actually meaningful.
+- **No per-encounter `composite_score` at all**: rather than inventing a reduced composite formula that would look superficially like the standalone one but mean something different, each nested OOW run only reports its individual axis scores (safety/compliance/explanation/manoeuvre/smoothness) upward into the Mission Log (§11.5); the **one real composite number** is computed at the mission level (§10), aggregating per-encounter axis scores (e.g. worst-case safety across all encounters) together with the mission-level axes.
+- Implementation-wise, this is `evaluate_run.py` gaining an explicit `mode: "standalone" | "encounter" = "standalone"` parameter — an ADDITIVE change (default preserves today's exact behaviour for every existing standalone mission), not a rewrite. This is the second, evidence-based, explicitly-justified exception to this file's normal "reuse UNCHANGED" rule (the first was the 2026-09-23 `PASS_WITH_CPA_VIOLATION` fix, see `pipeline-notes.md`) — consistent with how that exception policy already works, not a violation of it.
 
 ---
 
@@ -1151,7 +1251,7 @@ Just enough to drive/inspect the skeleton by hand — a CLI/notebook-level contr
 
 | Control | What it does |
 |---|---|
-| `step_mission(n=1)` | Advance the mission-sim by `n` steps (minutes) |
+| `step_mission(n=1)` | Advance the mission-sim by `n` steps (each `dt_mission_s` seconds) |
 | `run_to_next_event()` | Advance until the next scripted brown envelope fires or the mission ends |
 | `force_event(event_id)` | Manually trigger a specific scripted event out of turn (for testing) |
 | `show_mission_state()` | Dump the current Mission State (§13.B.5) as text |
