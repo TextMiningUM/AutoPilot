@@ -60,6 +60,7 @@ This follows on from the existing two-track architecture (see `.github/copilot-i
     - [13.A.2 Event model](#sec-13-a-2)
     - [13.A.3 Resource model](#sec-13-a-3)
     - [13.A.4 Procedure library](#sec-13-a-4)
+    - [13.A.5 Evidence, ambiguity, and reporter reliability](#sec-13-a-5)
   - [13.B Loose contracts](#sec-13-b)
     - [13.B.5 Mission State — formal schema](#sec-13-b-5)
     - [13.B.6 Captain output schema + precedence rules](#sec-13-b-6)
@@ -72,6 +73,11 @@ This follows on from the existing two-track architecture (see `.github/copilot-i
     - [13.C.12 Run format & versioning](#sec-13-c-12)
     - [13.C.13 Ground-truth scenario file](#sec-13-c-13)
 - [14. Approach: walking skeleton first](#sec-14)
+- [15. Concrete data structures & UI controls](#sec-15)
+  - [15.1 My assessment](#sec-15-1)
+  - [15.2 Remaining concrete data-structure specifics](#sec-15-2)
+  - [15.3 Minimal debug control set](#sec-15-3)
+  - [15.4 Full UI control spec — deferred](#sec-15-4)
 
 ---
 
@@ -889,6 +895,8 @@ The OOW's own run-log format is deliberately left untouched — the Captain laye
 
 The **world-responder** column is the piece that was completely missing: for the 2 events that imply the outside world must reply (distress call, commercial instruction), it is a small deterministic script/timer table — never an open-ended negotiation — consistent with this project's "deterministic where possible" philosophy (§9.3).
 
+**Correction (2026-09-30), addressing a real critique of the original single-answer procedure model**: the table above is not a fixed (event → one required action) mapping — see §13.A.4's revised 3-layer model. **Engine failure** and **Commercial instruction vs. safety** are only genuinely *table-determined* in their simplest parameterisation; both become real judgement cases once continuous parameters are added — Engine failure gains `distance_to_refuge_nm`/`deadline_slack_h` (continue at capped speed vs. put in to a port of refuge is then a real cost tradeoff, not a lookup); Commercial instruction's "breaches a safety margin" becomes a *computed* condition against the live Mission State rather than a fixed always-refuse rule. Fog and Whale zone remain genuinely table-determined (a COLREG-mandated safe speed and a charted/posted speed limit both leave negligible real tradeoff space) — Distress call was already a judgement case. This replaces the original "4 table-determined, 1 judgement case" split with a more accurate one: 2 event types are consistently table-determined, 3 are judgement-capable once properly parameterised — see §13.A.4.
+
 <a id="sec-13-a-3"></a>
 #### 13.A.3 Resource model
 
@@ -898,28 +906,45 @@ The **world-responder** column is the piece that was completely missing: for the
 - This is what makes "is the goal still achievable" (§9, §10.3) an actual computation rather than a judgement call.
 
 <a id="sec-13-a-4"></a>
-#### 13.A.4 Procedure library — shield, label generator, and auditor in one
+#### 13.A.4 Procedure library — shield, mandatory duties, and a cost-based decision layer (revised 2026-09-30)
 
-The single most important missing artefact, and the Captain's equivalent of `pipeline/oow_agent_spec.py`'s `classify_rules()`. Proposed home: **`pipeline/captain_agent_spec.py`**, holding a decision table:
+**Agreeing with a real critique of the first version of this section**: defining `required_actions` as "the ONLY correct action(s)" and using it simultaneously as shield/label/auditor collapses the Captain into a lookup table — SFT would just learn the lookup, DPO would punish any deviation from it, and no evaluation could ever score a genuinely better decision higher than the table's own entry. That directly contradicts §9.3 ("where the LLM proves its value: weighing, reprioritising") and the "legitimately abandoned goal" logic in §10.1/§10.3. Fixed by splitting the table into three layers with genuinely different roles — not three synonyms for "the correct answer":
 
-```
-PROCEDURES: dict[(event_type, severity_band, context_flags)] -> {
-    "required_actions":   [...],   # the ONLY correct action(s) — also the SFT/DPO label
-    "forbidden_actions":  [...],   # the shield — validated against before an instruction is applied
-    "reporting_duties":   [(report_type, deadline_minutes), ...],
-    "escalation_path":    [...],
-}
-```
+1. **Mandatory** — reporting duties and their deadlines (the original `reporting_duties`), independent of which candidate action is chosen. Checklist material, stays deterministic (§9.3's "known procedures" category). Can itself depend on the CHOSEN action (e.g. diverting to a port of refuge triggers its own extra reporting duty) — a function of `(event, chosen_action)`, not just `event`.
+2. **Shield** — `forbidden_actions`, unchanged: a hard gate on the action space, validated before any instruction reaches the OOW, mirroring `app/oracle_planner.py`'s `required_direction()` hard rule-legality gate (§9.3). Absolute, never a matter of degree.
+3. **Decision layer** (new, replaces the old single `required_actions`) — the only layer that gives the Captain something to actually decide, and the only layer worth training/evaluating judgement on:
+   - `candidates(event, mission_state) -> list[action]` — a systematic candidate generator (mirrors `oracle_planner.py`'s own candidate generation: baseline first-step choices + a parameter sweep), **not** an exhaustive enumeration and **not** a hard restriction on what the Captain may propose — it exists to compute a reference, not to fence in the Captain's action space (only the shield does that).
+   - `cost(action, mission_state) -> {resource_cost, risk_cost, goal_cost}` (§13.A.3's fuel/time formulas + a risk proxy grounded in the source incident base rates + deviation from the Mission State's own goals), combined via weights exactly like `oracle_planner.py`'s existing `W_GOAL`/`W_CLEARANCE`/`W_EFFORT` pattern — giving `oracle_best = argmin cost over candidates`.
+   - **Training/eval signal is regret, not exact match**: `regret = cost(chosen_action, mission_state) − cost(oracle_best, mission_state)`, with `cost()` recomputed for WHATEVER the Captain actually proposed (even an action outside the candidate generator's own list) — so a genuinely better, novel decision scores a lower regret than the oracle's own reference, never penalised just for differing textually. Low/zero regret is SFT-worthy regardless of whether it matches `oracle_best` verbatim; a real, unambiguous shield violation is the only thing that stays hard-gated (layer 2), not the decision layer.
 
-This one table is deliberately **three things at once** (as identified): the **shield** (`forbidden_actions` gates the Captain's own output before it reaches the OOW, mirroring `app/oracle_planner.py`'s hard rule-legality gate — see §9.3), the **label generator** (`required_actions` is the ground-truth SFT/DPO answer), and the **auditor** (§10.1's "procedure/regime selection accuracy" axis is scored against this exact same table). Sourced from ISM/SOLAS/BMP5 plus the project's own CHIRP set (§5/§6), and specified first, before anything else (adopted in §14).
+This directly fixes the "there are always exceptions to the rule" problem raised: layers 1–2 stay genuinely rule-like (checklists, hard bans) where that's actually true of the real world, and layer 3 is deliberately open-ended (regret against a computed reference, not membership in a fixed set) precisely because real Captain judgement calls don't have one textually-fixed correct answer.
 
-Concrete v1 entries (illustrative, to be refined against real ISM/SOLAS/BMP5 text once sourced):
+Proposed home unchanged: **`pipeline/captain_agent_spec.py`**, mirroring `pipeline/oow_agent_spec.py`'s `classify_rules()` role. Source unchanged: ISM/SOLAS/BMP5 + the project's own CHIRP set (§5/§6).
 
-- *Engine failure, moderate*: required = `slow_down` to the Chief-Engineer-declared safe speed, log the fault; forbidden = any `speed_up` above the declared cap; reporting = internal log entry only (no external report unless it becomes a place-of-refuge case); escalation = Chief Engineer → Captain only (no DPA needed at "moderate").
-- *Fog, regime change*: required = adopt safe speed for conditions + sound signals; forbidden = maintaining full sea speed; reporting = none (routine COLREG compliance, not a reportable event); escalation = none.
-- *Distress call*: required = divert to render assistance (SOLAS V/33) OR document a valid reason not to (already-adequate assistance under way, own-ship's own safety at risk); forbidden = ignoring the call without logging a reason; reporting = notify DPA + flag state per SOLAS reporting duties, deadline = immediate; escalation = Captain → DPA.
-- *Whale zone*: required = reduce speed to the zone's posted limit and stay inside the exclusion polygon's allowed corridor; forbidden = crossing the polygon above the speed limit; reporting = none; escalation = none.
-- *Commercial instruction vs. safety*: required = refuse/defer the instruction citing ISM Art. 5, log the refusal; forbidden = complying with an instruction that breaches a safety margin; reporting = log entry + DPA notification of the refusal (transparency, not permission-seeking); escalation = Captain → DPA if the company pushes back.
+Revised concrete v1 entries:
+
+- *Engine failure*: **mandatory** = fault log entry (+ a place-of-refuge report only if requested). **Shield** = never exceed the Chief-Engineer-declared safe speed. **Decision layer** = continue at the capped speed vs. divert to a nearby port of refuge — a real cost tradeoff once the event carries `distance_to_refuge_nm`/`deadline_slack_h` (§13.A.2); with no time pressure and no refuge nearby, `oracle_best` collapses to "continue at capped speed" and there is effectively nothing to weigh — this is what made the original v1 parameterisation look table-determined; it was an under-specified special case, not a property of engine failures in general.
+- *Fog, regime change*: **mandatory** = none. **Shield** = never exceed the Rule-19 safe speed for conditions. **Decision layer** = degenerate — COLREG mandates the safe speed itself, no real second candidate worth weighing — genuinely table-determined, unlike engine failure.
+- *Distress call*: **mandatory** = notify DPA + flag state (SOLAS reporting), deadline immediate. **Shield** = never ignore the call without logging a reason. **Decision layer** = assist vs. document a valid reason not to — cost trades off time/fuel/mission-goal delay against the legal/moral/reputational cost of not assisting; genuinely a judgement case, as originally identified.
+- *Whale zone*: **mandatory** = none. **Shield** = never exceed the zone's posted speed limit inside the polygon. **Decision layer** = degenerate — a charted, fixed limit, no real second candidate — genuinely table-determined.
+- *Commercial instruction vs. safety*: **mandatory** = log entry + DPA notification of the outcome. **Shield** = never comply with an instruction that breaches a safety margin. **Decision layer** = whether the instruction actually breaches a margin is now a COMPUTED condition against the live Mission State (fuel/rest-hour/COLREG margins) rather than a fixed always-refuse rule — itself a genuine judgement case once "breaches a margin" isn't hard-coded as always-true.
+
+**Reassessed v1 split** (supersedes the original "4 table-determined, 1 judgement case" claim): Fog and Whale zone are consistently table-determined; Engine failure, Distress call, and Commercial instruction are judgement-capable once properly parameterised. §14's walking skeleton is updated accordingly.
+
+<a id="sec-13-a-5"></a>
+#### 13.A.5 Evidence, ambiguity, and reporter reliability
+
+Real captains do exactly what was described: treat a single engine-room sensor alarm with suspicion (a faulty sensor is often more likely than a genuine failure), but take three independent sensors agreeing much more seriously; and an experienced captain also learns which crew members tend to over-report. **Confirming the read already given**: this is genuine judgement material, belongs entirely in the decision layer (§13.A.4), and is explicitly out of scope for the deterministic walking skeleton (§14) — but the architecture needs a few concrete additions so there is actually "room for it" once an LLM captain exists, rather than this staying a hopeful assertion.
+
+1. **Events carry evidence, not just a fact.** §13.A.2's event model gains `evidence: list[{sensor_id, reading, reported_by}]` plus a HIDDEN ground-truth `is_false_alarm: bool` that the scenario file (§13.C.13) knows but never exposes directly to the Captain — only the raw evidence is observable, exactly like a real sensor-fault situation. Whether it's one corroborating reading or three independent ones then becomes a real input to the decision layer's `candidates()`/`cost()` functions (§13.A.4), not a separate mechanism bolted on the side.
+2. **The decision layer gains an extra candidate: "treat as low-confidence, investigate/hold before acting."** This is exactly the ambiguous, weighing case §9.3 already earmarked as the LLM's real value — no new evaluation axis is needed: correctly discounting a single-sensor alarm (or correctly escalating on 3-sensor corroboration) is scored by the SAME regret mechanism (§13.A.4), since the cost function knows the true (hidden) state — an LLM that reacts proportionately to weak vs. strong evidence gets low regret; one that either cries wolf on noise or ignores a real multi-sensor failure gets high regret. This generalises cleanly rather than needing a bespoke alarm-discrimination score.
+3. **Reports need a `reported_by` field.** The subordinate facts containers already proposed (§15.2 — `EngineStatus`, `LookoutReport`) gain a `reported_by: crew_member_id` field; the Mission State's append-only event/decision log (§13.B.5) already records everything with a timestamp, so a per-mission "track record" (this crew member's last 3 reports: 2 confirmed false, 1 confirmed real) is available to the Captain for free, just by rendering that slice of the log into the facts-only prompt (§13.B.5) — no new mechanism, just a new fact to surface.
+4. **Two distinct kinds of "learning", worth keeping separate**:
+   - **In-mission**: the Captain reads a specific crew member's own track record so far THIS mission (item 3) — pure in-context reasoning over data already logged, works from day one once the field exists.
+   - **Cross-mission learned bias** ("this reporter tends to be trigger-happy" as a general pattern baked into training) — a genuine, bigger design choice with two options: (a) NAMED individuals with a persistent trait across the whole training corpus (higher fidelity, but risks the model learning a specific name → trait association that doesn't generalise to a real, unnamed crew), or (b) a per-mission SAMPLED "reporter reliability profile" (e.g. "tonight's lookout: elevated false-positive rate this mission"), freshly drawn per mission — mirrors the already-proven `ship_profile` sampling pattern from the Nomoto work (`pipeline/nomoto.py`'s `SHIP_PROFILES`/`sample_ship_profile()`) exactly, just for reporter reliability instead of ship dynamics. **Recommended for v1: (b)** — same reasoning as the ship-profile precedent: it teaches the general skill (weigh evidence on its merits, don't blindly trust or distrust a role) rather than memorising a specific name, and comes with a ready-made held-out-profile pattern for genuine generalisation testing.
+5. **Scenario generator** (§13.C.9) gains a new sampled dimension: whether a given event instance is a true event or a false alarm, how many/which sensors corroborate it, and (per item 4) an optional sampled reliability profile for whoever reports it.
+
+This gives the walking skeleton (§14) a natural second test scenario once it graduates beyond the single parameterised engine-failure case: the same event, but with a genuinely ambiguous 1-sensor vs. 3-sensor evidence pattern, directly exercises the regret mechanism §13.A.4 was built for.
 
 <a id="sec-13-b"></a>
 ### 13.B Loose contracts
@@ -976,9 +1001,9 @@ Each §3.1 checklist bullet becomes a named, thresholded function over the Missi
 #### 13.C.10 Training-row format
 
 - Input: last-N-events window + the current Mission State snapshot (facts-only, §13.B.5) + retrieved RAG/KG/PG chunks (§6.3) — bounded, not the full mission history, mirroring OOW's own bounded situation-report design.
-- Labels: the procedure library's `required_actions` (§13.A.4) is the primary SFT label; the Captain's own free-text `plan`/`reasoning` is CoT training text; the Mission Progress Report (§8.3) is a separate, simpler templated-output row, not mixed with tactical-decision rows.
+- Labels, revised (2026-09-30) for the 3-layer model (§13.A.4): for mandatory/shield-only events (fog, whale zone), the deterministic action is a direct SFT label as before; for decision-layer events (engine failure, distress call, commercial instruction), the SFT label is `oracle_best` (§13.A.4) but ONLY when the Captain's actual choice has near-zero regret against it — otherwise the row is better mined as a DPO/reflection pair (chosen vs. `oracle_best`) than force-fit as an SFT positive. The Captain's own free-text `plan`/`reasoning` is CoT training text regardless; the Mission Progress Report (§8.3) is a separate, simpler templated-output row, not mixed with tactical-decision rows.
 - CHIRP (427 unused articles, §5/§6) extraction: **reuses the existing `extract_incident_reasoning.py` schema unchanged** (`situation`/`procedures`/`regulations`/`outcomes`/`key_facts` plus its incident-specific `fault_attribution`/`actual_actions_taken`-vs-`procedures` fields) — this schema already captures exactly "situation, decision, outcome, what should have happened"; no new schema needed.
-- DPO-rejected construction: **two distinct categories**, mirroring the OOW's own category-split convention in `build_outcome_dpo.py` — (a) the wrong procedure was invoked entirely, (b) the correct procedure was invoked but too late (missed the §13.B.7 deadline) — kept separate because the intended "fix" differs (choice vs. timeliness).
+- DPO-rejected construction, revised (2026-09-30) for the 3-layer model: **two categories, split along layer boundaries, not "wrong vs. late"** — (a) a genuine mandatory/shield violation (a required report missed its §13.B.7 deadline, or a forbidden action was taken) — stays exact-match/rule-based, since layers 1–2 are genuinely rule-like; (b) a high-regret decision-layer choice (`regret` above a threshold against `oracle_best`, §13.A.4) — the action was permissible but clearly cost-dominated, a soft/graded rejection, not a rule violation. This replaces the earlier "wrong procedure vs. correct-but-late" split, which implicitly assumed a single correct procedure existed for every event — no longer true once the decision layer is open-ended.
 
 <a id="sec-13-c-11"></a>
 #### 13.C.11 Ground-truth functions per evaluation axis
@@ -988,7 +1013,7 @@ Each §3.1 checklist bullet becomes a named, thresholded function over the Missi
 | Safety | Counterfactual check against §13.A.4: was there a `required_action` that, per the procedure library's own recovery condition, would have prevented the outcome? |
 | Mission outcome | Recomputed resource margin (§13.A.3) vs. Mission Order success criteria — already specified in §10.3 |
 | Regulatory/procedural compliance | Direct boolean check against §13.A.4's `reporting_duties` table (report X filed within deadline Y?) |
-| Procedure/regime selection accuracy | Direct match against §13.A.4's own table — same table, a different query |
+| Procedure/regime selection accuracy | Revised (2026-09-30): for mandatory/shield-only events, a direct rule-compliance check; for decision-layer events, **regret** (§13.A.4) against `oracle_best` — a low-regret action scores well even when it differs from the oracle's own candidate, never a bare exact-match check |
 | Explanation/citation accuracy | Needs an **ISM/SOLAS/MARPOL article index** (the Captain's equivalent of `classify_rules()`'s COLREG-rule knowledge) mapping each procedure-library entry to its underlying article/regulation number |
 | Decision timeliness / calling discipline | The §13.B.7 trigger monitors ARE this ground truth already |
 | Resource efficiency | The §13.B.8 route planner's own unconstrained minimum-resource run, taken once per mission as the reference |
@@ -1085,7 +1110,57 @@ Combined schema (extends §8.2's Mission Order):
 Adopting the proposed approach as-is:
 
 - **Build first, with no LLM at all**: one mission, 3 waypoints, ONE event (engine failure → speed cap), and a "Captain" that is nothing more than a direct lookup into the procedure library (§13.A.4) — i.e. a deterministic baseline Captain, built exactly the way OOW's own deterministic baselines (`app/baselines/*.py`) were built before any LLM agent existed. It serves the same later purpose: a baseline the eventual LLM-Captain gets measured against, not a throwaway prototype.
+- **Revised (2026-09-30)**: this ONE event must be the **parameterised** engine-failure variant (moderate failure + deadline pressure + a port of refuge ~40 nm away — continue at 8 kn, or put in?), not the bare table-determined version — per §13.A.4's reassessment, the bare version exercises zero real judgement, only plumbing. The deterministic baseline Captain for THIS variant is a direct `oracle_best` lookup (§13.A.4) — correct for a baseline, but proves the walking skeleton can compute `cost()`/regret at all, which is the actual thing being tested here, not just that a mission can run end-to-end.
 - Mission-sim + encounter-sim coupled (§13.A.1), an MPR emitted (§8.3), evaluation computed (§10) over the whole run. If this runs end-to-end, §13.A, §13.B, and §13.C.11/§13.C.12 are all proven simultaneously — not just designed on paper.
 - §4 is reduced to the **v1 set of 5 fully-specified events** (§13.A.2) for this skeleton; the remaining ~65 named events in §4 stay an explicit backlog, not a blocker.
 - The RAG-corpus source-text decision (§12) is reaffirmed as a prerequisite **specifically for the RAG pipeline**, not for the walking skeleton — the skeleton needs the procedure library (§13.A.4), not RAG, which is a useful sequencing discovery in its own right: the skeleton can be built before the corpus question is resolved.
 - **Facts-only prompt rule — decided**: the Captain follows the same facts-only convention as OOW (§13.B.5).
+
+---
+
+<a id="sec-15"></a>
+<a id="sec-15"></a>
+## 15. Concrete data structures & UI controls — what's left before coding
+
+Direct answer to "should we also define interface controls and data structures for everything before we start coding — what do you think?"
+
+<a id="sec-15-1"></a>
+### 15.1 My assessment
+
+Two different questions, two different answers:
+
+- **Data structures — mostly already done.** §13 already specifies the Mission State schema (§13.B.5), the Captain output schema (§13.B.6), the event/state-delta model (§13.A.2), the procedure library structure (§13.A.4), the ground-truth scenario file (§13.C.13), and the run format (§13.C.12) — that IS the bulk of "data structures of all components". What remains is a short, concrete list of Python-level dataclass diffs (§15.2): small and mechanical, and in this project's own established practice, the kind of detail usually finalised *while* writing the walking skeleton, not before — it tends to shift once real code hits real friction (see e.g. the `target_heading`/Nomoto saga in `basic_simulator.md`, where several "obvious-looking" fields needed correction only once a real bug surfaced).
+- **UI controls — genuinely not done, and I'd recommend NOT fully specifying them yet.** §11 describes what the panels *show*, not the exact buttons/widgets/state machine (per-widget enabled/disabled logic, what triggers a rerun, etc.). But §14's walking skeleton is explicitly backend-only — no Streamlit involved at all, tested the same way OOW's `app/baselines/*.py` were: standalone scripts/pytest, long before any UI existed for them. Fully specifying a polished UI now would mean designing an interface for a backend that doesn't exist yet — and this project's own `basic_simulator.md` iteration history shows the OOW Streamlit UI was built and rebuilt many times **after** the simulation/agent logic already worked, never before. Same order recommended here.
+- What I'd specify now, cheaply: a minimal, non-Streamlit **debug control set** (§15.3) — just enough to drive/inspect the walking skeleton by hand while building it. Directly useful for the very next step, unlike a full UI spec.
+
+<a id="sec-15-2"></a>
+### 15.2 Remaining concrete data-structure specifics (small, mechanical — do while coding, not before)
+
+- `Mission` dataclass (`app/missions.py`): extend from a single optional `waypoint` to `waypoints: list[tuple[float, float]]`, plus `exclusion_zones: list[dict]` and `brown_envelopes: list[dict]` (schemas already given in §7/§13.C.13 — this is just the literal field diff).
+- `VesselConstraints` (`app/simulation.py`): new fields for Captain-imposed limits — e.g. `captain_speed_cap_kn: float | None`, `captain_regime: str` (`"colreg"` / `"security"`) — consistent with the precedence rule already decided in §13.B.6.
+- Mission-sim ↔ encounter-sim bridge (§13.A.1): two small pure functions, `to_local_frame(lat, lon, origin) -> (x, y)` / `from_local_frame(x, y, origin) -> (lat, lon)` (equirectangular, as already decided), plus the handoff function that starts/stops an encounter-sim window and passes the active Captain instruction through as a `VesselConstraints` override.
+- Subordinate "facts" schema (§2.6): a small dict/dataclass per subordinate role providing structured facts to the Captain/OOW prompts — e.g. `EngineStatus(max_speed_kn, fault, reported_at)`, `LookoutReport(bearing, description, range_est)` — deliberately NOT full agents (§2.6/§12), just typed fact containers.
+- World-responder execution mechanism (§13.A.2/§13.C.13): the `world_responder` JSON field already has a schema; what's missing is just the scheduling primitive — a `(trigger_time, resolution_fn)` entry in the mission-sim's own event queue, evaluated every step, no new architecture needed.
+
+None of these require a design decision to be made now — they're direct, mechanical translations of what §13 already specified in prose/JSON into Python types.
+
+<a id="sec-15-3"></a>
+### 15.3 Minimal debug control set for the walking skeleton (decided scope, not a full UI)
+
+Just enough to drive/inspect the skeleton by hand — a CLI/notebook-level control set, not Streamlit, not polished:
+
+| Control | What it does |
+|---|---|
+| `step_mission(n=1)` | Advance the mission-sim by `n` steps (minutes) |
+| `run_to_next_event()` | Advance until the next scripted brown envelope fires or the mission ends |
+| `force_event(event_id)` | Manually trigger a specific scripted event out of turn (for testing) |
+| `show_mission_state()` | Dump the current Mission State (§13.B.5) as text |
+| `show_procedure_lookup(event)` | Show what the procedure library (§13.A.4) returns for the current event, without applying it |
+| `show_mpr()` | Render the Mission Progress Report (§8.3) at the current point |
+
+This mirrors exactly how OOW's own baselines were first exercised — direct function calls / a small script, before `app/streamlit_app.py` existed at all.
+
+<a id="sec-15-4"></a>
+### 15.4 Full UI control spec — explicitly deferred
+
+**Decided (2026-09-30)**: defer the full, polished UI control-by-control specification (exact buttons/widgets per §11's panels, enabled/disabled logic, rerun triggers) until **after** the walking skeleton (§14) is running — the same order this project's own OOW Streamlit UI was actually built in. Revisit §11 at that point to turn its panel *descriptions* into a real control spec.
