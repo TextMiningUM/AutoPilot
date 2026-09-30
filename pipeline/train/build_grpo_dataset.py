@@ -1,0 +1,143 @@
+"""pipeline/train/build_grpo_dataset.py -- Stap 2 Step 9 prep: builds the GRPO training
+dataset (prompt + raw simulator state) for pipeline/train/train_grpo.py.
+
+Unlike pipeline/track2/build_oow_scenarios_rnd.py (which produces a FORMATTED teacher
+reasoning trace for SFT/DPO/reflection), this script keeps the RAW own-ship/targets/
+constraints/mission state alongside each prompt -- pipeline/train/reward_grpo.py needs
+that state to recompute oracle_planner.required_direction()/_rollout_cost() against
+whatever action the POLICY ITSELF samples at training time (never known in advance,
+unlike the oracle-labeled Step 3 data). This is a small, deliberate duplication of
+rollout_mission()'s decision-cadence loop (same convention build_oow_scenarios_rnd.py's
+own docstring already documents for build_oow_scenarios_leo.py) -- justified here because
+the two scripts need fundamentally different OUTPUT SHAPES (formatted text vs. raw
+state), not just different content.
+
+Only the "acute_action" bucket (a real turn/stop) is kept -- same rationale as
+build_rft_filter.py's own choice: this is where the reward signal is actually
+informative; quiet-cruise checkpoints would trivially reward "follow GOAL COURSE CHECK"
+with near-zero learning signal either way.
+
+USAGE
+-----
+    python -m pipeline.train.build_grpo_dataset --out-file Data/OOW/OOW_Agents_Training/oow_grpo_dataset.jsonl
+"""
+from __future__ import annotations
+
+import argparse
+import dataclasses
+import json
+import sys
+from pathlib import Path
+
+from core import AgentPaths
+
+paths = AgentPaths.oow()
+CACHE = paths.cache_dir
+
+# "Basic Simulator" has a space in its name -- same sys.path trick every pipeline/track2/
+# file that needs app.* already uses.
+APP_ROOT = paths.workspace / "Basic Simulator"
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
+
+from app import oracle_planner  # noqa: E402
+from app.missions import list_mission_ids, load_mission  # noqa: E402
+from app.narrate import live_decision_interval, narrate, recommended_decision_interval  # noqa: E402
+from app.simulation import Simulation, VesselConstraints  # noqa: E402
+from pipeline.oow_agent_spec import render_previous_decisions  # noqa: E402
+from pipeline.track2.build_oow_scenarios_rnd import FIXED_QUESTION, MAX_CHECKPOINTS_PER_MISSION  # noqa: E402
+
+HISTORY_N = 2  # matches build_oow_scenarios_rnd.py's own convention.
+
+
+def _bucket_is_acute(action: str) -> bool:
+    return action in ("turn_left", "turn_right", "stop")
+
+
+def rollout_mission_for_grpo(mission) -> list[dict]:
+    """Same decision-cadence/apply_action pattern as build_oow_scenarios_rnd.py's
+    rollout_mission(), but the oracle here is used ONLY to decide when/whether a
+    checkpoint is acute (bucket filter) -- what gets WRITTEN OUT is the raw own/targets/
+    constraints/mission state, not the oracle's own chosen action, since train_grpo.py's
+    reward functions need to score whatever the POLICY samples, not replay the oracle's
+    single fixed choice."""
+    constraints = VesselConstraints(kinematics_model="nomoto_v2")
+    sim = Simulation(mission, constraints)
+    dt = constraints.time_step_s
+    next_interval_steps = recommended_decision_interval(mission, dt)
+    next_decision_step = 0
+    transit_cap = next_interval_steps
+    history: list[dict] = []
+    rows: list[dict] = []
+    max_steps = min(2000, MAX_CHECKPOINTS_PER_MISSION * 20)
+
+    for step in range(max_steps):
+        if sim.reached_goal():
+            break
+        if len(rows) >= MAX_CHECKPOINTS_PER_MISSION:
+            break
+        if step >= next_decision_step:
+            next_interval_steps = live_decision_interval(
+                sim.own, sim.targets, transit_cap, constraints.min_cpa_m,
+                oracle_planner.derive_risk_horizon_s(constraints.min_cpa_m, constraints.max_rudder_angle_deg,
+                                                    sim.own.speed))
+            situation_report = narrate(mission, sim.own, sim.targets, cruise_speed_mps=constraints.cruise_speed_mps,
+                                       safe_distance_m=constraints.min_cpa_m, max_turn_deg=constraints.max_rudder_angle_deg)
+            result = oracle_planner.plan(mission, sim.own, sim.targets, constraints)
+            if _bucket_is_acute(result["action"]):
+                history_prefix = render_previous_decisions(history[-HISTORY_N:])
+                user_msg = f"Situation:\n{history_prefix}{situation_report}\n\n{FIXED_QUESTION}"
+                rows.append({
+                    "rnd_id": mission.id,
+                    "prompt": [
+                        {"role": "system", "content": _system_prompt()},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    "mission": dataclasses.asdict(mission),
+                    "own": dataclasses.asdict(sim.own),
+                    "targets": [dataclasses.asdict(t) for t in sim.targets],
+                    "constraints": dataclasses.asdict(constraints),
+                })
+            history.append({"action": result["action"], "degrees": result["degrees"],
+                           "conduct_rule": result["conduct_rule"]})
+            history = history[-HISTORY_N:]
+            sim.apply_action(result)
+            next_decision_step = step + next_interval_steps
+        sim.step(dt)
+    return rows
+
+
+def _system_prompt() -> str:
+    from pipeline.oow_agent_spec import SYSTEM_OOW_AGENT
+    return SYSTEM_OOW_AGENT
+
+
+def build_dataset(mission_ids: list[str] | None = None) -> list[dict]:
+    ids = mission_ids or [m for m in list_mission_ids() if m.startswith("RND")]
+    missions = [load_mission(i) for i in ids]
+    trainable = [m for m in missions if not json.loads(
+        (APP_ROOT / "Data" / "missions" / f"{m.id}.json").read_text(encoding="utf-8")).get("held_out")]
+    rows: list[dict] = []
+    for m in trainable:
+        rows.extend(rollout_mission_for_grpo(m))
+    print(f"{len(rows)} acute_action GRPO rows across {len(trainable)} trainable missions")
+    return rows
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[1])
+    ap.add_argument("--out-file", type=str, default=str(CACHE / "oow_grpo_dataset.jsonl"))
+    ap.add_argument("--missions", nargs="+", default=None)
+    args = ap.parse_args()
+
+    rows = build_dataset(args.missions)
+    out_path = Path(args.out_file)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    print(f"Wrote {out_path} ({len(rows)} rows)")
+
+
+if __name__ == "__main__":
+    main()
