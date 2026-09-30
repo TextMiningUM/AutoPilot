@@ -27,6 +27,7 @@ This follows on from the existing two-track architecture (see `.github/copilot-i
 - [5. Where to find example missions / source material](#sec-5)
   - [5.1 Already present in this project](#sec-5-1)
   - [5.2 External, publicly accessible sources](#sec-5-2)
+  - [5.3 Historical expedition/mission narratives — a structured extraction format (backlog)](#sec-5-3)
 - [6. `Data/Captain/` folder structure & training pipeline](#sec-6)
   - [6.1 Proposed folder layout](#sec-6-1)
   - [6.2 Own training pipeline](#sec-6-2)
@@ -497,6 +498,31 @@ This covers almost exactly what was described as the Captain's role (new waypoin
 - **Lloyd's List / The Maritime Executive / Splash247 / gCaptain** — trade journalism with many "what went wrong here" stories, often centred on Master's decision-making (useful for narrative tone, not as hard data).
 - Published memoirs by masters/pilots — good for the "job description" tone and realistic decision-making under pressure, not to be scraped as training data but as reading material for writing credible mission briefings.
 - **BIMCO/ICS** operational guidance and the **Nautical Institute's "Mars Reports"** (Mariners' Alerting and Reporting Scheme) — comparable to CHIRP, short anonymous near-miss stories aimed at officers/masters.
+
+<a id="sec-5-3"></a>
+### 5.3 Historical expedition/mission narratives — a structured extraction format (backlog, 2026-09-30, not yet started)
+
+**Explicit user request, recorded here as a backlog item, not yet acted on**: search for real logbooks/narratives of famous maritime missions or expeditions — what did the crew/captain actually observe, decide, and experience when things went wrong — extracted into a structured format usable as Captain training data, not just read as inspiration (unlike the "published memoirs"/"trade journalism" bullets above, which are explicitly flagged as background reading only).
+
+**Proposed row schema** (maps directly onto the already-established SFT/DPO/Reflection categories of §13.C.10, not a new training mechanism):
+
+| Field | Content | Feeds |
+|---|---|---|
+| `source` | Real citation — book/expedition/author, with enough detail to verify | Provenance |
+| `observation` | What the decision-maker actually knew/perceived at the time (weather, position, resources, crew state) | The facts-only situation report (§13.B.5's own convention) |
+| `action` | What they actually decided/did | SFT positive / DPO chosen |
+| `consequence` | What happened as a result (real historical outcome) | Ground truth for the Safety/Mission-outcome axes (§13.C.11) |
+| `reasoning` | Why this decision, as stated by the source or reasonably inferred | CoT training text |
+| `reflection` | Retrospective judgement — the author's own hindsight, or a historian's assessment | Reflection-stage critique (mirrors `build_reflection.py`'s draft/critique/refined shape) |
+| `worst_case_alternative` | What the worst available decision would have been, and why | DPO rejected member (paired against `action` as chosen) |
+
+This is a genuinely different SOURCE than CHIRP/MARS/MAIB (anonymised, generic near-miss reports) — real, named, well-documented historical decisions under extreme pressure, which is exactly the kind of high-stakes judgement call the Captain's decision layer (§13.A.4) needs examples of.
+
+**One source CONFIRMED real and freely usable (2026-09-30)**: Ernest Shackleton's *South! The Story of Shackleton's Last Expedition, 1914–1917* — Project Gutenberg **ebook #5199** (`gutenberg.org/ebooks/5199`), full text, public domain, free. A first-person, day-by-day account of the *Endurance* expedition's escalating series of emergencies (ship crushed by pack ice, months adrift, the open-boat journey to South Georgia) — an unusually rich source for exactly this schema (repeated genuine life-or-death command decisions, each with a known real-world outcome).
+
+**Candidates not yet verified** (plausible, same public-domain era, NOT confirmed free/accessible — check before use): Robert Falcon Scott's *Terra Nova* expedition diaries; William Bligh's own account of the *Bounty* mutiny and the subsequent open-boat voyage; Apsley Cherry-Garrard's *The Worst Journey in the World*; Joshua Slocum's *Sailing Alone Around the World*. **Institutional sources already listed above worth revisiting specifically for this** (§5.2): "Old Weather"'s raw transcribed logbooks (authentic but terse, likely needs more inference to fill `reasoning`/`reflection`) and the Lloyd's Register Foundation Heritage & Education Centre.
+
+**Not yet started**: no extraction, no schema implementation, no scraping — this section only records the schema design and the one verified source, per the user's explicit "add this to the to-do list" framing.
 
 ---
 
