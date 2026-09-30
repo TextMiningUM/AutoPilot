@@ -124,11 +124,17 @@ def fetch_bmp5(manifest: list[dict]) -> None:
 
 
 # UK Merchant Shipping statutory instruments -- exact references looked up via
-# legislation.gov.uk's own title-search redirect (https://www.legislation.gov.uk/id?title=...),
-# never guessed. Each is the CURRENT (in-force) instrument for its topic.
+# legislation.gov.uk's own title-search redirect (https://www.legislation.gov.uk/id?title=...)
+# or free-text search (https://www.legislation.gov.uk/all?text=...), never guessed. Each is
+# the CURRENT (in-force) base instrument for its topic (amendment-only SIs skipped).
 UK_INSTRUMENTS = [
     ("uk_stcw", "uksi/2022/1342", "The Merchant Shipping (Standards of Training, Certification and Watchkeeping) Regulations 2022"),
     ("uk_ism", "uksi/2026/194", "The Merchant Shipping (International Safety Management (ISM) Code) Regulations 2026"),
+    # MARPOL Annex I (oil), II (noxious liquid substances in bulk), IV (sewage), VI (air pollution).
+    ("uk_marpol_oil", "uksi/2019/42", "The Merchant Shipping (Prevention of Oil Pollution) Regulations 2019"),
+    ("uk_marpol_nls", "uksi/2018/68", "The Merchant Shipping (Prevention of Pollution from Noxious Liquid Substances in Bulk) Regulations 2018"),
+    ("uk_marpol_sewage", "uksi/2020/620", "The Merchant Shipping (Prevention of Pollution by Sewage from Ships) Regulations 2020"),
+    ("uk_marpol_air", "uksi/2008/2924", "The Merchant Shipping (Prevention of Air Pollution from Ships) Regulations 2008"),
 ]
 
 
