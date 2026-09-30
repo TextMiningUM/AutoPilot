@@ -45,6 +45,7 @@ import argparse
 import gzip
 import hashlib
 import json
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -229,10 +230,62 @@ def fetch_ecfr(manifest: list[dict]) -> None:
                           license_note=f"US Government Work (public domain) -- discovered via search query {query!r}")
 
 
+# ATSB (Australian Transport Safety Bureau) marine investigation reports -- free,
+# public, government-published PDFs, comparable to the project's existing CHIRP/MAIB
+# incident-narrative sources (§5.2 of design_captain_missions.md). Start small: only the
+# most recent N reports from page 0 of the listing, not the full ~300-report archive.
+ATSB_LISTING_URL = "https://www.atsb.gov.au/investigations?transport_mode=609&page=0"
+ATSB_MAX_REPORTS = 8
+_ATSB_INVESTIGATION_RE = re.compile(r'href="(/investigations/(mo-\d{4}-\d+))"')
+_ATSB_PDF_RE = re.compile(r'href="(https://www\.atsb\.gov\.au/sites/default/files/[^"]+?\.pdf)"')
+
+
+def fetch_atsb(manifest: list[dict]) -> None:
+    """Fetch the most recent ATSB marine investigation report PDFs (free, Commonwealth of
+    Australia copyright, government safety-investigation reports)."""
+    dest_dir = OUT_DIR / "atsb"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        listing_html = _fetch(ATSB_LISTING_URL, timeout=60.0).decode("utf-8", errors="replace")
+    except (urllib.error.URLError, TimeoutError) as exc:
+        print(f"  [atsb] listing fetch failed: {exc}")
+        return
+    seen: dict[str, str] = {}
+    for path, inv_id in _ATSB_INVESTIGATION_RE.findall(listing_html):
+        seen.setdefault(inv_id, path)
+    investigations = list(seen.items())[:ATSB_MAX_REPORTS]
+    if not investigations:
+        print("  [atsb] no investigations found on listing page")
+        return
+    for inv_id, path in investigations:
+        detail_url = f"https://www.atsb.gov.au{path}"
+        try:
+            detail_html = _fetch(detail_url, timeout=60.0).decode("utf-8", errors="replace")
+        except (urllib.error.URLError, TimeoutError) as exc:
+            print(f"  [atsb] {inv_id} detail page failed: {exc}")
+            continue
+        pdf_match = _ATSB_PDF_RE.search(detail_html)
+        if not pdf_match:
+            print(f"  [atsb] {inv_id} has no PDF link, skipping")
+            continue
+        pdf_url = pdf_match.group(1)
+        try:
+            data = _fetch(pdf_url, timeout=60.0)
+        except (urllib.error.URLError, TimeoutError) as exc:
+            print(f"  [atsb] {inv_id} PDF fetch failed: {exc}")
+            continue
+        dest = dest_dir / f"{inv_id}.pdf"
+        dest.write_bytes(data)
+        _record(manifest, source="atsb", url=pdf_url, dest=dest,
+                 license_note="Commonwealth of Australia, ATSB marine safety investigation report")
+        print(f"  [atsb] saved {dest.relative_to(WORKSPACE)} ({len(data)} bytes) -- {inv_id}")
+
+
 SOURCES = {
     "bmp5": fetch_bmp5,
     "uk_legislation": fetch_uk_legislation,
     "ecfr": fetch_ecfr,
+    "atsb": fetch_atsb,
 }
 
 
