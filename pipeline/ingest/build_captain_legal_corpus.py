@@ -331,12 +331,53 @@ def fetch_tsb_canada(manifest: list[dict]) -> None:
         print(f"  [tsb_canada] saved {dest.relative_to(WORKSPACE)} ({len(data)} bytes) -- {inv_id}")
 
 
+# Nautical Institute MARS (Mariners' Alerting and Reporting Scheme) reports -- free,
+# publicly browsable (no membership wall, confirmed), anonymised accident/near-miss
+# narratives, comparable to CHIRP (§5.2 of design_captain_missions.md), 2155 reports
+# archived back to 1992. Start small: only the most recent N shown on the listing's
+# own first (unpaginated) view.
+MARS_LISTING_URL = "https://www.nautinst.org/technical-resources/mars/mars-reports.html"
+MARS_MAX_REPORTS = 8
+_MARS_REPORT_RE = re.compile(r'href="(https://www\.nautinst\.org/resources-page/(\d+)-[^"]+\.html)"')
+
+
+def fetch_mars_reports(manifest: list[dict]) -> None:
+    """Fetch the most recent Nautical Institute MARS report pages (free, no
+    registration/membership required to read)."""
+    dest_dir = OUT_DIR / "mars"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        listing_html = _fetch(MARS_LISTING_URL, timeout=60.0).decode("utf-8", errors="replace")
+    except (urllib.error.URLError, TimeoutError) as exc:
+        print(f"  [mars] listing fetch failed: {exc}")
+        return
+    seen: dict[str, str] = {}
+    for url, report_id in _MARS_REPORT_RE.findall(listing_html):
+        seen.setdefault(report_id, url)
+    reports = list(seen.items())[:MARS_MAX_REPORTS]
+    if not reports:
+        print("  [mars] no reports found on listing page")
+        return
+    for report_id, url in reports:
+        try:
+            data = _fetch(url, timeout=60.0)
+        except (urllib.error.URLError, TimeoutError) as exc:
+            print(f"  [mars] MARS {report_id} fetch failed: {exc}")
+            continue
+        dest = dest_dir / f"mars_{report_id}.html"
+        dest.write_bytes(data)
+        _record(manifest, source="mars", url=url, dest=dest,
+                 license_note="The Nautical Institute, MARS (Mariners' Alerting and Reporting Scheme) report")
+        print(f"  [mars] saved {dest.relative_to(WORKSPACE)} ({len(data)} bytes) -- MARS {report_id}")
+
+
 SOURCES = {
     "bmp5": fetch_bmp5,
     "uk_legislation": fetch_uk_legislation,
     "ecfr": fetch_ecfr,
     "atsb": fetch_atsb,
     "tsb_canada": fetch_tsb_canada,
+    "mars": fetch_mars_reports,
 }
 
 
