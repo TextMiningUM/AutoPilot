@@ -996,6 +996,9 @@ def _scan_baseline_runs_all_missions(tag: str, signature: tuple) -> dict[str, di
 
 _FULL_GREEN, _NEAR_GREEN = "#2ecc71", "#a9dfbf"
 _FULL_RED, _NEAR_RED = "#e74c3c", "#f5b7b1"
+# Streamlit's default dataframe row/header height, shared by every sized dataframe in the
+# comparison tab (per-mission grid + per-mission points detail grid).
+_COMPARISON_ROW_PX, _COMPARISON_HEADER_PX = 35, 38
 
 
 def _tiered_highlight(s: pd.Series, band_frac: float = 0.05, higher_is_better: bool = True) -> list[str]:
@@ -1081,22 +1084,9 @@ def _load_comparison_data(tag: str, baseline_sig: tuple,
     return table_rows, detail_lookup, best_llm_label
 
 
-def _render_comparison_tab() -> None:
-    st.subheader("\u2696\uFE0F Baselines vs. LLM agent")
-    st.caption("Compares the deterministic baselines (`app/baselines/` -- Rule tree, "
-              "Velocity Obstacle, Artificial Potential Field, Dynamic Window Approach, "
-              "MPC, Sawada et al. reconstruction) against the best LLM-agent run per "
-              "mission, on the same 35 missions and the same `evaluate_run.py` composite "
-              "score as the Sweep tab. Read-only -- runs nothing itself, only scans "
-              "existing run logs (see `app.run_baseline_scenario` to generate new "
-              "baseline runs). Pick a mission + system below the grid and click for its "
-              "full evaluation breakdown.")
-
-    baseline_tags = _available_baseline_tags()
-    if not baseline_tags:
-        st.info("No baseline runs found yet -- run e.g. `python -m "
-               "app.run_baseline_scenario` first (see Basic Simulator/app/baselines/).")
-        return
+def _pick_baseline_tag_and_configs(baseline_tags: list[str]) -> tuple[str, str, list[str]]:
+    """Tag selectbox + kinematics-model-aware ``baseline_configs`` filtering (renders its
+    own captions). Returns ``(tag, kinematics_model, baseline_configs)``."""
     default_idx = baseline_tags.index("baseline") if "baseline" in baseline_tags else 0
     # A persisted tag from a previous session that no longer exists on disk must not reach
     # the widget (Streamlit raises if session_state[key] isn't in options) -- drop it and
@@ -1125,17 +1115,23 @@ def _render_comparison_tab() -> None:
         st.caption(f"Excludes {sorted(BASELINE_CONFIGS.get(c, c) for c in excluded)} from "
                   "this Nomoto comparison -- their own internal rollout assumes the legacy "
                   "turn-rate model, not Nomoto (see app/baselines/mpc.py's docstring).")
+    return tag, kinematics_model, baseline_configs
+
+
+def _build_comparison_systems(baseline_configs: list[str]) -> tuple[list[str], dict[str, str], dict[str, str]]:
+    """``(system_keys, system_labels, short_to_system)`` for ``baseline_configs`` + ``best_llm``."""
     system_keys = baseline_configs + ["best_llm"]
     system_labels = {**BASELINE_CONFIGS, "best_llm": "Best LLM-agent run per mission (any config/variant)"}
     short_to_system = {cfg.replace("baseline_", ""): cfg for cfg in baseline_configs}
     short_to_system["best_llm"] = "best_llm"
-    axis_names = ["safety", "compliance", "explanation", "temporal", "spatial", "manoeuvre"]
+    return system_keys, system_labels, short_to_system
 
-    table_rows, detail_lookup, best_llm_label = _load_comparison_data(
-        tag, _baseline_signature(tag), _llm_signature())
-    # Per-system aggregates (n/reached/collision/composite/axes), derived from the SAME
-    # cached detail_lookup -- kept out of the cached function itself so a code change to
-    # this aggregation doesn't require waiting out the cache TTL to see effect.
+
+def _aggregate_comparison_systems(
+    detail_lookup: dict[tuple[str, str], dict], system_keys: list[str], short_to_system: dict[str, str],
+) -> dict[str, dict]:
+    """Per-system n/reached/collision/composite/axes aggregates from ``detail_lookup``,
+    restricted to ``AGGREGATE_MISSIONS`` (drops known geometric-duplicate missions)."""
     agg = {k: {"n": 0, "reached": 0, "collision": 0, "composite": [], "axes": []} for k in system_keys}
     for (mission_id, short), r in detail_lookup.items():
         if mission_id not in AGGREGATE_MISSIONS:
@@ -1149,8 +1145,13 @@ def _render_comparison_tab() -> None:
         a["axes"].append(_axis_cols(r))
         a["reached"] += int(bool(r["temporal"]["arrived"]))
         a["collision"] += int(not r["safety"]["passed"])
+    return agg
 
 
+def _render_comparison_summary(
+    agg: dict[str, dict], system_keys: list[str], system_labels: dict[str, str], axis_names: list[str],
+) -> None:
+    """Renders the "### Summary" per-system means/std table."""
     st.markdown("### Summary")
     summary_rows = []
     for key in system_keys:
@@ -1189,6 +1190,12 @@ def _render_comparison_tab() -> None:
                   "duplicate mission(s) from these means/ranks (still runnable/browsable "
                   "individually elsewhere) -- see app.missions.duplicate_of().")
 
+
+def _render_comparison_strengths_weaknesses(
+    agg: dict[str, dict], system_keys: list[str], system_labels: dict[str, str], axis_names: list[str],
+) -> None:
+    """Renders the "relatively strongest/weakest axis" bullet list, ranking each system
+    against the OTHER systems per axis (not just against its own other axes)."""
     st.markdown("### Strengths / weaknesses per algorithm (relative to the other techniques)")
     # Per-axis MEAN per system, then RANK systems against each other on that SAME axis --
     # a system's "strength" is the axis where it ranks best among the OTHER systems, not
@@ -1228,6 +1235,9 @@ def _render_comparison_tab() -> None:
             f"(ranks #{worst_rank}/{len(axis_ranks[worst_axis])}, {worst_val:.2f} vs. field "
             f"average {axis_field_avg[worst_axis]:.2f}).")
 
+
+def _render_comparison_per_mission_table(table_rows: list[dict], short_to_system: dict[str, str]) -> None:
+    """Renders the "### Per mission" height-adjustable per-mission/per-system grid."""
     st.markdown("### Per mission")
     default_rows = min(len(table_rows), 20)
     visible_rows = st.slider(
@@ -1235,7 +1245,6 @@ def _render_comparison_tab() -> None:
         value=default_rows, key="per_mission_table_rows",
         help="Drag to show more missions at once, or shrink for a smaller screen.",
     )
-    row_height_px, header_height_px = 35, 38  # Streamlit's default dataframe row/header height
     # _load_comparison_data() itself always scores EVERY BASELINE_CONFIGS entry into
     # table_rows (it has no kinematics-model awareness of its own) -- so apf/mpc/vo columns
     # must be dropped here too, not just left out of system_keys/agg above, or they'd still
@@ -1251,11 +1260,18 @@ def _render_comparison_tab() -> None:
     # though this dataframe is read-only). A dedicated mission/system picker below is a
     # faster, unambiguous replacement: no full-grid rerun, no accidental edit state.
     st.dataframe(per_mission_styler, width="stretch", hide_index=False,
-                height=header_height_px + visible_rows * row_height_px)
+                height=_COMPARISON_HEADER_PX + visible_rows * _COMPARISON_ROW_PX)
     st.caption("Per row (mission): greenest cell = best system for that mission, reddest = worst "
               "(lighter shade = within 5% of that extreme) -- usually the LLM agent on the "
               "green end.")
 
+
+def _render_comparison_ranking(
+    detail_lookup: dict[tuple[str, str], dict], short_to_system: dict[str, str],
+    system_keys: list[str], system_labels: dict[str, str], axis_names: list[str],
+) -> None:
+    """Renders the regatta-style (low-point) overall + per-axis ranking, plus the
+    per-mission DNF/DSQ/DNE points-detail grid."""
     st.markdown("### Ranking (regatta-style: 1st place = 1 point, lower total = better)")
     st.caption("Sailing/regatta \"low-point\" scoring using real World Sailing outcome "
               "codes: finishers (reached the goal, no genuine right-of-way violation, no "
@@ -1409,7 +1425,7 @@ def _render_comparison_tab() -> None:
     st.dataframe(
         points_detail_df.style.apply(_style_points_detail, axis=None),
         width="stretch", hide_index=False,
-        height=header_height_px + visible_detail_rows * row_height_px,
+        height=_COMPARISON_HEADER_PX + visible_detail_rows * _COMPARISON_ROW_PX,
         column_config={col: st.column_config.TextColumn(width="small")
                       for col in points_detail_df.columns})
     st.caption("One cell per mission x system (columns use the same short config names as "
@@ -1420,6 +1436,12 @@ def _render_comparison_tab() -> None:
               "number in parentheses is the fixed points value non-finishers share for that "
               "mission (number of systems compared + 1).")
 
+
+def _render_comparison_inspect_run(
+    short_to_system: dict[str, str], system_labels: dict[str, str],
+    detail_lookup: dict[tuple[str, str], dict], best_llm_label: dict[str, str],
+) -> None:
+    """Renders the "Inspect one run" mission/system picker + on-click detail dialog."""
     st.markdown("#### Inspect one run")
     pick_cols = st.columns([2, 3, 1])
     with pick_cols[0]:
@@ -1444,6 +1466,40 @@ def _render_comparison_tab() -> None:
                     st.caption(f"Winning run: {best_llm_label.get(picked_mission, '?')}")
                 st.markdown(_describe_run(r))
             _show_picked_detail()
+
+
+def _render_comparison_tab() -> None:
+    st.subheader("\u2696\uFE0F Baselines vs. LLM agent")
+    st.caption("Compares the deterministic baselines (`app/baselines/` -- Rule tree, "
+              "Velocity Obstacle, Artificial Potential Field, Dynamic Window Approach, "
+              "MPC, Sawada et al. reconstruction) against the best LLM-agent run per "
+              "mission, on the same 35 missions and the same `evaluate_run.py` composite "
+              "score as the Sweep tab. Read-only -- runs nothing itself, only scans "
+              "existing run logs (see `app.run_baseline_scenario` to generate new "
+              "baseline runs). Pick a mission + system below the grid and click for its "
+              "full evaluation breakdown.")
+
+    baseline_tags = _available_baseline_tags()
+    if not baseline_tags:
+        st.info("No baseline runs found yet -- run e.g. `python -m "
+               "app.run_baseline_scenario` first (see Basic Simulator/app/baselines/).")
+        return
+    tag, _kinematics_model, baseline_configs = _pick_baseline_tag_and_configs(baseline_tags)
+    system_keys, system_labels, short_to_system = _build_comparison_systems(baseline_configs)
+    axis_names = ["safety", "compliance", "explanation", "temporal", "spatial", "manoeuvre"]
+
+    table_rows, detail_lookup, best_llm_label = _load_comparison_data(
+        tag, _baseline_signature(tag), _llm_signature())
+    # Per-system aggregates (n/reached/collision/composite/axes), derived from the SAME
+    # cached detail_lookup -- kept out of the cached function itself so a code change to
+    # this aggregation doesn't require waiting out the cache TTL to see effect.
+    agg = _aggregate_comparison_systems(detail_lookup, system_keys, short_to_system)
+
+    _render_comparison_summary(agg, system_keys, system_labels, axis_names)
+    _render_comparison_strengths_weaknesses(agg, system_keys, system_labels, axis_names)
+    _render_comparison_per_mission_table(table_rows, short_to_system)
+    _render_comparison_ranking(detail_lookup, short_to_system, system_keys, system_labels, axis_names)
+    _render_comparison_inspect_run(short_to_system, system_labels, detail_lookup, best_llm_label)
 
 
 tab_sweep, tab_audit, tab_comparison = st.tabs(["Sweep", "Audit", "Baseline"])

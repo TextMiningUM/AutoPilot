@@ -829,41 +829,30 @@ def _extract_risk_conclusion(reasoning: str) -> str:
     return "unknown"
 
 
-def check_2_7_reasoning_vs_decision(cp: dict, situation: list[dict],
-                                    constraints: VesselConstraints) -> list[dict]:
-    """Reimplementation of the B3 teacher-pipeline's acceptance gates a-e applied to the
-    MODEL's own answer (no shared gate functions were found already factored out anywhere
-    importable -- if/when they are moved into oow_agent_spec.py, switch this to call them)."""
-    findings: list[dict] = []
-    d = cp.get("decision") or {}
-    reasoning = (d.get("reasoning") or "").lower()
-    step = cp["step"]
-    below_safe = [c for c in situation if c.get("cpa_m") is not None
-                and c["cpa_m"] < constraints.min_cpa_m]
-    real_risk_contacts = [c for c in below_safe
-                          if real_risk(c.get("cpa_m"), c.get("tcpa_s"), constraints.min_cpa_m)]
-    early_action_contacts = [c for c in below_safe if c not in real_risk_contacts
-                            and c.get("tcpa_s") is not None and c["tcpa_s"] > RISK_HORIZON_S]
+def _audit_gate_a_contact_named(reasoning: str, step: int, real_risk_contacts: list[dict]) -> list[dict]:
+    """Gate a -- the decisive (lowest-CPA) real-risk contact must be named in the reasoning."""
+    if not real_risk_contacts:
+        return []
+    decisive = min(real_risk_contacts, key=lambda c: c.get("cpa_m", float("inf")))
+    if decisive.get("name") and decisive["name"].lower() not in reasoning:
+        return [_f("ERROR", "G_gate_a_contact_missing", step,
+                  f"Reasoning never mentions the decisive contact {decisive['name']!r}.")]
+    return []
 
-    # gate a -- decisive real-risk contact must be named
-    if real_risk_contacts:
-        decisive = min(real_risk_contacts, key=lambda c: c.get("cpa_m", float("inf")))
-        if decisive.get("name") and decisive["name"].lower() not in reasoning:
-            findings.append(_f("ERROR", "G_gate_a_contact_missing", step,
-                              f"Reasoning never mentions the decisive contact {decisive['name']!r}."))
 
-    # gate b -- fabricated numbers: mask rule/sub-rule citations first, then compare every
-    # remaining number against the FULL prompt text's own values (raw, rounded, unit-
-    # converted) and this run's constraint values, with a tolerance (models round/
-    # paraphrase). Screening-set-B audit follow-up (2026-09-23): situation_report ALONE
-    # (narrate()'s bare contact/GOAL-COURSE-CHECK text) never included the constraint
-    # line (safe distance/max turn/risk horizon) or the history-of-previous-decisions
-    # text, both of which ARE part of what the model actually read (debug.user_msg) --
-    # 567 (this run's real derived risk horizon, correctly read off the constraint line)
-    # and 1400 (a contact's own TCPA, correctly read off a history line) were flagged as
-    # "fabricated" 87x/29x purely because their source text was never in the known-set at
-    # all. debug.user_msg is the actual, complete text sent to the model; situation_report
-    # is kept only as a fallback for older logs that never stored debug.user_msg.
+def _audit_gate_b_number_fabrication(reasoning: str, step: int, cp: dict, constraints: VesselConstraints) -> list[dict]:
+    """Gate b -- fabricated numbers: mask rule/sub-rule citations first, then compare every
+    remaining number against the FULL prompt text's own values (raw, rounded, unit-
+    converted) and this run's constraint values, with a tolerance (models round/
+    paraphrase). Screening-set-B audit follow-up (2026-09-23): situation_report ALONE
+    (narrate()'s bare contact/GOAL-COURSE-CHECK text) never included the constraint
+    line (safe distance/max turn/risk horizon) or the history-of-previous-decisions
+    text, both of which ARE part of what the model actually read (debug.user_msg) --
+    567 (this run's real derived risk horizon, correctly read off the constraint line)
+    and 1400 (a contact's own TCPA, correctly read off a history line) were flagged as
+    "fabricated" 87x/29x purely because their source text was never in the known-set at
+    all. debug.user_msg is the actual, complete text sent to the model; situation_report
+    is kept only as a fallback for older logs that never stored debug.user_msg."""
     reasoning_masked = _mask_rule_citations(reasoning)
     numbers_in_reasoning = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", reasoning_masked)]
     full_prompt_text = (cp.get("debug") or {}).get("user_msg") or cp.get("situation_report") or ""
@@ -875,52 +864,93 @@ def check_2_7_reasoning_vs_decision(cp: dict, situation: list[dict],
         if not _is_known_number(n, known):
             fabricated.append(n)
             nearest_map[n] = _nearest_known(n, known)
-    if fabricated:
-        findings.append(_f("WARN", "G_gate_b_number_fabricated", step,
-                          "Reasoning cites number(s) not present in (or derivable from) "
-                          "situation_report.", numbers=fabricated[:5],
-                          nearest_known={str(n): nearest_map[n] for n in fabricated[:5]}))
+    if not fabricated:
+        return []
+    return [_f("WARN", "G_gate_b_number_fabricated", step,
+              "Reasoning cites number(s) not present in (or derivable from) "
+              "situation_report.", numbers=fabricated[:5],
+              nearest_known={str(n): nearest_map[n] for n in fabricated[:5]})]
 
-    # gate c -- risk conclusion vs real_risk(), using the same 3-way split as Check A:
-    # "unknown" (no explicit conclusion found) is informational, never a mismatch; in the
-    # early-action zone (below safe distance, TCPA beyond horizon) either conclusion is
-    # a defensible read, so nothing is flagged there either way.
+
+def _audit_gate_c_risk_conclusion(
+    reasoning: str, step: int, situation: list[dict],
+    real_risk_contacts: list[dict], early_action_contacts: list[dict],
+) -> list[dict]:
+    """Gate c -- risk conclusion vs real_risk(), using the same 3-way split as Check A:
+    "unknown" (no explicit conclusion found) is informational, never a mismatch; in the
+    early-action zone (below safe distance, TCPA beyond horizon) either conclusion is
+    a defensible read, so nothing is flagged there either way."""
     extracted = _extract_risk_conclusion(reasoning)
     worst = min(situation, key=lambda c: c.get("cpa_m", float("inf"))) if situation else None
     c_details = {"extracted": extracted, "real_risk": bool(real_risk_contacts),
                 "cpa_m": worst.get("cpa_m") if worst else None,
                 "tcpa_s": worst.get("tcpa_s") if worst else None, "horizon_s": RISK_HORIZON_S}
     if extracted == "unknown":
-        findings.append(_f("INFO", "G_gate_c_risk_unknown", step,
-                          "Could not extract an explicit risk/no-risk conclusion from the reasoning.",
-                          **c_details))
-    elif real_risk_contacts:
+        return [_f("INFO", "G_gate_c_risk_unknown", step,
+                  "Could not extract an explicit risk/no-risk conclusion from the reasoning.",
+                  **c_details)]
+    if real_risk_contacts:
         if extracted != "risk":
-            findings.append(_f("WARN", "G_gate_c_risk_mismatch", step,
-                              "Reasoning's stated risk conclusion does not match real_risk().",
-                              **c_details))
-    elif not early_action_contacts and extracted != "no_risk":
-        findings.append(_f("WARN", "G_gate_c_risk_mismatch", step,
-                          "Reasoning's stated risk conclusion does not match real_risk().",
-                          **c_details))
+            return [_f("WARN", "G_gate_c_risk_mismatch", step,
+                      "Reasoning's stated risk conclusion does not match real_risk().",
+                      **c_details)]
+        return []
+    if not early_action_contacts and extracted != "no_risk":
+        return [_f("WARN", "G_gate_c_risk_mismatch", step,
+                  "Reasoning's stated risk conclusion does not match real_risk().",
+                  **c_details)]
+    return []
 
-    # gate d -- direction word vs action taken
+
+def _audit_gate_d_direction_word(reasoning: str, step: int, d: dict) -> list[dict]:
+    """Gate d -- a directional word (port/starboard) in the reasoning must match the
+    action actually taken, if the action is a turn."""
     action = d.get("action")
-    if action in ("turn_left", "turn_right"):
-        word = "starboard" if action == "turn_right" else "port"
-        other = "port" if action == "turn_right" else "starboard"
-        if other in reasoning and word not in reasoning:
-            findings.append(_f("WARN", "G_gate_d_direction_mismatch", step,
-                              f"Reasoning says {other!r} but the action taken is {action!r}.",
-                              direction_word=other, action=action))
+    if action not in ("turn_left", "turn_right"):
+        return []
+    word = "starboard" if action == "turn_right" else "port"
+    other = "port" if action == "turn_right" else "starboard"
+    if other in reasoning and word not in reasoning:
+        return [_f("WARN", "G_gate_d_direction_mismatch", step,
+                  f"Reasoning says {other!r} but the action taken is {action!r}.",
+                  direction_word=other, action=action)]
+    return []
 
-    # gate e -- cited rule numbers should appear in the reasoning text
+
+def _audit_gate_e_rule_citation(reasoning: str, step: int, d: dict) -> list[dict]:
+    """Gate e -- cited rule numbers (encounter_rule/conduct_rule) should appear in the
+    reasoning text."""
+    findings: list[dict] = []
     for field_name in ("encounter_rule", "conduct_rule"):
         val = d.get(field_name)
         if val and val != "none" and val.lower() not in reasoning:
             findings.append(_f("INFO", "G_gate_e_rule_mismatch", step,
                               f"{field_name}={val!r} not mentioned in reasoning text.",
                               field=field_name, value=val))
+    return findings
+
+
+def check_2_7_reasoning_vs_decision(cp: dict, situation: list[dict],
+                                    constraints: VesselConstraints) -> list[dict]:
+    """Reimplementation of the B3 teacher-pipeline's acceptance gates a-e applied to the
+    MODEL's own answer (no shared gate functions were found already factored out anywhere
+    importable -- if/when they are moved into oow_agent_spec.py, switch this to call them)."""
+    d = cp.get("decision") or {}
+    reasoning = (d.get("reasoning") or "").lower()
+    step = cp["step"]
+    below_safe = [c for c in situation if c.get("cpa_m") is not None
+                and c["cpa_m"] < constraints.min_cpa_m]
+    real_risk_contacts = [c for c in below_safe
+                          if real_risk(c.get("cpa_m"), c.get("tcpa_s"), constraints.min_cpa_m)]
+    early_action_contacts = [c for c in below_safe if c not in real_risk_contacts
+                            and c.get("tcpa_s") is not None and c["tcpa_s"] > RISK_HORIZON_S]
+
+    findings: list[dict] = []
+    findings += _audit_gate_a_contact_named(reasoning, step, real_risk_contacts)
+    findings += _audit_gate_b_number_fabrication(reasoning, step, cp, constraints)
+    findings += _audit_gate_c_risk_conclusion(reasoning, step, situation, real_risk_contacts, early_action_contacts)
+    findings += _audit_gate_d_direction_word(reasoning, step, d)
+    findings += _audit_gate_e_rule_citation(reasoning, step, d)
     return findings
 
 
