@@ -28,6 +28,7 @@ This follows on from the existing two-track architecture (see `.github/copilot-i
   - [5.1 Already present in this project](#sec-5-1)
   - [5.2 External, publicly accessible sources](#sec-5-2)
   - [5.3 Historical expedition/mission narratives — a structured extraction format (backlog)](#sec-5-3)
+  - [5.4 Officer/captain training textbooks — two distinct categories, only one usable](#sec-5-4)
 - [6. `Data/Captain/` folder structure & training pipeline](#sec-6)
   - [6.1 Proposed folder layout](#sec-6-1)
   - [6.2 Own training pipeline](#sec-6-2)
@@ -520,7 +521,25 @@ This is a genuinely different SOURCE than CHIRP/MARS/MAIB (anonymised, generic n
 
 **One source CONFIRMED real and freely usable (2026-09-30)**: Ernest Shackleton's *South! The Story of Shackleton's Last Expedition, 1914–1917* — Project Gutenberg **ebook #5199** (`gutenberg.org/ebooks/5199`), full text, public domain, free. A first-person, day-by-day account of the *Endurance* expedition's escalating series of emergencies (ship crushed by pack ice, months adrift, the open-boat journey to South Georgia) — an unusually rich source for exactly this schema (repeated genuine life-or-death command decisions, each with a known real-world outcome).
 
-**Candidates not yet verified** (plausible, same public-domain era, NOT confirmed free/accessible — check before use): Robert Falcon Scott's *Terra Nova* expedition diaries; William Bligh's own account of the *Bounty* mutiny and the subsequent open-boat voyage; Apsley Cherry-Garrard's *The Worst Journey in the World*; Joshua Slocum's *Sailing Alone Around the World*. **Institutional sources already listed above worth revisiting specifically for this** (§5.2): "Old Weather"'s raw transcribed logbooks (authentic but terse, likely needs more inference to fill `reasoning`/`reflection`) and the Lloyd's Register Foundation Heritage & Education Centre.
+**Candidates CONFIRMED to exist and be free/public-domain via Project Gutenberg's own search (2026-09-30 — titles/ebook numbers verified against Gutenberg's search results, full text NOT yet fetched/read for any of these except #5199)**:
+- *Scott's Last Expedition, Volume I* — Robert Falcon Scott's own diary — ebook **#11579**.
+- William Bligh's own account, *A Voyage to the South Sea... including an account of the mutiny on board the said ship [Bounty]* — ebook **#15411**.
+- Sir John Barrow, *The Eventful History of the Mutiny and Piratical Seizure of H.M.S. Bounty* (third-party historical account, useful for the `reflection`/`worst_case_alternative` fields where Bligh's own narrative is naturally one-sided) — ebook **#14424**.
+- Sir John Franklin, *Narrative of a Second Expedition to the Shores of the Polar Sea, 1825–1827* (Franklin's earlier, survived expedition — not to be confused with his fatal 1845 expedition, which he did not survive to write about) — ebook **#33467**.
+- Owen Chase, *Narrative of the Most Extraordinary and Distressing Shipwreck of the Whale-ship Essex* (the real 1820 event that inspired *Moby-Dick*; first mate's own account of the decisions made after a whale rammed and sank the ship, including the fateful choice to sail for South America instead of the much-closer but wrongly-feared-cannibal Marquesas) — ebook **#61931**.
+- William O. S. Gilly, *Narratives of Shipwrecks of the Royal Navy, between 1793 and 1849* — a compilation of many short Royal Navy shipwreck accounts, useful for volume (many independent `observation`/`action`/`consequence` rows from one source) — ebook **#15301**.
+- Ernest Shackleton, *My South Polar Expedition* (his earlier Nimrod expedition account, distinct from *South!*) — ebook **#10229**.
+
+**Candidates still NOT verified at all** (plausible, not checked this pass): Apsley Cherry-Garrard's *The Worst Journey in the World*; Joshua Slocum's *Sailing Alone Around the World*. **Institutional sources already listed above worth revisiting specifically for this** (§5.2): "Old Weather"'s raw transcribed logbooks (authentic but terse, likely needs more inference to fill `reasoning`/`reflection`) and the Lloyd's Register Foundation Heritage & Education Centre.
+
+<a id="sec-5-4"></a>
+### 5.4 Officer/captain training textbooks — two distinct categories, only one usable
+
+**User question (2026-09-30)**: what books do real Koninklijke Marine (Royal Netherlands Navy) or commercial deck officers actually study from, and are any of those usable as Captain training data? Answer, researched this pass: **two very different categories, with very different licensing status** — don't conflate them:
+
+1. **Public-domain reference/procedural knowledge texts — usable.** *The American Practical Navigator* ("Bowditch", NGA/US Hydrographic Office publication no. 9, continuously updated since 1802, still the standard reference every USN/USCG/merchant officer is taught from) is a **US government work — public domain by statute**, freely distributed by NGA's own Maritime Safety Information portal and mirrored on archive.org/Wikisource. This is genuinely usable — but it's a **reference/procedural knowledge text** (navigation theory, celestial nav, tides, meteorology), not a decision-narrative — it would feed the **Track 1 RAG/KG knowledge base** (§6), NOT the §5.3 Observation/Action/Consequence schema. Not yet ingested; a real, verified, high-quality candidate for a future `build_captain_legal_corpus.py`-style acquisition pass alongside the existing legal/regulatory sources.
+2. **Modern commercial study guides/textbooks — NOT usable, copyrighted.** Everything actually used in current MCA/SQA/STCW officer-of-the-watch/chief-mate/master examination training (the Reeds Marine Engineering/Navigation series, Witherby Seamanship publications, Nautical Institute's own textbooks, Murphy's/USCG license-exam study guides, Brown's Nautical Almanac) is **actively commercially sold and copyrighted** — confirmed via a search of deck-officer textbook retailers (Marine Society, SailorShop.co.uk, amnautical.com). **Do not scrape or otherwise acquire these as training data without an explicit license** — flagged here specifically so this isn't attempted later without re-deriving this finding.
+3. **Koninklijke Marine's own internal officer curriculum/manuals** are, as expected, not publicly published online — not pursued further (no public source found, and service-specific military training material would be a different acquisition problem entirely from the open-access civilian/historical sources this design doc otherwise targets).
 
 **Not yet started**: no extraction, no schema implementation, no scraping — this section only records the schema design and the one verified source, per the user's explicit "add this to the to-do list" framing.
 
