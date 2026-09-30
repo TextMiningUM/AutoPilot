@@ -46,7 +46,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 
 from core import AgentPaths
 from pipeline.oow_agent_spec import PROMPT_VERSION
@@ -57,11 +56,7 @@ paths = AgentPaths.oow()
 CACHE = paths.cache_dir
 OUT_PATH = CACHE / "oow_dagger_dpo_pairs.jsonl"
 
-# "Basic Simulator" has a space in its name, so it isn't a normal importable package --
-# same sys.path trick pipeline/track2/build_outcome_dpo.py already uses.
-APP_ROOT = paths.workspace / "Basic Simulator"
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
+APP_ROOT = paths.ensure_basic_simulator_importable()
 
 from app.evaluation import _rows_at_time  # noqa: E402
 from app.llm_runs import parse_run_filename  # noqa: E402

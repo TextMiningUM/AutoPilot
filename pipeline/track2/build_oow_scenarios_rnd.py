@@ -54,11 +54,7 @@ paths = AgentPaths.oow()
 CACHE = paths.cache_dir
 CHECKPOINT_FILE = CACHE / "oow_scenario_RND_b3_checkpoint.jsonl"
 
-# "Basic Simulator" has a space in its name, so it isn't a normal importable package --
-# same sys.path trick pipeline/track2/build_outcome_dpo.py already uses.
-APP_ROOT = paths.workspace / "Basic Simulator"
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
+APP_ROOT = paths.ensure_basic_simulator_importable()
 
 from app import oracle_planner  # noqa: E402
 from app.baselines import DECISION_FUNCS  # noqa: E402

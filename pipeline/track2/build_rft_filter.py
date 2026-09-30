@@ -34,7 +34,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sys
 from pathlib import Path
 
 import torch
@@ -58,11 +57,7 @@ MAX_THINK_TOKENS = 3000
 MAX_NEW_TOKENS = 3584
 _THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
-# "Basic Simulator" has a space in its name -- same sys.path trick every pipeline/track2/
-# file that needs app.* already uses.
-APP_ROOT = paths.workspace / "Basic Simulator"
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
+APP_ROOT = paths.ensure_basic_simulator_importable()
 
 from app.missions import list_mission_ids, load_mission  # noqa: E402
 

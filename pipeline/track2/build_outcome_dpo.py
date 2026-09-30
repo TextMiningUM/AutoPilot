@@ -65,7 +65,6 @@ USAGE
 from __future__ import annotations
 
 import json
-import sys
 
 from core import AgentPaths
 from pipeline.oow_agent_spec import (
@@ -79,11 +78,7 @@ paths = AgentPaths.oow()
 CACHE = paths.cache_dir
 OUT_PATH = CACHE / "oow_outcome_dpo_pairs.jsonl"
 
-# "Basic Simulator" has a space in its name, so it isn't a normal importable package --
-# same sys.path trick pipeline/eval/measure_archived_checkpoints.py already uses.
-APP_ROOT = paths.workspace / "Basic Simulator"
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
+APP_ROOT = paths.ensure_basic_simulator_importable()
 
 from app.evaluation import _ground_truth_at_checkpoint, _rows_at_time  # noqa: E402
 from app.simulation import VesselConstraints  # noqa: E402

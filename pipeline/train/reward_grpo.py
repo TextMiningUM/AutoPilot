@@ -33,14 +33,11 @@ from __future__ import annotations
 
 import dataclasses
 import re
-import sys
 
 from core import AgentPaths
 
 paths = AgentPaths.oow()
-APP_ROOT = paths.workspace / "Basic Simulator"
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
+APP_ROOT = paths.ensure_basic_simulator_importable()
 
 from app import oracle_planner  # noqa: E402
 from app.missions import Mission, Vessel  # noqa: E402

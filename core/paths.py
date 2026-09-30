@@ -175,6 +175,25 @@ class AgentPaths:
         """Shared ``.env`` (OPENAI_API_KEY etc.). Not domain-scoped."""
         return self.workspace / ".env"
 
+    @property
+    def basic_simulator_root(self) -> Path:
+        """``Basic Simulator/`` sub-project root. Not domain-scoped."""
+        return self.workspace / "Basic Simulator"
+
+    def ensure_basic_simulator_importable(self) -> Path:
+        """Put ``Basic Simulator/`` on ``sys.path`` (idempotent) and return its root.
+
+        ``"Basic Simulator"`` has a space in its name, so it can't be imported
+        as a normal dotted package — every ``pipeline/`` script that needs its
+        ``app.*`` modules used to repeat this ``sys.path`` insertion by hand;
+        call this once instead.
+        """
+        import sys
+        root = self.basic_simulator_root
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        return root
+
     # ── utilities ───────────────────────────────────────────────────────
     def mkdirs(self) -> None:
         """Create every standard directory if missing. Idempotent."""

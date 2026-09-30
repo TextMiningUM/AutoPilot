@@ -26,7 +26,6 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
-import sys
 from pathlib import Path
 
 from core import AgentPaths
@@ -34,11 +33,7 @@ from core import AgentPaths
 paths = AgentPaths.oow()
 CACHE = paths.cache_dir
 
-# "Basic Simulator" has a space in its name -- same sys.path trick every pipeline/track2/
-# file that needs app.* already uses.
-APP_ROOT = paths.workspace / "Basic Simulator"
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
+APP_ROOT = paths.ensure_basic_simulator_importable()
 
 from app import oracle_planner  # noqa: E402
 from app.baselines import DECISION_FUNCS  # noqa: E402

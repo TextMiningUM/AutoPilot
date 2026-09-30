@@ -51,12 +51,8 @@ from pathlib import Path
 from core import AgentPaths
 
 # app/measurement.py + app/simulation.py are stdlib-only (no torch/streamlit/
-# transformers) -- safe to import into this CPU-light pipeline script. The space in
-# "Basic Simulator" prevents a normal dotted import, so this mirrors the exact
-# sys.path pattern Basic Simulator/tests/test_measurement.py already uses.
-APP_ROOT = AgentPaths.oow().workspace / "Basic Simulator"
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
+# transformers) -- safe to import into this CPU-light pipeline script.
+APP_ROOT = AgentPaths.oow().ensure_basic_simulator_importable()
 
 from app.measurement import measure_decision_quality  # noqa: E402
 from app.simulation import VesselConstraints  # noqa: E402
