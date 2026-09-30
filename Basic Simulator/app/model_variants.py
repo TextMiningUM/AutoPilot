@@ -63,6 +63,19 @@ MODEL_VARIANTS: dict[str, dict[str, str]] = {
                        "direct comparison. Intended for use under kinematics_model="
                        "'nomoto_v2'.",
     },
+    "qwen_sftdpo_v3": {
+        "label": "QWEN-SFT-DPO-V3",
+        "weights": "MERGED:OOW-QWEN_v3_sftdpo",
+        "description": "SFT+DPO merged checkpoint (2026-09-30, Stap 2 Step 8) -- adds "
+                       "8470 real DAgger DPO pairs (Step 7, build_dagger_dpo.py: mined "
+                       "from a dedicated 52-mission qwen_sftdpo_nomoto_v2 closed-loop "
+                       "rollout on RND01-60, oracle-planner disagreements recomputed at "
+                       "every visited checkpoint) on top of qwen_sftdpo_nomoto_v2's own "
+                       "mix. Reflection deliberately excluded, same composition "
+                       "convention as every other qwen_sftdpo* variant. Intended for use "
+                       "under kinematics_model='nomoto_v2' (same physics as v2 -- this "
+                       "iteration is a data-only improvement, not a physics change).",
+    },
 }
 
 DEFAULT_VARIANT = "qwen_base"
