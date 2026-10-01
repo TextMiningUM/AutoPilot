@@ -14,6 +14,7 @@ Run with:
 from __future__ import annotations
 import argparse
 import json
+import math
 import random
 import sys
 from pathlib import Path
@@ -21,20 +22,30 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from app.mission_sim import route_distance_nm  # noqa: E402
+from app.mission_route_planner import minimum_resource_route  # noqa: E402
+from app.mission_sim import haversine_nm  # noqa: E402
+from pipeline.captain_types import ExclusionZone  # noqa: E402
 
 OUT_DIR = ROOT.parent / "Data" / "Captain" / "Scenarios" / "generated"
 
 # Sec 13.C.9's "whole route templates held out" rule -- "long" is NEVER used for a
 # training mission regardless of which events/severities get attached to it, the
-# strongest single held-out guarantee. All 3 share stub_corridor_v1's own region/ports
-# (Data/Captain/Regions/stub_corridor_v1.json), so refuge/port lookups stay meaningful.
+# strongest single held-out guarantee. All templates share stub_corridor_v1's own
+# region/ports (Data/Captain/Regions/stub_corridor_v1.json), so refuge/port lookups stay
+# meaningful. "short"/"medium"/"long" are straight legs on one meridian (varying length
+# only); "coastal_bend"/"zigzag" genuinely turn through several bearings -- real geometric
+# variety for the mission-preview plot and for leg-bearing-dependent code
+# (current_leg_bearing_deg, ambient-contact seeding) to actually be exercised.
 ROUTE_TEMPLATES: dict[str, list[tuple[float, float]]] = {
-    "short":  [(52.0, 3.0), (53.5, 3.0)],
-    "medium": [(52.0, 3.0), (54.0, 3.0), (56.0, 3.0)],
-    "long":   [(52.0, 3.0), (54.0, 3.0), (56.0, 3.0), (58.5, 3.0)],
+    "short":        [(52.0, 3.0), (53.5, 3.0)],
+    "medium":       [(52.0, 3.0), (54.0, 3.0), (56.0, 3.0)],
+    "long":         [(52.0, 3.0), (54.0, 3.0), (56.0, 3.0), (58.5, 3.0)],
+    "coastal_bend": [(52.0, 3.0), (53.5, 3.0), (54.5, 4.0), (56.0, 4.5)],
+    "zigzag":       [(52.0, 3.0), (53.0, 3.8), (54.0, 3.0), (55.0, 3.8), (56.0, 3.0)],
 }
 HELD_OUT_TEMPLATES = {"long"}
+
+ZONE_PROBABILITY = 0.4  # fraction of generated missions that get an exclusion zone to route around
 
 EVENT_WEIGHTS = {
     "engine_failure": 0.30, "fog": 0.20, "whale_zone": 0.15,
@@ -128,13 +139,50 @@ def _trigger_bucket(distance_nm: float, total_distance_nm: float) -> str:
     return "early" if frac < 1 / 3 else ("mid" if frac < 2 / 3 else "late")
 
 
+def _zone_across_leg(rnd: random.Random, p1: tuple[float, float], p2: tuple[float, float],
+                     leg_distance_nm: float, zone_id: str) -> ExclusionZone:
+    """A square 'dynamic_hazard' zone centred on leg (p1, p2)'s own midpoint (Sec 7's
+    storm-cell/piracy-corridor/whale-protection convention) -- half-width capped well
+    below half the leg length, so the straight leg is genuinely blocked (the midpoint
+    always lies inside its own zone) while both endpoints stay clear of it, guaranteeing
+    `plan_route()` finds a real detour rather than raising 'no path found'."""
+    mid_lat, mid_lon = (p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0
+    half_width_nm = min(leg_distance_nm * 0.25, 20.0)
+    half_lat = half_width_nm / 60.0  # ~60 nm per degree of latitude
+    half_lon = half_width_nm / 60.0 / max(0.1, math.cos(math.radians(mid_lat)))
+    polygon = [(mid_lat - half_lat, mid_lon - half_lon), (mid_lat - half_lat, mid_lon + half_lon),
+              (mid_lat + half_lat, mid_lon + half_lon), (mid_lat + half_lat, mid_lon - half_lon)]
+    return ExclusionZone(id=zone_id, type="dynamic_hazard", polygon=polygon)
+
+
+def _zone_to_dict(zone: ExclusionZone) -> dict:
+    """Serializes an ExclusionZone into the exact Sec 13.C.13 `route.exclusion_zones` row
+    shape `pipeline.captain_types.zones_from_region()` already parses."""
+    return {"id": zone.id, "type": zone.type, "polygon": [list(p) for p in zone.polygon],
+           "speed_limit_kn": zone.speed_limit_kn, "min_depth_m": zone.min_depth_m}
+
+
 def generate_mission(index: int, seed: int) -> dict:
     """One fully self-contained Sec 13.C.13 scenario file, deterministic from (seed, index)."""
     rnd = random.Random(f"{seed}::{index}")
     template_name = rnd.choice(list(ROUTE_TEMPLATES))
-    waypoints = ROUTE_TEMPLATES[template_name]
-    distance_nm = route_distance_nm(waypoints)
+    intent_waypoints = ROUTE_TEMPLATES[template_name]
     held_out = template_name in HELD_OUT_TEMPLATES
+
+    # With ZONE_PROBABILITY, one randomly-chosen leg gets a 'dynamic_hazard' zone placed
+    # squarely across it -- minimum_resource_route() (Sec 13.B.8's own visibility-graph
+    # planner) then bends ONLY that leg around it, exactly as if the OOW's own route
+    # planning had already routed around a known hazard (Sec 7's stated convention) --
+    # this is the first time any generated mission actually exercises that planner.
+    zones: list[ExclusionZone] = []
+    if len(intent_waypoints) >= 2 and rnd.random() < ZONE_PROBABILITY:
+        leg_i = rnd.randrange(len(intent_waypoints) - 1)
+        p1, p2 = intent_waypoints[leg_i], intent_waypoints[leg_i + 1]
+        zones = [_zone_across_leg(rnd, p1, p2, haversine_nm(p1, p2), zone_id="hazard1")]
+
+    planned = minimum_resource_route(intent_waypoints, zones)
+    waypoints = planned.path
+    distance_nm = planned.distance_nm
 
     original_soa_kn = round(rnd.uniform(10.0, 13.0), 1)
     nominal_time_h = distance_nm / original_soa_kn
@@ -173,13 +221,18 @@ def generate_mission(index: int, seed: int) -> dict:
         buckets.append(_trigger_bucket(trigger_nm, distance_nm))
 
     mission_id = f"MSN-GEN-{seed:04d}-{index:04d}"
+    zone_note = f", routed around zone {zones[0].id!r} on leg {leg_i}" if zones else ""
     return {
         "mission_id": mission_id,
         "seeds": {"mission_seed": seed * 10_000 + index, "responder_seed": seed * 10_000 + index},
         "held_out": held_out,
+        "route_template": template_name,  # Sec 13.C.9's own held-out-key dimension, kept
+                                          # explicit rather than re-inferred from geometry
+                                          # (a zone can bend the stored path away from the
+                                          # raw template's own waypoint list)
         "failure_category": "+".join(sorted(chosen_types)),
         "_comment": f"Procedurally generated (generate_captain_missions.py, seed={seed}, "
-                   f"index={index}) -- route_template={template_name!r}, "
+                   f"index={index}) -- route_template={template_name!r}{zone_note}, "
                    f"trigger_placement_buckets={buckets}. Same fictional stub_corridor_v1 "
                    f"region as the hand-authored skeleton scenarios, not for navigation use.",
         "mission_order": {
@@ -197,8 +250,8 @@ def generate_mission(index: int, seed: int) -> dict:
             },
             "command_signal": {"reporting_interval_hours": 6.0},
         },
-        "route": {"region_id": "stub_corridor_v1",
-                  "waypoints": [list(p) for p in waypoints], "exclusion_zones": []},
+        "route": {"region_id": "stub_corridor_v1", "waypoints": [list(p) for p in waypoints],
+                  "exclusion_zones": [_zone_to_dict(z) for z in zones]},
         "brown_envelopes": envelopes,
     }
 

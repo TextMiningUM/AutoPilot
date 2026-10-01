@@ -30,7 +30,9 @@ from app.mission_sim import position_along_route_nm
 st.set_page_config(page_title="Captain Mission", page_icon="\U0001F6A2", layout="wide")
 
 SCENARIOS_DIR = ROOT.parent / "Data" / "Captain" / "Scenarios"
-SCENARIO_PATHS = {p.stem: p for p in sorted(SCENARIOS_DIR.glob("*.json"))}
+# Recursive glob so the generated/ subdirectory (generate_captain_missions.py's output) is
+# selectable here too, not just the 4 hand-authored top-level scenarios.
+SCENARIO_PATHS = {p.stem: p for p in sorted(SCENARIOS_DIR.glob("**/*.json"))}
 MAX_RUN_STEPS = 20_000  # generous safety net for "run to next event"/"run to completion"
 CHART_HEIGHT = 140  # keeps speed/fuel/state/MPR/event-log small enough to fit a 1080p screen
 

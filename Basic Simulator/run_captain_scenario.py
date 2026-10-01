@@ -87,8 +87,10 @@ def main() -> None:
                     help="directory to save plots to (default: Basic Simulator/_captain_runs/)")
     args = ap.parse_args()
 
+    # Recursive glob so the generated/ subdirectory (generate_captain_missions.py's
+    # output) is included by default too, not just the 4 hand-authored top-level scenarios.
     paths = ([SCENARIOS_DIR / f"{args.scenario}.json"] if args.scenario
-            else sorted(SCENARIOS_DIR.glob("*.json")))
+            else sorted(SCENARIOS_DIR.glob("**/*.json")))
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 

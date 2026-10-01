@@ -13,9 +13,11 @@ if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
 from app.captain_skeleton import CaptainSkeleton  # noqa: E402
+from app.mission_route_planner import segment_blocked  # noqa: E402
 from generate_captain_missions import (  # noqa: E402
     HELD_OUT_TEMPLATES, ROUTE_TEMPLATES, generate_mission, main,
 )
+from pipeline.captain_types import ExclusionZone  # noqa: E402
 
 
 def test_generate_mission_is_deterministic_for_the_same_seed_and_index():
@@ -31,14 +33,36 @@ def test_generate_mission_differs_across_index_and_seed():
 
 
 def test_held_out_flag_matches_the_route_template_used():
-    # Sample enough indices to see every template at least once (3 templates, uniform
-    # random.choice -- 30 draws makes an all-miss on any one template astronomically
-    # unlikely without pinning down which index maps to which template).
     for i in range(30):
         mission = generate_mission(index=i, seed=7)
-        template_name = next(name for name, wps in ROUTE_TEMPLATES.items()
-                            if [list(p) for p in wps] == mission["route"]["waypoints"])
-        assert mission["held_out"] == (template_name in HELD_OUT_TEMPLATES)
+        assert mission["held_out"] == (mission["route_template"] in HELD_OUT_TEMPLATES)
+
+
+def test_route_template_field_is_always_a_known_template():
+    for i in range(30):
+        mission = generate_mission(index=i, seed=7)
+        assert mission["route_template"] in ROUTE_TEMPLATES
+
+
+def test_missions_with_a_zone_actually_route_around_it():
+    """Whenever a zone was generated, the FINAL stored waypoint path must not have any leg
+    blocked by it -- proves minimum_resource_route() genuinely bent the path, not just that
+    a zone happens to be present in the JSON."""
+    found_a_zone_mission = False
+    for i in range(60):
+        mission = generate_mission(index=i, seed=33)
+        zones_json = mission["route"]["exclusion_zones"]
+        if not zones_json:
+            continue
+        found_a_zone_mission = True
+        zones = [ExclusionZone(id=z["id"], type=z["type"],
+                               polygon=[tuple(p) for p in z["polygon"]],
+                               speed_limit_kn=z.get("speed_limit_kn"), min_depth_m=z.get("min_depth_m"))
+                 for z in zones_json]
+        waypoints = [tuple(p) for p in mission["route"]["waypoints"]]
+        for p1, p2 in zip(waypoints, waypoints[1:]):
+            assert not segment_blocked(p1, p2, zones)
+    assert found_a_zone_mission
 
 
 def test_brown_envelopes_never_repeat_a_type_within_one_mission():
@@ -46,6 +70,7 @@ def test_brown_envelopes_never_repeat_a_type_within_one_mission():
         mission = generate_mission(index=i, seed=11)
         types = [e["type"] for e in mission["brown_envelopes"]]
         assert len(types) == len(set(types))
+
 
 
 def test_world_responder_present_only_for_distress_call_and_commercial_instruction():
