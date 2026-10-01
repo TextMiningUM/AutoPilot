@@ -90,7 +90,14 @@ def main() -> None:
                     help="merged checkpoint dir to start from, e.g. _models/OOW/OOW-QWEN_v3_sftdpo")
     ap.add_argument("--out-dir", type=str, default=str(MODELS / "oow_qwen_grpo_lora_v1"))
     ap.add_argument("--k", type=int, default=8, help="GRPOConfig.num_generations -- completions sampled per prompt")
-    ap.add_argument("--max-completion-length", type=int, default=1024)
+    # 1024 was the original default and is TOO SMALL -- same facts-only-prompt <think>
+    # trace this agent produces elsewhere commonly runs 1500-2800 tokens (see build_rft_
+    # filter.py's own MAX_NEW_TOKENS=3584 fix for the identical truncation bug). A real
+    # pilot run on OOW-QWEN_v4_sftdpo at 1024 showed 87.5% of completions clipped before
+    # finishing <think>, which `reward_schema()`/`reward_legality()` correctly scored as
+    # unparseable (schema/legality means landed exactly on the math predicted by that
+    # clip fraction) -- NOT a real model-capability failure.
+    ap.add_argument("--max-completion-length", type=int, default=3584)
     ap.add_argument("--temperature", type=float, default=0.8)
     ap.add_argument("--top-p", type=float, default=0.9)
     ap.add_argument("--repetition-penalty", type=float, default=1.15)  # Qwen3 loops without this, see repo memory
