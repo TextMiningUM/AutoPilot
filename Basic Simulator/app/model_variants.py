@@ -76,6 +76,22 @@ MODEL_VARIANTS: dict[str, dict[str, str]] = {
                        "under kinematics_model='nomoto_v2' (same physics as v2 -- this "
                        "iteration is a data-only improvement, not a physics change).",
     },
+    "qwen_sftdpo_v4": {
+        "label": "QWEN-SFT-DPO-V4",
+        "weights": "MERGED:OOW-QWEN_v4_sftdpo",
+        "description": "SFT+DPO merged checkpoint (2026-10-01, Stap 2 Step 11) -- adds "
+                       "927 RND01-60 rollouts regenerated WITH the opt-in low-level "
+                       "controller (baseline_ruletree fills gaps between oracle decision "
+                       "points instead of passive coasting, see build_oow_scenarios_rnd."
+                       "py) on top of qwen_sftdpo_v3's own mix. A direct comparative test "
+                       "showed the controller alone fixes 2/2 previously-colliding "
+                       "missions (IMP14/IMP12: composite 0.000 -> 0.74-0.76). Reflection "
+                       "deliberately excluded, same composition convention as every other "
+                       "qwen_sftdpo* variant. Intended for use under kinematics_model="
+                       "'nomoto_v2', ideally paired with --low-level-controller "
+                       "baseline_ruletree at eval/inference time too (training data alone "
+                       "doesn't give the live agent loop the same active infill).",
+    },
 }
 
 DEFAULT_VARIANT = "qwen_base"
