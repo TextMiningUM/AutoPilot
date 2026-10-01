@@ -17,11 +17,22 @@ Phase 1 but nothing populated/processed it until now) -- a fixed, scripted reply
 open-ended negotiation) for distress_call/commercial_instruction, scheduled in the
 mission-sim's own `EventScheduler` and polled alongside the brown-envelope trigger scan.
 
+Phase 8 wires Sec 13.B.9's event-to-monitor mapping + urgency-class deadlines (Sec 13.B.7)
+for the 3 DISCRETE monitors (machinery-fault/distress-signal/company-instruction) -- every
+Mandatory-mapped event logs a `monitor_engagement` delta (trigger time/response time/
+deadline/met). The 4 CONTINUOUS monitors (visibility/position-doubt/track-deviation/
+alarm) are fully implemented and tested in `pipeline/captain_monitors.py` but NOT yet
+live-wired here -- no ambient weather/position-uncertainty feed exists yet (Sec 13.A.1
+point 1's own job, deferred to the encounter-sim-splice phase).
+
 Deliberately NOT built here (explicit scope reduction, consistent with Sec 13.A.1's own "5
 concretising points" already deferred in Phase 1): NO encounter-sim splice / ambient COLREG
 traffic -- a scenario scripts none yet, so there is nothing to splice into; add it once a
-scenario actually needs it. Also NOT built: the general Sec 13.B.7 trigger-monitor
-mechanism (Phase 8) and full evaluation beyond Phase 5's 3 axes.
+scenario actually needs it. Also NOT built: full evaluation beyond Phase 5's 3 axes (Sec
+10.3's recall/precision is now COMPUTABLE via `pipeline/captain_monitors.py`, but not yet
+built as an eval axis -- this skeleton's own synchronous baseline Captain always responds
+in the SAME instant a trigger fires, so recall/precision would be trivially 100% here
+regardless; a genuinely late/missed response needs an LLM Captain, not built yet).
 """
 from __future__ import annotations
 import json
@@ -45,6 +56,10 @@ from pipeline.captain_agent_spec import (
 )
 from pipeline.captain_eval import (
     CaptainMissionEvaluation, MissionOutcomeFacts, ResourceEfficiencyFacts, evaluate_captain_mission,
+)
+from pipeline.captain_monitors import (
+    EVENT_MONITOR_MAP, company_instruction_received, distress_signal_received,
+    engaged_within_deadline, machinery_fault_reported, urgency_deadline_s,
 )
 from pipeline.captain_types import (
     BrownEnvelopeEvent, CaptainAction, EngineStatus, ExclusionZone, MissionOrder, MissionState,
@@ -210,6 +225,46 @@ class CaptainSkeleton:
                 hazard["resolution"] = resolution
         self._log_delta("active_hazards", old=source_event_id, new=resolution, cause=scheduled.kind)
 
+    def _hazard_active(self, event_type: str) -> bool:
+        """True iff a hazard of `event_type` has fired and is not yet cleared -- the live
+        fact the 3 discrete monitors (Sec 13.B.7/13.B.9) are keyed on."""
+        return any(h["type"] == event_type and "cleared_at_s" not in h for h in self.state.active_hazards)
+
+    def active_monitors(self) -> list[str]:
+        """Sec 13.B.7's 3 discrete monitors, evaluated against the live Mission State --
+        which ones are currently true (Sec 13.B.9's mapping). The 4 continuous monitors
+        (visibility/position-doubt/track-deviation/alarm) need a live ambient feed this
+        skeleton doesn't have yet (Phase 8's own stated scope), so they're not included."""
+        checks = {
+            "machinery_fault_reported": machinery_fault_reported(self._hazard_active("engine_failure")),
+            "distress_signal_received": distress_signal_received(self._hazard_active("distress_call")),
+            "company_instruction_received": company_instruction_received(
+                self._hazard_active("commercial_instruction")),
+        }
+        return [name for name, active in checks.items() if active]
+
+    def _log_monitor_engagement(self, event: BrownEnvelopeEvent, trigger_fired_at_s: float) -> None:
+        """Sec 13.B.9's event-to-monitor mapping + Sec 13.B.7's urgency-class deadline,
+        recorded as a genuine, checkable fact for every Mandatory-mapped event type (Sec
+        13.B.9's own 'whale zone resolved' case is correctly excluded -- a pre-authorised
+        Standing Order, never a live monitor). The deterministic baseline Captain always
+        responds in the SAME mission-sim instant the trigger fires (Sec 14), so
+        `met_deadline` is trivially True here -- this records the mechanism faithfully, it
+        does not yet exercise a genuinely slow/missed response (needs an LLM Captain,
+        not built yet)."""
+        mapping = EVENT_MONITOR_MAP.get(event.type)
+        if mapping is None or mapping.urgency is None:
+            return
+        responded_at_s = self.sim.state.elapsed_s
+        deadline_s = urgency_deadline_s(mapping.urgency, trigger_fired_at_s, self.sim.dt_mission_s)
+        met_deadline = engaged_within_deadline(trigger_fired_at_s, responded_at_s, mapping.urgency,
+                                               self.sim.dt_mission_s)
+        self._log_delta("monitor_engagement", old=None, new={
+            "monitor": mapping.monitor_name, "urgency": mapping.urgency,
+            "trigger_fired_at_s": trigger_fired_at_s, "responded_at_s": responded_at_s,
+            "deadline_s": deadline_s, "met_deadline": met_deadline,
+        }, cause=event.event_id)
+
     def _check_triggers(self) -> BrownEnvelopeEvent | None:
         """Checks every still-pending event's (fixed-time) trigger condition against the
         current mission-sim clock/position; fires and returns the first one that is due,
@@ -233,6 +288,7 @@ class CaptainSkeleton:
         if event.type.endswith("_clear"):
             self._handle_regime_clear(event)
             return
+        trigger_fired_at_s = self.sim.state.elapsed_s
         self.state.active_hazards.append({"event_id": event.event_id, "type": event.type,
                                           "severity": event.severity})
         self._log_delta("active_hazards", old=None, new=event.event_id, cause=event.event_id)
@@ -253,6 +309,7 @@ class CaptainSkeleton:
             self._log_delta("event_log", old=None,
                             new=f"{event.type} fired (shield: {entry.shield_description})",
                             cause=event.event_id)
+        self._log_monitor_engagement(event, trigger_fired_at_s)
 
     def _handle_regime_clear(self, event: BrownEnvelopeEvent) -> None:
         """Reverts a temporary speed-cap regime (fog/whale zone) once its own scripted
@@ -480,6 +537,7 @@ class CaptainSkeleton:
             f"  fuel remaining: {self.sim.state.fuel_tonnes:.1f} t, "
             f"current speed: {self.sim.state.current_speed_kn:.1f} kn",
             f"  active hazards: {[h['type'] for h in self.state.active_hazards]}",
+            f"  active monitors: {self.active_monitors()}",
             f"  goals: {[(g['goal'], g['status']) for g in self.state.goals]}",
             f"  event log entries: {len(self.state.event_log)}",
         ]
