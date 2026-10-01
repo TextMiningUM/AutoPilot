@@ -55,6 +55,29 @@ def test_safety_axis_skips_a_decision_whose_event_has_no_declared_cap():
     assert passed and score == 1.0
 
 
+def test_safety_axis_recognises_a_fog_events_own_safe_speed_param_name():
+    fog_event = BrownEnvelopeEvent(event_id="ev_fog", type="fog", severity="moderate",
+                                   params={"safe_speed_kn": 6.0})
+    events_by_id = {"ev_fog": fog_event}
+    bad_log = [{"t": 0.0, "field_path": "captain_decision",
+               "new": {"tool": "reduce_to_safe_speed", "params": {"speed_kn": 9.0}, "shield_substituted": False},
+               "old": None, "cause": "ev_fog"}]
+    passed, score, violations = safety_axis_captain(bad_log, events_by_id)
+    assert not passed
+    assert len(violations) == 1
+
+
+def test_safety_axis_recognises_a_whale_zones_own_speed_limit_param_name():
+    whale_event = BrownEnvelopeEvent(event_id="ev_whale", type="whale_zone", severity="minor",
+                                     params={"speed_limit_kn": 10.0})
+    events_by_id = {"ev_whale": whale_event}
+    clean_log = [{"t": 0.0, "field_path": "captain_decision",
+                 "new": {"tool": "reduce_to_zone_speed_limit", "params": {"speed_kn": 10.0}, "shield_substituted": False},
+                 "old": None, "cause": "ev_whale"}]
+    passed, _, _ = safety_axis_captain(clean_log, events_by_id)
+    assert passed
+
+
 # --- mission_outcome_axis ------------------------------------------------------------------
 
 def test_mission_outcome_all_criteria_met():

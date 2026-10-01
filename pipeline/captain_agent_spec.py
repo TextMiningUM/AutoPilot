@@ -1,19 +1,19 @@
-"""Captain walking-skeleton Phase 3/4: procedure library, shield, cost()/regret decision
-layer, and the Sec 13.B.6 output schema + instruction-precedence mechanism
-(design_captain_missions.md Sec 13.A.4/13.A.6/13.A.8/13.B.6).
+"""Captain walking-skeleton Phase 3/4/6: procedure library, shield, cost()/regret decision
+layer, the Sec 13.B.6 output schema + instruction-precedence mechanism, and the fog/
+whale_zone decision layers (design_captain_missions.md Sec 13.A.4/13.A.6/13.A.8/13.B.6).
 
 Pure Python, no GPU/API key, safe to run locally. Mirrors `pipeline/oow_agent_spec.py`'s
 role for OOW -- the Captain's own classify/validate/decide logic -- but lives in its own
 file since Captain is a separately-trained, separate-domain agent (not a shared model with
 OOW), per the project's own confirmed architecture decision.
 
-Only `engine_failure`'s decision layer is fully wired here, per the walking skeleton's
-scope (Sec 14): the other 4 v1 event types (fog, distress_call, whale_zone,
-commercial_instruction) have their mandatory-duty/shield METADATA recorded in
-PROCEDURE_LIBRARY (genuinely rule-like, cheap to specify up front), but no
-candidates()/rollout() yet -- building a generic polymorphic dispatch mechanism for a
-single wired event would be speculative; add the next event's own concrete functions
-when it is actually needed, following this file's existing shape.
+`engine_failure`/`fog`/`whale_zone` now have fully wired decision layers (Sec 14/Phase 6);
+the remaining 2 v1 event types (distress_call, commercial_instruction) have their
+mandatory-duty/shield METADATA recorded in PROCEDURE_LIBRARY (genuinely rule-like, cheap to
+specify up front), but no candidates()/rollout() yet -- they also need the
+WORLD_RESPONDER_TIMER mechanism (Sec 13.A.2), planned for the next phase. Building a
+generic polymorphic dispatch mechanism for the wired events would be speculative; add each
+event's own concrete functions when actually needed, following this file's existing shape.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -283,6 +283,75 @@ def rollout_engine_failure(action: CaptainAction, ctx: EngineFailureContext) -> 
         commercial=fuel_excess_t + delay_h,
     )
     return RolloutResult(dims=dims, notes={"time_h": time_h, "fuel_t": fuel_t, "delay_h": delay_h})
+
+
+# --- Fog / whale-zone decision layers (Phase 6) -- degenerate, one candidate each --------
+# Sec 13.A.4: both are "genuinely table-determined" (Rule 19's safe speed / a charted
+# posted limit leave no real tradeoff space), unlike engine failure's real cost tradeoff --
+# but still routed through cost()/oracle_best() so zero regret is DEMONSTRATED, not just
+# asserted, and so a future shield substitution is scored the same way as any other event.
+
+def _single_candidate_speed_rollout(speed_kn: float, original_soa_kn: float, affected_distance_nm: float,
+                                    fuel_rate_tonnes_per_h: Callable[[float], float]) -> RolloutResult:
+    """Shared cost arithmetic for a degenerate (one mandated speed) candidate -- used by
+    both fog and whale_zone, which differ only in WHY the speed is mandated (Rule 19 vs a
+    charted/posted limit), never in how the commercial cost of complying is computed."""
+    reference_time_h = affected_distance_nm / original_soa_kn
+    reference_fuel_t = fuel_rate_tonnes_per_h(original_soa_kn) * reference_time_h
+    time_h = affected_distance_nm / speed_kn
+    fuel_t = fuel_rate_tonnes_per_h(speed_kn) * time_h
+    delay_h = max(0.0, time_h - reference_time_h)
+    fuel_excess_t = max(0.0, fuel_t - reference_fuel_t)
+    dims = CostDimensions(commercial=fuel_excess_t + delay_h)
+    return RolloutResult(dims=dims, notes={"time_h": time_h, "fuel_t": fuel_t, "delay_h": delay_h})
+
+
+@dataclass(frozen=True)
+class FogContext:
+    """Facts the fog decision layer needs (Sec 13.A.2/13.A.4) -- Rule 19 mandates the safe
+    speed directly, so there is only ever ONE legitimate candidate."""
+    safe_speed_kn: float          # the Rule-19 mandated safe speed for current visibility
+    original_soa_kn: float
+    affected_distance_nm: float   # distance travelled at reduced speed before visibility clears
+    fuel_rate_tonnes_per_h: Callable[[float], float]
+
+
+def candidates_fog(ctx: FogContext) -> list[CaptainAction]:
+    """Sec 13.A.4: fog's one legitimate candidate -- reduce to the Rule-19 safe speed."""
+    return [CaptainAction(tool="reduce_to_safe_speed", params={"speed_kn": ctx.safe_speed_kn})]
+
+
+def rollout_fog(action: CaptainAction, ctx: FogContext) -> RolloutResult:
+    """The only candidate's cost -- a real commercial cost (time/fuel lost to the mandatory
+    reduction) but zero regret BY CONSTRUCTION (no cheaper legitimate alternative exists)."""
+    if action.tool != "reduce_to_safe_speed":
+        raise ValueError(f"unknown fog candidate action: {action.tool!r}")
+    return _single_candidate_speed_rollout(ctx.safe_speed_kn, ctx.original_soa_kn,
+                                           ctx.affected_distance_nm, ctx.fuel_rate_tonnes_per_h)
+
+
+@dataclass(frozen=True)
+class WhaleZoneContext:
+    """Facts the whale-zone decision layer needs (Sec 13.A.2/13.A.4) -- a charted/posted
+    zone speed limit mandates the speed directly, so there is only ever ONE candidate."""
+    speed_limit_kn: float
+    original_soa_kn: float
+    zone_transit_distance_nm: float  # the zone's own extent along the route
+    fuel_rate_tonnes_per_h: Callable[[float], float]
+
+
+def candidates_whale_zone(ctx: WhaleZoneContext) -> list[CaptainAction]:
+    """Sec 13.A.4: the zone's one legitimate candidate -- reduce to its posted limit."""
+    return [CaptainAction(tool="reduce_to_zone_speed_limit", params={"speed_kn": ctx.speed_limit_kn})]
+
+
+def rollout_whale_zone(action: CaptainAction, ctx: WhaleZoneContext) -> RolloutResult:
+    """The only candidate's cost -- same shape as `rollout_fog()`, zero regret by
+    construction."""
+    if action.tool != "reduce_to_zone_speed_limit":
+        raise ValueError(f"unknown whale_zone candidate action: {action.tool!r}")
+    return _single_candidate_speed_rollout(ctx.speed_limit_kn, ctx.original_soa_kn,
+                                           ctx.zone_transit_distance_nm, ctx.fuel_rate_tonnes_per_h)
 
 
 # --- Output schema + precedence (Sec 13.B.6, Phase 4) ------------------------------------

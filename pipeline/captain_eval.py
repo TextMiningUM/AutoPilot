@@ -28,6 +28,20 @@ from pipeline.captain_types import BrownEnvelopeEvent, CaptainAction
 # set to fill the full scale would misrepresent an unimplemented axis as a perfect score.
 PHASE5_WEIGHTS = {"mission_outcome": 0.25, "safety": 0.20, "resource_efficiency": 0.07}
 
+# Every v1 event with a fully-wired decision layer (Phase 3/6) names its own mandated speed
+# under a different, event-specific key (engine_failure's shield cap vs fog's Rule-19 safe
+# speed vs whale_zone's posted limit) -- checked in this fixed order, first match wins.
+_CAP_PARAM_NAMES = ("capped_speed_kn", "safe_speed_kn", "speed_limit_kn")
+
+
+def _declared_cap_kn(event: BrownEnvelopeEvent) -> float | None:
+    """The speed this event's own procedure mandates, regardless of which param name its
+    event type happens to use -- None if this event type declares no speed cap at all."""
+    for name in _CAP_PARAM_NAMES:
+        if name in event.params:
+            return float(event.params[name])
+    return None
+
 
 # --- Safety (Sec 10.1 hard gate 1) -------------------------------------------------------
 
@@ -35,7 +49,7 @@ def safety_axis_captain(event_log: list[dict[str, Any]],
                         events_by_id: dict[str, BrownEnvelopeEvent]) -> tuple[bool, float, list[str]]:
     """Sec 13.C.11's counterfactual safety ground truth, specialised to this skeleton's
     recorded decisions: independently RE-CHECKS every logged `captain_decision` entry's
-    applied action against its own event's declared engine-speed cap -- never trusts the
+    applied action against its own event's declared speed cap -- never trusts the
     recorded `shield_substituted` flag at face value (Sec 10.3's own "recompute ground
     truth independently" pattern). Returns (passed, score, violation_descriptions);
     passed=False means Hard Gate 1 applies (composite = 0), mirroring
@@ -45,7 +59,7 @@ def safety_axis_captain(event_log: list[dict[str, Any]],
         if entry["field_path"] != "captain_decision":
             continue
         event = events_by_id.get(entry["cause"])
-        cap = event.params.get("capped_speed_kn") if event is not None else None
+        cap = _declared_cap_kn(event) if event is not None else None
         if cap is None:
             continue
         applied = entry["new"]

@@ -33,8 +33,9 @@ if str(REPO_ROOT) not in sys.path:
 from app.mission_route_planner import distance_to_refuge_nm, minimum_resource_route
 from app.mission_sim import MissionSim, position_along_route_nm
 from pipeline.captain_agent_spec import (
-    PROCEDURE_LIBRARY, EngineFailureContext, candidates_engine_failure, check_safety_margins,
-    oracle_best, resolve_captain_decision, rollout_engine_failure,
+    PROCEDURE_LIBRARY, EngineFailureContext, FogContext, WhaleZoneContext, candidates_engine_failure,
+    candidates_fog, candidates_whale_zone, check_safety_margins, oracle_best, resolve_captain_decision,
+    rollout_engine_failure, rollout_fog, rollout_whale_zone,
 )
 from pipeline.captain_eval import (
     CaptainMissionEvaluation, MissionOutcomeFacts, ResourceEfficiencyFacts, evaluate_captain_mission,
@@ -88,6 +89,7 @@ class CaptainSkeleton:
     draft_m: float
     pending_events: list[BrownEnvelopeEvent] = field(default_factory=list)
     fired_event_ids: set[str] = field(default_factory=set)
+    _active_speed_caps: dict[str, float] = field(default_factory=dict)  # regime key -> capped speed_kn
 
     @classmethod
     def from_scenario_file(cls, path: Path) -> "CaptainSkeleton":
@@ -110,6 +112,34 @@ class CaptainSkeleton:
     def _pending_untriggered(self) -> list[BrownEnvelopeEvent]:
         return [e for e in self.pending_events if e.event_id not in self.fired_event_ids]
 
+    def _apply_speed_cap(self, key: str, speed_kn: float) -> None:
+        """Sec 13.A.4: multiple regimes (engine failure, fog, whale zone) can be active at
+        once -- the effective speed is always the MOST restrictive cap, never whichever
+        fired last."""
+        self._active_speed_caps[key] = speed_kn
+        self._recompute_effective_speed()
+
+    def _clear_speed_cap(self, key: str) -> None:
+        self._active_speed_caps.pop(key, None)
+        self._recompute_effective_speed()
+
+    def _recompute_effective_speed(self) -> None:
+        caps = [self.order.speed_of_advance_kn, *self._active_speed_caps.values()]
+        self.sim.state.current_speed_kn = min(caps)
+
+    def _schedule_regime_clear(self, event: BrownEnvelopeEvent, affected_distance_nm: float) -> None:
+        """A minimal 'duration' mechanic for a temporary regime (fog/whale zone, Phase 6) --
+        enqueues a synthetic companion event that reverts this event's own speed cap once
+        its own scripted window has elapsed. NOT yet the general live position/time monitor
+        Sec 13.B.7 will eventually provide (Phase 8) -- the zone/window extent here is a
+        distance-along-route approximation, not live lat/lon-vs-polygon containment."""
+        clear_at_nm = self.sim.state.distance_travelled_nm + affected_distance_nm
+        self.pending_events.append(BrownEnvelopeEvent(
+            event_id=f"{event.event_id}_clear", type=f"{event.type}_clear", severity=event.severity,
+            trigger={"type": "distance_along_route_nm", "value": clear_at_nm},
+            params={"source_event_id": event.event_id},
+        ))
+
     def _check_triggers(self) -> BrownEnvelopeEvent | None:
         """Checks every still-pending event's (fixed-time) trigger condition against the
         current mission-sim clock/position; fires and returns the first one that is due,
@@ -130,11 +160,18 @@ class CaptainSkeleton:
 
     def _fire_event(self, event: BrownEnvelopeEvent) -> None:
         self.fired_event_ids.add(event.event_id)
+        if event.type.endswith("_clear"):
+            self._handle_regime_clear(event)
+            return
         self.state.active_hazards.append({"event_id": event.event_id, "type": event.type,
                                           "severity": event.severity})
         self._log_delta("active_hazards", old=None, new=event.event_id, cause=event.event_id)
         if event.type == "engine_failure":
             self._handle_engine_failure(event)
+        elif event.type == "fog":
+            self._handle_fog(event)
+        elif event.type == "whale_zone":
+            self._handle_whale_zone(event)
         else:
             # Metadata-only events (Sec 14's stated scope): record the procedure-library
             # lookup so it's visible in the log, but apply no decision layer yet.
@@ -142,6 +179,18 @@ class CaptainSkeleton:
             self._log_delta("event_log", old=None,
                             new=f"{event.type} fired (shield: {entry.shield_description})",
                             cause=event.event_id)
+
+    def _handle_regime_clear(self, event: BrownEnvelopeEvent) -> None:
+        """Reverts a temporary speed-cap regime (fog/whale zone) once its own scripted
+        window has elapsed (Phase 6's minimal 'duration' mechanic, see
+        `_schedule_regime_clear()`)."""
+        source_event_id = event.params["source_event_id"]
+        self._clear_speed_cap(source_event_id)
+        for hazard in self.state.active_hazards:
+            if hazard["event_id"] == source_event_id:
+                hazard["cleared_at_s"] = self.sim.state.elapsed_s
+        self._log_delta("active_hazards", old=source_event_id, new=f"{source_event_id}_cleared",
+                        cause=event.event_id)
 
     def _handle_engine_failure(self, event: BrownEnvelopeEvent) -> None:
         """The ONE fully-wired decision layer (Sec 13.A.4/13.A.8): builds the
@@ -182,7 +231,56 @@ class CaptainSkeleton:
         fallback = CaptainAction(tool="continue_at_capped_speed", params={"speed_kn": capped_speed_kn})
         applied, substituted = resolve_captain_decision(proposed, violations, fallback)
 
-        self.sim.state.current_speed_kn = float(applied.params.get("speed_kn", capped_speed_kn))
+        self._apply_speed_cap("engine_failure", float(applied.params.get("speed_kn", capped_speed_kn)))
+        self._log_delta("captain_decision", old=None,
+                        new={"tool": applied.tool, "params": applied.params, "shield_substituted": substituted},
+                        cause=event.event_id)
+
+    def _handle_fog(self, event: BrownEnvelopeEvent) -> None:
+        """Sec 13.A.4's degenerate fog decision layer: Rule 19 mandates the safe speed
+        directly -- one candidate, still run through cost()/oracle_best() so zero regret
+        is demonstrated, not hardcoded."""
+        safe_speed_kn = float(event.params["safe_speed_kn"])
+        affected_distance_nm = float(event.params["affected_distance_nm"])
+        ctx = FogContext(safe_speed_kn=safe_speed_kn, original_soa_kn=self.order.speed_of_advance_kn,
+                        affected_distance_nm=affected_distance_nm,
+                        fuel_rate_tonnes_per_h=self.sim.fuel_model.fuel_rate_tonnes_per_h)
+        candidates = candidates_fog(ctx)
+        proposed, _ = oracle_best(candidates, lambda a: rollout_fog(a, ctx))
+
+        violations = check_safety_margins(proposed, engine_max_speed_kn=safe_speed_kn)
+        fallback = CaptainAction(tool="reduce_to_safe_speed", params={"speed_kn": safe_speed_kn})
+        applied, substituted = resolve_captain_decision(proposed, violations, fallback)
+
+        self._apply_speed_cap(event.event_id, float(applied.params["speed_kn"]))
+        self._log_delta("captain_decision", old=None,
+                        new={"tool": applied.tool, "params": applied.params, "shield_substituted": substituted},
+                        cause=event.event_id)
+        self._schedule_regime_clear(event, affected_distance_nm)
+
+    def _handle_whale_zone(self, event: BrownEnvelopeEvent) -> None:
+        """Sec 13.A.4's degenerate whale-zone decision layer: a charted/posted zone speed
+        limit mandates the speed directly -- one candidate. The zone's own extent is
+        approximated as a distance-along-route window (Sec 13.A.2's 'position inside the
+        polygon' condition becomes a live monitor in Phase 8, Sec 13.B.7 -- this skeleton
+        doesn't yet re-check live lat/lon against the zone polygon)."""
+        speed_limit_kn = float(event.params["speed_limit_kn"])
+        affected_distance_nm = float(event.params["affected_distance_nm"])
+        ctx = WhaleZoneContext(speed_limit_kn=speed_limit_kn, original_soa_kn=self.order.speed_of_advance_kn,
+                              zone_transit_distance_nm=affected_distance_nm,
+                              fuel_rate_tonnes_per_h=self.sim.fuel_model.fuel_rate_tonnes_per_h)
+        candidates = candidates_whale_zone(ctx)
+        proposed, _ = oracle_best(candidates, lambda a: rollout_whale_zone(a, ctx))
+
+        violations = check_safety_margins(proposed, engine_max_speed_kn=speed_limit_kn)
+        fallback = CaptainAction(tool="reduce_to_zone_speed_limit", params={"speed_kn": speed_limit_kn})
+        applied, substituted = resolve_captain_decision(proposed, violations, fallback)
+
+        self._apply_speed_cap(event.event_id, float(applied.params["speed_kn"]))
+        self._log_delta("captain_decision", old=None,
+                        new={"tool": applied.tool, "params": applied.params, "shield_substituted": substituted},
+                        cause=event.event_id)
+        self._schedule_regime_clear(event, affected_distance_nm)
         self._log_delta("captain_decision", old=None,
                         new={"tool": applied.tool, "params": applied.params, "shield_substituted": substituted},
                         cause=event.event_id)

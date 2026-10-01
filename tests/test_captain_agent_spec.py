@@ -1,13 +1,15 @@
-"""Captain walking-skeleton Phase 3/4 tests: procedure library, shield, cost()/regret
-decision layer, and the Sec 13.B.6 output schema + instruction-precedence mechanism. Pure
-pipeline/ module -- no app/ dependency, no GPU/API key needed."""
+"""Captain walking-skeleton Phase 3/4/6 tests: procedure library, shield, cost()/regret
+decision layer, the Sec 13.B.6 output schema + instruction-precedence mechanism, and the
+fog/whale_zone decision layers. Pure pipeline/ module -- no app/ dependency, no GPU/API
+key needed."""
 import pytest
 
 from pipeline.captain_agent_spec import (
     HOLD_ACTION, PROCEDURE_LIBRARY, ActiveInstruction, CostDimensions,
-    EngineFailureContext, InstructionStack, MarginViolation, candidates_engine_failure,
-    check_safety_margins, cost, oracle_best, parse_captain_response, regret,
-    resolve_captain_decision, rollout_engine_failure, validate_captain_response_json,
+    EngineFailureContext, FogContext, InstructionStack, MarginViolation, WhaleZoneContext,
+    candidates_engine_failure, candidates_fog, candidates_whale_zone, check_safety_margins,
+    cost, oracle_best, parse_captain_response, regret, resolve_captain_decision,
+    rollout_engine_failure, rollout_fog, rollout_whale_zone, validate_captain_response_json,
 )
 from pipeline.captain_types import CaptainAction
 
@@ -355,3 +357,69 @@ def test_instruction_stack_resolve_if_due_clears_an_elapsed_minutes_instruction(
 def test_instruction_stack_resolve_if_due_is_false_for_an_unoccupied_scope():
     stack = InstructionStack()
     assert not stack.resolve_if_due("route", now_s=1000.0)
+
+
+# --- Fog / whale-zone decision layers (Phase 6) --------------------------------------------
+
+
+def test_candidates_fog_has_exactly_one_candidate():
+    ctx = FogContext(safe_speed_kn=6.0, original_soa_kn=12.0, affected_distance_nm=25.0,
+                     fuel_rate_tonnes_per_h=_fuel_rate_fn())
+    candidates = candidates_fog(ctx)
+    assert len(candidates) == 1
+    assert candidates[0] == CaptainAction(tool="reduce_to_safe_speed", params={"speed_kn": 6.0})
+
+
+def test_rollout_fog_matches_hand_computed_arithmetic():
+    fuel_fn = _fuel_rate_fn()
+    ctx = FogContext(safe_speed_kn=6.0, original_soa_kn=12.0, affected_distance_nm=25.0,
+                     fuel_rate_tonnes_per_h=fuel_fn)
+    result = rollout_fog(CaptainAction(tool="reduce_to_safe_speed", params={"speed_kn": 6.0}), ctx)
+    expected_time_h = 25.0 / 6.0
+    reference_time_h = 25.0 / 12.0
+    assert result.notes["time_h"] == pytest.approx(expected_time_h)
+    expected_fuel_t = fuel_fn(6.0) * expected_time_h
+    reference_fuel_t = fuel_fn(12.0) * reference_time_h
+    assert result.dims.commercial == pytest.approx(
+        max(0.0, expected_fuel_t - reference_fuel_t) + max(0.0, expected_time_h - reference_time_h))
+
+
+def test_rollout_fog_raises_for_an_unknown_action():
+    ctx = FogContext(safe_speed_kn=6.0, original_soa_kn=12.0, affected_distance_nm=25.0,
+                     fuel_rate_tonnes_per_h=_fuel_rate_fn())
+    with pytest.raises(ValueError):
+        rollout_fog(CaptainAction(tool="hold", params={}), ctx)
+
+
+def test_oracle_best_for_fog_has_zero_regret_by_construction():
+    fuel_fn = _fuel_rate_fn()
+    ctx = FogContext(safe_speed_kn=6.0, original_soa_kn=12.0, affected_distance_nm=25.0,
+                     fuel_rate_tonnes_per_h=fuel_fn)
+    candidates = candidates_fog(ctx)
+    rollout_fn = lambda a: rollout_fog(a, ctx)  # noqa: E731
+    best, _ = oracle_best(candidates, rollout_fn)
+    assert regret(best, candidates, rollout_fn) == pytest.approx(0.0)
+
+
+def test_candidates_whale_zone_has_exactly_one_candidate():
+    ctx = WhaleZoneContext(speed_limit_kn=10.0, original_soa_kn=12.0, zone_transit_distance_nm=20.0,
+                          fuel_rate_tonnes_per_h=_fuel_rate_fn())
+    candidates = candidates_whale_zone(ctx)
+    assert len(candidates) == 1
+    assert candidates[0] == CaptainAction(tool="reduce_to_zone_speed_limit", params={"speed_kn": 10.0})
+
+
+def test_rollout_whale_zone_matches_hand_computed_arithmetic():
+    fuel_fn = _fuel_rate_fn()
+    ctx = WhaleZoneContext(speed_limit_kn=10.0, original_soa_kn=12.0, zone_transit_distance_nm=20.0,
+                          fuel_rate_tonnes_per_h=fuel_fn)
+    result = rollout_whale_zone(CaptainAction(tool="reduce_to_zone_speed_limit", params={"speed_kn": 10.0}), ctx)
+    expected_time_h = 20.0 / 10.0
+    assert result.notes["time_h"] == pytest.approx(expected_time_h)
+
+
+def test_rollout_whale_zone_raises_for_an_unknown_action():
+    ctx = WhaleZoneContext(speed_limit_kn=10.0, original_soa_kn=12.0, zone_transit_distance_nm=20.0,
+                          fuel_rate_tonnes_per_h=_fuel_rate_fn())
+    with pytest.raises(ValueError):
+        rollout_whale_zone(CaptainAction(tool="hold", params={}), ctx)
