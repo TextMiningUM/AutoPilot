@@ -24,12 +24,16 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class NomotoParams:
     """Sawada et al. (2021)'s own Nomoto + rudder-servo constants (defaults), plus one
-    added autopilot gain (see module docstring)."""
+    added autopilot gain (see module docstring) and two Captain-layer speed fields (see
+    SHIP_PROFILES' own comment for which of these are cited-paper values vs. flagged
+    approximations -- design_captain_missions.md Sec 13.A.3/Sec 14.1 Tier 0.5)."""
     K_per_s: float = 0.05
     T_s: float = 50.0
     T_E_s: float = 2.5
     rudder_limit_deg: float = 10.0
     autopilot_kp: float = 1.0  # commanded_rudder_deg = clip(kp * heading_error_deg, +/-limit)
+    nominal_speed_kn: float = 12.0
+    max_speed_kn: float = 14.0
 
 
 @dataclass(frozen=True)
@@ -137,13 +141,37 @@ def manoeuvre_time_s(turn_deg: float, params: NomotoParams | None = None,
 # xie2023_small is deliberately EXCLUDED from TRAINING_PROFILE_WEIGHTS (weight 0) and
 # reserved for held-out generalization EVAL only -- see sample_ship_profile()'s
 # docstring for why.
+#
+# nominal_speed_kn/max_speed_kn (added 2026-10-01 for the Captain walking skeleton,
+# design_captain_missions.md Sec 13.A.3/Sec 14.1 Tier 0.5): sawada2021's 12kt design speed
+# IS a confirmed, cited figure (already verified/used in that design doc's own Sec 8.2
+# worked-example correction). xie2023_small/yukun2023_large's own papers do not state a
+# design/cruise speed (checked directly, 2026-10-01, no reliable source found) -- their
+# nominal_speed_kn/max_speed_kn below are FLAGGED APPROXIMATIONS (same honesty convention
+# as this file's own T_E_s approximations above), not cited figures. max_speed_kn is a
+# modest operational margin above nominal_speed_kn in all three cases -- none of the three
+# papers states a separate top speed either.
 SHIP_PROFILES: dict[str, NomotoParams] = {
-    "sawada2021": NomotoParams(K_per_s=0.05, T_s=50.0, T_E_s=2.5, rudder_limit_deg=10.0),
-    "xie2023_small": NomotoParams(K_per_s=0.085, T_s=4.2, T_E_s=1.5, rudder_limit_deg=15.0),
-    "yukun2023_large": NomotoParams(K_per_s=0.2257, T_s=86.815, T_E_s=2.5, rudder_limit_deg=10.0),
+    "sawada2021": NomotoParams(K_per_s=0.05, T_s=50.0, T_E_s=2.5, rudder_limit_deg=10.0,
+                                nominal_speed_kn=12.0, max_speed_kn=14.0),
+    "xie2023_small": NomotoParams(K_per_s=0.085, T_s=4.2, T_E_s=1.5, rudder_limit_deg=15.0,
+                                   nominal_speed_kn=14.0, max_speed_kn=16.0),
+    "yukun2023_large": NomotoParams(K_per_s=0.2257, T_s=86.815, T_E_s=2.5, rudder_limit_deg=10.0,
+                                     nominal_speed_kn=12.0, max_speed_kn=14.0),
 }
 # Weight 0 = never sampled for TRAINING rows (xie2023_small held out for eval-only use).
 TRAINING_PROFILE_WEIGHTS: dict[str, float] = {
     "sawada2021": 0.7, "yukun2023_large": 0.3, "xie2023_small": 0.0,
 }
 HELD_OUT_EVAL_PROFILE = "xie2023_small"
+
+
+def validate_soa_against_profile(soa_kn: float, params: NomotoParams) -> None:
+    """Raises ValueError if a Mission Order's speed_of_advance_kn exceeds the sampled ship
+    profile's own max_speed_kn -- the scenario generator's generation-time check from
+    design_captain_missions.md Sec 13.A.3 (reject/resample rather than silently sail an
+    inconsistent mission)."""
+    if soa_kn > params.max_speed_kn:
+        raise ValueError(
+            f"speed_of_advance_kn={soa_kn} exceeds this ship profile's max_speed_kn={params.max_speed_kn}"
+        )

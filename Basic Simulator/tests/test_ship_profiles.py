@@ -11,7 +11,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # Auto Pilot/
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from pipeline.nomoto import HELD_OUT_EVAL_PROFILE, SHIP_PROFILES, TRAINING_PROFILE_WEIGHTS
+import pytest
+
+from pipeline.nomoto import (
+    HELD_OUT_EVAL_PROFILE, SHIP_PROFILES, TRAINING_PROFILE_WEIGHTS, validate_soa_against_profile,
+)
 from pipeline.oow_agent_spec import sample_row_limits, sample_row_limits_nomoto, sample_ship_profile
 
 
@@ -55,3 +59,22 @@ def test_sample_row_limits_nomoto_varies_manoeuvre_time_across_profiles():
     t_sawada = manoeuvre_time_s(30.0, SHIP_PROFILES["sawada2021"])
     t_yukun = manoeuvre_time_s(30.0, SHIP_PROFILES["yukun2023_large"])
     assert t_sawada != t_yukun
+
+
+def test_every_ship_profile_has_nominal_speed_at_or_below_max_speed():
+    """Captain walking-skeleton Phase 0 (design_captain_missions.md Sec 13.A.3): a design/
+    cruise speed above the engine's own top speed would be an inconsistent profile."""
+    for name, params in SHIP_PROFILES.items():
+        assert params.nominal_speed_kn <= params.max_speed_kn, name
+
+
+def test_validate_soa_against_profile_accepts_at_or_below_max():
+    profile = SHIP_PROFILES["sawada2021"]
+    validate_soa_against_profile(profile.max_speed_kn, profile)  # must not raise
+    validate_soa_against_profile(profile.nominal_speed_kn, profile)  # must not raise
+
+
+def test_validate_soa_against_profile_rejects_above_max():
+    profile = SHIP_PROFILES["sawada2021"]
+    with pytest.raises(ValueError):
+        validate_soa_against_profile(profile.max_speed_kn + 0.1, profile)
