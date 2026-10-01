@@ -1,6 +1,6 @@
 """Captain walking-skeleton Phase 0: schema-shape tests for pipeline/captain_types.py --
 construct each new dataclass with a valid example, confirm MissionState derives correctly
-from a MissionOrder, and confirm the stub region file (Data/Captain/Regions/stub_region.json)
+from a MissionOrder, and confirm the stub region file (Data/Captain/Regions/stub_corridor_v1.json)
 loads and has the shape later phases will depend on. No GPU/API key needed."""
 from pathlib import Path
 
@@ -9,7 +9,7 @@ from pipeline.captain_types import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-STUB_REGION_PATH = REPO_ROOT / "Data" / "Captain" / "Regions" / "stub_region.json"
+STUB_REGION_PATH = REPO_ROOT / "Data" / "Captain" / "Regions" / "stub_corridor_v1.json"
 
 
 def _example_mission_order() -> MissionOrder:
@@ -87,7 +87,9 @@ def test_stub_region_file_loads_and_has_expected_shape():
     region = load_region_json(STUB_REGION_PATH)
     assert region["region_id"] == "stub_corridor_v1"
     assert region["exclusion_zones"] == []
-    assert len(region["ports"]) == 1
-    port = region["ports"][0]
-    assert port["min_approach_depth_m"] > 0
-    assert "repair" in port["services"]
+    assert len(region["ports"]) == 2  # Phase 0's port_stub_refuge + Phase 4's port_skeleton_refuge
+    port_ids = {p["id"] for p in region["ports"]}
+    assert port_ids == {"port_stub_refuge", "port_skeleton_refuge"}
+    for port in region["ports"]:
+        assert port["min_approach_depth_m"] > 0
+        assert "repair" in port["services"]

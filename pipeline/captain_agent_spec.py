@@ -1,5 +1,6 @@
-"""Captain walking-skeleton Phase 3: procedure library, shield, and cost()/regret decision
-layer (design_captain_missions.md Sec 13.A.4/13.A.6/13.A.8).
+"""Captain walking-skeleton Phase 3/4: procedure library, shield, cost()/regret decision
+layer, and the Sec 13.B.6 output schema + instruction-precedence mechanism
+(design_captain_missions.md Sec 13.A.4/13.A.6/13.A.8/13.B.6).
 
 Pure Python, no GPU/API key, safe to run locally. Mirrors `pipeline/oow_agent_spec.py`'s
 role for OOW -- the Captain's own classify/validate/decide logic -- but lives in its own
@@ -16,7 +17,7 @@ when it is actually needed, following this file's existing shape.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Any, Callable
 
 from pipeline.captain_types import CaptainAction
 
@@ -282,3 +283,103 @@ def rollout_engine_failure(action: CaptainAction, ctx: EngineFailureContext) -> 
         commercial=fuel_excess_t + delay_h,
     )
     return RolloutResult(dims=dims, notes={"time_h": time_h, "fuel_t": fuel_t, "delay_h": delay_h})
+
+
+# --- Output schema + precedence (Sec 13.B.6, Phase 4) ------------------------------------
+
+HOLD_ACTION = CaptainAction(tool="hold", params={})
+
+
+@dataclass(frozen=True)
+class CaptainResponse:
+    """Sec 13.B.6's full output schema -- `action` carries the machine-checkable
+    tool/params, `plan`/`reasoning` are the free-text planning fields a prompt-driven
+    Captain would also produce. The walking skeleton's deterministic baseline (Sec 14)
+    fills these with simple literal values, never hand-written decision logic (Sec 13.B.5's
+    facts-only rule applies to the RENDERER, not to what this schema can hold)."""
+    action: CaptainAction
+    plan: dict[str, Any]  # {"updated_goals": [...], "resource_note": <str>}
+    reasoning: str
+
+
+def validate_captain_response_json(obj: dict) -> list[str]:
+    """Returns a list of validation-error strings (empty == valid) for a candidate Captain
+    response dict -- mirrors `oow_agent_spec.validate_action_json()`'s pattern, per Sec
+    13.B.6's own "mirrors OOW's validate_action_json() pattern" decision."""
+    errors: list[str] = []
+    if not isinstance(obj, dict):
+        return [f"expected a dict, got {type(obj).__name__}"]
+    for key in ("tool", "params", "plan", "reasoning"):
+        if key not in obj:
+            errors.append(f"missing required key {key!r}")
+    if not isinstance(obj.get("tool"), str) or not obj.get("tool"):
+        errors.append(f"'tool' must be a non-empty string, got {obj.get('tool')!r}")
+    if not isinstance(obj.get("params"), dict):
+        errors.append(f"'params' must be a dict, got {obj.get('params')!r}")
+    plan = obj.get("plan")
+    if not isinstance(plan, dict) or "updated_goals" not in plan or "resource_note" not in plan:
+        errors.append("'plan' must be a dict with 'updated_goals' and 'resource_note' keys")
+    elif not isinstance(plan.get("updated_goals"), list):
+        errors.append(f"'plan.updated_goals' must be a list, got {plan.get('updated_goals')!r}")
+    reasoning = obj.get("reasoning")
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        errors.append("'reasoning' must be a non-empty string")
+    return errors
+
+
+def parse_captain_response(obj: dict) -> tuple[CaptainResponse, bool]:
+    """Parses a candidate dict into a CaptainResponse; on ANY schema violation, falls back
+    to a safe no-op (`hold`) response and flags `was_parse_error=True` -- Sec 13.B.6: "never
+    silently apply a malformed instruction". Returns `(response, was_parse_error)`."""
+    errors = validate_captain_response_json(obj)
+    if errors:
+        fallback = CaptainResponse(action=HOLD_ACTION, plan={"updated_goals": [], "resource_note": ""},
+                                   reasoning=f"parse error, defaulted to hold: {'; '.join(errors)}")
+        return fallback, True
+    return CaptainResponse(
+        action=CaptainAction(tool=obj["tool"], params=obj["params"]),
+        plan=obj["plan"], reasoning=obj["reasoning"],
+    ), False
+
+
+@dataclass
+class ActiveInstruction:
+    """One scope's currently-active Captain instruction (Sec 13.B.6) -- `resolution` is a
+    machine-checkable predicate dict, e.g. `{"type": "elapsed_minutes", "value": 120}`,
+    never bare free text like "until clear of the TSS"."""
+    scope: str  # "route" | "speed" | "regime"
+    action: CaptainAction
+    resolution: dict[str, Any]
+    issued_at_s: float
+
+
+class InstructionStack:
+    """Sec 13.B.6's "at most one active instruction per scope, most recent instruction
+    supersedes any earlier unresolved one" rule -- a dict keyed by scope, never a merge."""
+
+    def __init__(self) -> None:
+        self._active: dict[str, ActiveInstruction] = {}
+
+    def issue(self, instruction: ActiveInstruction) -> None:
+        """The newest instruction for a scope always replaces any earlier unresolved one."""
+        self._active[instruction.scope] = instruction
+
+    def get(self, scope: str) -> ActiveInstruction | None:
+        return self._active.get(scope)
+
+    def resolve_if_due(self, scope: str, now_s: float) -> bool:
+        """Evaluates the scope's active instruction's own resolution predicate against the
+        current mission-sim time; clears it and returns True if resolved, False otherwise
+        (including when nothing is active for this scope). Only `elapsed_minutes` is
+        implemented for the walking skeleton (Sec 15.3) -- an `exit_polygon`-style
+        predicate needs live zone-occupancy tracking, not yet needed by any scenario this
+        skeleton actually runs (Sec 13.C.13's engine-failure scenario has no exclusion
+        zones); add it alongside the first scenario that genuinely needs it."""
+        instr = self._active.get(scope)
+        if instr is None:
+            return False
+        pred = instr.resolution
+        if pred.get("type") == "elapsed_minutes" and (now_s - instr.issued_at_s) / 60.0 >= pred["value"]:
+            del self._active[scope]
+            return True
+        return False

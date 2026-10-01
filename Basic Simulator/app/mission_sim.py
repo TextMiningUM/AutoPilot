@@ -123,6 +123,29 @@ def route_distance_nm(waypoints: list[tuple[float, float]]) -> float:
     return sum(haversine_nm(waypoints[i], waypoints[i + 1]) for i in range(len(waypoints) - 1))
 
 
+def position_along_route_nm(waypoints: list[tuple[float, float]], distance_nm: float) -> tuple[float, float]:
+    """Linear lat/lon interpolation between whichever two waypoints bracket `distance_nm`
+    along the route -- the SAME equirectangular-approximation abstraction level already
+    accepted for the encounter-sim's local frame (Sec 13.A.1), not a true great-circle
+    interpolation. Needed because MissionSim only tracks cumulative distance travelled
+    (Sec 13.A.1), not a live lat/lon, so the route planner (which needs a real point) has
+    to derive one. Clamps to the first/last waypoint for distance_nm outside the route's
+    own [0, total] range."""
+    if distance_nm <= 0:
+        return waypoints[0]
+    cumulative_nm = 0.0
+    for i in range(len(waypoints) - 1):
+        leg_start, leg_end = waypoints[i], waypoints[i + 1]
+        leg_len_nm = haversine_nm(leg_start, leg_end)
+        if cumulative_nm + leg_len_nm >= distance_nm:
+            fraction = (distance_nm - cumulative_nm) / leg_len_nm if leg_len_nm > 0 else 0.0
+            lat = leg_start[0] + fraction * (leg_end[0] - leg_start[0])
+            lon = leg_start[1] + fraction * (leg_end[1] - leg_start[1])
+            return (lat, lon)
+        cumulative_nm += leg_len_nm
+    return waypoints[-1]
+
+
 @dataclass(frozen=True)
 class FuelModel:
     """`fuel_rate(t) = base_load + k * speed_kn(t)**3` (Sec 13.A.3), both constants

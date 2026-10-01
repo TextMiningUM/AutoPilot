@@ -53,6 +53,9 @@ class BrownEnvelopeEvent:
     trigger: dict[str, Any] = field(default_factory=dict)
     world_responder: dict[str, Any] | None = None
     evidence: list[dict[str, Any]] = field(default_factory=list)  # Sec 13.A.5
+    params: dict[str, Any] = field(default_factory=dict)  # event-specific facts the decision
+    # layer needs (e.g. engine_failure's capped_speed_kn/repair_duration_h) -- added Phase 4,
+    # per Sec 15.1's own "finalise while coding" guidance; not part of the original Sec 8.2 schema
 
 
 @dataclass(frozen=True)

@@ -11,7 +11,8 @@ if str(APP_ROOT) not in sys.path:
 
 from app.mission_sim import (  # noqa: E402
     EventScheduler, EventType, MissionSim, RestHoursLedger, calibrate_fuel_rate,
-    haversine_nm, route_distance_nm, schedule_routine_reports, watch_roster_off_hours,
+    haversine_nm, position_along_route_nm, route_distance_nm, schedule_routine_reports,
+    watch_roster_off_hours,
 )
 from app.missions import load_mission  # noqa: E402
 from app.simulation import Simulation  # noqa: E402
@@ -89,6 +90,33 @@ def test_haversine_one_degree_latitude_is_about_sixty_nm():
 def test_route_distance_sums_consecutive_legs():
     waypoints = [(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)]
     assert route_distance_nm(waypoints) == pytest.approx(2 * haversine_nm((0.0, 0.0), (1.0, 0.0)))
+
+
+def test_position_along_route_returns_start_at_zero_distance():
+    waypoints = [(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)]
+    assert position_along_route_nm(waypoints, 0.0) == waypoints[0]
+
+
+def test_position_along_route_interpolates_within_the_first_leg():
+    waypoints = [(0.0, 0.0), (2.0, 0.0)]
+    leg_len = haversine_nm(waypoints[0], waypoints[1])
+    lat, lon = position_along_route_nm(waypoints, leg_len / 2.0)
+    assert lat == pytest.approx(1.0, abs=0.01)
+    assert lon == pytest.approx(0.0, abs=1e-9)
+
+
+def test_position_along_route_interpolates_within_the_second_leg():
+    waypoints = [(0.0, 0.0), (1.0, 0.0), (3.0, 0.0)]
+    leg1_len = haversine_nm(waypoints[0], waypoints[1])
+    leg2_len = haversine_nm(waypoints[1], waypoints[2])
+    lat, lon = position_along_route_nm(waypoints, leg1_len + leg2_len / 2.0)
+    assert lat == pytest.approx(2.0, abs=0.01)
+    assert lon == pytest.approx(0.0, abs=1e-9)
+
+
+def test_position_along_route_clamps_to_the_last_waypoint_beyond_total_distance():
+    waypoints = [(0.0, 0.0), (1.0, 0.0)]
+    assert position_along_route_nm(waypoints, 10_000.0) == waypoints[-1]
 
 
 # --- Fuel calibration -----------------------------------------------------------------

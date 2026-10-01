@@ -1,11 +1,13 @@
-"""Captain walking-skeleton Phase 3 tests: procedure library, shield, and cost()/regret
-decision layer (design_captain_missions.md Sec 13.A.4/13.A.6/13.A.8). Pure pipeline/ module
--- no app/ dependency, no GPU/API key needed."""
+"""Captain walking-skeleton Phase 3/4 tests: procedure library, shield, cost()/regret
+decision layer, and the Sec 13.B.6 output schema + instruction-precedence mechanism. Pure
+pipeline/ module -- no app/ dependency, no GPU/API key needed."""
 import pytest
 
 from pipeline.captain_agent_spec import (
-    PROCEDURE_LIBRARY, CostDimensions, EngineFailureContext, MarginViolation, candidates_engine_failure,
-    check_safety_margins, cost, oracle_best, regret, resolve_captain_decision, rollout_engine_failure,
+    HOLD_ACTION, PROCEDURE_LIBRARY, ActiveInstruction, CostDimensions,
+    EngineFailureContext, InstructionStack, MarginViolation, candidates_engine_failure,
+    check_safety_margins, cost, oracle_best, parse_captain_response, regret,
+    resolve_captain_decision, rollout_engine_failure, validate_captain_response_json,
 )
 from pipeline.captain_types import CaptainAction
 
@@ -278,3 +280,78 @@ def test_regret_is_positive_for_the_clearly_worse_candidate():
     rollout_fn = lambda a: rollout_engine_failure(a, ctx)  # noqa: E731
     worse = next(c for c in candidates if c.tool == "request_place_of_refuge")
     assert regret(worse, candidates, rollout_fn) > 0.0
+
+
+# --- Output schema (Sec 13.B.6) -----------------------------------------------------------
+
+
+def test_validate_captain_response_accepts_a_well_formed_response():
+    obj = {"tool": "continue_at_capped_speed", "params": {"speed_kn": 8.0},
+          "plan": {"updated_goals": [], "resource_note": "fuel on track"}, "reasoning": "deadline is tight"}
+    assert validate_captain_response_json(obj) == []
+
+
+def test_validate_captain_response_reports_missing_keys():
+    errors = validate_captain_response_json({"tool": "hold"})
+    assert any("params" in e for e in errors)
+    assert any("plan" in e for e in errors)
+    assert any("reasoning" in e for e in errors)
+
+
+def test_validate_captain_response_rejects_a_non_dict_plan():
+    obj = {"tool": "hold", "params": {}, "plan": "not a dict", "reasoning": "x"}
+    assert any("plan" in e for e in validate_captain_response_json(obj))
+
+
+def test_validate_captain_response_rejects_empty_reasoning():
+    obj = {"tool": "hold", "params": {}, "plan": {"updated_goals": [], "resource_note": ""}, "reasoning": "   "}
+    assert any("reasoning" in e for e in validate_captain_response_json(obj))
+
+
+def test_parse_captain_response_round_trips_a_valid_response():
+    obj = {"tool": "request_place_of_refuge", "params": {"port_id": "port_stub_refuge"},
+          "plan": {"updated_goals": [], "resource_note": "diverting"}, "reasoning": "severe cap"}
+    response, was_parse_error = parse_captain_response(obj)
+    assert not was_parse_error
+    assert response.action == CaptainAction(tool="request_place_of_refuge", params={"port_id": "port_stub_refuge"})
+    assert response.reasoning == "severe cap"
+
+
+def test_parse_captain_response_falls_back_to_hold_on_a_malformed_response():
+    response, was_parse_error = parse_captain_response({"tool": "hold"})
+    assert was_parse_error
+    assert response.action == HOLD_ACTION
+
+
+# --- Instruction precedence (Sec 13.B.6) ---------------------------------------------------
+
+
+def test_instruction_stack_returns_none_for_an_empty_scope():
+    stack = InstructionStack()
+    assert stack.get("speed") is None
+
+
+def test_instruction_stack_the_newest_instruction_supersedes_the_earlier_one():
+    stack = InstructionStack()
+    first = ActiveInstruction(scope="speed", action=CaptainAction(tool="slow_down", params={"speed_kn": 8.0}),
+                              resolution={"type": "elapsed_minutes", "value": 60}, issued_at_s=0.0)
+    second = ActiveInstruction(scope="speed", action=CaptainAction(tool="slow_down", params={"speed_kn": 6.0}),
+                               resolution={"type": "elapsed_minutes", "value": 30}, issued_at_s=10.0)
+    stack.issue(first)
+    stack.issue(second)
+    assert stack.get("speed") is second
+
+
+def test_instruction_stack_resolve_if_due_clears_an_elapsed_minutes_instruction():
+    stack = InstructionStack()
+    instr = ActiveInstruction(scope="speed", action=CaptainAction(tool="slow_down", params={}),
+                              resolution={"type": "elapsed_minutes", "value": 30}, issued_at_s=0.0)
+    stack.issue(instr)
+    assert not stack.resolve_if_due("speed", now_s=1000.0)  # 16.6 min < 30 min
+    assert stack.resolve_if_due("speed", now_s=1800.0)  # exactly 30 min
+    assert stack.get("speed") is None
+
+
+def test_instruction_stack_resolve_if_due_is_false_for_an_unoccupied_scope():
+    stack = InstructionStack()
+    assert not stack.resolve_if_due("route", now_s=1000.0)
