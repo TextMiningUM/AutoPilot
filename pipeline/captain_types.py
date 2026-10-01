@@ -114,3 +114,22 @@ def load_region_json(path: Path) -> dict[str, Any]:
     here since callers want different subsets (route planner vs. port lookup)."""
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+def zones_from_region(region: dict[str, Any]) -> list[ExclusionZone]:
+    """Parses a loaded region dict's `exclusion_zones` list into typed instances (Sec 7)."""
+    return [
+        ExclusionZone(id=z["id"], type=z["type"], polygon=[tuple(p) for p in z["polygon"]],
+                      speed_limit_kn=z.get("speed_limit_kn"), min_depth_m=z.get("min_depth_m"))
+        for z in region.get("exclusion_zones", [])
+    ]
+
+
+def ports_from_region(region: dict[str, Any]) -> list[Port]:
+    """Parses a loaded region dict's `ports` list into typed instances (Sec 7)."""
+    return [
+        Port(id=p["id"], name=p["name"], position=tuple(p["position"]), services=list(p["services"]),
+             min_approach_depth_m=p["min_approach_depth_m"], region_id=p["region_id"])
+        for p in region.get("ports", [])
+    ]
+
