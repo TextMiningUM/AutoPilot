@@ -30,11 +30,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # Auto Pilot/
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from app.mission_route_planner import distance_to_refuge_nm
+from app.mission_route_planner import distance_to_refuge_nm, minimum_resource_route
 from app.mission_sim import MissionSim, position_along_route_nm
 from pipeline.captain_agent_spec import (
     PROCEDURE_LIBRARY, EngineFailureContext, candidates_engine_failure, check_safety_margins,
     oracle_best, resolve_captain_decision, rollout_engine_failure,
+)
+from pipeline.captain_eval import (
+    CaptainMissionEvaluation, MissionOutcomeFacts, ResourceEfficiencyFacts, evaluate_captain_mission,
 )
 from pipeline.captain_types import (
     BrownEnvelopeEvent, CaptainAction, EngineStatus, ExclusionZone, MissionOrder, MissionState,
@@ -255,3 +258,33 @@ class CaptainSkeleton:
             f"Active hazards: {', '.join(h['type'] for h in self.state.active_hazards) or 'none'}",
         ]
         return "\n".join(lines)
+
+    # --- minimal evaluation (Sec 10, Phase 5: Safety/Mission-outcome/Resource-efficiency) -
+
+    def evaluate(self) -> CaptainMissionEvaluation:
+        """Sec 10's minimal composite evaluation (Phase 5 scope: only the Safety,
+        Mission-outcome, and Resource-efficiency axes). Computes the Sec 13.B.8 oracle
+        baseline (the unconstrained minimum-resource route, ignoring the engine failure
+        entirely) and the actual recorded fuel/time usage here (needs the route planner),
+        then delegates all SCORING to the pure `pipeline.captain_eval` module."""
+        events_by_id = {e.event_id: e for e in self.order.events}
+        oracle = minimum_resource_route(self.order.waypoints, self.zones)
+        reference_time_h = oracle.distance_nm / self.order.speed_of_advance_kn
+        reference_fuel_t = (self.sim.fuel_model.fuel_rate_tonnes_per_h(self.order.speed_of_advance_kn)
+                            * reference_time_h)
+
+        fuel_at_departure = float(self.order.admin_logistics.get("resources", {}).get("fuel_tonnes", 0.0))
+        actual_fuel_t = fuel_at_departure - self.sim.state.fuel_tonnes
+        actual_time_h = self.sim.state.elapsed_s / 3600.0
+
+        outcome_facts = MissionOutcomeFacts(
+            reached_destination=self.sim.reached_destination(),
+            fuel_tonnes_remaining=self.sim.state.fuel_tonnes,
+            elapsed_h=actual_time_h,
+            eta_deadline_h=self.order.admin_logistics.get("eta_deadline_h"),
+        )
+        resource_facts = ResourceEfficiencyFacts(
+            reference_fuel_t=reference_fuel_t, reference_time_h=reference_time_h,
+            actual_fuel_t=actual_fuel_t, actual_time_h=actual_time_h,
+        )
+        return evaluate_captain_mission(self.state.event_log, events_by_id, outcome_facts, resource_facts)

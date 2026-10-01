@@ -152,3 +152,40 @@ def test_show_mpr_reflects_the_capped_speed_after_the_engine_failure():
     report = skeleton.show_mpr()
     assert "engine_failure" in report
     assert "8.0 kn" in report
+
+
+# --- Minimal evaluation (Sec 10, Phase 5) -----------------------------------------------
+
+def _run_to_completion(skeleton: CaptainSkeleton) -> None:
+    worst_case_duration_s = (skeleton.sim.total_route_distance_nm / 8.0) * 3600.0
+    total_steps = int(worst_case_duration_s // skeleton.sim.dt_mission_s) + 5
+    skeleton.step_mission(total_steps)
+
+
+def test_evaluate_a_full_run_passes_with_no_safety_violation():
+    skeleton = _fresh_skeleton()
+    _run_to_completion(skeleton)
+    result = skeleton.evaluate()
+    assert result.verdict == "PASS"
+    assert result.safety_passed
+    assert result.safety_violations == []
+    assert result.mission_outcome_score == 1.0  # arrived, within deadline, fuel remaining
+
+
+def test_evaluate_resource_efficiency_reflects_the_capped_speed_detour():
+    skeleton = _fresh_skeleton()
+    _run_to_completion(skeleton)
+    result = skeleton.evaluate()
+    # The capped-speed leg costs real extra TIME vs the unconstrained 12kn oracle baseline
+    # -- time_score must be meaningfully below 1.0 even though the mission still passed.
+    assert result.resource_efficiency["time_score"] < 1.0
+    assert 0.0 < result.composite_score <= (0.25 + 0.20 + 0.07)
+
+
+def test_evaluate_before_the_mission_completes_hits_hard_gate_2():
+    skeleton = _fresh_skeleton()
+    skeleton.run_to_next_event()  # engine failure fires, but destination not yet reached
+    result = skeleton.evaluate()
+    assert not skeleton.sim.reached_destination()
+    assert result.composite_score <= 0.2
+    assert result.verdict.startswith("FAIL -- did not reach")
