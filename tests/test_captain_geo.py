@@ -5,7 +5,7 @@ import math
 
 import pytest
 
-from pipeline.captain_geo import from_local_frame, to_local_frame
+from pipeline.captain_geo import from_local_frame, initial_bearing_deg, to_local_frame
 
 
 def test_origin_maps_to_zero_zero():
@@ -59,3 +59,26 @@ def test_matches_haversine_nm_for_a_small_offset():
     local_distance_nm = local_distance_m / 1852.0
     great_circle_nm = haversine_nm(origin, target)
     assert local_distance_nm == pytest.approx(great_circle_nm, rel=0.01)
+
+
+# --- initial_bearing_deg ------------------------------------------------------------------
+
+
+def test_bearing_due_north_is_zero():
+    assert initial_bearing_deg((52.0, 4.0), (53.0, 4.0)) == pytest.approx(0.0, abs=1e-6)
+
+
+def test_bearing_due_east_is_ninety():
+    assert initial_bearing_deg((52.0, 4.0), (52.0, 5.0)) == pytest.approx(90.0, abs=0.5)
+
+
+def test_bearing_due_south_is_180():
+    assert initial_bearing_deg((52.0, 4.0), (51.0, 4.0)) == pytest.approx(180.0, abs=1e-6)
+
+
+def test_bearing_due_west_is_270():
+    assert initial_bearing_deg((52.0, 4.0), (52.0, 3.0)) == pytest.approx(270.0, abs=0.5)
+
+
+def test_bearing_is_always_in_0_360_range():
+    assert 0.0 <= initial_bearing_deg((52.0, 4.0), (51.5, 3.5)) < 360.0

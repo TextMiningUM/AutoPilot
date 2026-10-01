@@ -33,3 +33,16 @@ def from_local_frame(x: float, y: float, origin: tuple[float, float]) -> tuple[f
     lat = origin_lat + math.degrees(y / _EARTH_RADIUS_M)
     lon = origin_lon + math.degrees(x / (_EARTH_RADIUS_M * math.cos(lat_rad)))
     return lat, lon
+
+
+def initial_bearing_deg(p1: tuple[float, float], p2: tuple[float, float]) -> float:
+    """True initial great-circle bearing (degrees, 0-360) from p1 to p2 -- standard
+    navigation formula, used by Phase 9c to derive own-ship's current heading (Sec 13.A.1:
+    own-ship is assumed to track exactly along its route leg when not spliced into an
+    encounter) and to seed ambient-contact generation."""
+    lat1, lon1 = math.radians(p1[0]), math.radians(p1[1])
+    lat2, lon2 = math.radians(p2[0]), math.radians(p2[1])
+    dlon = lon2 - lon1
+    x = math.sin(dlon) * math.cos(lat2)
+    y = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+    return math.degrees(math.atan2(x, y)) % 360.0

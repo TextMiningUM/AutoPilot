@@ -26,6 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # Auto Pilot/
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from pipeline.captain_geo import initial_bearing_deg
 from pipeline.captain_types import MissionOrder
 
 _EARTH_RADIUS_NM = 3440.065  # mean Earth radius in nautical miles
@@ -142,6 +143,38 @@ def position_along_route_nm(waypoints: list[tuple[float, float]], distance_nm: f
             lat = leg_start[0] + fraction * (leg_end[0] - leg_start[0])
             lon = leg_start[1] + fraction * (leg_end[1] - leg_start[1])
             return (lat, lon)
+        cumulative_nm += leg_len_nm
+    return waypoints[-1]
+
+
+def current_leg_bearing_deg(waypoints: list[tuple[float, float]], distance_nm: float) -> float:
+    """The current route leg's own initial bearing (true, degrees) at `distance_nm` along
+    the route -- own-ship is assumed to track exactly along the route when not spliced
+    into an encounter (Sec 13.A.1), so this doubles as 'own-ship's current heading' for
+    ambient-contact generation and the encounter-sim handoff (Phase 9c)."""
+    if distance_nm <= 0:
+        return initial_bearing_deg(waypoints[0], waypoints[1])
+    cumulative_nm = 0.0
+    for i in range(len(waypoints) - 1):
+        leg_start, leg_end = waypoints[i], waypoints[i + 1]
+        leg_len_nm = haversine_nm(leg_start, leg_end)
+        if cumulative_nm + leg_len_nm >= distance_nm:
+            return initial_bearing_deg(leg_start, leg_end)
+        cumulative_nm += leg_len_nm
+    return initial_bearing_deg(waypoints[-2], waypoints[-1])
+
+
+def next_waypoint_nm(waypoints: list[tuple[float, float]], distance_nm: float) -> tuple[float, float]:
+    """The upcoming waypoint (current leg's own end point) at `distance_nm` along the
+    route -- Sec 13.C.14's "an encounter's goal is only the projected leg endpoint", used
+    as the encounter-sim's own Mission.goal (Phase 9c)."""
+    if distance_nm <= 0:
+        return waypoints[1]
+    cumulative_nm = 0.0
+    for i in range(len(waypoints) - 1):
+        leg_len_nm = haversine_nm(waypoints[i], waypoints[i + 1])
+        if cumulative_nm + leg_len_nm >= distance_nm:
+            return waypoints[i + 1]
         cumulative_nm += leg_len_nm
     return waypoints[-1]
 

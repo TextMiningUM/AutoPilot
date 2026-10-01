@@ -11,8 +11,8 @@ if str(APP_ROOT) not in sys.path:
 
 from app.mission_sim import (  # noqa: E402
     EventScheduler, EventType, MissionSim, RestHoursLedger, calibrate_fuel_rate,
-    haversine_nm, position_along_route_nm, route_distance_nm, schedule_routine_reports,
-    watch_roster_off_hours,
+    current_leg_bearing_deg, haversine_nm, next_waypoint_nm, position_along_route_nm,
+    route_distance_nm, schedule_routine_reports, watch_roster_off_hours,
 )
 from app.missions import load_mission  # noqa: E402
 from app.simulation import Simulation  # noqa: E402
@@ -117,6 +117,23 @@ def test_position_along_route_interpolates_within_the_second_leg():
 def test_position_along_route_clamps_to_the_last_waypoint_beyond_total_distance():
     waypoints = [(0.0, 0.0), (1.0, 0.0)]
     assert position_along_route_nm(waypoints, 10_000.0) == waypoints[-1]
+
+
+def test_current_leg_bearing_matches_the_leg_direction():
+    waypoints = [(52.0, 3.0), (54.0, 3.0), (56.0, 3.0)]  # due north throughout
+    assert current_leg_bearing_deg(waypoints, 10.0) == pytest.approx(0.0, abs=1e-6)
+    assert current_leg_bearing_deg(waypoints, 130.0) == pytest.approx(0.0, abs=1e-6)  # 2nd leg
+
+
+def test_next_waypoint_returns_the_current_legs_own_end_point():
+    waypoints = [(52.0, 3.0), (54.0, 3.0), (56.0, 3.0)]
+    assert next_waypoint_nm(waypoints, 10.0) == waypoints[1]
+    assert next_waypoint_nm(waypoints, 130.0) == waypoints[2]
+
+
+def test_next_waypoint_clamps_to_the_final_waypoint_beyond_total_distance():
+    waypoints = [(52.0, 3.0), (54.0, 3.0)]
+    assert next_waypoint_nm(waypoints, 10_000.0) == waypoints[-1]
 
 
 # --- Fuel calibration -----------------------------------------------------------------

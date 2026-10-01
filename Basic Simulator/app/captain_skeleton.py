@@ -25,17 +25,28 @@ alarm) are fully implemented and tested in `pipeline/captain_monitors.py` but NO
 live-wired here -- no ambient weather/position-uncertainty feed exists yet (Sec 13.A.1
 point 1's own job, deferred to the encounter-sim-splice phase).
 
-Deliberately NOT built here (explicit scope reduction, consistent with Sec 13.A.1's own "5
-concretising points" already deferred in Phase 1): NO encounter-sim splice / ambient COLREG
-traffic -- a scenario scripts none yet, so there is nothing to splice into; add it once a
-scenario actually needs it. Also NOT built: full evaluation beyond Phase 5's 3 axes (Sec
-10.3's recall/precision is now COMPUTABLE via `pipeline/captain_monitors.py`, but not yet
-built as an eval axis -- this skeleton's own synchronous baseline Captain always responds
-in the SAME instant a trigger fires, so recall/precision would be trivially 100% here
-regardless; a genuinely late/missed response needs an LLM Captain, not built yet).
+Phase 9c wires Sec 13.A.1's own encounter-sim splice: an ambient Poisson-arrival contact
+(Phase 9b, `app/captain_encounter.py`) is spliced into the EXISTING live encounter-sim
+(`app.simulation.Simulation` + `app.oracle_planner.plan()` as the deterministic OOW, Sec
+13.C.15 -- never an LLM here) for exactly as long as `encounter_resolved()` says it isn't
+clear yet; the mission-sim's own clock/fuel/rest-hours keep advancing throughout (at the
+encounter's own finer `dt`, point 3) and brown-envelope/scheduler triggers are re-checked
+at that same cadence (point 4), so a brown envelope CAN still fire mid-encounter. Phase
+9c's own deliberate scope cut: a spawned ambient contact is treated as an encounter
+starting immediately (not held in a pending pool awaiting `should_start_encounter()`) --
+see `_check_ambient()`'s own docstring.
+
+Deliberately NOT built here (explicit scope reduction): `avoid_zone` polygons projected
+into the encounter frame + `oracle_planner.py`'s hard-gate extension (Sec 13.A.1 point 5,
+Phase 9d). Also NOT built: full evaluation beyond Phase 5's 3 axes (Sec 10.3's
+recall/precision is now COMPUTABLE via `pipeline/captain_monitors.py`, but not yet built
+as an eval axis -- this skeleton's own synchronous baseline Captain always responds in the
+SAME instant a trigger fires, so recall/precision would be trivially 100% here regardless;
+a genuinely late/missed response needs an LLM Captain, not built yet).
 """
 from __future__ import annotations
 import json
+import random
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,8 +56,16 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # Auto Pilot/
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from app.captain_encounter import encounter_resolved, generate_ambient_contact, sample_ambient_arrival_times_s
 from app.mission_route_planner import distance_to_refuge_nm, minimum_resource_route
-from app.mission_sim import EventType, MissionSim, ScheduledEvent, position_along_route_nm
+from app.mission_sim import (
+    EventType, MissionSim, ScheduledEvent, current_leg_bearing_deg, next_waypoint_nm,
+    position_along_route_nm,
+)
+from app.missions import Mission, Vessel
+from app.oracle_planner import plan as oracle_plan
+from app.simulation import Simulation, VesselConstraints
+from app.units import kn_to_mps, mps_to_kn
 from pipeline.captain_agent_spec import (
     PROCEDURE_LIBRARY, CommercialInstructionContext, DistressCallContext, EngineFailureContext,
     FogContext, WhaleZoneContext, candidates_commercial_instruction, candidates_distress_call,
@@ -57,6 +76,7 @@ from pipeline.captain_agent_spec import (
 from pipeline.captain_eval import (
     CaptainMissionEvaluation, MissionOutcomeFacts, ResourceEfficiencyFacts, evaluate_captain_mission,
 )
+from pipeline.captain_geo import to_local_frame
 from pipeline.captain_monitors import (
     EVENT_MONITOR_MAP, company_instruction_received, distress_signal_received,
     engaged_within_deadline, machinery_fault_reported, urgency_deadline_s,
@@ -68,6 +88,8 @@ from pipeline.captain_types import (
 from pipeline.nomoto import SHIP_PROFILES
 
 REGIONS_DIR = REPO_ROOT / "Data" / "Captain" / "Regions"
+ENCOUNTER_DT_S = 10.0  # matches app.simulation.VesselConstraints' own usual default
+MAX_ENCOUNTER_STEPS = 600  # 1h of encounter time -- a defensive cap, not expected to bind
 
 
 def load_scenario(path: Path) -> dict[str, Any]:
@@ -113,6 +135,9 @@ class CaptainSkeleton:
     fired_event_ids: set[str] = field(default_factory=set)
     _active_speed_caps: dict[str, float] = field(default_factory=dict)  # regime key -> capped speed_kn
     _requested_soa_kn: float = 0.0  # the Captain's own current baseline speed instruction
+    _ambient_seed: int = 0
+    _ambient_arrival_times_s: list[float] = field(default_factory=list)
+    _ambient_next_index: int = 0
 
     @classmethod
     def from_scenario_file(cls, path: Path) -> "CaptainSkeleton":
@@ -122,9 +147,15 @@ class CaptainSkeleton:
         sim = MissionSim.from_mission_order(order)
         zones, ports = build_region_data(scenario)
         draft_m = float(order.admin_logistics.get("resources", {}).get("draft_m", 0.0))
+        ambient = scenario.get("ambient", {})
+        density = ambient.get("background_traffic_density")
+        seed = scenario.get("seeds", {}).get("mission_seed", 0)
+        arrival_times = (sample_ambient_arrival_times_s(density, sim.nominal_duration_s, seed)
+                        if density is not None else [])
         return cls(order=order, state=state, sim=sim, zones=zones, ports=ports,
                    draft_m=draft_m, pending_events=list(order.events),
-                   _requested_soa_kn=order.speed_of_advance_kn)
+                   _requested_soa_kn=order.speed_of_advance_kn,
+                   _ambient_seed=seed, _ambient_arrival_times_s=arrival_times)
 
     # --- internal: delta log + trigger/dispatch -----------------------------------------
 
@@ -210,6 +241,77 @@ class CaptainSkeleton:
             scheduled = self.sim.scheduler.pop_next()
             if scheduled.event_type == EventType.WORLD_RESPONDER_TIMER:
                 self._handle_world_responder(scheduled)
+
+    def _own_vessel_now(self) -> Vessel:
+        """Own-ship's current state as a fresh LOCAL-frame Vessel, centred on its own
+        current position (x=y=0.0) -- used to generate an ambient contact or seed a
+        spliced encounter. Heading is derived from the current route leg (Sec 13.A.1:
+        own-ship is assumed to track exactly along the route when not spliced into an
+        encounter)."""
+        heading = current_leg_bearing_deg(self.order.waypoints, self.sim.state.distance_travelled_nm)
+        speed_mps = kn_to_mps(self.sim.state.current_speed_kn)
+        return Vessel(name="own_ship", x=0.0, y=0.0, heading=heading, speed=speed_mps)
+
+    def _check_ambient(self) -> None:
+        """Sec 13.A.1 point 1: pops every due Poisson-scheduled ambient-contact arrival
+        and immediately splices it into an encounter -- Phase 9c's own deliberate
+        simplification: a spawned contact's geometry is already within encounter-start
+        range by construction (Sec 13.A.1's separate `should_start_encounter()` gate stays
+        available/tested for a future caller with a persistent, not-yet-in-range contact
+        pool, which this skeleton doesn't need)."""
+        while (self._ambient_next_index < len(self._ambient_arrival_times_s)
+              and self._ambient_arrival_times_s[self._ambient_next_index] <= self.sim.state.elapsed_s):
+            index = self._ambient_next_index
+            self._ambient_next_index += 1
+            own = self._own_vessel_now()
+            rnd = random.Random(f"{self._ambient_seed}::ambient_{index}")
+            contact = generate_ambient_contact(own.x, own.y, own.heading, own.speed, rnd, name=f"ambient_{index}")
+            self._run_spliced_encounter([contact])
+
+    def _run_spliced_encounter(self, contacts: list[Vessel]) -> None:
+        """Sec 13.A.1's 5 concretising points: splices the live encounter-sim in for as
+        long as `contacts` remain unresolved (point 2, `encounter_resolved()`). Mission
+        clock/fuel/rest-hours keep advancing throughout (point 3) at the encounter's own
+        finer `dt`, following the encounter's own realised speed every micro-step; brown-
+        envelope/scheduler triggers are re-checked at that same cadence (point 4), so a
+        brown envelope CAN still fire mid-encounter -- any resulting Captain speed-cap
+        change is propagated INTO the encounter afterwards (`oracle_planner.plan()` is
+        turn-only, never a speed action, so this is the only path speed changes
+        mid-encounter). OOW is ALWAYS `app/oracle_planner.py`'s deterministic `plan()`
+        (Sec 13.C.15) -- never an LLM, during Captain training-data generation/evaluation."""
+        origin = position_along_route_nm(self.order.waypoints, self.sim.state.distance_travelled_nm)
+        own = self._own_vessel_now()
+        next_wp = next_waypoint_nm(self.order.waypoints, self.sim.state.distance_travelled_nm)
+        goal_xy = to_local_frame(next_wp[0], next_wp[1], origin)
+
+        mission = Mission(id="spliced_encounter", name="spliced encounter", rule_refs=[],
+                          own_ship_role="own_ship", description="", pass_criteria=[],
+                          own_ship=own, goal=goal_xy, targets=contacts)
+        constraints = VesselConstraints(time_step_s=ENCOUNTER_DT_S, cruise_speed_mps=own.speed)
+        enc_sim = Simulation(mission, constraints)
+
+        started_at_s = self.sim.state.elapsed_s
+        for _ in range(MAX_ENCOUNTER_STEPS):
+            if encounter_resolved(enc_sim.own, enc_sim.targets, goal_xy,
+                                  constraints.min_cpa_m, constraints.max_rudder_angle_deg):
+                break
+            decision = oracle_plan(mission, enc_sim.own, enc_sim.targets, constraints)
+            enc_sim.apply_action(decision)
+            enc_sim.step()
+            self.sim.state.current_speed_kn = mps_to_kn(enc_sim.own.speed)
+            self.sim.step(dt_s=ENCOUNTER_DT_S)
+            self._check_triggers()
+            self._check_scheduler()
+            # A brown envelope may have just changed the Captain's own effective speed cap
+            # -- feed it back into the encounter's own commanded speed for the next step.
+            enc_sim.set_speed(kn_to_mps(self.sim.state.current_speed_kn))
+            if self.sim.reached_destination():
+                break
+        self._recompute_effective_speed()
+        self._log_delta("encounter", old=None, new={
+            "contacts": [c.name for c in contacts], "started_at_s": started_at_s,
+            "ended_at_s": self.sim.state.elapsed_s, "duration_s": self.sim.state.elapsed_s - started_at_s,
+        }, cause="ambient_traffic")
 
     def _handle_world_responder(self, scheduled: ScheduledEvent) -> None:
         """Applies a scripted, fixed world-responder resolution (Sec 13.A.2) -- closes out
@@ -495,24 +597,27 @@ class CaptainSkeleton:
 
     def step_mission(self, n: int = 1) -> None:
         """Advances the mission-sim by `n` steps (each `dt_mission_s` seconds), checking
-        for a due trigger/scheduled world-responder resolution after every step."""
+        for a due trigger/scheduled world-responder resolution/ambient-encounter splice
+        after every step."""
         for _ in range(n):
             if self.sim.reached_destination():
                 return
             self.sim.step()
             self._check_triggers()
             self._check_scheduler()
+            self._check_ambient()
 
     def run_to_next_event(self) -> BrownEnvelopeEvent | None:
         """Advances until the next scripted brown envelope fires or the mission ends --
         returns the fired event, or None once the destination is reached with nothing
-        left pending. Scheduled world-responder resolutions (Sec 13.A.9) are processed
-        alongside but don't interrupt the advance (Sec 15.3's own control is only ever
-        for brown envelopes)."""
+        left pending. Scheduled world-responder resolutions (Sec 13.A.9) and ambient
+        encounters (Sec 13.A.1) are processed alongside but don't interrupt the advance
+        (Sec 15.3's own control is only ever for brown envelopes)."""
         while not self.sim.reached_destination():
             self.sim.step()
             event = self._check_triggers()
             self._check_scheduler()
+            self._check_ambient()
             if event is not None:
                 return event
         return None

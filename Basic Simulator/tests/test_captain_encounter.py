@@ -1,5 +1,5 @@
-"""Captain walking-skeleton Phase 9b tests: ambient-traffic generation
-(design_captain_missions.md Sec 13.A.1 point 1). No GPU/API key needed."""
+"""Captain walking-skeleton Phase 9b/9c tests: ambient-traffic generation + encounter
+window bounds (design_captain_missions.md Sec 13.A.1 points 1-2). No GPU/API key needed."""
 import random
 import sys
 from pathlib import Path
@@ -11,8 +11,10 @@ if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
 from app.captain_encounter import (  # noqa: E402
-    AMBIENT_TRAFFIC_RATES_PER_HOUR, generate_ambient_contact, sample_ambient_arrival_times_s,
+    AMBIENT_TRAFFIC_RATES_PER_HOUR, encounter_resolved, generate_ambient_contact,
+    sample_ambient_arrival_times_s, should_start_encounter,
 )
+from app.missions import Vessel  # noqa: E402
 
 # --- sample_ambient_arrival_times_s -------------------------------------------------------
 
@@ -78,3 +80,51 @@ def test_generate_ambient_contact_matches_absolute_bearing_convention_at_zero_he
     rnd = random.Random(123)
     contact = generate_ambient_contact(0.0, 0.0, 0.0, 6.17, rnd, "amb1")
     assert isinstance(contact.x, float) and isinstance(contact.y, float)
+
+
+# --- should_start_encounter / encounter_resolved (Sec 13.A.1 point 2) ----------------------
+
+
+def test_should_start_encounter_true_for_a_close_contact():
+    own = Vessel(name="own_ship", x=0.0, y=0.0, heading=0.0, speed=6.17)
+    close = Vessel(name="amb1", x=0.0, y=5000.0, heading=180.0, speed=6.17)  # 5km ahead, closing
+    assert should_start_encounter(own, [close])
+
+
+def test_should_start_encounter_false_for_a_distant_non_closing_contact():
+    own = Vessel(name="own_ship", x=0.0, y=0.0, heading=0.0, speed=6.17)
+    # Same heading, well out of range (20km > the 6NM/11112m threshold), and FASTER than
+    # own-ship (pulling away ahead) -- genuinely diverging, not just far.
+    far = Vessel(name="amb1", x=0.0, y=20000.0, heading=0.0, speed=10.0)
+    assert not should_start_encounter(own, [far])
+
+
+def test_should_start_encounter_false_with_no_targets():
+    own = Vessel(name="own_ship", x=0.0, y=0.0, heading=0.0, speed=6.17)
+    assert not should_start_encounter(own, [])
+
+
+def test_encounter_resolved_true_when_clear_and_on_goal_course():
+    own = Vessel(name="own_ship", x=0.0, y=0.0, heading=0.0, speed=6.17, target_heading=0.0)
+    cleared = Vessel(name="amb1", x=0.0, y=-5000.0, heading=0.0, speed=6.17)  # astern, diverging
+    assert encounter_resolved(own, [cleared], goal_xy=(0.0, 100000.0),
+                              safe_distance_m=500.0, max_turn_deg=30.0)
+
+
+def test_encounter_resolved_false_while_still_closing():
+    own = Vessel(name="own_ship", x=0.0, y=0.0, heading=0.0, speed=6.17, target_heading=0.0)
+    closing = Vessel(name="amb1", x=0.0, y=5000.0, heading=180.0, speed=6.17)
+    assert not encounter_resolved(own, [closing], goal_xy=(0.0, 100000.0),
+                                  safe_distance_m=500.0, max_turn_deg=30.0)
+
+
+def test_encounter_resolved_false_when_clear_but_off_the_goal_course():
+    own = Vessel(name="own_ship", x=0.0, y=0.0, heading=90.0, speed=6.17, target_heading=90.0)
+    cleared = Vessel(name="amb1", x=0.0, y=-5000.0, heading=0.0, speed=6.17)
+    assert not encounter_resolved(own, [cleared], goal_xy=(0.0, 100000.0),
+                                  safe_distance_m=500.0, max_turn_deg=30.0)
+
+
+def test_encounter_resolved_true_with_no_targets_left_and_on_course():
+    own = Vessel(name="own_ship", x=0.0, y=0.0, heading=0.0, speed=6.17, target_heading=0.0)
+    assert encounter_resolved(own, [], goal_xy=(0.0, 100000.0), safe_distance_m=500.0, max_turn_deg=30.0)
