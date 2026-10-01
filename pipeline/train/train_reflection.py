@@ -115,6 +115,9 @@ REFL_FILES   = {
         # new random-geometry RND01-60 mission pool, same convention as the plain/Leo
         # reflection files above -- own file for traceability, never merged into them.
         CACHE / "oow_scenario_RND_reflection_nomoto.jsonl",
+        # Stap 2 Step 11 (2026-10-01) -- same RND pool, rolled out WITH the opt-in
+        # low-level controller -- see train_sft.py's own comment for the full rationale.
+        CACHE / "oow_scenario_RND_reflection_nomoto_llc.jsonl",
     ],
 }[paths.domain]
 

@@ -156,6 +156,15 @@ SFT_DATASETS = {
         # Own file (never merged into the plain oow_scenario_*/Leo_* pairs) for traceability.
         CACHE / "oow_scenario_RND_sft_direct_nomoto.jsonl",
         CACHE / "oow_scenario_RND_sft_cot_nomoto.jsonl",
+        # Stap 2 Step 11 (2026-10-01) -- same RND pool, but rolled out WITH the opt-in
+        # low-level controller (ruletree fills the gaps between oracle decision points
+        # instead of passive coasting, see build_oow_scenarios_rnd.py's rollout_mission()
+        # docstring) -- a real comparative test showed this fixes missions that otherwise
+        # collide outright (composite 0.000 -> 0.74-0.76 on 2/2 tested). Own file (never
+        # merged into the no-controller RND pair above) since the two represent genuinely
+        # different simulator dynamics, not just a bigger sample of the same thing.
+        CACHE / "oow_scenario_RND_sft_direct_nomoto_llc.jsonl",
+        CACHE / "oow_scenario_RND_sft_cot_nomoto_llc.jsonl",
         # Stap 2 Step 5 (2026-09-29) -- RFT self-consistency rows: base Qwen3-8B's OWN
         # sampled <think> completions that independently passed every b3_reasoning_gates
         # check (build_rft_filter.py), not a teacher-generated trace -- kept as its own
