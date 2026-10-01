@@ -244,14 +244,25 @@ def _load_qwen(weights: str = "W0_base"):
     MUST match how the corresponding train_*.py stage itself builds on the previous one
     (train_dpo.py's load_model_with_sft_merged(): SFT adapter merged in BEFORE the DPO
     adapter trains on top), otherwise the DPO/reflection adapter would be applied to the
-    wrong base distribution. `st.cache_resource` keys its cache on the argument value, so
-    base and each weights chain get their own cached (tok, mdl) pair, never conflated."""
+    wrong base distribution. `weights="MERGED:<dir>+<adapter>[+<adapter2>...]"` combines both:
+    starts from the merged dir as the base, then chains the given adapter(s) on top via PEFT
+    WITHOUT merging/re-saving -- added 2026-10-01 for quick A/B eval of a new adapter (e.g. a
+    GRPO LoRA) stacked on a previous merged checkpoint, since re-merging+save_pretrained()'ing
+    a SECOND time onto an already-merged-and-saved-quantized directory hits a transformers
+    core_model_loading.py NotImplementedError (stale weight-conversion-reversal metadata from
+    the first merge's save) -- staying unmerged sidesteps that entirely, at the cost of a
+    small PEFT dispatch overhead (acceptable for evaluation, not for a final deployed variant).
+    `st.cache_resource` keys its cache on the argument value, so base and each weights chain
+    get their own cached (tok, mdl) pair, never conflated."""
     bnb = BitsAndBytesConfig(
         load_in_4bit=True, bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
     )
+    extra_adapter_names: list[str] = []
     if weights.startswith("MERGED:"):
-        merged_dir = AgentPaths.oow().domain_models_dir / weights[len("MERGED:"):]
+        rest = weights[len("MERGED:"):]
+        merged_name, *extra_adapter_names = rest.split("+")
+        merged_dir = AgentPaths.oow().domain_models_dir / merged_name
         if not merged_dir.exists():
             raise FileNotFoundError(f"No merged model directory at {merged_dir} for weights={weights!r}")
         model_source = str(merged_dir)
@@ -278,6 +289,15 @@ def _load_qwen(weights: str = "W0_base"):
             mdl = PeftModel.from_pretrained(mdl, str(adapter_dir))
             if i < len(adapter_names) - 1:
                 mdl = mdl.merge_and_unload()  # fold in before the NEXT adapter trains/applies on top
+    elif extra_adapter_names:
+        models_dir = AgentPaths.oow().domain_models_dir
+        for i, name in enumerate(extra_adapter_names):
+            adapter_dir = models_dir / name
+            if not adapter_dir.exists():
+                raise FileNotFoundError(f"No adapter directory at {adapter_dir} for weights={weights!r}")
+            mdl = PeftModel.from_pretrained(mdl, str(adapter_dir))
+            if i < len(extra_adapter_names) - 1:
+                mdl = mdl.merge_and_unload()
     mdl.eval()
     return tok, mdl
 
