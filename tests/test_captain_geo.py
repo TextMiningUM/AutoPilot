@@ -5,7 +5,8 @@ import math
 
 import pytest
 
-from pipeline.captain_geo import from_local_frame, initial_bearing_deg, to_local_frame
+from pipeline.captain_geo import from_local_frame, initial_bearing_deg, project_zone_to_local_frame, to_local_frame
+from pipeline.captain_types import ExclusionZone
 
 
 def test_origin_maps_to_zero_zero():
@@ -82,3 +83,25 @@ def test_bearing_due_west_is_270():
 
 def test_bearing_is_always_in_0_360_range():
     assert 0.0 <= initial_bearing_deg((52.0, 4.0), (51.5, 3.5)) < 360.0
+
+
+# --- project_zone_to_local_frame -----------------------------------------------------------
+
+
+def test_project_zone_to_local_frame_preserves_non_geometry_fields():
+    zone = ExclusionZone(id="whale_zone_1", type="dynamic_hazard",
+                         polygon=[(52.0, 4.0), (52.0, 4.1), (52.1, 4.1), (52.1, 4.0)],
+                         speed_limit_kn=10.0, min_depth_m=None)
+    projected = project_zone_to_local_frame(zone, origin=(52.0, 4.0))
+    assert projected.id == zone.id
+    assert projected.type == zone.type
+    assert projected.speed_limit_kn == zone.speed_limit_kn
+    assert projected.min_depth_m == zone.min_depth_m
+
+
+def test_project_zone_to_local_frame_projects_each_vertex():
+    zone = ExclusionZone(id="z1", type="coastline", polygon=[(52.0, 4.0), (53.0, 4.0)])
+    origin = (52.0, 4.0)
+    projected = project_zone_to_local_frame(zone, origin)
+    assert projected.polygon[0] == pytest.approx((0.0, 0.0), abs=1e-6)
+    assert projected.polygon[1] == pytest.approx(to_local_frame(53.0, 4.0, origin), abs=1e-6)

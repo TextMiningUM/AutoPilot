@@ -76,7 +76,7 @@ from pipeline.captain_agent_spec import (
 from pipeline.captain_eval import (
     CaptainMissionEvaluation, MissionOutcomeFacts, ResourceEfficiencyFacts, evaluate_captain_mission,
 )
-from pipeline.captain_geo import to_local_frame
+from pipeline.captain_geo import project_zone_to_local_frame, to_local_frame
 from pipeline.captain_monitors import (
     EVENT_MONITOR_MAP, company_instruction_received, distress_signal_received,
     engaged_within_deadline, machinery_fault_reported, urgency_deadline_s,
@@ -277,12 +277,16 @@ class CaptainSkeleton:
         brown envelope CAN still fire mid-encounter -- any resulting Captain speed-cap
         change is propagated INTO the encounter afterwards (`oracle_planner.plan()` is
         turn-only, never a speed action, so this is the only path speed changes
-        mid-encounter). OOW is ALWAYS `app/oracle_planner.py`'s deterministic `plan()`
-        (Sec 13.C.15) -- never an LLM, during Captain training-data generation/evaluation."""
+        mid-encounter). The mission's own exclusion zones are projected into the SAME
+        local frame and passed into the oracle's hard gate (point 5) -- `avoid_zone`
+        automatically takes tactical effect with no separate OOW instruction. OOW is
+        ALWAYS `app/oracle_planner.py`'s deterministic `plan()` (Sec 13.C.15) -- never an
+        LLM, during Captain training-data generation/evaluation."""
         origin = position_along_route_nm(self.order.waypoints, self.sim.state.distance_travelled_nm)
         own = self._own_vessel_now()
         next_wp = next_waypoint_nm(self.order.waypoints, self.sim.state.distance_travelled_nm)
         goal_xy = to_local_frame(next_wp[0], next_wp[1], origin)
+        local_zones = [project_zone_to_local_frame(z, origin) for z in self.zones]
 
         mission = Mission(id="spliced_encounter", name="spliced encounter", rule_refs=[],
                           own_ship_role="own_ship", description="", pass_criteria=[],
@@ -295,7 +299,7 @@ class CaptainSkeleton:
             if encounter_resolved(enc_sim.own, enc_sim.targets, goal_xy,
                                   constraints.min_cpa_m, constraints.max_rudder_angle_deg):
                 break
-            decision = oracle_plan(mission, enc_sim.own, enc_sim.targets, constraints)
+            decision = oracle_plan(mission, enc_sim.own, enc_sim.targets, constraints, zones=local_zones)
             enc_sim.apply_action(decision)
             enc_sim.step()
             self.sim.state.current_speed_kn = mps_to_kn(enc_sim.own.speed)

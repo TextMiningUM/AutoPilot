@@ -1,8 +1,9 @@
-"""Captain walking-skeleton Phase 9c tests: the encounter-sim splice wired end-to-end
+"""Captain walking-skeleton Phase 9c/9d tests: the encounter-sim splice wired end-to-end
 (design_captain_missions.md Sec 13.A.1's 5 concretising points) -- Poisson-scheduled
 ambient traffic spliced into the EXISTING live encounter-sim (app.oracle_planner.plan()
 as the deterministic OOW, Sec 13.C.15), while the mission-sim's own clock/fuel keep
-advancing. No GPU/API key needed."""
+advancing, and the mission's own exclusion zones (point 5) are projected into the live
+encounter frame and passed into the oracle's hard gate. No GPU/API key needed."""
 import sys
 from pathlib import Path
 
@@ -13,6 +14,7 @@ if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
 from app.captain_skeleton import ENCOUNTER_DT_S, MAX_ENCOUNTER_STEPS, CaptainSkeleton  # noqa: E402
+from pipeline.captain_types import ExclusionZone  # noqa: E402
 
 REPO_ROOT = APP_ROOT.parent
 AMBIENT_SCENARIO = REPO_ROOT / "Data" / "Captain" / "Scenarios" / "skeleton_ambient_encounter_v1.json"
@@ -96,3 +98,30 @@ def test_full_mission_evaluates_cleanly_despite_the_encounters():
     assert result.verdict == "PASS"
     assert result.safety_passed
     assert result.mission_outcome_score == 1.0
+
+
+# --- avoid_zone projection into the encounter frame (Sec 13.A.1 point 5, Phase 9d) ---------
+
+def test_an_active_exclusion_zone_does_not_break_the_mission():
+    # A real zone positioned directly on the corridor's own route, near the start --
+    # exercises the project-zones-into-the-encounter-frame + oracle hard-gate plumbing on
+    # every one of this scenario's 23 encounters without special-casing any of them.
+    skeleton = _fresh_skeleton()
+    skeleton.zones = [ExclusionZone(id="test_zone", type="dynamic_hazard",
+                                    polygon=[(52.05, 2.999), (52.05, 3.001),
+                                            (52.06, 3.001), (52.06, 2.999)])]
+    _run_to_completion(skeleton)
+    assert skeleton.sim.reached_destination()
+
+
+def test_zones_are_projected_into_the_live_encounter_origin():
+    from pipeline.captain_geo import project_zone_to_local_frame
+    skeleton = _fresh_skeleton()
+    zone = ExclusionZone(id="test_zone", type="dynamic_hazard",
+                        polygon=[(52.05, 2.999), (52.05, 3.001), (52.06, 3.001), (52.06, 2.999)])
+    origin = skeleton.order.waypoints[0]  # distance_travelled_nm == 0 at mission start
+    projected = project_zone_to_local_frame(zone, origin)
+    # The zone sits north + very slightly off the corridor's own due-north leg -- its
+    # projected y should be positive (ahead) and x close to 0 (near the track).
+    assert all(y > 0 for _x, y in projected.polygon)
+    assert all(abs(x) < 500.0 for x, _y in projected.polygon)

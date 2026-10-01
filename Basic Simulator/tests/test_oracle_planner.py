@@ -12,6 +12,7 @@ if str(APP_ROOT) not in sys.path:
 from app import oracle_planner  # noqa: E402
 from app.missions import load_mission  # noqa: E402
 from app.simulation import VesselConstraints  # noqa: E402
+from pipeline.captain_types import ExclusionZone  # noqa: E402
 
 
 def test_no_risk_mission_holds_course():
@@ -57,3 +58,38 @@ def test_plan_runs_cleanly_across_the_existing_imazu_set():
         m = load_mission(mission_id)
         result = oracle_planner.plan(m, m.own_ship, m.targets, VesselConstraints(kinematics_model="nomoto_v2"))
         assert result["action"] in ("hold_course", "turn_left", "turn_right")
+
+
+# --- avoid_zone hard gate (Sec 13.A.1 point 5, Phase 9d) -----------------------------------
+
+def test_zones_none_is_a_pure_no_op():
+    m = load_mission("RND01")
+    constraints = VesselConstraints(kinematics_model="nomoto_v2")
+    without = oracle_planner.plan(m, m.own_ship, m.targets, constraints)
+    with_none = oracle_planner.plan(m, m.own_ship, m.targets, constraints, zones=None)
+    assert without["action"] == with_none["action"] == "hold_course"
+
+
+def test_a_zone_directly_ahead_forces_a_turn_away_from_hold_course():
+    m = load_mission("RND01")  # no real COLREG risk at t=0 -- would otherwise hold_course
+    constraints = VesselConstraints(kinematics_model="nomoto_v2")
+    # Positioned where the hold_course candidate's straight path still sits exactly on
+    # x=0 (always blocked) but a turning candidate has had enough of the rollout's own
+    # slow Nomoto response time to laterally diverge clear of it (own-ship's own rate-
+    # limited turn dynamics mean a candidate barely moves sideways within the first
+    # couple of 10s steps -- verified by hand-tracing the rollout before picking this
+    # zone's own position/width).
+    zone = ExclusionZone(id="z1", type="dynamic_hazard",
+                         polygon=[(-15.0, 300.0), (15.0, 300.0), (15.0, 370.0), (-15.0, 370.0)])
+    result = oracle_planner.plan(m, m.own_ship, m.targets, constraints, zones=[zone])
+    assert result["action"] != "hold_course"
+
+
+def test_a_distant_zone_does_not_affect_the_decision():
+    m = load_mission("RND01")
+    constraints = VesselConstraints(kinematics_model="nomoto_v2")
+    # Far beyond the rollout's own reach (~370m) -- must not be treated as blocking.
+    zone = ExclusionZone(id="z1", type="dynamic_hazard",
+                         polygon=[(-500.0, 50000.0), (500.0, 50000.0), (500.0, 50100.0), (-500.0, 50100.0)])
+    result = oracle_planner.plan(m, m.own_ship, m.targets, constraints, zones=[zone])
+    assert result["action"] == "hold_course"

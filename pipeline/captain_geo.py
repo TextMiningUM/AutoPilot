@@ -1,4 +1,4 @@
-"""Captain walking-skeleton Phase 9a: local equirectangular projection between the
+"""Captain walking-skeleton Phase 9a/9d: local equirectangular projection between the
 mission-sim's lat/lon frame and the encounter-sim's local metric (x, y in metres) frame
 (design_captain_missions.md Sec 13.A.1's own handoff decision) -- accurate enough over an
 encounter's bounded few-nm/few-minute window, NEVER used for the whole-voyage distance/ETA
@@ -10,6 +10,9 @@ own Mission/Vessel objects are constructed by a caller in app/ from these primit
 """
 from __future__ import annotations
 import math
+from dataclasses import replace
+
+from pipeline.captain_types import ExclusionZone
 
 _EARTH_RADIUS_M = 6371000.0  # mean Earth radius in metres
 
@@ -46,3 +49,15 @@ def initial_bearing_deg(p1: tuple[float, float], p2: tuple[float, float]) -> flo
     x = math.sin(dlon) * math.cos(lat2)
     y = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
     return math.degrees(math.atan2(x, y)) % 360.0
+
+
+def project_zone_to_local_frame(zone: ExclusionZone, origin: tuple[float, float]) -> ExclusionZone:
+    """Projects one exclusion zone's lat/lon polygon into the SAME local metric frame as
+    the encounter-sim's own own-ship/target projection (Sec 13.A.1 point 5) -- same
+    dataclass, same id/type/speed_limit_kn/min_depth_m, only the polygon's own coordinate
+    space changes (lat/lon -> local x/y metres). This is what lets a Captain's `avoid_zone`
+    instruction become automatically effective at the tactical level: the projected zone
+    set is carried into `app/oracle_planner.py`'s hard gate every time the encounter-sim
+    is spliced in, no separate instruction to the OOW needed."""
+    local_polygon = [to_local_frame(lat, lon, origin) for lat, lon in zone.polygon]
+    return replace(zone, polygon=local_polygon)

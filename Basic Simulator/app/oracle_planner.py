@@ -26,6 +26,13 @@ expected_acute_response() conservatism (a pure Rule-13 overtaking encounter has 
 mandated side and is left unconstrained) -- NOT app/baselines/ruletree.py's own
 simplification, which always defaults to turn_right even for overtaking (a known,
 documented oversimplification of that one baseline, not the ground truth to filter by).
+
+Captain walking-skeleton Phase 9d (design_captain_missions.md Sec 13.A.1 point 5): `plan()`
+gained an OPTIONAL `zones` parameter -- a candidate whose own rollout path crosses one of
+these (already-projected-to-the-live-local-frame, see `app/captain_skeleton.py`) exclusion
+zones is excluded by the SAME hard-gate mechanism as a COLREG-illegal candidate, not a
+separate one. `zones=None` (every pre-existing caller, OOW/VHF missions included) makes
+this a pure no-op -- zero behaviour change for anything that doesn't pass zones.
 """
 from __future__ import annotations
 import math
@@ -34,9 +41,11 @@ from dataclasses import replace
 from app.baselines import DECISION_FUNCS
 from app.baselines._rule_citation import infer_rule_citation
 from app.baselines import ruletree
+from app.mission_route_planner import segment_blocked
 from app.missions import Mission, Vessel
 from app.narrate import contact_line
 from app.simulation import VesselConstraints
+from pipeline.captain_types import ExclusionZone
 from pipeline.nomoto import NomotoParams, NomotoState, advance as nomoto_advance
 from pipeline.oow_agent_spec import bearing_and_range, derive_risk_horizon_s, real_risk, relative_bearing, risk_band
 
@@ -114,13 +123,16 @@ def _advance_straight(v: Vessel, dt: float) -> Vessel:
 
 
 def _rollout_cost(mission: Mission, own0: Vessel, first_offset: float, targets: list[Vessel],
-                  constraints: VesselConstraints) -> tuple[float, float]:
-    """(cost, min_clearance) for committing to a target heading of own0.heading +
-    first_offset as the first control, then letting ruletree.decide_action() adjust that
-    target heading further for the rest of the horizon (same internal-base-policy
-    pattern as app/baselines/mpc.py's own _rollout_cost) -- but own-ship's heading here
-    is advanced via REAL Nomoto + rudder-servo dynamics (pipeline.nomoto.advance()), not
-    mpc.py's legacy rate-limited-slew model. Lower cost is better."""
+                  constraints: VesselConstraints, zones: list[ExclusionZone] | None = None
+                  ) -> tuple[float, float, bool]:
+    """(cost, min_clearance, zone_blocked) for committing to a target heading of
+    own0.heading + first_offset as the first control, then letting ruletree.decide_action()
+    adjust that target heading further for the rest of the horizon (same internal-base-
+    policy pattern as app/baselines/mpc.py's own _rollout_cost) -- but own-ship's heading
+    here is advanced via REAL Nomoto + rudder-servo dynamics (pipeline.nomoto.advance()),
+    not mpc.py's legacy rate-limited-slew model. Lower cost is better. `zone_blocked`
+    (Sec 13.A.1 point 5, Phase 9d) is True iff OWN-SHIP's own rolled-out path crosses any
+    of `zones` at any step -- `zones=None`/empty is a no-op, always False."""
     params = NomotoParams(K_per_s=constraints.nomoto_K_per_s, T_s=constraints.nomoto_T_s,
                           T_E_s=constraints.nomoto_T_E_s, rudder_limit_deg=constraints.nomoto_rudder_limit_deg,
                           autopilot_kp=constraints.nomoto_autopilot_kp)
@@ -131,11 +143,15 @@ def _rollout_cost(mission: Mission, own0: Vessel, first_offset: float, targets: 
     min_clearance = min((math.hypot(own.x - t.x, own.y - t.y) for t in virt_targets), default=float("inf"))
     goal_brg0, _ = bearing_and_range(own.x, own.y, mission.goal[0], mission.goal[1])
     deviations = [abs(relative_bearing(own.heading, goal_brg0)) / 180.0]
+    zone_blocked = False
 
     for step in range(HORIZON_STEPS):
         state = nomoto_advance(state, target_heading, params, STEP_S, substep_s=constraints.nomoto_substep_s)
+        own_before = own
         own = replace(own, heading=state.heading_deg)
         own = _advance_straight(own, STEP_S)
+        if zones and segment_blocked((own_before.x, own_before.y), (own.x, own.y), zones):
+            zone_blocked = True
         virt_targets = [_advance_straight(t, STEP_S) for t in virt_targets]
         if virt_targets:
             min_clearance = min(min_clearance, min(math.hypot(own.x - t.x, own.y - t.y) for t in virt_targets))
@@ -153,7 +169,7 @@ def _rollout_cost(mission: Mission, own0: Vessel, first_offset: float, targets: 
     clearance_penalty = max(0.0, (safe_distance_m - min_clearance) / safe_distance_m) if targets else 0.0
     effort = abs(first_offset) / 180.0
     cost = W_GOAL * goal_deviation + W_CLEARANCE * clearance_penalty + W_EFFORT * effort
-    return cost, min_clearance
+    return cost, min_clearance, zone_blocked
 
 
 def _candidate_offsets(mission: Mission, own: Vessel, targets: list[Vessel],
@@ -173,25 +189,32 @@ def _candidate_offsets(mission: Mission, own: Vessel, targets: list[Vessel],
     return sorted(offsets)
 
 
-def plan(mission: Mission, own: Vessel, targets: list[Vessel], constraints: VesselConstraints) -> dict:
+def plan(mission: Mission, own: Vessel, targets: list[Vessel], constraints: VesselConstraints,
+        zones: list[ExclusionZone] | None = None) -> dict:
     """The oracle decision -- {"action","degrees","heading_deg","encounter_rule",
     "conduct_rule","reasoning","rejected_candidates"}. `rejected_candidates` (a list of
     {"offset_deg","cost","illegal"} for every candidate NOT chosen) is additive, meant
     for a future reflection-style critique trace (Stap 2 Step 3/5), never required by any
-    existing consumer."""
+    existing consumer. `zones` (Sec 13.A.1 point 5, Phase 9d): already-projected-to-the-
+    live-local-frame exclusion zones -- a candidate whose own rollout path crosses one is
+    excluded by the SAME hard gate as a COLREG-illegal candidate; `zones=None` (every
+    pre-existing caller) makes this entirely a no-op."""
     required = required_direction(own, targets, constraints)
     candidates = _candidate_offsets(mission, own, targets, constraints)
     scored = []
     for offset in candidates:
-        cost, clearance = _rollout_cost(mission, own, offset, targets, constraints)
-        illegal = required is not None and _offset_direction(offset) != required
-        scored.append({"offset_deg": offset, "cost": cost, "clearance_m": clearance, "illegal": illegal})
+        cost, clearance, zone_blocked = _rollout_cost(mission, own, offset, targets, constraints, zones)
+        colreg_illegal = required is not None and _offset_direction(offset) != required
+        scored.append({"offset_deg": offset, "cost": cost, "clearance_m": clearance,
+                      "illegal": colreg_illegal or zone_blocked, "zone_blocked": zone_blocked})
 
     legal = [s for s in scored if not s["illegal"]]
-    # required_direction() always admits at least one candidate (an exact-0.0 grid point
-    # for "hold", or the grid's own +/-90 extremes safely covering "starboard"/"port" --
-    # HEADING_DEADBAND_DEG=3 is far smaller than the grid's 15 deg spacing) -- this
-    # fallback should never trigger in practice, kept only as a defensive last resort.
+    # required_direction() (and an empty/no-op zones) always admits at least one candidate
+    # (an exact-0.0 grid point for "hold", or the grid's own +/-90 extremes safely covering
+    # "starboard"/"port" -- HEADING_DEADBAND_DEG=3 is far smaller than the grid's 15 deg
+    # spacing) -- a genuinely boxed-in ship (every candidate zone-blocked too) is the one
+    # realistic way this fallback could actually trigger; kept as a defensive last resort
+    # either way, never silently returning no decision at all.
     pool = legal if legal else scored
     best = min(pool, key=lambda s: s["cost"])
     best_offset = best["offset_deg"]
@@ -212,7 +235,7 @@ def plan(mission: Mission, own: Vessel, targets: list[Vessel], constraints: Vess
                     f"Nomoto rollout commits to a first-step offset of {best_offset:.0f} deg "
                     f"(cost={best['cost']:.3f}, min clearance {best['clearance_m']:.0f}m vs contact "
                     f"{decisive['name']!r}, {n_rejected_illegal}/{len(scored)} candidates excluded "
-                    f"as rule-illegal) -> action={action}.")
+                    f"as rule-illegal/zone-blocked) -> action={action}.")
 
     return {
         "action": action, "degrees": degrees,
