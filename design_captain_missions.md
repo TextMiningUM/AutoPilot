@@ -89,6 +89,13 @@ This follows on from the existing two-track architecture (see `.github/copilot-i
   - [15.2 Remaining concrete data-structure specifics](#sec-15-2)
   - [15.3 Minimal debug control set](#sec-15-3)
   - [15.4 Full UI control spec — deferred](#sec-15-4)
+- [16. Captain abilities overview — memory, planning, tool use, reasoning training (2026-10-01, backlog)](#sec-16)
+  - [16.1 Memory / "experience" — concrete algorithm/data mapping per component](#sec-16-1)
+  - [16.2 Goal-setting & planning — algorithm/data mapping](#sec-16-2)
+  - [16.3 Tool use — decided direction](#sec-16-3)
+  - [16.4 Reasoning training — teacher-distillation pipeline, concrete mapping](#sec-16-4)
+  - [16.5 Still-open item: RAG source corpus](#sec-16-5)
+  - [16.6 Build order when this block is picked up](#sec-16-6)
 
 ---
 
@@ -1410,3 +1417,82 @@ This mirrors exactly how OOW's own baselines were first exercised — direct fun
 ### 15.4 Full UI control spec — explicitly deferred
 
 **Decided (2026-09-30)**: defer the full, polished UI control-by-control specification (exact buttons/widgets per §11's panels, enabled/disabled logic, rerun triggers) until **after** the walking skeleton (§14) is running — the same order this project's own OOW Streamlit UI was actually built in. Revisit §11 at that point to turn its panel *descriptions* into a real control spec.
+
+---
+
+<a id="sec-16"></a>
+## 16. Captain abilities overview — memory, planning, tool use, reasoning training (2026-10-01, backlog)
+
+**Status: DISCUSSION ONLY, nothing implemented.** Explicit user request (2026-10-01): before coding anything from this block, lay out — per Captain ability — which algorithm and which data (shape/source) is needed, mirroring the existing VHF/OOW pipeline wherever possible rather than inventing something new. This section is the written record of that discussion, including the decisions actually made; the user has explicitly deferred starting the work itself ("we pakken dit later op" — we'll pick this up later). §6.3/§9.2 already named the 4-part retrieval architecture and the teacher-distillation idea in general terms; this section makes each piece concrete enough to start coding from directly once picked up.
+
+<a id="sec-16-1"></a>
+### 16.1 Memory / "experience" — concrete algorithm/data mapping per component
+
+Second domain-instance of the already-proven VHF/OOW retrieval stack (§6.3) — no new retrieval architecture, only a new corpus and a new concept vocabulary. Concretising each of the 4 parts:
+
+| Component | Algorithm | Data shape (schema) | Source (Captain) |
+|---|---|---|---|
+| **RAG** (dense retrieval) | Rule-based chunker (`pipeline/ingest/build_rag.py`): token-budget (~400 target/500 max/40 min) + topic-Jaccard merge, certain section types always standalone (never merged across e.g. CHIRP articles). Embeddings via `BAAI/bge-large-en-v1.5` (`sentence-transformers`, `core.embedding.EMBEDDER_MODEL`) — plain cosine similarity, no FAISS. | `{chunk_id, document_id, source_file, source_type, chapter_title, text, text_with_context, concepts[], topics[], pages[], token_count}` + a parallel `.npy` embedding array + a `chunk_ids.json` index list | ISM/SOLAS/STCW/MARPOL source text (still unresolved, §16.5) + the 427 unused CHIRP articles (§5.1a) + the 108 new MAIB reports (`Processed Leo/`, §5.1c) + historical narratives (Gutenberg/Wikipedia, §5.3/§5.5) |
+| **Reranker** (cross-encoder) | Fine-tune on mined `(query, chunk, label)` triples — labels come from already-deterministic ground truth (e.g. a CHIRP article's own `mapped_event_type`, §13.C.10's extended extraction schema), never hand-labelled | `.jsonl` rows: `{query, chunk_id, text, label, event_type, source, split}` (mirrors `oow_reranker_pairs.jsonl`'s shape, `rule` renamed `event_type`) | Mined from the reasoning traces below, same mechanism as `build_reranker_pairs.py` |
+| **KG** (concept graph) | No deep learning — inverted index (concept → chunk_ids) + symmetric co-occurrence counts + an alias dict for query-time normalisation (e.g. "machinery fault" → `engine_failure`) + sequential adjacency within a chapter | One JSON: `{chunk_meta, concept_chunks, concept_cooccur, topic_chunks, document_chunks, adjacency, aliases, stats}` | Concepts tagged at parse time against a **new, Captain-specific keyword vocabulary** (ISM/SOLAS articles, the 5 v1 brown-envelope categories, §13.A.2) — the existing `_VHF_ALIASES`/`_OOW_ALIASES`/`CONCEPT_KEYWORDS` vocabularies do not cover this domain and must not be silently reused |
+| **PG** (procedural graph) | Deterministic (`pipeline/ingest/build_pg.py`): vessel-name masking + tense normalisation on each `procedures[].action`, then greedy embedding-clustering (cosine ≥ `CANON_THRESH`) into canonical steps; consecutive steps become `NEXT` edges with a support count; traces tagged by procedure **family** (reuse the 5 v1 event types, §13.A.2, instead of VHF/OOW's distress/urgency/safety/dsc/colreg_encounter families) | `(procedure, NEXT, procedure)` triples with `condition`/`guidance`/`pitfalls` edge attributes, grouped per family | Mined from the same reasoning traces as PG/reranker — **hard dependency**, nothing above this row works without it |
+| **Reasoning-trace extraction** (the shared input every row above depends on) | One LLM call per RAG chunk (`pipeline/track1/extract_reasoning.py`'s pattern) — **model choice decided in §16.4**, not the cheap `gpt-4o-mini` used for VHF/OOW's extractive-only mining | `{chunk_id, source_file, chapter_title, section_types, chunk_concepts, trace: {situation, trigger, procedures[{step,action,why}], constraints, prowords_used, channels, regulations, warnings, outcomes, key_facts, question_seeds}}`, extended per §13.C.10 with `mapped_event_type`/`severity`/`context_flags` so every row is scoreable against the procedure library | Same RAG chunks as above; a cheap rule-based keyword checker cross-validates each `mapped_event_type` the same way §13.C.10 already specifies for CHIRP |
+
+<a id="sec-16-2"></a>
+### 16.2 Goal-setting & planning — algorithm/data mapping
+
+Not a retrieval/ML task — a fixed data structure plus the already-specified deterministic cost function:
+
+| Piece | Algorithm | Data shape |
+|---|---|---|
+| **Mission Order** (§8, issued once) | — (fixed SMEAC input contract) | JSON: `mission_id, situation, mission{goal, success_criteria}, execution{waypoints, soa_kn, restricted_zones}, admin_logistics{fuel, rest_hours}, command_signal{reporting}, events[]` |
+| **Mission State** (§8.4, live, updated every step) | Mission Order (frozen) + accumulated deltas — never a free-text memory | `{goals:[{text, priority, condition, status}], resources, hazards, active_plan, event_log[]}` — already largely implemented (`pipeline/captain_types.py`/`Basic Simulator/app/captain_skeleton.py`, walking-skeleton phases 0–9d) |
+| **Plan / re-plan decision** | `cost(action, mission_state)` — lexicographic 5-tier weighted sum (life=1e8 / ship-env=1e6 / duty=1e4 / goal=1e2 / commercial=1, §13.A.8) → `oracle_best = argmin cost` → `regret()` against whichever action was actually chosen | Already fully implemented in `pipeline/captain_agent_spec.py` — this is the deterministic backbone behind the shield, the training labels (§13.C.10), AND the evaluation (§13.C.11) |
+
+The LLM never re-derives `cost()`/`oracle_best()` itself — it receives Mission State facts (facts-only convention, §13.B.5) plus retrieved RAG/KG/PG context, and its job is to **state** which action and why, and to **re-derive** whether the original mission goal is still achievable (continue / revise / accept-partial / abort, §9) every time a brown envelope fires.
+
+<a id="sec-16-3"></a>
+### 16.3 Tool use — decided direction
+
+**Decided (2026-10-01): passive retrieval only for v1** — RAG/KG/PG context is always retrieved and prepended into the prompt before generation, exactly like OOW's existing mechanism (`pipeline/ingest/build_kg.py`'s `kg_retrieve()` + top-k dense hits). The Captain does **not** get an active/agentic tool-calling loop (no mid-reasoning `search_regulations()`/`lookup_procedure()`/`lookup_port()` calls) for this pass.
+
+Explicitly recorded as a **deferred backlog item, not rejected**: active/agentic tool-calling (ReAct-style, the Captain LLM decides what to look up and when, across multiple turns) would need a genuinely new training format (tool-call traces, not just retrieval-augmented SFT rows) and a new inference loop — nothing like it exists anywhere in this project yet. Revisit only if passive retrieval turns out to be insufficient once real Captain-agent runs exist (same "recalibrate once real runs exist" posture as §10.3's starting thresholds).
+
+Not to be confused with the **existing, separately-decided** `tools.json`/§9.1 action schema (`reroute`/`slow_down`/`contact_dpa`/`declare_emergency`/...) — that is the Captain **issuing instructions** to OOW/VHF/escalation, not "looking something up", and is unaffected by this decision.
+
+<a id="sec-16-4"></a>
+### 16.4 Reasoning training — teacher-distillation pipeline, concrete mapping
+
+Already specified in general terms in §13.C.10; the step-by-step mechanism concretised:
+
+| Step | Algorithm | Data shape |
+|---|---|---|
+| 1. Teacher proposal | A large model is given ONLY the Mission State facts — **never** shown `oracle_best`, so its proposal genuinely varies rather than trivially matching the cost model | Free-text plan + justification |
+| 2. Checker | (a) shield/mandatory-duty check (rule-based, layers 1–2, §13.A.4) — rejects outright on a violation; (b) `regret()` via `cost()` against `oracle_best` (layer 3) | boolean (shield) + scalar (regret) |
+| 3. Split into a training row | regret ≈ 0 → **SFT positive**, using the teacher's own prose verbatim (never a synthetic rewrite — a rewrite would re-introduce the "lookup wearing a prose costume" problem §13.C.10 explicitly warns against); regret high → **DPO pair**, teacher's proposal = rejected, `oracle_best`'s own action (rendered via the same prose-formatter-with-one-field-swapped convention `build_rlhf.py` already uses) = chosen | SFT: `{prompt, response}`; DPO: `{prompt, chosen, rejected, metadata}` (same TRL-compatible shape as `vhf_dpo_pairs.jsonl`) |
+| Explanation-quality rubric (filters the SFT pool, §13.C.10) | Rule-based check: (i) cites the actual applicable ISM/SOLAS/STCW article, (ii) names ≥1 cost dimension weighed (fuel/time/risk/goal), (iii) names ≥1 rejected alternative | Filter only, no separate output file |
+| Reflection | Same draft/critique/refined mechanism as `pipeline/track1/build_reflection.py`: drop one required element from a correct answer, generate a critique naming it | `.jsonl`, draft/critique inside a `<think>` block, full answer visible (same convention fixed 2026-09-25 for VHF/OOW, see repo memory) |
+| Multi-hop | Pair two reasoning traces sharing a KG concept from different source documents (e.g. an ISM article + a CHIRP incident, both tagged `engine_failure`) | `{question, answer, concept, trace_a, trace_b, key_facts}` |
+| Mandatory/shield-only events (fog, whale_zone) | No teacher needed — action is table-determined; direct SFT via the same prose formatter | SFT row only, never a DPO pair |
+| RL | **Deliberately de-emphasised** (§9.2 already decided this) — "more SFT/DPO/Reflection, less RL", mirrors the existing distillation stage (`compress_distill.py`) rather than a new RL loop | — |
+
+**Decided (2026-10-01): the teacher model is a stronger model than VHF/OOW's `gpt-4o-mini`** — either GPT-4o or Claude (exact pick deferred to whenever the extraction script is actually written, based on API budget/availability at that time). Rationale: VHF/OOW's `extract_reasoning.py` only ever does *extractive* mining (pull structure out of text that already states the answer); this teacher call is a genuine *generative judgement* task (weigh cost dimensions, cite the right article, land on a view that may or may not match `oracle_best`) — a materially harder generation task, so the cheaper model is not assumed sufficient without evidence.
+
+Training mechanics otherwise unchanged from VHF/OOW: same base model (Qwen3-8B), own separate QLoRA SFT→DPO→Reflection chain (own adapters under `_models/Captain/`), same contamination filter (cosine ≥ 0.85 dropped) run against **both** Captain held-out eval files (`captain_gold_answers.json` + `captain_mission_scenarios.json`).
+
+<a id="sec-16-5"></a>
+### 16.5 Still-open item: RAG source corpus
+
+**Not resolved this pass, explicitly deferred** (per the user's choice, 2026-10-01): the actual ISM/SOLAS/STCW/MARPOL source text for the RAG corpus is still unidentified beyond Bowditch (§5.4, confirmed usable but a reference/procedural text, not core regulation). Assigned back to the agent to research when this block is picked up — same kind of acquisition pass as `build_captain_legal_corpus.py` already did for `Data/Captain/Legal_Reference/`.
+
+<a id="sec-16-6"></a>
+### 16.6 Build order when this block is picked up
+
+**Decided (2026-10-01): extraction before retrieval-infrastructure** — get real reasoning traces flowing before investing in KG/PG/reranker, since PG and the reranker's labels both hard-depend on traces existing (§16.1). Concretely, the real pipeline dependency order (not just "extraction then RAG" — chunking must sit between the two, since extraction operates per RAG chunk, exactly as it does for VHF/OOW):
+
+1. `build_captain_json.py` (new) — parse the source corpus (§16.5) into the hierarchical JSON shape `build_vhf_json.py`/`build_oow_json.py` already use.
+2. `pipeline/ingest/build_rag.py` (unchanged, domain-parameterised) — chunk + embed, producing `captain_rag_chunks.json` + the embedding array.
+3. `extract_captain_reasoning.py` (new, mirrors `extract_incident_reasoning.py` minus the COLREG-only concept filter, using the stronger teacher model per §16.4) — one reasoning trace per RAG chunk, extended with `mapped_event_type`/`severity`/`context_flags`.
+4. From there, `build_kg.py` (only needs the chunks from step 2) and `build_pg.py`/`build_reranker_pairs.py` (need the traces from step 3) can proceed in any order, unchanged.
+
+Not yet started — no files created, no scripts run. This section exists so the next session can start directly from step 1 instead of re-deriving this order.
