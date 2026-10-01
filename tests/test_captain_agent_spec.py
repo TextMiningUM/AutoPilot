@@ -1,15 +1,17 @@
-"""Captain walking-skeleton Phase 3/4/6 tests: procedure library, shield, cost()/regret
-decision layer, the Sec 13.B.6 output schema + instruction-precedence mechanism, and the
-fog/whale_zone decision layers. Pure pipeline/ module -- no app/ dependency, no GPU/API
-key needed."""
+"""Captain walking-skeleton Phase 3/4/6/7 tests: procedure library, shield, cost()/regret
+decision layer, the Sec 13.B.6 output schema + instruction-precedence mechanism, and all 5
+v1 events' decision layers. Pure pipeline/ module -- no app/ dependency, no GPU/API key
+needed."""
 import pytest
 
 from pipeline.captain_agent_spec import (
-    HOLD_ACTION, PROCEDURE_LIBRARY, ActiveInstruction, CostDimensions,
-    EngineFailureContext, FogContext, InstructionStack, MarginViolation, WhaleZoneContext,
+    HOLD_ACTION, PROCEDURE_LIBRARY, ActiveInstruction, CommercialInstructionContext, CostDimensions,
+    DistressCallContext, EngineFailureContext, FogContext, InstructionStack, MarginViolation,
+    WhaleZoneContext, candidates_commercial_instruction, candidates_distress_call,
     candidates_engine_failure, candidates_fog, candidates_whale_zone, check_safety_margins,
     cost, oracle_best, parse_captain_response, regret, resolve_captain_decision,
-    rollout_engine_failure, rollout_fog, rollout_whale_zone, validate_captain_response_json,
+    rollout_commercial_instruction, rollout_distress_call, rollout_engine_failure, rollout_fog,
+    rollout_whale_zone, validate_captain_response_json,
 )
 from pipeline.captain_types import CaptainAction
 
@@ -423,3 +425,125 @@ def test_rollout_whale_zone_raises_for_an_unknown_action():
                           fuel_rate_tonnes_per_h=_fuel_rate_fn())
     with pytest.raises(ValueError):
         rollout_whale_zone(CaptainAction(tool="hold", params={}), ctx)
+
+
+# --- Distress call decision layer (Phase 7) ------------------------------------------------
+
+
+def test_candidates_distress_call_offers_assist_and_decline():
+    ctx = DistressCallContext(detour_distance_nm=20.0, original_soa_kn=12.0, remaining_distance_nm=100.0,
+                              fuel_rate_tonnes_per_h=_fuel_rate_fn(), deadline_slack_h=None,
+                              assisting_breaches_safety_margin=False)
+    tools = {c.tool for c in candidates_distress_call(ctx)}
+    assert tools == {"proceed_to_assist", "decline_with_logged_reason"}
+
+
+def test_distress_call_oracle_best_assists_when_it_is_safe_to_do_so():
+    fuel_fn = _fuel_rate_fn()
+    ctx = DistressCallContext(detour_distance_nm=20.0, original_soa_kn=12.0, remaining_distance_nm=100.0,
+                              fuel_rate_tonnes_per_h=fuel_fn, deadline_slack_h=None,
+                              assisting_breaches_safety_margin=False)
+    candidates = candidates_distress_call(ctx)
+    best, _ = oracle_best(candidates, lambda a: rollout_distress_call(a, ctx))
+    assert best.tool == "proceed_to_assist"  # the SOLAS duty_cost dominates any commercial saving
+
+
+def test_distress_call_oracle_best_declines_when_assisting_would_breach_a_safety_margin():
+    fuel_fn = _fuel_rate_fn()
+    ctx = DistressCallContext(detour_distance_nm=20.0, original_soa_kn=12.0, remaining_distance_nm=100.0,
+                              fuel_rate_tonnes_per_h=fuel_fn, deadline_slack_h=None,
+                              assisting_breaches_safety_margin=True)
+    candidates = candidates_distress_call(ctx)
+    best, _ = oracle_best(candidates, lambda a: rollout_distress_call(a, ctx))
+    assert best.tool == "decline_with_logged_reason"
+
+
+def test_rollout_distress_call_assist_matches_hand_computed_arithmetic():
+    fuel_fn = _fuel_rate_fn()
+    ctx = DistressCallContext(detour_distance_nm=20.0, original_soa_kn=12.0, remaining_distance_nm=100.0,
+                              fuel_rate_tonnes_per_h=fuel_fn, deadline_slack_h=None,
+                              assisting_breaches_safety_margin=False)
+    result = rollout_distress_call(CaptainAction(tool="proceed_to_assist", params={}), ctx)
+    expected_time_h = 120.0 / 12.0
+    assert result.notes["time_h"] == pytest.approx(expected_time_h)
+    assert result.dims.duty_breaches == 0.0
+
+
+def test_rollout_distress_call_decline_with_no_valid_reason_costs_a_duty_breach():
+    ctx = DistressCallContext(detour_distance_nm=20.0, original_soa_kn=12.0, remaining_distance_nm=100.0,
+                              fuel_rate_tonnes_per_h=_fuel_rate_fn(), deadline_slack_h=None,
+                              assisting_breaches_safety_margin=False)
+    result = rollout_distress_call(CaptainAction(tool="decline_with_logged_reason", params={}), ctx)
+    assert result.dims.duty_breaches == 1.0
+
+
+def test_rollout_distress_call_decline_with_a_valid_reason_costs_no_duty_breach():
+    ctx = DistressCallContext(detour_distance_nm=20.0, original_soa_kn=12.0, remaining_distance_nm=100.0,
+                              fuel_rate_tonnes_per_h=_fuel_rate_fn(), deadline_slack_h=None,
+                              assisting_breaches_safety_margin=True)
+    result = rollout_distress_call(CaptainAction(tool="decline_with_logged_reason", params={}), ctx)
+    assert result.dims.duty_breaches == 0.0
+
+
+def test_rollout_distress_call_raises_for_an_unknown_action():
+    ctx = DistressCallContext(detour_distance_nm=20.0, original_soa_kn=12.0, remaining_distance_nm=100.0,
+                              fuel_rate_tonnes_per_h=_fuel_rate_fn(), deadline_slack_h=None,
+                              assisting_breaches_safety_margin=False)
+    with pytest.raises(ValueError):
+        rollout_distress_call(CaptainAction(tool="hold", params={}), ctx)
+
+
+# --- Commercial instruction vs. safety decision layer (Phase 7) ----------------------------
+
+
+def test_candidates_commercial_instruction_offers_comply_and_refuse():
+    ctx = CommercialInstructionContext(demanded_speed_kn=16.0, original_soa_kn=12.0, remaining_distance_nm=100.0,
+                                       fuel_rate_tonnes_per_h=_fuel_rate_fn(), deadline_slack_h=None,
+                                       complying_breaches_safety_margin=True)
+    tools = {c.tool for c in candidates_commercial_instruction(ctx)}
+    assert tools == {"comply_with_instruction", "refuse_citing_ism_art5"}
+
+
+def test_commercial_instruction_oracle_best_complies_when_deadline_pressure_demands_it():
+    # Note: with NO deadline pressure, going faster is actually commercially WORSE here
+    # (the cubic fuel-rate curve means more speed can burn more fuel despite costing less
+    # time, same insight as Phase 5's eval) -- refusing a pointless speed-up is correct.
+    # Complying only wins when an already-accumulated deficit (deadline_slack_h < 0, e.g.
+    # from an earlier fog/engine-failure delay) means ONLY the extra speed can still make
+    # the deadline.
+    fuel_fn = _fuel_rate_fn()
+    ctx = CommercialInstructionContext(demanded_speed_kn=16.0, original_soa_kn=12.0, remaining_distance_nm=100.0,
+                                       fuel_rate_tonnes_per_h=fuel_fn, deadline_slack_h=-1.0,
+                                       complying_breaches_safety_margin=False)
+    candidates = candidates_commercial_instruction(ctx)
+    best, _ = oracle_best(candidates, lambda a: rollout_commercial_instruction(a, ctx))
+    assert best.tool == "comply_with_instruction"
+
+
+def test_commercial_instruction_oracle_best_refuses_when_complying_would_breach_a_safety_margin():
+    fuel_fn = _fuel_rate_fn()
+    ctx = CommercialInstructionContext(demanded_speed_kn=16.0, original_soa_kn=12.0, remaining_distance_nm=100.0,
+                                       fuel_rate_tonnes_per_h=fuel_fn, deadline_slack_h=None,
+                                       complying_breaches_safety_margin=True)
+    candidates = candidates_commercial_instruction(ctx)
+    best, _ = oracle_best(candidates, lambda a: rollout_commercial_instruction(a, ctx))
+    assert best.tool == "refuse_citing_ism_art5"
+
+
+def test_rollout_commercial_instruction_comply_matches_hand_computed_arithmetic():
+    fuel_fn = _fuel_rate_fn()
+    ctx = CommercialInstructionContext(demanded_speed_kn=16.0, original_soa_kn=12.0, remaining_distance_nm=100.0,
+                                       fuel_rate_tonnes_per_h=fuel_fn, deadline_slack_h=None,
+                                       complying_breaches_safety_margin=False)
+    result = rollout_commercial_instruction(CaptainAction(tool="comply_with_instruction", params={"speed_kn": 16.0}), ctx)
+    expected_time_h = 100.0 / 16.0
+    assert result.notes["time_h"] == pytest.approx(expected_time_h)
+    assert result.dims.duty_breaches == 0.0
+
+
+def test_rollout_commercial_instruction_raises_for_an_unknown_action():
+    ctx = CommercialInstructionContext(demanded_speed_kn=16.0, original_soa_kn=12.0, remaining_distance_nm=100.0,
+                                       fuel_rate_tonnes_per_h=_fuel_rate_fn(), deadline_slack_h=None,
+                                       complying_breaches_safety_margin=False)
+    with pytest.raises(ValueError):
+        rollout_commercial_instruction(CaptainAction(tool="hold", params={}), ctx)

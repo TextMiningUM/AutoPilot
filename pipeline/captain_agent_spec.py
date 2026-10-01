@@ -1,19 +1,19 @@
-"""Captain walking-skeleton Phase 3/4/6: procedure library, shield, cost()/regret decision
-layer, the Sec 13.B.6 output schema + instruction-precedence mechanism, and the fog/
-whale_zone decision layers (design_captain_missions.md Sec 13.A.4/13.A.6/13.A.8/13.B.6).
+"""Captain walking-skeleton Phase 3/4/6/7: procedure library, shield, cost()/regret
+decision layer, the Sec 13.B.6 output schema + instruction-precedence mechanism, and all
+5 v1 events' decision layers (design_captain_missions.md Sec 13.A.4/13.A.6/13.A.8/13.B.6).
 
 Pure Python, no GPU/API key, safe to run locally. Mirrors `pipeline/oow_agent_spec.py`'s
 role for OOW -- the Captain's own classify/validate/decide logic -- but lives in its own
 file since Captain is a separately-trained, separate-domain agent (not a shared model with
 OOW), per the project's own confirmed architecture decision.
 
-`engine_failure`/`fog`/`whale_zone` now have fully wired decision layers (Sec 14/Phase 6);
-the remaining 2 v1 event types (distress_call, commercial_instruction) have their
-mandatory-duty/shield METADATA recorded in PROCEDURE_LIBRARY (genuinely rule-like, cheap to
-specify up front), but no candidates()/rollout() yet -- they also need the
-WORLD_RESPONDER_TIMER mechanism (Sec 13.A.2), planned for the next phase. Building a
-generic polymorphic dispatch mechanism for the wired events would be speculative; add each
-event's own concrete functions when actually needed, following this file's existing shape.
+All 5 v1 event types now have fully wired decision layers (Sec 14/Phase 6/Phase 7):
+engine_failure/fog/whale_zone (Phase 3/6), and distress_call/commercial_instruction
+(Phase 7 -- their world-responder resolutions are scheduled/applied by
+`app/captain_skeleton.py`, not here; this module only computes candidates/cost, pure
+decision logic has no scheduler dependency). Building a generic polymorphic dispatch
+mechanism for the wired events would be speculative; each event type gets its own concrete
+functions, following this file's existing shape.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -352,6 +352,119 @@ def rollout_whale_zone(action: CaptainAction, ctx: WhaleZoneContext) -> RolloutR
         raise ValueError(f"unknown whale_zone candidate action: {action.tool!r}")
     return _single_candidate_speed_rollout(ctx.speed_limit_kn, ctx.original_soa_kn,
                                            ctx.zone_transit_distance_nm, ctx.fuel_rate_tonnes_per_h)
+
+
+# --- Distress call decision layer (Phase 7) -- a genuine judgement case (Sec 13.A.4) -----
+# "ignoring it costs at least one duty_cost point (tier 3, weight 1e4) -- no fuel saving
+# (commercial, weight 1) can ever close that gap" (Sec 13.A.8a's own worked answer to
+# "the oracle could ignore a distress call because it's cheaper"). Declining is NOT always
+# wrong, though: Sec 13.A.4 frames it as "assist vs. document a VALID reason not to" -- the
+# one valid reason modeled here is that assisting would itself breach a safety margin
+# (Sec 13.A.6), computed by the caller via `check_safety_margins()`, same as Sec 13.A.6's
+# own worked example of that function's general-purpose use.
+
+@dataclass(frozen=True)
+class DistressCallContext:
+    """Facts the distress-call decision layer needs (Sec 13.A.2/13.A.4)."""
+    detour_distance_nm: float   # extra round-trip distance to reach + resume from the distress position
+    original_soa_kn: float
+    remaining_distance_nm: float  # own mission's remaining distance at the time of the call
+    fuel_rate_tonnes_per_h: Callable[[float], float]
+    deadline_slack_h: float | None
+    assisting_breaches_safety_margin: bool  # Sec 13.A.6's computed condition -- the one valid reason to decline
+
+
+def candidates_distress_call(ctx: DistressCallContext) -> list[CaptainAction]:
+    """Sec 13.A.4: assist (discharge the SOLAS duty) vs. decline with a logged reason."""
+    return [CaptainAction(tool="proceed_to_assist", params={}),
+           CaptainAction(tool="decline_with_logged_reason", params={})]
+
+
+def rollout_distress_call(action: CaptainAction, ctx: DistressCallContext) -> RolloutResult:
+    """Assisting costs real time/fuel (commercial tier) but discharges the duty cleanly;
+    declining is free commercially but costs a real `duty_breaches` point UNLESS assisting
+    would itself have breached a safety margin -- Sec 13.A.8a's 100x-per-tier gap then
+    makes 'assist' win whenever it's safe to do so, and 'decline' win when it genuinely
+    isn't, regardless of how large the commercial difference happens to be."""
+    reference_time_h = ctx.remaining_distance_nm / ctx.original_soa_kn
+    reference_fuel_t = ctx.fuel_rate_tonnes_per_h(ctx.original_soa_kn) * reference_time_h
+
+    if action.tool == "proceed_to_assist":
+        total_distance_nm = ctx.remaining_distance_nm + ctx.detour_distance_nm
+        time_h = total_distance_nm / ctx.original_soa_kn
+        fuel_t = ctx.fuel_rate_tonnes_per_h(ctx.original_soa_kn) * time_h
+        duty_breaches = 0.0
+    elif action.tool == "decline_with_logged_reason":
+        time_h = reference_time_h
+        fuel_t = reference_fuel_t
+        duty_breaches = 0.0 if ctx.assisting_breaches_safety_margin else 1.0
+    else:
+        raise ValueError(f"unknown distress-call candidate action: {action.tool!r}")
+
+    delay_h = max(0.0, time_h - reference_time_h)
+    fuel_excess_t = max(0.0, fuel_t - reference_fuel_t)
+    dims = CostDimensions(
+        duty_breaches=duty_breaches,
+        goal_shortfall=_goal_shortfall(time_h, reference_time_h, ctx.deadline_slack_h),
+        commercial=fuel_excess_t + delay_h,
+    )
+    return RolloutResult(dims=dims, notes={"time_h": time_h, "fuel_t": fuel_t, "delay_h": delay_h})
+
+
+# --- Commercial instruction vs. safety decision layer (Phase 7) -------------------------
+# Sec 13.A.2: "Commercial instruction's 'breaches a safety margin' becomes a COMPUTED
+# condition against the live Mission State rather than a fixed always-refuse rule" -- the
+# caller supplies that computed boolean (typically via `check_safety_margins()` against the
+# ship's own engine/fuel limits), this module never re-derives it independently.
+
+@dataclass(frozen=True)
+class CommercialInstructionContext:
+    """Facts the commercial-instruction decision layer needs (Sec 13.A.2/13.A.4)."""
+    demanded_speed_kn: float   # what the company/DPA message is demanding
+    original_soa_kn: float
+    remaining_distance_nm: float
+    fuel_rate_tonnes_per_h: Callable[[float], float]
+    deadline_slack_h: float | None
+    complying_breaches_safety_margin: bool  # Sec 13.A.6's computed condition
+
+
+def candidates_commercial_instruction(ctx: CommercialInstructionContext) -> list[CaptainAction]:
+    """Sec 13.A.4: comply with the instruction vs. refuse, citing ISM Art. 5."""
+    return [CaptainAction(tool="comply_with_instruction", params={"speed_kn": ctx.demanded_speed_kn}),
+           CaptainAction(tool="refuse_citing_ism_art5", params={})]
+
+
+def rollout_commercial_instruction(action: CaptainAction, ctx: CommercialInstructionContext) -> RolloutResult:
+    """Complying costs a real `duty_breaches` point when it would actually breach a
+    safety margin -- the decision layer's own ranking then already agrees with the
+    shield (Sec 13.A.6) rather than needing the shield to override a bad oracle pick.
+    When it's SAFE, complying is not automatically commercially better: the cubic
+    fuel-rate curve (Sec 13.A.3) means going faster can burn more fuel despite costing
+    less time, so complying only wins when real deadline pressure (`deadline_slack_h`
+    already tight/negative, e.g. from an earlier delay elsewhere in the mission) makes
+    the extra speed actually necessary -- never assumed, always computed."""
+    reference_time_h = ctx.remaining_distance_nm / ctx.original_soa_kn
+    reference_fuel_t = ctx.fuel_rate_tonnes_per_h(ctx.original_soa_kn) * reference_time_h
+
+    if action.tool == "comply_with_instruction":
+        time_h = ctx.remaining_distance_nm / ctx.demanded_speed_kn
+        fuel_t = ctx.fuel_rate_tonnes_per_h(ctx.demanded_speed_kn) * time_h
+        duty_breaches = 1.0 if ctx.complying_breaches_safety_margin else 0.0
+    elif action.tool == "refuse_citing_ism_art5":
+        time_h = reference_time_h
+        fuel_t = reference_fuel_t
+        duty_breaches = 0.0
+    else:
+        raise ValueError(f"unknown commercial-instruction candidate action: {action.tool!r}")
+
+    delay_h = max(0.0, time_h - reference_time_h)
+    fuel_excess_t = max(0.0, fuel_t - reference_fuel_t)
+    dims = CostDimensions(
+        duty_breaches=duty_breaches,
+        goal_shortfall=_goal_shortfall(time_h, reference_time_h, ctx.deadline_slack_h),
+        commercial=fuel_excess_t + delay_h,
+    )
+    return RolloutResult(dims=dims, notes={"time_h": time_h, "fuel_t": fuel_t, "delay_h": delay_h})
 
 
 # --- Output schema + precedence (Sec 13.B.6, Phase 4) ------------------------------------

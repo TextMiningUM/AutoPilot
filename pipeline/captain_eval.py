@@ -28,10 +28,13 @@ from pipeline.captain_types import BrownEnvelopeEvent, CaptainAction
 # set to fill the full scale would misrepresent an unimplemented axis as a perfect score.
 PHASE5_WEIGHTS = {"mission_outcome": 0.25, "safety": 0.20, "resource_efficiency": 0.07}
 
-# Every v1 event with a fully-wired decision layer (Phase 3/6) names its own mandated speed
-# under a different, event-specific key (engine_failure's shield cap vs fog's Rule-19 safe
-# speed vs whale_zone's posted limit) -- checked in this fixed order, first match wins.
-_CAP_PARAM_NAMES = ("capped_speed_kn", "safe_speed_kn", "speed_limit_kn")
+# Every v1 event with a fully-wired decision layer (Phase 3/6/7) names its own mandated
+# speed ceiling under a different, event-specific key (engine_failure's shield cap vs
+# fog's Rule-19 safe speed vs whale_zone's posted limit vs commercial_instruction's own
+# ship engine limit) -- checked in this fixed order, first match wins. distress_call has
+# no speed-cap concept at all (its safety-adjacent cost is `duty_breaches`, not a speed
+# ceiling) -- deliberately excluded here, not an oversight.
+_CAP_PARAM_NAMES = ("capped_speed_kn", "safe_speed_kn", "speed_limit_kn", "engine_max_speed_kn")
 
 
 def _declared_cap_kn(event: BrownEnvelopeEvent) -> float | None:
