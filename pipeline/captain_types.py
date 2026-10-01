@@ -56,6 +56,24 @@ class BrownEnvelopeEvent:
 
 
 @dataclass(frozen=True)
+class EngineStatus:
+    """A subordinate fact container (Sec 2.5/15.2) -- the Chief Engineer's own report, fed
+    into the Captain's prompt/shield as a plain fact, never a separate fine-tuned agent."""
+    max_speed_kn: float
+    fault: str | None = None
+    reported_at: float | None = None  # mission-sim elapsed_s
+
+
+@dataclass(frozen=True)
+class CaptainAction:
+    """One Captain decision (Sec 13.B.6's output schema's `tool`/`params` subset) -- the
+    unit both the shield (Sec 13.A.6) and the decision layer (Sec 13.A.4/13.A.8) operate
+    on, whether it's a `candidates()` member or a genuinely novel proposal."""
+    tool: str
+    params: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class MissionOrder:
     """The Captain's input contract (Sec 8.2), issued once at mission start and never
     mutated afterward -- see MissionState for the live, mutable counterpart (Sec 8.4)."""
