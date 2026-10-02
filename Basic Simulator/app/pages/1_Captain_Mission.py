@@ -26,6 +26,7 @@ import streamlit as st
 
 from app.captain_skeleton import CaptainSkeleton
 from app.mission_sim import position_along_route_nm
+from pipeline import captain_memory, captain_tools
 
 st.set_page_config(page_title="Captain Mission", page_icon="\U0001F6A2", layout="wide")
 
@@ -250,6 +251,7 @@ st.caption("There is no text 'instruction' channel yet -- OOW is always the dete
           "constraint line' mechanism is for a future LLM-OOW, not built yet.")
 events_by_id = {e.event_id: e for e in skeleton.order.events}
 decisions = [d for d in skeleton.state.event_log if d["field_path"] == "captain_decision"]
+responses_by_cause = {r["cause"]: r for r in skeleton.state.event_log if r["field_path"] == "captain_response"}
 if decisions:
     for d in decisions:
         event = events_by_id.get(d["cause"])
@@ -265,8 +267,35 @@ if decisions:
             badge = (" \u2022 \U0001F6E1\uFE0F *shield override -- the Captain's own proposal "
                     "breached a safety margin and was substituted*" if d["new"]["shield_substituted"] else "")
             st.caption(f"\U0001F4E1 Communicated to: {recipient}{badge}")
+
+            response = responses_by_cause.get(d["cause"])
+            if response is not None:
+                plan = response["new"]["plan"]
+                with st.expander("\U0001F4CB Plan & reasoning (computed, Sec 16.2/16.4)"):
+                    st.markdown(f"**Reasoning:** {response['new']['reasoning']}")
+                    st.markdown(f"**Goal achievability:** {plan['resource_note']}")
+                    goals_line = " \u00b7 ".join(f"{g['goal']} ({g['status']})" for g in plan["updated_goals"])
+                    st.caption(f"Updated goals: {goals_line}")
+
+            if event is not None:
+                memory_hits = captain_memory.retrieve(event.type)
+                with st.expander(f"\U0001F9E0 Memory consulted ({len(memory_hits)}, Sec 16.1)"):
+                    if memory_hits[0].is_placeholder:
+                        st.caption("\u26A0\uFE0F Placeholder content -- real RAG/KG/PG not built yet "
+                                  "(design_captain_missions.md \u00a716.6 step 1).")
+                    for hit in memory_hits:
+                        st.markdown(f"- **{hit.source}** (score {hit.score:.2f}): {hit.text}")
 else:
     st.caption("No Captain decisions recorded yet.")
+
+with st.expander("\U0001F6E0\uFE0F Tool overview (Sec 16.3/9.1 -- extension point for future tools)"):
+    st.caption("The Captain decision layer selects from the 'wired' tools below today. The "
+              "'future' rows are a deliberately deferred extension point (Sec 16.3) -- no "
+              "inference loop or training format exists for them yet; add new entries to "
+              "pipeline/captain_tools.py's TOOL_REGISTRY when one is actually built.")
+    tools_df = pd.DataFrame([{"Tool": t.name, "Scope": t.scope, "Status": t.status,
+                             "Description": t.description} for t in captain_tools.TOOL_REGISTRY])
+    st.dataframe(tools_df, use_container_width=True, hide_index=True)
 
 with st.expander("Event log (full, raw)"):
     if skeleton.state.event_log:

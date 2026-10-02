@@ -70,7 +70,7 @@ from pipeline.captain_agent_spec import (
     PROCEDURE_LIBRARY, CommercialInstructionContext, DistressCallContext, EngineFailureContext,
     FogContext, WhaleZoneContext, candidates_commercial_instruction, candidates_distress_call,
     candidates_engine_failure, candidates_fog, candidates_whale_zone, check_safety_margins,
-    oracle_best, resolve_captain_decision, rollout_commercial_instruction, rollout_distress_call,
+    oracle_best, regret, resolve_captain_decision, rollout_commercial_instruction, rollout_distress_call,
     rollout_engine_failure, rollout_fog, rollout_whale_zone,
 )
 from pipeline.captain_eval import (
@@ -81,6 +81,7 @@ from pipeline.captain_monitors import (
     EVENT_MONITOR_MAP, company_instruction_received, distress_signal_received,
     engaged_within_deadline, machinery_fault_reported, urgency_deadline_s,
 )
+from pipeline.captain_reasoning import render_captain_response
 from pipeline.captain_types import (
     BrownEnvelopeEvent, CaptainAction, EngineStatus, ExclusionZone, MissionOrder, MissionState,
     Port, load_region_json, ports_from_region, zones_from_region,
@@ -429,6 +430,27 @@ class CaptainSkeleton:
         self._log_delta("active_hazards", old=source_event_id, new=f"{source_event_id}_cleared",
                         cause=event.event_id)
 
+    def _record_captain_response(self, event: BrownEnvelopeEvent, applied: CaptainAction,
+                                 candidates: list[CaptainAction], rollout_fn, substituted: bool,
+                                 remaining_nm: float) -> None:
+        """Sec 16.2/16.4's reasoning/planning skeleton: builds and logs a real Sec 13.B.6
+        CaptainResponse (plan/reasoning) for whichever action actually applied -- additive,
+        a NEW 'captain_response' log entry alongside the existing 'captain_decision' one,
+        never replacing it. `response.plan['updated_goals']` re-derives goal achievability
+        from the REAL current deadline slack every call (Sec 9's own re-planning question),
+        so the Mission State's own goals genuinely update as unforeseen events unfold,
+        not a static copy."""
+        chosen_rollout = rollout_fn(applied)
+        regret_value = regret(applied, candidates, rollout_fn)
+        response = render_captain_response(
+            event_type=event.type, applied=applied, chosen_rollout=chosen_rollout,
+            regret_value=regret_value, shield_substituted=substituted,
+            goals=self.state.goals, deadline_slack_h=self._deadline_slack_h(remaining_nm),
+        )
+        self.state.goals = response.plan["updated_goals"]
+        self._log_delta("captain_response", old=None,
+                        new={"plan": response.plan, "reasoning": response.reasoning}, cause=event.event_id)
+
     def _handle_engine_failure(self, event: BrownEnvelopeEvent) -> None:
         """The ONE fully-wired decision layer (Sec 13.A.4/13.A.8): builds the
         EngineFailureContext from live Mission-sim/route-planner facts, applies the
@@ -458,7 +480,8 @@ class CaptainSkeleton:
             repair_duration_h=repair_duration_h,
         )
         candidates = candidates_engine_failure(ctx)
-        proposed, _ = oracle_best(candidates, lambda a: rollout_engine_failure(a, ctx))
+        rollout_fn = lambda a: rollout_engine_failure(a, ctx)  # noqa: E731
+        proposed, _ = oracle_best(candidates, rollout_fn)
 
         violations = check_safety_margins(proposed, engine_max_speed_kn=capped_speed_kn)
         fallback = CaptainAction(tool="continue_at_capped_speed", params={"speed_kn": capped_speed_kn})
@@ -468,6 +491,7 @@ class CaptainSkeleton:
         self._log_delta("captain_decision", old=None,
                         new={"tool": applied.tool, "params": applied.params, "shield_substituted": substituted},
                         cause=event.event_id)
+        self._record_captain_response(event, applied, candidates, rollout_fn, substituted, remaining_nm)
 
     def _handle_fog(self, event: BrownEnvelopeEvent) -> None:
         """Sec 13.A.4's degenerate fog decision layer: Rule 19 mandates the safe speed
@@ -479,7 +503,8 @@ class CaptainSkeleton:
                         affected_distance_nm=affected_distance_nm,
                         fuel_rate_tonnes_per_h=self.sim.fuel_model.fuel_rate_tonnes_per_h)
         candidates = candidates_fog(ctx)
-        proposed, _ = oracle_best(candidates, lambda a: rollout_fog(a, ctx))
+        rollout_fn = lambda a: rollout_fog(a, ctx)  # noqa: E731
+        proposed, _ = oracle_best(candidates, rollout_fn)
 
         violations = check_safety_margins(proposed, engine_max_speed_kn=safe_speed_kn)
         fallback = CaptainAction(tool="reduce_to_safe_speed", params={"speed_kn": safe_speed_kn})
@@ -489,6 +514,8 @@ class CaptainSkeleton:
         self._log_delta("captain_decision", old=None,
                         new={"tool": applied.tool, "params": applied.params, "shield_substituted": substituted},
                         cause=event.event_id)
+        self._record_captain_response(event, applied, candidates, rollout_fn, substituted,
+                                      self.sim.remaining_distance_nm())
         self._schedule_regime_clear(event, affected_distance_nm)
 
     def _handle_whale_zone(self, event: BrownEnvelopeEvent) -> None:
@@ -503,7 +530,8 @@ class CaptainSkeleton:
                               zone_transit_distance_nm=affected_distance_nm,
                               fuel_rate_tonnes_per_h=self.sim.fuel_model.fuel_rate_tonnes_per_h)
         candidates = candidates_whale_zone(ctx)
-        proposed, _ = oracle_best(candidates, lambda a: rollout_whale_zone(a, ctx))
+        rollout_fn = lambda a: rollout_whale_zone(a, ctx)  # noqa: E731
+        proposed, _ = oracle_best(candidates, rollout_fn)
 
         violations = check_safety_margins(proposed, engine_max_speed_kn=speed_limit_kn)
         fallback = CaptainAction(tool="reduce_to_zone_speed_limit", params={"speed_kn": speed_limit_kn})
@@ -513,6 +541,8 @@ class CaptainSkeleton:
         self._log_delta("captain_decision", old=None,
                         new={"tool": applied.tool, "params": applied.params, "shield_substituted": substituted},
                         cause=event.event_id)
+        self._record_captain_response(event, applied, candidates, rollout_fn, substituted,
+                                      self.sim.remaining_distance_nm())
         self._schedule_regime_clear(event, affected_distance_nm)
 
     def _handle_distress_call(self, event: BrownEnvelopeEvent) -> None:
@@ -544,7 +574,8 @@ class CaptainSkeleton:
             assisting_breaches_safety_margin=bool(assist_violations),
         )
         candidates = candidates_distress_call(ctx)
-        proposed, _ = oracle_best(candidates, lambda a: rollout_distress_call(a, ctx))
+        rollout_fn = lambda a: rollout_distress_call(a, ctx)  # noqa: E731
+        proposed, _ = oracle_best(candidates, rollout_fn)
 
         # The shield only ever enforces against assisting's OWN violation, and only when
         # that's actually what was proposed -- a decision layer that already correctly
@@ -557,6 +588,7 @@ class CaptainSkeleton:
         self._log_delta("captain_decision", old=None,
                         new={"tool": applied.tool, "params": applied.params, "shield_substituted": substituted},
                         cause=event.event_id)
+        self._record_captain_response(event, applied, candidates, rollout_fn, substituted, remaining_nm)
         self._schedule_world_responder(event)
 
     def _handle_commercial_instruction(self, event: BrownEnvelopeEvent) -> None:
@@ -581,7 +613,8 @@ class CaptainSkeleton:
             complying_breaches_safety_margin=bool(comply_violations),
         )
         candidates = candidates_commercial_instruction(ctx)
-        proposed, _ = oracle_best(candidates, lambda a: rollout_commercial_instruction(a, ctx))
+        rollout_fn = lambda a: rollout_commercial_instruction(a, ctx)  # noqa: E731
+        proposed, _ = oracle_best(candidates, rollout_fn)
 
         # Re-checks WHATEVER was actually proposed (naturally [] when proposed has no
         # speed_kn, i.e. refuse) -- never the fixed hypothetical above, so a decision layer
@@ -595,6 +628,7 @@ class CaptainSkeleton:
         self._log_delta("captain_decision", old=None,
                         new={"tool": applied.tool, "params": applied.params, "shield_substituted": substituted},
                         cause=event.event_id)
+        self._record_captain_response(event, applied, candidates, rollout_fn, substituted, remaining_nm)
         self._schedule_world_responder(event)
 
     # --- debug control set (Sec 15.3) ---------------------------------------------------
