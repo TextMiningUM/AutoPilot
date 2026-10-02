@@ -35,6 +35,10 @@ per document, glob'd automatically -- no wiring needed elsewhere):
       ]
     }
 
+De-hyphenation (core/text_segmentation.py::join_hyphenated_linebreaks) is applied to
+every raw-text-assembly point below -- standard for all text processed into JSON, see
+Docs/rag_chunking_design_and_verification.md.
+
 Run with: python -m pipeline.ingest.build_oow_json
 """
 from __future__ import annotations
@@ -44,6 +48,7 @@ from pathlib import Path
 import pdfplumber
 
 from core import AgentPaths
+from core.text_segmentation import join_hyphenated_linebreaks
 
 paths = AgentPaths.from_env()
 JSON_OUT_DIR = paths.json_dir
@@ -192,7 +197,9 @@ def parse_document(pdf_path: Path) -> dict:
     def flush_section():
         nonlocal cur_section, cur_lines, cur_pages
         if cur_section is not None:
-            text = "\n".join(cur_lines).strip()
+            # Standard for all text processed into JSON (Docs/rag_chunking_design_and_
+            # verification.md): join a word the PDF's own line-wrapping broke in two.
+            text = join_hyphenated_linebreaks("\n".join(cur_lines)).strip()
             concepts, topics = tag_text(text)
             cur_section["text"] = text
             cur_section["concepts"] = concepts
@@ -312,7 +319,7 @@ def parse_markdown_doc(md_path: Path, document_id: str, source_type: str, publis
     def flush_section():
         nonlocal cur_section, cur_lines
         if cur_section is not None:
-            text = "\n".join(cur_lines).strip()
+            text = join_hyphenated_linebreaks("\n".join(cur_lines)).strip()
             if text:
                 concepts, topics = tag_text(text)
                 cur_section.update(text=text, concepts=concepts, topics=topics, pages=[])
@@ -366,7 +373,7 @@ def parse_radar_workbook(pdf_path: Path) -> dict:
     def flush():
         nonlocal cur_section, cur_lines, cur_pages
         if cur_section is not None:
-            text = "\n".join(cur_lines).strip()
+            text = join_hyphenated_linebreaks("\n".join(cur_lines)).strip()
             if text:
                 concepts, topics = tag_text(text)
                 cur_section.update(text=text, concepts=concepts, topics=topics, pages=sorted(cur_pages))

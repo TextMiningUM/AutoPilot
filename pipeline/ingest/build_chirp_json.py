@@ -34,6 +34,10 @@ per the RAG-rebuild plan) -- an article is kept only if net_score >= 0.
 Output: one JSON per newsletter under OOW_JSON/, same schema build_rag.py expects
 (document -> chapters -> sections), so no further RAG/KG wiring is required.
 
+De-hyphenation (core/text_segmentation.py::join_hyphenated_linebreaks) is applied once
+at extraction time, before caching -- standard for all text processed into JSON, see
+Docs/rag_chunking_design_and_verification.md.
+
 Run with: python -m pipeline.ingest.build_chirp_json
 """
 from __future__ import annotations
@@ -45,6 +49,7 @@ from pathlib import Path
 import pymupdf
 
 from core import AgentPaths
+from core.text_segmentation import join_hyphenated_linebreaks
 from pipeline.ingest.build_oow_json import tag_text
 from pipeline.ingest.rag_exclusions import raise_if_excluded_source
 from pipeline.ingest.screen_incidents import score_pages
@@ -127,7 +132,11 @@ def extract_pages_cached(pdf_path: Path) -> list[str]:
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     try:
         with pymupdf.open(pdf_path) as doc:
-            pages = [_CONTROL_CHAR_RE.sub("", page.get_text("text") or "") for page in doc]
+            # Standard for all text processed into JSON (Docs/rag_chunking_design_and_
+            # verification.md): join a word PyMuPDF's own line-wrapping broke in two,
+            # cached here so the fix applies without needing to re-extract from the PDF.
+            pages = [join_hyphenated_linebreaks(_CONTROL_CHAR_RE.sub("", page.get_text("text") or ""))
+                    for page in doc]
     except Exception as e:  # corrupt/scanned/encrypted PDF
         pages = [f"__EXTRACT_ERROR__: {e}"]
     cache_file.write_text(json.dumps(pages), encoding="utf-8")

@@ -5,6 +5,13 @@ Reads JSONs from _json/, writes:
   _cache/vhf_rag_embeddings.npy        (numpy float32 array)
   _cache/vhf_rag_chunk_ids.json        (chunk_id list, same order as embeddings)
 
+Standard for ALL text (PDF/TXT/MD, any domain) that reaches this module: every parsed
+section is passed through embedding-based topic-boundary detection BEFORE token-budget
+chunking -- see core/text_segmentation.py and Docs/rag_chunking_design_and_verification.md
+for the full design (Hearst 1997 TextTiling depth-score, adapted to sentence embeddings).
+This is the single shared choke point every domain's build_*_json.py output flows
+through, so the fix applies uniformly without touching any individual parser.
+
 Run with: python build_rag.py
 """
 from __future__ import annotations
@@ -16,6 +23,10 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from core import AgentPaths, EMBEDDER_MODEL
+from core.text_segmentation import (
+    join_hyphenated_linebreaks, split_sentences, cosine_similarities,
+    percentile, semantic_split_sentence_indices,
+)
 from pipeline.ingest.rag_exclusions import raise_if_excluded_source
 
 paths = AgentPaths.from_env()
@@ -34,6 +45,19 @@ CHUNK_TARGET_TOKENS = 400
 CHUNK_MAX_TOKENS    = 500
 CHUNK_MIN_TOKENS    = 40
 TOPIC_JACCARD_MIN   = 0.5
+
+# Embedding-based topic-boundary parameters (Docs/rag_chunking_design_and_verification.md).
+# MIN_SENTENCES_FOR_TOPIC_SPLIT: below this, a section is never split -- too few
+# sentences for the depth-score's "peak on both sides" logic to mean anything.
+# TOPIC_SPLIT_PERCENTILE: only the deepest ~15% of a section's OWN similarity valleys
+# count as a real internal topic shift (adaptive per-section, not a fixed cosine cutoff).
+# MERGE_FLOOR_PERCENTILE: when deciding whether to merge two ADJACENT sections into one
+# chunk, block the merge if their boundary similarity falls in the bottom quartile of
+# THIS chapter's own adjacent-section similarities -- adaptive per-chapter, augmenting
+# (never replacing) the existing keyword-topic-Jaccard check below.
+MIN_SENTENCES_FOR_TOPIC_SPLIT = 6
+TOPIC_SPLIT_PERCENTILE = 85.0
+MERGE_FLOOR_PERCENTILE = 25.0
 
 # "rule" added so every individual COLREG rule (Rule 13, Rule 14, ...) is always its
 # own standalone chunk, never merged with a neighbouring rule -- found 3 accidental
@@ -74,8 +98,48 @@ def token_count(text: str) -> int:
 
 
 # ── Chunker ───────────────────────────────────────────────────────────────
+def _embed(texts: list[str]) -> np.ndarray:
+    """Batch-embed `texts` with the already-loaded global `model` (normalize_embeddings=True,
+    matching every other embedding call in this project -- see core/embedding.py).
+    Returns an (0, dim) array for an empty input so callers never special-case it."""
+    if not texts:
+        return np.zeros((0, model.get_sentence_embedding_dimension()), dtype=np.float32)
+    return model.encode(texts, convert_to_numpy=True, normalize_embeddings=True, show_progress_bar=False)
+
+
+def _split_section_by_topic(section: dict) -> list[dict]:
+    """Detect a genuine internal topic shift within ONE section's own text and split it
+    there -- independent of, and applied BEFORE, the token-budget-driven
+    _split_oversized_section below (see core/text_segmentation.py and
+    Docs/rag_chunking_design_and_verification.md for the full method). Returns
+    [section] unchanged if there isn't a confident boundary (short text, or no deep
+    enough similarity valley) -- the common case, so this is cheap for most sections."""
+    text = join_hyphenated_linebreaks(section["text"])
+    sentences = split_sentences(text)
+    if len(sentences) < MIN_SENTENCES_FOR_TOPIC_SPLIT:
+        return [section]
+    embeddings = _embed(sentences)
+    split_idxs = semantic_split_sentence_indices(
+        embeddings, percentile_cutoff=TOPIC_SPLIT_PERCENTILE, min_sentences=MIN_SENTENCES_FOR_TOPIC_SPLIT)
+    if not split_idxs:
+        return [section]
+    bounds = [0] + split_idxs + [len(sentences)]
+    out = []
+    for k in range(len(bounds) - 1):
+        piece_sentences = sentences[bounds[k]:bounds[k + 1]]
+        if not piece_sentences:
+            continue
+        sub = dict(section)
+        sub["text"] = " ".join(piece_sentences)
+        sub["section_id"] = f"{section['section_id']}_t{k + 1}"
+        sub["semantic_split"] = True
+        out.append(sub)
+    return out if len(out) > 1 else [section]
+
+
 def _can_extend(cur_types, cur_topics, cur_tokens,
-                nxt_type, nxt_topics, nxt_tokens) -> bool:
+                nxt_type, nxt_topics, nxt_tokens,
+                boundary_sim: float, merge_floor: float) -> bool:
     if nxt_type in STANDALONE_TYPES:
         return False
     if any(t in STANDALONE_TYPES for t in cur_types):
@@ -86,6 +150,13 @@ def _can_extend(cur_types, cur_topics, cur_tokens,
     if cur_tokens < CHUNK_MIN_TOKENS or nxt_tokens < CHUNK_MIN_TOKENS:
         thresh = 0.2
     if jaccard(cur_topics, nxt_topics) < thresh:
+        return False
+    # Embedding-based augment (Docs/rag_chunking_design_and_verification.md): blocks a
+    # merge the coarse keyword-Jaccard check alone would wrongly allow when two sections
+    # happen to share/lack keyword tags by coincidence but are semantically unrelated --
+    # an ADAPTIVE floor (this chapter's own bottom-quartile adjacent-section similarity),
+    # never a fixed global cosine cutoff.
+    if boundary_sim < merge_floor:
         return False
     return True
 
@@ -130,6 +201,10 @@ def _finalise_chunk(sections, chapter, doc, tokens, chapter_index, chunk_index) 
         "pages":             pages,
         "token_count":       tokens,
         "n_sections":        len(sections),
+        # True if any constituent section was produced by the embedding-based topic
+        # splitter (_split_section_by_topic) rather than the original parser -- an audit
+        # trail, see Docs/rag_chunking_design_and_verification.md.
+        "contains_semantic_split": any(s.get("semantic_split") for s in sections),
     }
 
 
@@ -183,10 +258,20 @@ def chunk_chapter(chapter: dict, doc: dict, chapter_index: int) -> list[dict]:
         return []
     sections = []
     for s in raw_sections:
-        if token_count(s["text"]) > CHUNK_MAX_TOKENS:
-            sections.extend(_split_oversized_section(s, CHUNK_MAX_TOKENS))
-        else:
-            sections.append(s)
+        for piece in _split_section_by_topic(s):
+            if token_count(piece["text"]) > CHUNK_MAX_TOKENS:
+                sections.extend(_split_oversized_section(piece, CHUNK_MAX_TOKENS))
+            else:
+                sections.append(piece)
+
+    # Adaptive, per-chapter merge floor (Docs/rag_chunking_design_and_verification.md):
+    # whole-section embeddings for every section in THIS chapter, then only block a
+    # merge that's unusually weak relative to the REST of this chapter's own
+    # adjacent-section similarities -- never a fixed global cosine cutoff.
+    section_embeddings = _embed([s["text"] for s in sections])
+    adjacent_sims = cosine_similarities(section_embeddings)
+    merge_floor = percentile(adjacent_sims, MERGE_FLOOR_PERCENTILE) if adjacent_sims else 0.0
+
     out = []
     i = 0
     chunk_index = 0
@@ -202,8 +287,10 @@ def chunk_chapter(chapter: dict, doc: dict, chapter_index: int) -> list[dict]:
             nxt = sections[j]
             nxt_tokens = token_count(nxt["text"])
             nxt_topics = set(nxt.get("topics", []))
+            boundary_sim = adjacent_sims[j - 1] if j - 1 < len(adjacent_sims) else 1.0
             if not _can_extend(cur_types, cur_topics, cur_tokens,
-                               nxt["type"], nxt_topics, nxt_tokens):
+                               nxt["type"], nxt_topics, nxt_tokens,
+                               boundary_sim, merge_floor):
                 break
             if cur_tokens >= CHUNK_TARGET_TOKENS and nxt_tokens >= CHUNK_MIN_TOKENS:
                 break
@@ -304,6 +391,9 @@ def main() -> None:
     print(f"\nSections per chunk:")
     for k in sorted(n_sec_distribution):
         print(f"  {k}: {n_sec_distribution[k]}")
+
+    n_semantic_split = sum(1 for c in all_chunks if c["contains_semantic_split"])
+    print(f"\nChunks containing an embedding-detected internal topic split: {n_semantic_split}")
 
     # ── Embed ─────────────────────────────────────────────────────────────
     print(f"\nEmbedding {len(all_chunks)} chunks on "

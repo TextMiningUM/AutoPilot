@@ -11,6 +11,10 @@ Output schema matches what build_rag.py / build_kg.py expect (same as build_oow_
         {"section_id", "title", "type", "text", "concepts", "topics", "steps", "pages"}
      ]}], "parsing_notes", "metadata": {...}}
 
+De-hyphenation (core/text_segmentation.py::join_hyphenated_linebreaks) is applied to
+every raw-text-assembly point below -- standard for all text processed into JSON, see
+Docs/rag_chunking_design_and_verification.md.
+
 Run with: python -m pipeline.ingest.build_vhf_json
 """
 from __future__ import annotations
@@ -22,6 +26,7 @@ from collections import Counter
 import pdfplumber
 
 from core import AgentPaths
+from core.text_segmentation import join_hyphenated_linebreaks
 
 paths = AgentPaths.from_env()
 DATA_DIR = paths.source_dir
@@ -261,6 +266,10 @@ def parse_txt_file(path: Path) -> dict:
     if not doc:
         return {}
     raw = path.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n")
+    # Standard for all text processed into JSON (Docs/rag_chunking_design_and_verification.md):
+    # join a word broken across a line by the SOURCE file's own wrapping BEFORE any
+    # heading/paragraph splitting runs on it.
+    raw = join_hyphenated_linebreaks(raw)
     lines = raw.split("\n")
 
     chapters: list[dict] = []
@@ -410,7 +419,10 @@ def parse_pdf_file(path: Path, max_pages: int = 200) -> dict:
 
     def flush_section() -> None:
         nonlocal buffer_texts, buffer_pages, pending_section_title, current_chapter
-        body = " ".join(buffer_texts).strip()
+        # Join with "\n" (not " ") first so join_hyphenated_linebreaks can see the
+        # line-wrap pattern it looks for, THEN collapse to the usual space-joined body --
+        # standard for all text (Docs/rag_chunking_design_and_verification.md).
+        body = join_hyphenated_linebreaks("\n".join(buffer_texts)).replace("\n", " ").strip()
         buffer_texts = []
         pages = sorted(set(buffer_pages))
         buffer_pages = []
@@ -450,7 +462,7 @@ def parse_pdf_file(path: Path, max_pages: int = 200) -> dict:
         chapters.append(current_chapter)
 
     if not chapters or all(not c["sections"] for c in chapters):
-        body = " ".join(l["text"] for l in all_lines).strip()
+        body = join_hyphenated_linebreaks("\n".join(l["text"] for l in all_lines)).replace("\n", " ").strip()
         if body:
             concepts, topics = extract_concepts(body)
             chapters = [{"chapter_id": stable_id("c", doc["document_id"], 0), "title": path.stem, "level": 1,

@@ -26,6 +26,7 @@ import numpy as np
 # question/answer text → family, mirroring build_pg.FAMILY_RULES
 from pipeline.ingest.build_pg import FAMILY_RULES
 from core import QUERY_PREFIX, MATCH_THRESH, ANCHOR_THRESH
+from core.text_segmentation import split_sentences
 
 MAX_HOPS = 3          # reachability horizon for ordering checks / neighborhoods
 
@@ -166,7 +167,7 @@ _STEP_HINT_RE = re.compile(
 
 def split_step_sentences(answer: str) -> list[str]:
     """Sentences of an answer that look like procedure steps (order-bearing)."""
-    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", answer) if len(s.strip()) > 8]
+    sents = [s for s in split_sentences(answer) if len(s) > 8]
     return [s for s in sents if _STEP_HINT_RE.search(s)]
 
 

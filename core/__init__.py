@@ -22,6 +22,10 @@ from core.embedding import (
     EMBEDDER_MODEL, QUERY_PREFIX,
     CONTAM_THRESH, DEDUP_THRESH, CANON_THRESH, MATCH_THRESH, ANCHOR_THRESH,
 )
+from core.text_segmentation import (
+    join_hyphenated_linebreaks, split_sentences, cosine_similarities,
+    depth_scores, percentile, semantic_split_sentence_indices,
+)
 
 __all__ = [
     "AgentPaths",
@@ -31,4 +35,6 @@ __all__ = [
     "add_dry_run_arg", "write_stub_output",
     "EMBEDDER_MODEL", "QUERY_PREFIX",
     "CONTAM_THRESH", "DEDUP_THRESH", "CANON_THRESH", "MATCH_THRESH", "ANCHOR_THRESH",
+    "join_hyphenated_linebreaks", "split_sentences", "cosine_similarities",
+    "depth_scores", "percentile", "semantic_split_sentence_indices",
 ]
