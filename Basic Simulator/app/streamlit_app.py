@@ -5,11 +5,9 @@ Run from the Basic Simulator/ folder:
 """
 from __future__ import annotations
 import json
-import math
 import os
 import sys
 import textwrap
-import time
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent
@@ -20,13 +18,11 @@ for p in (ROOT, REPO_ROOT):
         sys.path.insert(0, str(p))
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from app.missions import Mission, list_mission_ids, load_mission
 from app.simulation import Simulation, VesselConstraints, project_scenario, find_collision
 from app.narrate import narrate, contact_line, bearing_and_range, relative_bearing, cpa_tcpa
-from app.measurement import measure_decision_quality
-from app.viz_plotly import trajectory_figure, trajectory_bounds, animated_trajectory_figure
+from app.viz_plotly import trajectory_bounds, animated_trajectory_figure
 from app.evaluation import compliance_finding_parts, score_trajectory
 from app.units import kn_to_mps, mps_to_kn, m_to_nm, nm_to_m
 
@@ -141,7 +137,7 @@ if not st.session_state.splash_dismissed:
 
 # Available after the splash gate above (which imports app.agents and warms its caches
 # on the very first run) -- re-importing here is a cheap sys.modules lookup, not a reload.
-from app.agents import MODEL_CONFIGS, SYSTEM_OOW_AGENT, ask_oow
+from app.agents import MODEL_CONFIGS, SYSTEM_OOW_AGENT
 from app.llm_runs import list_runs_for_mission, load_run, checkpoint_at_or_before, list_run_sets, BASE_RUNS_DIR
 from app.model_variants import MODEL_VARIANTS, variant_label
 
@@ -408,44 +404,6 @@ def _build_decision_by_time(run_log: dict, times: list[float]) -> dict[float, st
     return out
 
 
-def _render_plot(trajectory: list[dict], mission, placeholder, title: str,
-                 bounds_from: list[dict] | None = None, freeze_at_collision: bool = True) -> None:
-    """Plain trajectory render: shows everything recorded so far (or the full precomputed
-    path for the no-avoidance preview). `freeze_at_collision` (default True) truncates the
-    render to `t <= collision_time` and marks it -- meaningful for a real (Manual helm/LLM
-    driven) run that actually stops there. The no-avoidance Scenario preview passes
-    `freeze_at_collision=False` instead: it's a hypothetical illustration of the raw
-    encounter geometry, so cutting it off at the collision point hid the rest of the
-    intended path -- now it shows the full path with the collision point just marked.
-    Called directly (no @st.fragment) so it can also be invoked repeatedly, mid-loop, by
-    the sidebar's 'Full run' button for a live animated readout (see below)."""
-    if not trajectory:
-        placeholder.info("Nothing recorded yet.")
-        return
-    times = sorted({row["time"] for row in trajectory})
-    collision = find_collision(trajectory)
-    render_traj, render_times = trajectory, times
-    if collision is not None and freeze_at_collision:
-        render_traj = [row for row in trajectory if row["time"] <= collision["time"]]
-        render_times = [t for t in times if t <= collision["time"]]
-    x_range, y_range = trajectory_bounds(bounds_from or trajectory, mission)
-    placeholder.plotly_chart(
-        trajectory_figure(render_traj, mission, title=title, x_range=x_range, y_range=y_range,
-                          current_time=render_times[-1] if render_times else None,
-                          total_time=times[-1] if times else None, collision=collision),
-        # Streamlit requires a unique key per element within a single script run (not just
-        # across reruns) -- the Full-run loop below calls this repeatedly in one run, so the
-        # key must vary per call. len(trajectory) grows every step, which gives uniqueness
-        # "for free" without needing a separate counter.
-        use_container_width=True, key=f"chart_render_plot_{len(trajectory)}",
-    )
-    if collision is not None:
-        st.error(
-            f"\U0001F4A5 Collision with **{collision['vehicle']}** at t={collision['time']:.0f}s "
-            f"(range {m_to_nm(collision['range_m']):.3f} NM)."
-        )
-
-
 def _animate_preview(trajectory: list[dict], mission, placeholder, title: str,
                      speed_s: float = 0.3, max_frames: int = 80,
                      metrics_by_time: dict[float, str] | None = None,
@@ -481,34 +439,6 @@ def _animate_preview(trajectory: list[dict], mission, placeholder, title: str,
             f"\U0001F4A5 Collision with **{collision['vehicle']}** at t={collision['time']:.0f}s "
             f"(range {m_to_nm(collision['range_m']):.3f} NM)."
         )
-
-
-def _render_metrics_row(placeholders, mission, metrics_row, targets_now) -> None:
-    """Fills the 4 goal-bearing/heading/CPA/TCPA metric boxes -- used for Manual helm/Agent
-    Real-Time only (Scenario Preview/Play Agent Mission show the same numbers baked directly
-    into the plot's own animation frames instead, see _build_metrics_by_time)."""
-    b1, b2, b3, b4 = placeholders
-    if metrics_row:
-        _t, _x, _y, _hdg, _spd = metrics_row
-        _goal_brg, _goal_rng = bearing_and_range(_x, _y, mission.goal[0], mission.goal[1])
-        b1.metric("Goal bearing / dist", f"{_goal_brg:.0f}\u00b0 / {m_to_nm(_goal_rng):.3f} NM")
-        b2.metric("Our heading / speed", f"{_hdg:.0f}\u00b0 / {mps_to_kn(_spd):.2f} kt")
-        if targets_now:
-            cpas, tcpas = [], []
-            for tgt in targets_now:
-                cpa_m, tcpa_s = cpa_tcpa(_x, _y, _hdg, _spd, tgt["x"], tgt["y"],
-                                        tgt["heading"], tgt["speed"])
-                name = tgt.get("vehicle", "?")
-                cpas.append(f"{name}: {m_to_nm(cpa_m):.3f} NM")
-                tcpas.append(f"{name}: {tcpa_s:.0f}s")
-            b3.metric("CPA", " \u2022 ".join(cpas))
-            b4.metric("TCPA", " \u2022 ".join(tcpas))
-        else:
-            b3.metric("CPA", "no contacts")
-            b4.metric("TCPA", "no contacts")
-    else:
-        for _b in placeholders:
-            _b.metric("\u2014", "n/a")
 
 
 def _render_agent_detail(ph, mission) -> None:
@@ -595,27 +525,12 @@ with side_panel:
 with plot_col:
     st.caption(f"\U0001F4CB **{mission.name}** ({mission.id}) -- full briefing in the sidebar under Mission.")
     view = st.radio(
-        "Mode", options=["Scenario preview (no avoidance)", "Manual helm",
-                        "Play Agent Mission", "Agent Real-Time"],
+        "Mode", options=["Scenario preview (no avoidance)", "Play Agent Mission"],
         horizontal=True, label_visibility="collapsed", key="sim_view_mode",
-        help="Preview: no-avoidance path. Manual helm: steer it live. Play Agent Mission: "
-             "replay a precomputed run. Agent Real-Time: live agent calls.",
+        help="Preview: no-avoidance path. Play Agent Mission: replay a precomputed run.",
     )
     _dt_now = 10.0
     _speed_s = (1500 - (6 - 1) * (1500 - 60) / 9) / 1000  # fixed mid-range animation speed
-
-    # Scenario Preview and Play Agent Mission show goal-bearing/CPA/TCPA (and, for Play Agent
-    # Mission, a short decision summary) baked directly into the plot's own native animation
-    # instead of a separate metrics row -- there is no single "current frame" outside the
-    # plot to compute a row FOR while the user is free-scrubbing its native slider. Manual
-    # helm/Agent Real-Time have one live `sim` state, so they keep the row as before.
-    if view not in ("Scenario preview (no avoidance)", "Play Agent Mission"):
-        b_cols = st.columns(4)
-        metric_phs = [c.empty() for c in b_cols]
-        metrics_row = (sim.t, sim.own.x, sim.own.y, sim.own.heading, sim.own.speed)
-        targets_now = [{"vehicle": v.name, "x": v.x, "y": v.y, "heading": v.heading, "speed": v.speed}
-                       for v in sim.targets]
-        _render_metrics_row(metric_phs, mission, metrics_row, targets_now)
 
     chart = st.empty()
     if view == "Scenario preview (no avoidance)":
@@ -714,9 +629,6 @@ with plot_col:
                     if st.button("\U0001F50E Show details in Agent panel", use_container_width=True,
                                 key="pam_show_details"):
                         st.session_state._agent_detail_cp_i = picked_cp_i
-    else:
-        _render_plot(sim.trajectory, mission, chart, "",
-                    bounds_from=project_scenario(mission, dt=_dt_now))
 
 # ── Sidebar ───────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -782,119 +694,10 @@ with st.sidebar:
 
     st.divider()
     dt = 10.0  # fixed simulation time step (s) -- no longer a user-adjustable slider
-    sim_mode = st.session_state.get("sim_view_mode", "Manual helm")
-    is_preview = sim_mode == "Scenario preview (no avoidance)"
-    is_llm_playback = sim_mode == "Play Agent Mission"
-    is_frame_scrub = is_preview or is_llm_playback
-
-    if not is_frame_scrub:
-        # Scenario Preview/Play Agent Mission no longer need Step/Auto Run controls here --
-        # both now play/scrub natively via the Play button + slider embedded in the plot
-        # itself. Manual helm/Agent Real-Time still need these since `sim.step()` must stay
-        # visible to the Evaluation panel etc. further down the page.
-        sb_col, sf_col = st.columns(2)
-        if sb_col.button("\u2b05\ufe0f Step back", use_container_width=True, disabled=True):
-            pass
-        if sf_col.button("\u27a1\ufe0f Step forward", use_container_width=True):
-            sim.step(dt)
-            st.rerun()
-
-        rs_col1, rs_col2, rs_col3 = st.columns(3)
-        n_auto = rs_col2.number_input("Steps", 1, 100, 10, step=1, label_visibility="collapsed")
-        if rs_col1.button("\u23ea Steps", use_container_width=True, disabled=True):
-            pass
-        if rs_col3.button("Steps \u23e9", use_container_width=True):
-            for _ in range(int(n_auto)):
-                if sim.reached_goal():
-                    break
-                sim.step(dt)
-            st.rerun()
-
-        if st.button("\U0001F680 Auto Run", use_container_width=True):
-            # Distance-aware step cap: a fixed cap (e.g. 200) silently cut runs short whenever
-            # dt was small and/or the goal was far, which is why "Full run" previously stopped
-            # before finishing longer scenarios. Sized from the actual remaining distance/speed.
-            straight_dist = math.hypot(mission.goal[0] - sim.own.x, mission.goal[1] - sim.own.y)
-            est_speed = max(sim.own.speed, 0.1)
-            needed_steps = int((straight_dist / est_speed * 1.5) / dt) + 10
-            bounds_from = project_scenario(mission, dt=dt)
-            # Play it like a game: redraw the plot as it steps instead of jumping straight
-            # to the final frame. Redraws are throttled to ~60 frames total so a long run
-            # (many steps at a small dt) doesn't spend most of its time re-rendering Plotly.
-            max_steps = min(1200, max(20, needed_steps))
-            render_every = max(1, max_steps // 60)
-            for i in range(max_steps):
-                if sim.reached_goal():
-                    break
-                sim.step(dt)
-                if i % render_every == 0:
-                    _render_plot(sim.trajectory, mission, chart, "", bounds_from=bounds_from)
-                    time.sleep(0.05)
-            _render_plot(sim.trajectory, mission, chart, "", bounds_from=bounds_from)
-            st.rerun()
-    else:
-        st.caption("\u25b6 Use the Play button / slider directly in the plot to move through it.")
-
-    st.divider()
-    st.header("Manual helm")
-    _max_rudder = sim.constraints.max_rudder_angle_deg
-    degrees = st.slider("Turn amount (deg)", 1.0, _max_rudder, min(15.0, _max_rudder), step=1.0)
-    st.caption(
-        "Each control also advances the simulation by one time step -- steering used to just "
-        "change heading/speed without moving, which is why it felt like every click 'stopped' "
-        "things. Arrow keys work too (\u2191\u2193\u2190\u2192, S to stop)."
-    )
-    # Arrow-key / D-pad layout: Speed up on top, Port/Stop/Starboard in the middle row,
-    # Slow down on the bottom -- matches the physical arrow-key mental model requested.
-    _, up_col, _ = st.columns(3)
-    if up_col.button("\u2B06\uFE0F", use_container_width=True):
-        sim.speed_up(); sim.step(dt); st.rerun()
-    left_col, mid_col, right_col = st.columns(3)
-    if left_col.button("\u2B05\uFE0F", use_container_width=True):
-        sim.turn_left(degrees); sim.step(dt); st.rerun()
-    if mid_col.button("\u23F9\uFE0F", use_container_width=True):
-        sim.stop_vessel(); sim.step(dt); st.rerun()
-    if right_col.button("\u27A1\uFE0F", use_container_width=True):
-        sim.turn_right(degrees); sim.step(dt); st.rerun()
-    _, down_col, _ = st.columns(3)
-    if down_col.button("\u2B07\uFE0F", use_container_width=True):
-        sim.slow_down(); sim.step(dt); st.rerun()
-
-    # Arrow-key bridge: this iframe's JS reaches into the PARENT document (same-origin,
-    # since components.html is served from the same Streamlit server) and .click()s the
-    # D-pad button matching the key pressed -- so keyboard steering triggers the exact same
-    # Python callback as a mouse click (including the step-forward fix above). Guarded by a
-    # flag on window.parent so re-injecting this on every rerun doesn't stack up listeners.
-    components.html(
-        """
-        <script>
-        (function() {
-            const doc = window.parent.document;
-            function clickByText(text) {
-                const buttons = doc.querySelectorAll('button');
-                for (const b of buttons) {
-                    if (b.innerText.trim() === text) { b.click(); return true; }
-                }
-                return false;
-            }
-            if (window.parent.__helmKeyListenerAttached) return;
-            window.parent.__helmKeyListenerAttached = true;
-            doc.addEventListener('keydown', function(e) {
-                const map = {
-                    'ArrowUp': '\u2B06\uFE0F', 'ArrowDown': '\u2B07\uFE0F',
-                    'ArrowLeft': '\u2B05\uFE0F', 'ArrowRight': '\u27A1\uFE0F',
-                    's': '\u23F9\uFE0F', 'S': '\u23F9\uFE0F',
-                };
-                const label = map[e.key];
-                if (label && clickByText(label)) {
-                    e.preventDefault();
-                }
-            });
-        })();
-        </script>
-        """,
-        height=0,
-    )
+    sim_mode = st.session_state.get("sim_view_mode", "Scenario preview (no avoidance)")
+    # Scenario Preview/Play Agent Mission both play/scrub natively via the Play button +
+    # slider embedded in the plot itself -- no Step/Auto Run controls needed here.
+    st.caption("\u25b6 Use the Play button / slider directly in the plot to move through it.")
 
     st.divider()
     st.caption(
@@ -933,113 +736,7 @@ with st.sidebar:
 # (mission caption + the 5-metric row now render at the top of plot_col, above the plot itself)
 
 with side_panel:
-    if sim_mode == "Agent Real-Time":
-        # The original live/interactive agent panel -- kept exactly as-is, now scoped to
-        # this one mode instead of always showing regardless of which mode was picked.
-        with st.expander("Situation report", expanded=False):
-            st.caption(_goal_quickfacts(sim.own.x, sim.own.y, sim.own.heading, sim.own.speed,
-                                       mission.goal))
-            st.code(narrate(mission, sim.own, sim.targets, safe_distance_m=sim.constraints.min_cpa_m,
-                           max_turn_deg=sim.constraints.max_rudder_angle_deg), language=None, wrap_lines=True)
-
-        model_config = st.selectbox(
-            "Model / prompt config", options=list(MODEL_CONFIGS),
-            format_func=lambda k: MODEL_CONFIGS[k],
-            index=list(MODEL_CONFIGS).index("v3_rag_cot"), key="model_config_select",
-            help="Same 8 configs as the notebook's \u00a711 prompt ablation study: a bare-Qwen "
-                 "baseline plus v0_base..v6_pg_scenario.",
-        )
-
-        gc1, gc2 = st.columns(2)
-        enable_thinking = gc1.toggle(
-            "\U0001F9E0 Thinking", value=False, key="thinking_toggle",
-            help="Qwen3's native hidden <think>...</think> reasoning channel. Off by default -- "
-                 "it's the single biggest latency cost and isn't needed for a JSON-only answer. "
-                 "Turn on to see/allow visible step-by-step reasoning (slower).",
-        )
-        max_new_tokens = gc2.number_input(
-            "Max new tokens", min_value=64, max_value=1024, value=256, step=32, key="max_new_tokens_input",
-            help="Hard cap on generated response length. Higher = slower but more room for "
-                 "reasoning text before the JSON (relevant mainly with Thinking on).",
-        )
-        rag_k = st.slider(
-            "RAG chunks (k)", min_value=1, max_value=6, value=4, key="rag_k_slider",
-            help="Only affects v1_rag/v3_rag_cot. Each retrieved COLREG excerpt adds ~500 tokens "
-                 "to the PROMPT (not the response) -- this is why those two configs are slower "
-                 "than bare_qwen/v0_base even with generation length unchanged. Lower = faster "
-                 "prefill, less context; 6 is the ablation study's default.",
-        )
-        use_rag = st.toggle(
-            "\U0001F4DA Use RAG context", value=True, key="use_rag_toggle",
-            help="Only affects v1_rag/v3_rag_cot. Off forces k=0 (no retrieved excerpts injected) "
-                 "-- use this for a quick apples-to-apples speed comparison against bare_qwen/v0_base.",
-        )
-        effective_k = int(rag_k) if use_rag else 0
-
-        if model_config in ("v1_rag", "v3_rag_cot"):
-            from app.agents import rag_context_preview
-            preview = rag_context_preview(mission, sim.own, sim.targets, k=effective_k)
-            if preview["chars"]:
-                st.caption(
-                    f"\U0001F4CF Context preview: ~{preview['chars']:,} chars "
-                    f"(~{preview['chars'] // 4:,} tokens est.) from {preview['chunks']} chunk(s)"
-                )
-            else:
-                st.caption("\U0001F4CF Context preview: RAG off -- no excerpts will be injected.")
-
-        if st.button("\U0001F9E0 Ask OOW agent", type="primary", use_container_width=True):
-            with st.spinner(f"Retrieving context + generating ({MODEL_CONFIGS[model_config]})..."):
-                decision, debug = ask_oow(mission, sim.own, sim.targets, config=model_config,
-                                          system_prompt=st.session_state.get("custom_system_prompt"),
-                                          max_new_tokens=int(max_new_tokens), enable_thinking=enable_thinking,
-                                          k=effective_k, constraints=sim.constraints)
-            st.session_state.last_decision = decision
-            st.session_state.last_debug = debug
-            # Same deterministic, read-only Check A/B/C measurement run_llm_scenario.py
-            # attaches per-checkpoint in a batch sweep -- computed live here too, against
-            # the SAME contacts the agent was just shown, so "Ask OOW agent" gets the same
-            # insight without needing a precomputed run.
-            situation_now = [contact_line(sim.own, t, sim.constraints.min_cpa_m, sim.constraints.max_rudder_angle_deg)
-                             for t in sim.targets]
-            st.session_state.last_measurement = measure_decision_quality(decision, situation_now, sim.constraints)
-
-        decision = st.session_state.last_decision
-        debug = st.session_state.last_debug
-        if decision:
-            st.markdown("**Recommendation**")
-            st.markdown(_describe_decision(decision))
-            measurement = st.session_state.get("last_measurement")
-            checks_fired = (measurement or {}).get("checks_fired") or []
-            badge = f" ({len(checks_fired)})" if checks_fired else ""
-            with st.expander(f"\U0001F52C Measurement -- Check A/B/C{badge}", expanded=bool(checks_fired)):
-                st.markdown(_describe_measurement(measurement))
-            b1, b2 = st.columns(2)
-            if b1.button("\u2705 Apply", use_container_width=True):
-                sim.apply_action(decision)
-                sim.step(dt)
-                st.rerun()
-            b2.button("\U0001F6AB Ignore", use_container_width=True)
-
-            with st.expander("Retrieval / grounding detail"):
-                st.write("**Config used:**", MODEL_CONFIGS.get(debug.get("config"), debug.get("config")))
-                st.write("**Prompt sent (user turn):**", f"{debug.get('user_msg_chars', 0):,} chars "
-                        f"(~{debug.get('user_msg_chars', 0) // 4:,} tokens est.)")
-                st.write("**Retrieved COLREG chunk IDs:**", debug.get("retrieved_chunk_ids"))
-                st.write("**Query concepts:**", debug.get("query_concepts"))
-                st.write("**Expanded concepts:**", debug.get("expanded_concepts"))
-                if debug.get("pg_guidance"):
-                    st.markdown("**Procedural-graph guidance**")
-                    st.code(debug["pg_guidance"], language=None, wrap_lines=True)
-                if debug.get("user_msg"):
-                    st.markdown("**Full user turn sent to model** (constraints, situation, "
-                               "RAG/PG context -- everything except the system prompt above)")
-                    st.code(debug["user_msg"], language=None, wrap_lines=True)
-                st.markdown("**Raw model output**")
-                st.code(debug.get("raw_response", ""), language=None, wrap_lines=True)
-        else:
-            st.caption("Click \"Ask OOW agent\" for a recommended manoeuvre.")
-
-    elif sim_mode == "Play Agent Mission":
+    if sim_mode == "Play Agent Mission":
         # Model/config/params (static, only changes when switching runs) in agent_static_ph.
         # The full situation report/reasoning for a specific moment lives in agent_detail_ph
         # instead, driven by `_agent_detail_cp_i` (set by the "Show details" button next to
@@ -1058,11 +755,8 @@ with side_panel:
                 with st.popover("\U0001F4DD View system prompt", use_container_width=True):
                     st.code(params.get("system_prompt", ""), language=None, wrap_lines=True)
         _render_agent_detail(agent_detail_ph, mission)
-
-
     else:
-        st.caption("Switch to \"Agent Real-Time\" to consult the agent live for the current "
-                  "situation, or \"Play Agent Mission\" to review a precomputed run's reasoning.")
+        st.caption("Switch to \"Play Agent Mission\" to review a precomputed run's reasoning.")
 
 with plot_col:
     st.divider()

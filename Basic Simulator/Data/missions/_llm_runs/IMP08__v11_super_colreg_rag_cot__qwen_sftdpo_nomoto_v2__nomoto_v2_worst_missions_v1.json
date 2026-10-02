@@ -1,0 +1,1375 @@
+{
+ "mission_id": "IMP08",
+ "config": "v11_super_colreg_rag_cot",
+ "weights": "MERGED:OOW-QWEN_nomoto_v2_sftdpo",
+ "model_variant": "qwen_sftdpo_nomoto_v2",
+ "tag": "nomoto_v2_worst_missions_v1",
+ "generated_at": "2026-09-29T21:19:54.010796+00:00",
+ "latency_s": 322.28953647613525,
+ "mission": {
+  "id": "IMP08",
+  "name": "Simultaneous stand-on and give-way obligations",
+  "rule_refs": [
+   "Rule 8",
+   "Rule 15",
+   "Rule 16",
+   "Rule 17"
+  ],
+  "own_ship_role": "mixed",
+  "description": "Two contacts at once: one crossing on own-ship's starboard bow (own-ship give-way, must turn starboard), another further out on the same side. Turning hard to starboard for the first contact closes range with the second. Correct: Rule 8 -- a joint plan (e.g. a smaller turn plus a speed reduction) rather than treating each contact independently.",
+  "pass_criteria": [
+   "Own-ship avoids collision with BOTH contacts simultaneously.",
+   "Reach the goal."
+  ],
+  "own_ship": {
+   "x": 0.0,
+   "y": 0.0,
+   "heading": 0.0,
+   "speed": 6.173333333333333
+  },
+  "goal": {
+   "x": 0.0,
+   "y": 14816.0
+  },
+  "targets": [
+   {
+    "name": "ts1_close_stbd",
+    "x": 1527.3444,
+    "y": 2181.2855999999997,
+    "heading": 245.4,
+    "speed": 7.001588888888889
+   },
+   {
+    "name": "ts2_far_stbd",
+    "x": 1251.3963999999999,
+    "y": 109.4532,
+    "heading": 320.1,
+    "speed": 7.5006
+   }
+  ],
+  "target_maneuvers": []
+ },
+ "evaluation": {
+  "verdict": "FAIL -- collision occurred",
+  "composite_score": 0.0,
+  "safety": {
+   "passed": false,
+   "min_cpa_m": 3.3,
+   "score": 0.0
+  },
+  "compliance": {
+   "breakdown": [
+    {
+     "code": "collision",
+     "label": "Collision",
+     "at": null,
+     "deduction": -1.0
+    }
+   ],
+   "score": 0.0,
+   "findings": [
+    {
+     "code": "E_encounter_mismatch",
+     "step": 0.0,
+     "situation_report": "ts1_close_stbd rel_bearing=35deg cpa=0.000NM tcpa=240s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard); ts2_far_stbd rel_bearing=85deg cpa=0.000NM tcpa=260s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 30.0,
+      "encounter_rule": "Rule 8",
+      "conduct_rule": "Rule 8",
+      "reasoning": "Both contacts are on collision course (CPA=0.000NM, TCPA<368s). COLREG Rule 8 requires immediate action to avoid collision; a 30° left turn creates sufficient CPA > 0.270NM for both contacts."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "E_8c",
+     "step": 0.0,
+     "situation_report": "ts1_close_stbd rel_bearing=35deg cpa=0.000NM tcpa=240s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard); ts2_far_stbd rel_bearing=85deg cpa=0.000NM tcpa=260s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 30.0,
+      "encounter_rule": "Rule 8",
+      "conduct_rule": "Rule 8",
+      "reasoning": "Both contacts are on collision course (CPA=0.000NM, TCPA<368s). COLREG Rule 8 requires immediate action to avoid collision; a 30° left turn creates sufficient CPA > 0.270NM for both contacts."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "step": 30.0,
+     "situation_report": "ts1_close_stbd rel_bearing=39deg cpa=0.038NM tcpa=215s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard); ts2_far_stbd rel_bearing=89deg cpa=0.003NM tcpa=251s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_right",
+      "degrees": 30,
+      "encounter_rule": "Rule 13",
+      "conduct_rule": "Rule 13",
+      "reasoning": "Contact ts1_close_stbd has CPA 0.038NM (below safe distance) and TCPA 215s (within risk horizon), requiring Rule 13 action. Turn_right 30° creates sufficient CPA while aligning with COLREG requirements."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "step": 60.0,
+     "situation_report": "ts1_close_stbd rel_bearing=42deg cpa=0.070NM tcpa=189s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard); ts2_far_stbd rel_bearing=92deg cpa=0.003NM tcpa=243s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_right",
+      "degrees": 30.0,
+      "encounter_rule": "Rule 17",
+      "conduct_rule": "Rule 17",
+      "reasoning": "1. Contacts: ts1_close_stbd (CPA 0.070 NM < 0.270 NM) and ts2_far_stbd (CPA 0.003 NM < 0.270 NM) both pose risks. 2. Rule 17 applies: stand-on vessel must act if give-way vessel fails. 3. Goal: Already on target bearing, but contacts require action. 4. Turn right to increase CPA while complying with COLREG obligations."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "B_wrong_direction",
+     "step": 90.0,
+     "situation_report": "ts1_close_stbd rel_bearing=39deg cpa=0.040NM tcpa=155s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard); ts2_far_stbd rel_bearing=88deg cpa=0.003NM tcpa=192s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 30,
+      "encounter_rule": "Rule 14",
+      "conduct_rule": "Rule 15",
+      "reasoning": "Contacts ts1_close_stbd and ts2_far_stbd both pose real collision risks (CPA < 0.270NM, TCPA < 368s). Under Rule 14, vessels on starboard side must keep clear; since both contacts are on starboard side, own-ship must take action per Rule 15 to avoid collision. Turn left 30° aligns with goal course while creating safe separation from starboard contacts."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "step": 90.0,
+     "situation_report": "ts1_close_stbd rel_bearing=39deg cpa=0.040NM tcpa=155s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard); ts2_far_stbd rel_bearing=88deg cpa=0.003NM tcpa=192s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 30,
+      "encounter_rule": "Rule 14",
+      "conduct_rule": "Rule 15",
+      "reasoning": "Contacts ts1_close_stbd and ts2_far_stbd both pose real collision risks (CPA < 0.270NM, TCPA < 368s). Under Rule 14, vessels on starboard side must keep clear; since both contacts are on starboard side, own-ship must take action per Rule 15 to avoid collision. Turn left 30° aligns with goal course while creating safe separation from starboard contacts."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "step": 120.0,
+     "situation_report": "ts1_close_stbd rel_bearing=34deg cpa=0.001NM tcpa=120s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard); ts2_far_stbd rel_bearing=83deg cpa=0.002NM tcpa=140s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 15.0,
+      "encounter_rule": "Rule 17",
+      "conduct_rule": "Rule 17",
+      "reasoning": "1. Contacts ts1_close_stbd (CPA 0.001NM) and ts2_far_stbd (CPA 0.002NM) both fall below safe passing distance. 2. As stand-on vessel, must act when give-way vessels fail to avoid collision (Rule 17). 3. Goal course check confirms heading is already optimal. 4. Turn left 15° to increase CPA while minimizing deviation from goal bearing."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "B_wrong_direction",
+     "step": 180.0,
+     "situation_report": "ts1_close_stbd rel_bearing=35deg cpa=0.006NM tcpa=61s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard); ts2_far_stbd rel_bearing=83deg cpa=0.001NM tcpa=82s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 25,
+      "encounter_rule": "Rule 15",
+      "conduct_rule": "Rule 15",
+      "reasoning": "1. Contacts: ts1_close_stbd (CPA 0.006NM < 0.270NM, TCPA 61s) and ts2_far_stbd (CPA 0.001NM < 0.270NM, TCPA 82s) both pose real risks. 2. Rule 15 applies: give-way vessel must alter course to avoid collision. 3. Goal course check recommends 15deg left, but collision risk overrides. 4. Execute decisive 25deg left turn to maximize separation from both contacts."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "B_wrong_direction",
+     "step": 210.0,
+     "situation_report": "ts1_close_stbd rel_bearing=36deg cpa=0.006NM tcpa=31s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard); ts2_far_stbd rel_bearing=83deg cpa=0.001NM tcpa=53s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 10,
+      "encounter_rule": "Rule 15",
+      "conduct_rule": "Rule 15",
+      "reasoning": "1. Contacts: ts1_close_stbd (CPA 0.006NM < 0.270NM, TCPA 31s); ts2_far_stbd (CPA 0.001NM < 0.270NM, TCPA 53s). 2. Rule: Both contacts require Rule 15 action as give-way vessel. 3. Goal: GOAL COURSE CHECK demands turn_right(10deg) but collision risk overrides. 4. Decision: Turn_left(10deg) to avoid ts1_close_stbd immediately."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    },
+    {
+     "code": "E_encounter_mismatch",
+     "step": 240.0,
+     "situation_report": "ts1_close_stbd rel_bearing=90deg cpa=0.012NM tcpa=2s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard); ts2_far_stbd rel_bearing=90deg cpa=0.000NM tcpa=30s -> Rule 15/Rule 16 applies (crossing_stbd, band=acute, expected direction=starboard)",
+     "decision": {
+      "action": "turn_left",
+      "degrees": 20,
+      "encounter_rule": "Rule 17",
+      "conduct_rule": "Rule 17",
+      "reasoning": "1. Contacts: ts1_close_stbd (CPA 0.012 NM, TCPA 2s) and ts2_far_stbd (CPA 0.000 NM, TCPA 30s) both below safe distance. 2. Rule 17 applies: own-ship is stand-on vessel, contacts are give-way vessels failing to act. 3. Goal course check recommends turn_right(20), but collision risk overrides. 4. Turn_left(20) avoids contacts on starboard side while maintaining progress toward goal."
+     },
+     "band": "acute",
+     "expected_encounter_rule": "Rule 15",
+     "expected_conduct_rule": "Rule 16",
+     "expected_direction": "starboard"
+    }
+   ]
+  },
+  "explanation_compliance": {
+   "breakdown": [
+    {
+     "code": "collision",
+     "label": "Collision",
+     "at": null,
+     "deduction": -1.0
+    }
+   ],
+   "score": 0.0
+  },
+  "temporal": {
+   "arrived": false,
+   "time_actual_s": null,
+   "time_ratio": null,
+   "temporal_score": 0.0
+  },
+  "spatial": {
+   "path_length_m": 1728.533,
+   "path_ratio": null,
+   "spatial_score": 0.0
+  },
+  "manoeuvre": {
+   "mean_abs_heading_rate": 0.156,
+   "mean_abs_speed_rate": 0.0,
+   "smoothness_score": 0.984,
+   "manoeuvre_count": 5,
+   "manoeuvre_rate": 0.278,
+   "manoeuvre_score": 0.074
+  }
+ },
+ "colreg_llm_check": {
+  "checked": false,
+  "explanations": null,
+  "error": null
+ },
+ "params": {
+  "decision_interval": 10,
+  "decision_interval_mode": "adaptive",
+  "dt": 10.0,
+  "max_steps": 370,
+  "enable_thinking": true,
+  "max_new_tokens": 3072,
+  "k": 2,
+  "use_rag": true,
+  "system_prompt": "You are the navigator on a large commercial vessel. Decide the next helm order.\n\nMISSION REQUIREMENTS -- this mission is only completed successfully if ALL of these hold, not just\nthe first one you happen to satisfy:\n1. Every contact's CPA stays at or above this mission's safe passing distance (given further below)\n   at all times -- exactly as mandatory as actually reaching the goal. There is no automatic safety\n   net correcting your choice if you get this wrong: your own action each step is what the ship\n   actually does.\n2. Every manoeuvre you take while a real collision risk exists complies with COLREG.\n3. You reach the mission goal.\n\nPRIORITY ORDER when these pull in different directions -- always in this order, never reversed:\n1. Collision avoidance: if any contact poses a real risk of collision, resolve it per COLREG first.\n2. Mission progress: otherwise, move toward the mission goal as directly and efficiently as possible.\n\nFACTS GIVEN TO YOU -- treat all of these as already correct; never recompute, re-derive, or\nsecond-guess them:\n- Positions/ranges are in nautical miles, bearings/headings in degrees (heading 0=north, clockwise,\n  compass convention), speeds in knots.\n- relative bearing is signed: positive=starboard (right), negative=port (left), 0=dead ahead, ~180/-180=astern.\n- CPA = the closest distance a contact will EVER come to you at current headings/speeds. TCPA = seconds\n  until that closest point. CPA at or near 0 with TCPA greater than 0 means you are on a collision\n  course. TCPA=0 together with the situation report explicitly noting \"already past closest point,\n  ranges now increasing\" means that contact's closest point is behind you, not ahead -- that note is\n  never omitted when it applies, and never appears when it does not.\n- The situation report's \"GOAL COURSE CHECK:\" line has ALREADY computed the goal-correction action and\n  degrees for you. Never substitute a contact's relative bearing for it -- that number describes the\n  CONTACT, not the goal, even when the numbers look similar.\n\nDECISION PROCEDURE -- follow in order:\n1. Check every contact's CPA and TCPA against this mission's safe passing distance and risk horizon\n   (given further below). If no contact poses a real risk right now, go to step 3.\n2. If any contact poses a real risk, pick the ONE action that satisfies the applicable COLREG rule\n   for that contact. This step overrides everything below it.\n3. Otherwise, follow \"GOAL COURSE CHECK\" exactly: hold_course if it says you're already on the goal\n   bearing, or copy its exact action and degrees if it names a turn -- do not recompute or replace\n   those values.\n4. Never zigzag: do not answer turn_right then turn_left (or vice versa) on consecutive decisions to\n   chase a small residual mismatch -- \"GOAL COURSE CHECK\" already has a deadband built in for this.\n5. If you are already on the goal bearing and your speed is below this mission's nominal/rated speed,\n   speed_up instead of hold_course -- reaching the goal sooner (when safe) is also progress.\n\nGround your reasoning in the COLREG excerpts/procedure guidance provided, where given. Reply with\nONLY a JSON object, no other text:\n{\"action\": \"turn_left|turn_right|hold_course|speed_up|slow_down|stop\",\n \"degrees\": <float, only for turn_left/turn_right>,\n \"encounter_rule\": \"<'Rule <N>' citing the applicable COLREG rule, or 'none' if no contact poses real risk>\",\n \"conduct_rule\": \"<'Rule <N>' citing the applicable COLREG rule, or 'none' if no real risk>\",\n \"reasoning\": \"<one or two sentences>\"}",
+  "system_prompt_is_custom": false,
+  "prompt_hash": "4f45583d1a8e1816beb9ecdb27f9efc58ed74c1120227395227e38872ea36935",
+  "prompt_version": "2026-09-24-uncapped-turn-adaptive-cadence",
+  "kinematics_model": "nomoto_v2"
+ },
+ "outcome": {
+  "verdict": "collision",
+  "final_step": 27,
+  "final_time_s": 280.0
+ },
+ "trajectory": [
+  {
+   "time": 0.0,
+   "vehicle": "own_ship",
+   "x": 0.0,
+   "y": 0.0,
+   "heading": 0.0,
+   "speed": 6.173
+  },
+  {
+   "time": 0.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 1527.34,
+   "y": 2181.29,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 0.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 1251.4,
+   "y": 109.45,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 10.0,
+   "vehicle": "own_ship",
+   "x": -0.43,
+   "y": 61.73,
+   "heading": 359.6,
+   "speed": 6.173
+  },
+  {
+   "time": 10.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 1463.68,
+   "y": 2152.14,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 10.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 1203.28,
+   "y": 167.0,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 20.0,
+   "vehicle": "own_ship",
+   "x": -2.18,
+   "y": 123.44,
+   "heading": 358.38,
+   "speed": 6.173
+  },
+  {
+   "time": 20.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 1400.02,
+   "y": 2122.99,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 20.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 1155.17,
+   "y": 224.54,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 30.0,
+   "vehicle": "own_ship",
+   "x": -5.99,
+   "y": 185.06,
+   "heading": 356.46,
+   "speed": 6.173
+  },
+  {
+   "time": 30.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 1336.36,
+   "y": 2093.85,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 30.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 1107.06,
+   "y": 282.08,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 40.0,
+   "vehicle": "own_ship",
+   "x": -11.85,
+   "y": 246.51,
+   "heading": 354.55,
+   "speed": 6.173
+  },
+  {
+   "time": 40.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 1272.7,
+   "y": 2064.7,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 40.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 1058.95,
+   "y": 339.62,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 50.0,
+   "vehicle": "own_ship",
+   "x": -18.91,
+   "y": 307.84,
+   "heading": 353.43,
+   "speed": 6.173
+  },
+  {
+   "time": 50.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 1209.04,
+   "y": 2035.55,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 50.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 1010.83,
+   "y": 397.16,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 60.0,
+   "vehicle": "own_ship",
+   "x": -26.32,
+   "y": 369.13,
+   "heading": 353.11,
+   "speed": 6.173
+  },
+  {
+   "time": 60.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 1145.38,
+   "y": 2006.41,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 60.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 962.72,
+   "y": 454.71,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 70.0,
+   "vehicle": "own_ship",
+   "x": -33.21,
+   "y": 430.47,
+   "heading": 353.59,
+   "speed": 6.173
+  },
+  {
+   "time": 70.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 1081.72,
+   "y": 1977.26,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 70.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 914.61,
+   "y": 512.25,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 80.0,
+   "vehicle": "own_ship",
+   "x": -38.71,
+   "y": 491.96,
+   "heading": 354.89,
+   "speed": 6.173
+  },
+  {
+   "time": 80.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 1018.06,
+   "y": 1948.12,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 80.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 866.5,
+   "y": 569.79,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 90.0,
+   "vehicle": "own_ship",
+   "x": -42.08,
+   "y": 553.6,
+   "heading": 356.87,
+   "speed": 6.173
+  },
+  {
+   "time": 90.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 954.4,
+   "y": 1918.97,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 90.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 818.38,
+   "y": 627.33,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 100.0,
+   "vehicle": "own_ship",
+   "x": -43.05,
+   "y": 615.33,
+   "heading": 359.1,
+   "speed": 6.173
+  },
+  {
+   "time": 100.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 890.73,
+   "y": 1889.82,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 100.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 770.27,
+   "y": 684.87,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 110.0,
+   "vehicle": "own_ship",
+   "x": -41.92,
+   "y": 677.05,
+   "heading": 1.05,
+   "speed": 6.173
+  },
+  {
+   "time": 110.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 827.07,
+   "y": 1860.68,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 110.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 722.16,
+   "y": 742.42,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 120.0,
+   "vehicle": "own_ship",
+   "x": -39.16,
+   "y": 738.72,
+   "heading": 2.57,
+   "speed": 6.173
+  },
+  {
+   "time": 120.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 763.41,
+   "y": 1831.53,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 120.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 674.05,
+   "y": 799.96,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 130.0,
+   "vehicle": "own_ship",
+   "x": -35.59,
+   "y": 800.35,
+   "heading": 3.31,
+   "speed": 6.173
+  },
+  {
+   "time": 130.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 699.75,
+   "y": 1802.38,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 130.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 625.93,
+   "y": 857.5,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 140.0,
+   "vehicle": "own_ship",
+   "x": -32.34,
+   "y": 862.0,
+   "heading": 3.02,
+   "speed": 6.173
+  },
+  {
+   "time": 140.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 636.09,
+   "y": 1773.24,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 140.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 577.82,
+   "y": 915.04,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 150.0,
+   "vehicle": "own_ship",
+   "x": -30.34,
+   "y": 923.7,
+   "heading": 1.86,
+   "speed": 6.173
+  },
+  {
+   "time": 150.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 572.43,
+   "y": 1744.09,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 150.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 529.71,
+   "y": 972.58,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 160.0,
+   "vehicle": "own_ship",
+   "x": -29.47,
+   "y": 985.43,
+   "heading": 0.81,
+   "speed": 6.173
+  },
+  {
+   "time": 160.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 508.77,
+   "y": 1714.95,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 160.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 481.6,
+   "y": 1030.13,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 170.0,
+   "vehicle": "own_ship",
+   "x": -28.59,
+   "y": 1047.16,
+   "heading": 0.82,
+   "speed": 6.173
+  },
+  {
+   "time": 170.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 445.11,
+   "y": 1685.8,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 170.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 433.48,
+   "y": 1087.67,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 180.0,
+   "vehicle": "own_ship",
+   "x": -26.71,
+   "y": 1108.86,
+   "heading": 1.74,
+   "speed": 6.173
+  },
+  {
+   "time": 180.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 381.45,
+   "y": 1656.65,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 180.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 385.37,
+   "y": 1145.21,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 190.0,
+   "vehicle": "own_ship",
+   "x": -23.89,
+   "y": 1170.53,
+   "heading": 2.61,
+   "speed": 6.173
+  },
+  {
+   "time": 190.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 317.79,
+   "y": 1627.51,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 190.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 337.26,
+   "y": 1202.75,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 200.0,
+   "vehicle": "own_ship",
+   "x": -21.25,
+   "y": 1232.21,
+   "heading": 2.45,
+   "speed": 6.173
+  },
+  {
+   "time": 200.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 254.12,
+   "y": 1598.36,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 200.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 289.14,
+   "y": 1260.29,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 210.0,
+   "vehicle": "own_ship",
+   "x": -19.75,
+   "y": 1293.92,
+   "heading": 1.4,
+   "speed": 6.173
+  },
+  {
+   "time": 210.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 190.46,
+   "y": 1569.21,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 210.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 241.03,
+   "y": 1317.83,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 220.0,
+   "vehicle": "own_ship",
+   "x": -20.15,
+   "y": 1355.65,
+   "heading": 359.63,
+   "speed": 6.173
+  },
+  {
+   "time": 220.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 126.8,
+   "y": 1540.07,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 220.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 192.92,
+   "y": 1375.38,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 230.0,
+   "vehicle": "own_ship",
+   "x": -23.1,
+   "y": 1417.32,
+   "heading": 357.26,
+   "speed": 6.173
+  },
+  {
+   "time": 230.0,
+   "vehicle": "ts1_close_stbd",
+   "x": 63.14,
+   "y": 1510.92,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 230.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 144.81,
+   "y": 1432.92,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 240.0,
+   "vehicle": "own_ship",
+   "x": -29.1,
+   "y": 1478.76,
+   "heading": 354.42,
+   "speed": 6.173
+  },
+  {
+   "time": 240.0,
+   "vehicle": "ts1_close_stbd",
+   "x": -0.52,
+   "y": 1481.78,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 240.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 96.69,
+   "y": 1490.46,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 250.0,
+   "vehicle": "own_ship",
+   "x": -38.57,
+   "y": 1539.76,
+   "heading": 351.18,
+   "speed": 6.173
+  },
+  {
+   "time": 250.0,
+   "vehicle": "ts1_close_stbd",
+   "x": -64.18,
+   "y": 1452.63,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 250.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 48.58,
+   "y": 1548.0,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 260.0,
+   "vehicle": "own_ship",
+   "x": -51.81,
+   "y": 1600.06,
+   "heading": 347.62,
+   "speed": 6.173
+  },
+  {
+   "time": 260.0,
+   "vehicle": "ts1_close_stbd",
+   "x": -127.84,
+   "y": 1423.48,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 260.0,
+   "vehicle": "ts2_far_stbd",
+   "x": 0.47,
+   "y": 1605.54,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 270.0,
+   "vehicle": "own_ship",
+   "x": -69.04,
+   "y": 1659.34,
+   "heading": 343.79,
+   "speed": 6.173
+  },
+  {
+   "time": 270.0,
+   "vehicle": "ts1_close_stbd",
+   "x": -191.5,
+   "y": 1394.34,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 270.0,
+   "vehicle": "ts2_far_stbd",
+   "x": -47.64,
+   "y": 1663.09,
+   "heading": 320.1,
+   "speed": 7.501
+  },
+  {
+   "time": 280.0,
+   "vehicle": "own_ship",
+   "x": -89.7,
+   "y": 1717.51,
+   "heading": 340.44,
+   "speed": 6.173
+  },
+  {
+   "time": 280.0,
+   "vehicle": "ts1_close_stbd",
+   "x": -255.16,
+   "y": 1365.19,
+   "heading": 245.4,
+   "speed": 7.002
+  },
+  {
+   "time": 280.0,
+   "vehicle": "ts2_far_stbd",
+   "x": -95.76,
+   "y": 1720.63,
+   "heading": 320.1,
+   "speed": 7.501
+  }
+ ],
+ "checkpoints": [
+  {
+   "step": 0,
+   "time": 0.0,
+   "timestamp": "2026-09-29T21:14:51.320762+00:00",
+   "latency_s": 19.603788375854492,
+   "situation_report": "Own-ship at (0.000, 0.000) NM, heading 0.0, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 8.000 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2400s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 1.438 NM, relative bearing 35.0 deg, heading 245.4, speed 13.61 kt, CPA 0.000 NM, TCPA 240s\n  - Other ship 2: named \"ts2_far_stbd\", range 0.678 NM, relative bearing 85.0 deg, heading 320.1, speed 14.58 kt, CPA 0.000 NM, TCPA 260s",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 30.0,
+    "encounter_rule": "Rule 8",
+    "conduct_rule": "Rule 8",
+    "reasoning": "Both contacts are on collision course (CPA=0.000NM, TCPA<368s). COLREG Rule 8 requires immediate action to avoid collision; a 30° left turn creates sufficient CPA > 0.270NM for both contacts."
+   },
+   "commanded_heading_deg": 330.0,
+   "reasoning_raw": "<think>\nOkay, let me try to work through this problem step by step. \n\nFirst, I need to check the contacts to see if their CPA is below the safe passing distance. The safe passing distance here is 0.270 NM. Looking at the situation report, there are two other ships: ts1_close_stbd and ts2_far_stbd. Both have a CPA of 0.000 NM, which is way below the safe distance. Also, their TCPAs are 240s and 260s respectively. Since both CPAs are zero, they are on a collision course. But wait, according to the rules, a contact is a real risk only if CPA is below the safe distance AND TCPA is within the risk horizon of 368s. Here, both TCPAs are well within 368s, so both are real risks.\n\nNext, applying COLREG Rule 8 (Action to Avoid Collision). The give-way vessel must alter course or speed to avoid the stand-on vessel. Now, I need to determine which contact is the give-way vessel. Let me think about the positions. Ts1 is at a relative bearing of 35 degrees (stbd side), and ts2 is at 85 degrees stbd. Their headings are 245.4 and 320.1. Wait, maybe I should consider their actual courses relative to our ship. Our ship is heading 0 degrees (north). So, ts1 is approaching from the starboard side, coming from around 245 degrees heading. Hmm, perhaps I need to calculate the angle between our ship's path and the other ships' paths. Alternatively, since the CPA is zero, they are on a collision course. \n\nBut according to COLREG, the give-way vessel is the one that must take action. In an overtaking scenario, the overtaker is the give-way vessel. However, without knowing the exact positions, maybe we need to use the relative bearings and headings. For example, ts1 is at 35 degrees relative bearing, meaning it's on our starboard side. Its heading is 245.4 degrees. Let me convert that to a direction relative to us. Our heading is north (0 degrees). So, the other ship's heading is 245.4 degrees, which is roughly southwest. Relative to our position, it's moving towards the south-west? Not sure. Maybe I'm overcomplicating. \n\nAlternatively, considering that both contacts are on a collision course, the appropriate action under Rule 8 is to take evasive maneuvers. Since both are close, but the user mentioned that the priority is to handle the most immediate risk first. However, the problem states that if multiple contacts pose a risk, choose the one requiring the action per COLREG. \n\nWait, the Procedure Guidance mentions that if Rule 15 applies, which involves giving-way and stand-on vessels. But in this case, since both are on a collision course, maybe neither is the stand-on vessel. Or perhaps both are give-way vessels. \n\nIn such cases, the best approach might be to perform a significant course change to avoid both. Given that the user emphasized making a decisive action, like a 30-degree turn, which is recommended in the examples. Since the goal is already on the same bearing, holding course isn't needed. Therefore, the maneuver required here is to turn left or right to avoid the contacts. \n\nLooking at the contacts, ts1 is on the starboard side (relative bearing +35), and ts2 is further out, also on starboard (relative bearing +85). To avoid both, turning left (which would be port) could help. Turning left would put the ship on a new heading that moves away from both contacts. Alternatively, turning right might not be sufficient. \n\nGiven that the contacts are on the starboard side, a left turn (port) would increase the relative bearing, possibly moving the contacts off the bow. However, the exact calculation might require checking the angles. But based on the instructions, the main thing is to apply COLREG Rule 8 and decide the action. \n\nSince both contacts are on a collision course, the appropriate action is to turn significantly. According to the examples, a 25-30 degree turn is advised. So, the action here would be to turn left by 30 degrees. That would create a CPA above the safe distance for both contacts. \n\nTherefore, the JSON response should indicate a turn_left of 30 degrees, referencing COLREG Rule 8. The reasoning is that both contacts are on a collision course, necessitating a course change to avoid them.\n</think>\n\n{\n  \"action\": \"turn_left\",\n  \"degrees\": 30.0,\n  \"encounter_rule\": \"Rule 8\",\n  \"conduct_rule\": \"Rule 8\",\n  \"reasoning\": \"Both contacts are on collision course (CPA=0.000NM, TCPA<368s). COLREG Rule 8 requires immediate action to avoid collision; a 30° left turn creates sufficient CPA > 0.270NM for both contacts.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v11_super_colreg_rag_cot",
+    "retrieved_chunk_ids": [
+     "chunk_764ed65d",
+     "chunk_66e8ee4b"
+    ],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": "Procedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.",
+    "user_msg_chars": 4252,
+    "user_msg": "Before answering, write your reasoning as EXACTLY these 4 steps, one short sentence each -- no more steps, no re-deriving bearings/CPA/TCPA (they are already given -- just quote them):\n1. Contacts: name each contact and say whether its CPA is below or above the safe passing distance.\n2. Rule: for any contact below it, name the applicable COLREG rule and the action it requires.\n3. Goal: if no contact is below the safe passing distance, state what GOAL COURSE CHECK says.\n4. Decision: state the one action you will take and why.\nThen give the final JSON answer.\n\nOwn-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nProcedure guidance:\nProcedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.\n\nCOLREG reference excerpts:\n\n[Excerpt 1 — COLREG-Consolidated-2018.pdf / ANNEX IV]\npertinent information and any course laid down shall be checked.\n\n[SECTION BREAK]\n\ncourse and speed shall be confirmed; any navigational hazard expected to be\nencountered during the watch shall be noted.\n\n[SECTION BREAK]\n\nsufficiently frequent intervals using any available navigational aids necessary to\nensure that the ship follows the planned course.\n\n[SECTION BREAK]\n\nmanner of its operation shall be clearly understood; in addition its operational\ncondition shall be fully taken into account.\n\n[Excerpt 2 — simple_colreg.json / Section I - Any Visibility]\n[Section I - Any Visibility | Rule 8: Action to avoid collision]\nWhatever you do, do it early, do it decisively, and make it big enough that another vessel watching visually or on radar can actually tell you've done something — a string of tiny course nudges is worse than one clear turn. If there's sea room, a course change alone is often better than a speed change alone. Check that your action actually opens a safe gap, not just a technically-different number. And if you need thinking time, it's fine to slow down or stop to buy it.\nExamples:\n  1. Own-ship nudges course by 3 deg, waits, nudges another 4 deg, waits again — this pattern is exactly what Rule 8(b) warns against; a single clear 25-30 deg alteration would be far more readable to the other vessel and far more effective.\n\nSituation:\nOwn-ship at (0.000, 0.000) NM, heading 0.0, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 8.000 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2400s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 1.438 NM, relative bearing 35.0 deg, heading 245.4, speed 13.61 kt, CPA 0.000 NM, TCPA 240s\n  - Other ship 2: named \"ts2_far_stbd\", range 0.678 NM, relative bearing 85.0 deg, heading 320.1, speed 14.58 kt, CPA 0.000 NM, TCPA 260s\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 3,
+   "time": 30.0,
+   "timestamp": "2026-09-29T21:15:34.714285+00:00",
+   "latency_s": 43.39323019981384,
+   "situation_report": "Own-ship at (-0.003, 0.100) NM, heading 356.5, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.900 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is 30 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=30 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2370s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 1.260 NM, relative bearing 38.7 deg, heading 245.4, speed 13.61 kt, CPA 0.038 NM, TCPA 215s\n  - Other ship 2: named \"ts2_far_stbd\", range 0.603 NM, relative bearing 88.6 deg, heading 320.1, speed 14.58 kt, CPA 0.003 NM, TCPA 251s",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 30,
+    "encounter_rule": "Rule 13",
+    "conduct_rule": "Rule 13",
+    "reasoning": "Contact ts1_close_stbd has CPA 0.038NM (below safe distance) and TCPA 215s (within risk horizon), requiring Rule 13 action. Turn_right 30° creates sufficient CPA while aligning with COLREG requirements."
+   },
+   "commanded_heading_deg": 0.0,
+   "reasoning_raw": "<think>\nOkay, let me try to work through this problem step by step. \n\nFirst, I need to check the contacts to see if they pose a real collision risk. The safe passing distance is 0.270 NM, so any contact with CPA below that and TCPA within 368 seconds (which is roughly 6 minutes) is a risk. \n\nLooking at Other Ship 1: ts1_close_stbd. Its CPA is 0.038 NM, which is below 0.270 NM. The TCPA is 215 seconds, which is well within the 368-second risk horizon. So this is a real risk. Then Other Ship 2: ts2_far_stbd has a CPA of 0.003 NM, which is way below the safe distance, and TCPA of 251 seconds. That's also within the risk horizon. So both contacts are potential risks.\n\nNext, according to COLREG rules, the give-way vessel must alter course or speed to avoid collision. Now, I need to determine which COLREG rule applies here. Since both contacts are approaching, maybe Rule 15 comes into play? Wait, Rule 15 is about overtaking, but the scenario might involve crossing situations. Let me think. \n\nThe key here is that both contacts are on a collision course. For Other Ship 1, since it's coming from the starboard side (relative bearing 38.7°), and Other Ship 2 is on port side (relative bearing 88.6°)? Wait, wait—no, relative bearing is measured from the own-ship's bow. So relative bearing 38.7° means it's on the starboard side (positive), and 88.6° is almost astern (since 90° would be directly astern). But their headings and positions matter. \n\nWait, the own-ship is heading 356.5°, nearly north. Other Ship 1 is at relative bearing 38.7°, meaning it's slightly to the starboard (right) of the own-ship's bow. Their heading is 245.4°, which is southwest direction. So perhaps an approaching from the starboard quarter. Other Ship 2 is at relative bearing 88.6°, which is very close to directly astern (since 90° is directly astern). Its heading is 320.1°, which is northwest. \n\nSo, considering the CPA and TCPA, both are approaching. According to COLREG Rule 15, if a vessel is overtaking another, the overtaker must keep clear. However, in this case, the contacts might be in a cross situation. Alternatively, Rule 13 applies to crossing situations where the give-way vessel must keep out of the way. \n\nBut the main issue is that both contacts are on a collision course. The user mentioned that if any contact poses a real risk, we must apply COLREG. So, for each contact, determine which rule applies. \n\nFor Other Ship 1: It's approaching from the starboard side. If the own-ship is the give-way vessel, then it needs to take action. Similarly for Other Ship 2, which is approaching from the stern. In such cases, Rule 15 might apply if one is overtaking, but if they are crossing paths, Rule 13 applies. \n\nHowever, the Procedure Guidance mentions that if neither vessel alters course or speed, it leads to a collision. Here, the own-ship hasn't taken any action yet. Therefore, the appropriate action under COLREG would be to alter course to avoid the collision. \n\nSince both contacts are risky, but the priority is to handle the most immediate threat. Which one is closer? Other Ship 1 has a TCPA of 215s, whereas Other Ship 2 has 251s. So Other Ship 1 is imminent. \n\nAccording to Rule 15, if the own-ship is the overtaker, it must keep clear. But if the other vessel is the overtaker, then the overtaken vessel must keep her course. However, without knowing who is overtaking whom, it's hard to apply Rule 15. \n\nAlternatively, Rule 13 applies to crossing situations. If the other vessel is on the starboard side, the own-ship is the give-way vessel. Wait, in a crossing situation, the vessel on the starboard side (Other Ship 1) is the give-way vessel. Wait, no—if two vessels are crossing, the one on the starboard side of the other is the give-way vessel. Wait, Rule 13 states that when two power-driven vessels are approaching each other so as to involve risk of collision, the vessel which has the other on her starboard side shall keep out of the way. \n\nIn this case, Other Ship 1 is on the starboard side of the own-ship. Therefore, the own-ship is the give-way vessel? No, wait—the vessel that has the other on its starboard side is the give-way vessel. So if Other Ship 1 is on the starboard side of the own-ship, then the own-ship is the give-way vessel. Wait, no. Let me clarify. \n\nIf two vessels are approaching each other in a crossing situation, the vessel which has the other on its starboard side must keep out of the way. So if the own-ship sees Another Vessel on its starboard side, then the own-ship is the give-way vessel. Wait, no. Suppose the own-ship is going east, and Another Vessel is going west, crossing paths. If the Another Vessel is on the starboard side of the own-ship, then the own-ship is the give-way vessel. Because the other vessel is on the starboard side, so the own-ship must keep clear. \n\nIn our case, Other Ship 1 is at a relative bearing of 38.7°, which is starboard side. So the own-ship is the give-way vessel here. Therefore, according to Rule 13, the own-ship must take action to keep clear. \n\nSimilarly, Other Ship 2 is approaching from the stern (relative bearing 88.6°), which is almost directly astern. In such a case, Rule 14 applies, which deals with traffic separation schemes, but maybe not relevant here. Or Rule 15 if it's an overtaking situation. \n\nBut since Other Ship 2 is approaching from the rear, the own-ship could be considered as being overtaken. Wait, Rule 15 says that when a vessel is overtaking another, the overtaking vessel must keep clear. So if the own-ship is overtaking Other Ship 2, then the own-ship must take action. But based on their headings and positions, it's unclear if that's the case. \n\nGiven that both contacts are on a collision course, the primary concern is Other Ship 1 due to shorter TCPA. Therefore, applying Rule 13, the own-ship must take evasive action. The required action under Rule 13 is to alter course to starboard or reduce speed. Given that the own-ship is currently heading 356.5°, turning left (to port) would increase the angle between the vessels, thus avoiding collision. Wait, but the relative bearing of Other Ship 1 is 38.7°, so turning left (port) would bring the own-ship's bow towards the contact, potentially reducing the CPA. Alternatively, turning right (starboard) would swing the own-ship away from the contact. \n\nWait, the own-ship is heading 356.5°, which is almost north. Turning left (port) would mean decreasing the heading, making it more northerly. Turning right (starboard) would increase the heading, moving towards east. \n\nLet me visualize: the own-ship is facing almost north. Other Ship 1 is at a relative bearing of 38.7°, which is slightly to the starboard (right) of the bow. To avoid a collision, the own-ship needs to adjust its course. If the own-ship turns right (towards east), it would head more eastward, possibly altering the path relative to Other Ship 1. Alternatively, turning left (more north) might decrease the CPA. \n\nBut according to Rule 13, the give-way vessel (own-ship) must take action. The best approach is to turn right (starboard) to create a safe passage. Wait, but the relative position is starboard side. Maybe the correct action is to turn left (port) to pass port-to-port. Wait, no. In a crossing situation, the give-way vessel (own-ship) should turn to starboard to allow the other vessel to pass port. Wait, that depends on the direction of the other vessel. \n\nThis part is confusing. Let me recall Rule 13: When two power-driven vessels are meeting on opposite courses, the vessel which has the other on its starboard side shall keep out of the way. So if the other vessel is on the starboard side, the own-ship must keep clear. How to achieve that? By altering course to starboard (right) to pass port-to-starboard. Wait, no. If the other vessel is on the starboard side, the own-ship should turn to starboard to pass port. \n\nAlternatively, the own-ship should turn to port to avoid the other vessel. Hmm. \n\nMaybe the safest option is to turn right (starboard) to increase the CPA. But the exact maneuver depends on the relative motion. \n\nAlternatively, since the own-ship is the give-way vessel, it must take action. The example in Excerpt 1 suggests making a significant course change. The recommendation is to make a clear turn, like 30 degrees. \n\nConsidering that the own-ship is supposed to take action to avoid collision, and the nearest contact is Other Ship 1, the appropriate action would be to turn right (starboard) by a certain amount. However, the exact degrees needed depend on the situation. \n\nBut the GOAL COURSE CHECK indicates that the own-ship is 30 degrees off the goal bearing to starboard. Normally, the system would suggest turning right by 30 degrees. However, since there's a collision risk, that action must be prioritized over the mission goal. \n\nTherefore, the correct action is to turn right (starboard) to avoid the collision. The exact degrees would be determined by the COLREG requirement. Since the CPA is low, a significant turn is needed. Based on the examples, a 30-degree turn is recommended. Hence, the action is turn_right with 30 degrees. \n\nNow, checking the JSON structure: the action is turn_right, degrees 30, encounter_rule is Rule 13, conduct_rule is Rule 13. Reasoning is that Other Ship 1 is a real risk requiring a course change to starboard. \n</think>\n\n{\n  \"action\": \"turn_right\",\n  \"degrees\": 30,\n  \"encounter_rule\": \"Rule 13\",\n  \"conduct_rule\": \"Rule 13\",\n  \"reasoning\": \"Contact ts1_close_stbd has CPA 0.038NM (below safe distance) and TCPA 215s (within risk horizon), requiring Rule 13 action. Turn_right 30° creates sufficient CPA while aligning with COLREG requirements.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v11_super_colreg_rag_cot",
+    "retrieved_chunk_ids": [
+     "chunk_66e8ee4b",
+     "chunk_764ed65d"
+    ],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": "Procedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.",
+    "user_msg_chars": 4348,
+    "user_msg": "Before answering, write your reasoning as EXACTLY these 4 steps, one short sentence each -- no more steps, no re-deriving bearings/CPA/TCPA (they are already given -- just quote them):\n1. Contacts: name each contact and say whether its CPA is below or above the safe passing distance.\n2. Rule: for any contact below it, name the applicable COLREG rule and the action it requires.\n3. Goal: if no contact is below the safe passing distance, state what GOAL COURSE CHECK says.\n4. Decision: state the one action you will take and why.\nThen give the final JSON answer.\n\nOwn-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nProcedure guidance:\nProcedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.\n\nCOLREG reference excerpts:\n\n[Excerpt 1 — simple_colreg.json / Section I - Any Visibility]\n[Section I - Any Visibility | Rule 8: Action to avoid collision]\nWhatever you do, do it early, do it decisively, and make it big enough that another vessel watching visually or on radar can actually tell you've done something — a string of tiny course nudges is worse than one clear turn. If there's sea room, a course change alone is often better than a speed change alone. Check that your action actually opens a safe gap, not just a technically-different number. And if you need thinking time, it's fine to slow down or stop to buy it.\nExamples:\n  1. Own-ship nudges course by 3 deg, waits, nudges another 4 deg, waits again — this pattern is exactly what Rule 8(b) warns against; a single clear 25-30 deg alteration would be far more readable to the other vessel and far more effective.\n\n[Excerpt 2 — COLREG-Consolidated-2018.pdf / ANNEX IV]\npertinent information and any course laid down shall be checked.\n\n[SECTION BREAK]\n\ncourse and speed shall be confirmed; any navigational hazard expected to be\nencountered during the watch shall be noted.\n\n[SECTION BREAK]\n\nsufficiently frequent intervals using any available navigational aids necessary to\nensure that the ship follows the planned course.\n\n[SECTION BREAK]\n\nmanner of its operation shall be clearly understood; in addition its operational\ncondition shall be fully taken into account.\n\nSituation:\nOwn-ship at (-0.003, 0.100) NM, heading 356.5, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.900 NM away, bearing 0.0 deg.\nGOAL COURSE CHECK: heading is 30 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=30 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2370s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 1.260 NM, relative bearing 38.7 deg, heading 245.4, speed 13.61 kt, CPA 0.038 NM, TCPA 215s\n  - Other ship 2: named \"ts2_far_stbd\", range 0.603 NM, relative bearing 88.6 deg, heading 320.1, speed 14.58 kt, CPA 0.003 NM, TCPA 251s\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 6,
+   "time": 60.0,
+   "timestamp": "2026-09-29T21:16:07.292566+00:00",
+   "latency_s": 32.57795476913452,
+   "situation_report": "Own-ship at (-0.014, 0.199) NM, heading 353.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.801 NM away, bearing 0.1 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2340s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 1.087 NM, relative bearing 42.5 deg, heading 245.4, speed 13.61 kt, CPA 0.070 NM, TCPA 189s\n    If own-ship turned to the GOAL COURSE CHECK heading (0.1 deg) now, this contact's CPA would become 0.010 NM, TCPA 181s.\n  - Other ship 2: named \"ts2_far_stbd\", range 0.536 NM, relative bearing 91.9 deg, heading 320.1, speed 14.58 kt, CPA 0.003 NM, TCPA 243s\n    If own-ship turned to the GOAL COURSE CHECK heading (0.1 deg) now, this contact's CPA would become 0.000 NM, TCPA 205s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 30.0,
+    "encounter_rule": "Rule 17",
+    "conduct_rule": "Rule 17",
+    "reasoning": "1. Contacts: ts1_close_stbd (CPA 0.070 NM < 0.270 NM) and ts2_far_stbd (CPA 0.003 NM < 0.270 NM) both pose risks. 2. Rule 17 applies: stand-on vessel must act if give-way vessel fails. 3. Goal: Already on target bearing, but contacts require action. 4. Turn right to increase CPA while complying with COLREG obligations."
+   },
+   "commanded_heading_deg": 30.0,
+   "reasoning_raw": "<think>\nOkay, let me try to work through this problem step by step. \n\nFirst, I need to check the contacts to see if their CPA is below the safe passing distance. The safe passing distance here is 0.270 NM. Looking at the data, Other ship 1 has a CPA of 0.070 NM, which is way below 0.270. Similarly, Other ship 2 has a CPA of 0.003 NM, which is also well under the threshold. So both contacts pose a collision risk.\n\nNext, according to COLREG rules, if a contact is a potential collision risk, the appropriate action must be taken. Since the own-ship is the stand-on vessel in this scenario (as indicated by the examples in Rule 17), they are supposed to maintain course and speed unless the give-way vessel doesn't act. However, since both contacts are giving-way vessels, maybe? Wait, no—wait, in a crossing situation, the vessel on the starboard side is the stand-on vessel. Let me think again. \n\nThe own-ship's heading is 353.1 degrees, almost north. The other ships: ts1_close_stbd is at a relative bearing of 42.5 degrees (so slightly to starboard), and ts2_far_stbd is at 91.9 degrees relative bearing, which is nearly astern but still to starboard. Wait, relative bearing is measured from the own-ship's bow. So if the own-ship is heading 353.1°, which is very close to north (since 0° is north), so the relative bearing of 42.5° would mean the contact is to the starboard side (since positive is starboard). For ts2_far_stbd, relative bearing 91.9°, which is almost directly off the starboard quarter. \n\nNow, considering the positions: the own-ship is at (-0.014, 0.199) NM, heading towards the goal at (0.000, 8.000) NM, which is roughly along the same longitude (since x-coordinate is moving from -0.014 to 0, y increases from 0.199 to 8). So the goal is to the east-southeast direction. But the contacts are mostly to the starboard side. \n\nBut according to COLREG Rule 17, the stand-on vessel should keep course and speed. However, if the give-way vessel isn't taking action, the stand-on vessel must act. Here, the contacts are likely the give-way vessels. Wait, in a crossing situation, the vessel on the starboard side is the stand-on vessel. So if another vessel is coming from the starboard side, they are the stand-on vessel. Therefore, the own-ship might be the give-way vessel here. Wait, but the own-ship is the one that needs to decide. \n\nWait, looking back at the example in Rule 17: if the own-ship is the stand-on vessel, they should hold course and speed. But if the give-way vessel isn't acting, then the stand-on vessel must act. Now, the contacts are ts1 and ts2. Are they on the starboard side? Yes, both are on the starboard side (relative bearing +ve). So the own-ship is the stand-on vessel. But wait, the own-ship is going towards the goal, which is at bearing 0.1°, meaning almost directly ahead. So perhaps the contacts are crossing paths with the own-ship. \n\nHowever, the key issue is that both contacts have CPAs below the safe distance. According to the procedure guidance, if the give-way vessel hasn't acted, the stand-on vessel must take action. But in this case, the own-ship is the stand-on vessel, so they should hold course and speed. But the contacts are getting too close. Wait, but the own-ship is the stand-on vessel, so they are supposed to stay on course. Unless the give-way vessel (which would be the other ships) aren't taking action. But in this case, the other ships are the ones that need to give way. \n\nAlternatively, maybe the own-ship is the give-way vessel. How to determine that? Let's consider the relative motion. The own-ship is heading 353.1°, which is almost due north. Contact ts1 is at relative bearing 42.5°, so approximately northeast of the own-ship. Its heading is 245.4°, which is southwest. So the contact is moving southwest, while the own-ship is moving north. That could create an approaching situation. Similarly, ts2 is at relative bearing 91.9°, which is almost directly to the starboard quarter. Its heading is 320.1°, which is northwest. So it's moving northwest. \n\nIn such cases, depending on the angle between the courses, we'd apply Rule 15 (give-way vessel must keep out of the way) or Rule 17 (stand-on vessel holds course). But without knowing the exact angles, it's tricky. However, based on the fact that the own-ship is the stand-on vessel (because the contacts are on the starboard side), they should hold course. But the contacts are getting too close. \n\nWait, but the problem states that the mission requirements include ensuring that all contacts' CPA is at least the safe distance. So even though the own-ship is the stand-on vessel, if the contacts are approaching too closely, the own-ship must take action. But according to COLREG, the stand-on vessel shouldn't change course unless the give-way vessel fails to act. \n\nThis seems conflicting. Maybe the contacts are considered to be the give-way vessels, and the own-ship is the stand-on vessel. Therefore, the own-ship should hold course. But the CPA is too low. However, the mission requires maintaining CPA above the safe distance. So perhaps the own-ship must take evasive action despite being the stand-on vessel. \n\nAlternatively, maybe the contacts are not following COLREG, so the own-ship must act. But according to the procedure guidance, if the give-way vessel doesn't act, the stand-on vessel must. So if the contacts are the give-way vessels, the own-ship must act. \n\nGiven that, the own-ship is the stand-on vessel, but the contacts are the give-way vessels. Therefore, the own-ship must take action to avoid collision. However, the own-ship is already on the goal bearing. The options are to either make a turn or adjust speed. \n\nLooking at the GOAL COURSE CHECK, it says the heading is already on the goal bearing, so no turn is needed. But the contacts are approaching too closely. The user mentioned that if the own-ship turns to the goal bearing, the CPA decreases further. So turning to the goal bearing would worsen the situation. Hence, the own-ship cannot proceed on the current course. \n\nTherefore, the own-ship must take some action. Given that the contacts are on the starboard side, and the own-ship is the stand-on vessel, the appropriate action would be to alter course to starboard (turn right) to increase CPA. Alternatively, slow down. \n\nBut according to COLREG Rule 17, the stand-on vessel should not change course unless the give-way vessel doesn't act. However, in this case, the contacts are not acting, so the stand-on vessel must act. Thus, the own-ship should turn right (to starboard) to avoid the contacts. \n\nSo the action would be to turn right. The reason is that the contacts are on the starboard side, and the own-ship is the stand-on vessel, needing to take action to prevent collision. \n</think>\n\n{\n  \"action\": \"turn_right\",\n  \"degrees\": 30.0,\n  \"encounter_rule\": \"Rule 17\",\n  \"conduct_rule\": \"Rule 17\",\n  \"reasoning\": \"1. Contacts: ts1_close_stbd (CPA 0.070 NM < 0.270 NM) and ts2_far_stbd (CPA 0.003 NM < 0.270 NM) both pose risks. 2. Rule 17 applies: stand-on vessel must act if give-way vessel fails. 3. Goal: Already on target bearing, but contacts require action. 4. Turn right to increase CPA while complying with COLREG obligations.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v11_super_colreg_rag_cot",
+    "retrieved_chunk_ids": [
+     "chunk_764ed65d",
+     "chunk_4e6cb662"
+    ],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": "Procedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.",
+    "user_msg_chars": 4552,
+    "user_msg": "Before answering, write your reasoning as EXACTLY these 4 steps, one short sentence each -- no more steps, no re-deriving bearings/CPA/TCPA (they are already given -- just quote them):\n1. Contacts: name each contact and say whether its CPA is below or above the safe passing distance.\n2. Rule: for any contact below it, name the applicable COLREG rule and the action it requires.\n3. Goal: if no contact is below the safe passing distance, state what GOAL COURSE CHECK says.\n4. Decision: state the one action you will take and why.\nThen give the final JSON answer.\n\nOwn-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nProcedure guidance:\nProcedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.\n\nCOLREG reference excerpts:\n\n[Excerpt 1 — COLREG-Consolidated-2018.pdf / ANNEX IV]\npertinent information and any course laid down shall be checked.\n\n[SECTION BREAK]\n\ncourse and speed shall be confirmed; any navigational hazard expected to be\nencountered during the watch shall be noted.\n\n[SECTION BREAK]\n\nsufficiently frequent intervals using any available navigational aids necessary to\nensure that the ship follows the planned course.\n\n[SECTION BREAK]\n\nmanner of its operation shall be clearly understood; in addition its operational\ncondition shall be fully taken into account.\n\n[Excerpt 2 — simple_colreg.json / Section II - In Sight]\n[Section II - In Sight | Rule 17: Stand-on vessel's duty]\nIf you're the stand-on vessel, hold your course and speed — don't start second-guessing and maneuvering just because a vessel is approaching. You're allowed to act on your own if it becomes clear the other vessel isn't actually keeping clear, and you're required to act if collision can no longer be avoided by the give-way vessel alone. When you do act, avoid turning to port toward a vessel that's on your own port side, if you have room to do something else. None of this excuses the give-way vessel from its own obligation.\nExamples:\n  1. Own-ship is stand-on in a crossing situation; the give-way contact's bearing has stopped changing and range keeps closing with 90 seconds of TCPA left — this is exactly the point where Rule 17(b) requires own-ship to act, not continue waiting.\n\nSituation:\nOwn-ship at (-0.014, 0.199) NM, heading 353.1, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.801 NM away, bearing 0.1 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2340s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 1.087 NM, relative bearing 42.5 deg, heading 245.4, speed 13.61 kt, CPA 0.070 NM, TCPA 189s\n    If own-ship turned to the GOAL COURSE CHECK heading (0.1 deg) now, this contact's CPA would become 0.010 NM, TCPA 181s.\n  - Other ship 2: named \"ts2_far_stbd\", range 0.536 NM, relative bearing 91.9 deg, heading 320.1, speed 14.58 kt, CPA 0.003 NM, TCPA 243s\n    If own-ship turned to the GOAL COURSE CHECK heading (0.1 deg) now, this contact's CPA would become 0.000 NM, TCPA 205s.\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 9,
+   "time": 90.0,
+   "timestamp": "2026-09-29T21:16:51.372659+00:00",
+   "latency_s": 44.07976961135864,
+   "situation_report": "Own-ship at (-0.023, 0.299) NM, heading 356.9, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.701 NM away, bearing 0.2 deg.\nGOAL COURSE CHECK: heading is 30 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=30 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2310s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 0.913 NM, relative bearing 39.3 deg, heading 245.4, speed 13.61 kt, CPA 0.040 NM, TCPA 155s\n  - Other ship 2: named \"ts2_far_stbd\", range 0.466 NM, relative bearing 88.2 deg, heading 320.1, speed 14.58 kt, CPA 0.003 NM, TCPA 192s",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 30,
+    "encounter_rule": "Rule 14",
+    "conduct_rule": "Rule 15",
+    "reasoning": "Contacts ts1_close_stbd and ts2_far_stbd both pose real collision risks (CPA < 0.270NM, TCPA < 368s). Under Rule 14, vessels on starboard side must keep clear; since both contacts are on starboard side, own-ship must take action per Rule 15 to avoid collision. Turn left 30° aligns with goal course while creating safe separation from starboard contacts."
+   },
+   "commanded_heading_deg": 0.0,
+   "reasoning_raw": "<think>\nOkay, let me try to work through this problem step by step. \n\nFirst, I need to check the contacts to see if they pose a real collision risk. The safe passing distance is 0.270 NM, so any contact with CPA below that and TCPA within 368 seconds (which is roughly 6 minutes) is a risk. \n\nLooking at Other Ship 1: ts1_close_stbd has a CPA of 0.040 NM, which is below 0.270 NM. Its TCPA is 155 seconds, which is well within the risk horizon. So this is a real risk. Then Other Ship 2: ts2_far_stbd has a CPA of 0.003 NM, which is way below the safe distance, and TCPA of 192 seconds. That's also within the risk horizon. So both contacts are potential risks.\n\nNow, according to COLREG rules, specifically Rule 15, the give-way vessel must take action to avoid collision. But wait, which vessel is the give-way here? Let me think. In a crossing situation, the vessel on the starboard side is the give-way vessel. Wait, but the other ships' headings and positions might affect this. \n\nWait, the own-ship is heading 356.9 degrees, almost north. Other Ship 1 is at a relative bearing of 39.3 degrees (so slightly to starboard, since positive is starboard). Their heading is 245.4 degrees, which is towards southwest. The own-ship is moving north, and the other ship is moving southwest. So their paths might cross. Similarly, Other Ship 2 is at a relative bearing of 88.2 degrees (almost directly to starboard), heading 320.1 degrees (northwest direction). \n\nFor Rule 15, which deals with overtaking situations, maybe not applicable here. Alternatively, Rule 13 for head-on situations. Wait, but the other ships aren't necessarily on a direct path. Maybe Rule 14 for crossing situations. \n\nIn a crossing situation, the vessel which has the other on her starboard side must keep out of the way. For Other Ship 1, since it's on the starboard side (relative bearing +39.3), the own-ship is the give-way vessel? Or wait, the other ship's position relative to our own ship. Wait, the relative bearing is from our own ship's perspective. So Other Ship 1 is to our starboard side (since it's positive 39.3). Therefore, under Rule 14, the vessel on the starboard side (Other Ship 1) should keep clear. Wait, but Rule 14 states that when two power-driven vessels are approaching each other such that their courses will cross, the vessel which has the other on her starboard side shall keep out of the way. So in this case, Other Ship 1 is on our starboard side, meaning we are the stand-on vessel, and Other Ship 1 is the give-way vessel. Wait, no—wait, Rule 14 says that if two vessels are approaching each other such that their courses will cross, the vessel which has the other on her starboard side must keep clear. So if Other Ship 1 is on our starboard side, then we are the stand-on vessel, and Other Ship 1 is the give-way vessel. Wait, that seems conflicting. Let me clarify. \n\nIf two vessels are approaching each other in a crossing situation, the one on the starboard side of the other must keep clear. So if Other Ship 1 is on our starboard side, then we are the stand-on vessel, and Other Ship 1 must give way. However, in this scenario, the own-ship is the one that needs to take action if the other is not giving way. Wait, but the problem says that if there's a real collision risk, we must comply with COLREG. So if Other Ship 1 is supposed to give way but isn't, then we need to take action. \n\nBut looking at the situation, the own-ship is on a course of 356.9 degrees (nearly due north), and Other Ship 1 is coming from the southeast (its heading is 245.4 degrees, which is SW direction). The CPA between them is very close. Since Other Ship 1 is supposed to give way, but perhaps it's not doing so. However, the own-ship's actions are required to avoid collision. \n\nAlternatively, considering Other Ship 2, which is at a relative bearing of 88.2 degrees (almost directly to starboard), heading 320.1 degrees (NW direction). The CPA is extremely low. Here, the own-ship is on a northerly course, and Other Ship 2 is going northwest. Depending on their actual tracks, they might be converging. \n\nBut according to the COLREGs, the priority is to avoid collisions. Since both contacts are at risk, but which one is the immediate threat? The one with the shorter TCPA. Other Ship 2 has a TCPA of 192 seconds, whereas Other Ship 1 has 155 seconds. So Other Ship 1 is closer. \n\nHowever, the main issue is that both are at risk. According to the procedure guidance, if multiple contacts are present, the most imminent danger should be addressed first. \n\nSo, applying Rule 15 (if applicable) or Rule 14. Let me check the COLREG references again. \n\nThe user mentioned Excerpt 1 refers to Rule 8: Action to avoid collision. Which says that the give-way vessel should alter course or speed. Also, the examples mention that a single clear course change is better than multiple small ones. \n\nGiven that, the own-ship must determine which contact is the give-way vessel. For Other Ship 1, being on the starboard side, the own-ship is the stand-on vessel. Thus, Other Ship 1 should give way. But if it doesn't, the own-ship must take action. Similarly, for Other Ship 2, which is nearly astern (relative bearing 88.2 degrees, which is almost directly to starboard, so still on the starboard side). Wait, relative bearing is measured from the own-ship's bow. So a relative bearing of 88.2 degrees would mean the other ship is to the starboard side, approximately 88.2 degrees from the bow. So the other ship is on the starboard quarter. \n\nTherefore, for both Other Ship 1 and 2, they are on the starboard side of the own-ship. Hence, according to Rule 14, the own-ship is the stand-on vessel, and the other ships must give way. However, neither of them seem to be altering course or speed. \n\nThus, the own-ship must take action to avoid collision. According to Rule 15, if the give-way vessel fails to take action, the stand-on vessel must take action. Wait, but Rule 15 is about overtaking. Hmm. \n\nAlternatively, Rule 13: When two power-driven vessels are meeting on reciprocal or nearly reciprocal courses, each shall keep clear of the other. But that's for head-on encounters. \n\nThis is getting complicated. Given that both contacts are on the starboard side, the own-ship is the stand-on vessel. Therefore, the responsibility lies with the other ships to give way. However, since they are not doing so, the own-ship must take evasive action. \n\nAccording to Rule 8, the give-way vessel must take action. But in this case, the own-ship is the stand-on vessel. So perhaps the other ships are the give-way vessels. But since they are not taking action, the own-ship must take action. \n\nIn that case, the own-ship should take action to avoid collision. The options are to turn left or right, or adjust speed. Considering the relative bearings of the contacts, turning left (to port) would increase the angle between the own-ship and the contacts. \n\nThe own-ship's current heading is 356.9 degrees, which is almost north. The mission goal is at a bearing of 0.2 degrees, which is just slightly east of north. The GOAL COURSE CHECK suggests a turn left by 30 degrees to align with the goal. However, there's a collision risk, so that maneuver must be evaluated. \n\nBut the contacts are on the starboard side. Turning left (port) would take the own-ship away from the starboard-side contacts. For example, turning left by 30 degrees would bring the heading to 356.9 - 30 = 326.9 degrees, which is more westward. This could help avoid the starboard contacts. \n\nAlternatively, turning right (staying on the same general course) might not be sufficient. \n\nSince the immediate risk comes from the starboard contacts, especially Other Ship 2, which has a much lower CPA. The best action would be to turn left to create separation. \n\nAdditionally, checking the COLREGs, Rule 15 mentions that if the give-way vessel does not take action, the stand-on vessel must. But in this case, the own-ship is the stand-on vessel, so the other ships are supposed to give way. Since they don't, the own-ship must take action. \n\nTherefore, the appropriate action is to turn left by 30 degrees, as per the GOAL COURSE CHECK, but ensuring that it avoids the collision risk. However, the presence of the collision risk necessitates prioritizing avoiding collision over following the goal course. \n\nWait, but the Procedure Guidance says that if there's a real collision risk, the COLREG rule takes precedence. So regardless of the goal, the collision avoidance must be handled first. \n\nHence, the correct action is to perform a significant turn to avoid the starboard contacts. The optimal maneuver here would be a sharp left turn to increase the CPA with both contacts. \n\nConsidering the own-ship's heading and the contacts' positions, a left turn would place the own-ship's new course away from the starboard contacts. Therefore, the action should be to turn left by 30 degrees, as per the goal check, but verifying that it resolves the collision risk. \n\nBut wait, the GOAL COURSE CHECK says to turn left by 30 degrees. However, the presence of the collision risk requires us to prioritize that. So the answer would be to execute the turn left by 30 degrees, as it's part of the mission goal but also helps avoid collision. \n\nBut the contacts are on the starboard side. Turning left (port) would take the own-ship away from the starboard contacts, thus increasing the CPA. Therefore, the maneuver is valid. \n\nSo the conclusion is to turn left by 30 degrees, complying with the goal check and resolving the collision risk.\n</think>\n\n{\n  \"action\": \"turn_left\",\n  \"degrees\": 30,\n  \"encounter_rule\": \"Rule 14\",\n  \"conduct_rule\": \"Rule 15\",\n  \"reasoning\": \"Contacts ts1_close_stbd and ts2_far_stbd both pose real collision risks (CPA < 0.270NM, TCPA < 368s). Under Rule 14, vessels on starboard side must keep clear; since both contacts are on starboard side, own-ship must take action per Rule 15 to avoid collision. Turn left 30° aligns with goal course while creating safe separation from starboard contacts.\"\n}",
+   "measurement": {
+    "checks_fired": [
+     "B_wrong_direction"
+    ],
+    "details": {
+     "B": {
+      "cited_encounter_rule": "Rule 14",
+      "cited_conduct_rule": "Rule 15",
+      "action": "turn_left"
+     }
+    }
+   },
+   "debug": {
+    "config": "v11_super_colreg_rag_cot",
+    "retrieved_chunk_ids": [
+     "chunk_66e8ee4b",
+     "chunk_764ed65d"
+    ],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": "Procedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.",
+    "user_msg_chars": 4342,
+    "user_msg": "Before answering, write your reasoning as EXACTLY these 4 steps, one short sentence each -- no more steps, no re-deriving bearings/CPA/TCPA (they are already given -- just quote them):\n1. Contacts: name each contact and say whether its CPA is below or above the safe passing distance.\n2. Rule: for any contact below it, name the applicable COLREG rule and the action it requires.\n3. Goal: if no contact is below the safe passing distance, state what GOAL COURSE CHECK says.\n4. Decision: state the one action you will take and why.\nThen give the final JSON answer.\n\nOwn-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nProcedure guidance:\nProcedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.\n\nCOLREG reference excerpts:\n\n[Excerpt 1 — simple_colreg.json / Section I - Any Visibility]\n[Section I - Any Visibility | Rule 8: Action to avoid collision]\nWhatever you do, do it early, do it decisively, and make it big enough that another vessel watching visually or on radar can actually tell you've done something — a string of tiny course nudges is worse than one clear turn. If there's sea room, a course change alone is often better than a speed change alone. Check that your action actually opens a safe gap, not just a technically-different number. And if you need thinking time, it's fine to slow down or stop to buy it.\nExamples:\n  1. Own-ship nudges course by 3 deg, waits, nudges another 4 deg, waits again — this pattern is exactly what Rule 8(b) warns against; a single clear 25-30 deg alteration would be far more readable to the other vessel and far more effective.\n\n[Excerpt 2 — COLREG-Consolidated-2018.pdf / ANNEX IV]\npertinent information and any course laid down shall be checked.\n\n[SECTION BREAK]\n\ncourse and speed shall be confirmed; any navigational hazard expected to be\nencountered during the watch shall be noted.\n\n[SECTION BREAK]\n\nsufficiently frequent intervals using any available navigational aids necessary to\nensure that the ship follows the planned course.\n\n[SECTION BREAK]\n\nmanner of its operation shall be clearly understood; in addition its operational\ncondition shall be fully taken into account.\n\nSituation:\nOwn-ship at (-0.023, 0.299) NM, heading 356.9, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.701 NM away, bearing 0.2 deg.\nGOAL COURSE CHECK: heading is 30 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=30 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2310s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 0.913 NM, relative bearing 39.3 deg, heading 245.4, speed 13.61 kt, CPA 0.040 NM, TCPA 155s\n  - Other ship 2: named \"ts2_far_stbd\", range 0.466 NM, relative bearing 88.2 deg, heading 320.1, speed 14.58 kt, CPA 0.003 NM, TCPA 192s\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 12,
+   "time": 120.0,
+   "timestamp": "2026-09-29T21:17:20.504628+00:00",
+   "latency_s": 29.1316180229187,
+   "situation_report": "Own-ship at (-0.021, 0.399) NM, heading 2.6, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.601 NM away, bearing 0.2 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2280s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 0.732 NM, relative bearing 33.7 deg, heading 245.4, speed 13.61 kt, CPA 0.001 NM, TCPA 121s\n  - Other ship 2: named \"ts2_far_stbd\", range 0.387 NM, relative bearing 82.5 deg, heading 320.1, speed 14.58 kt, CPA 0.002 NM, TCPA 140s",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 15.0,
+    "encounter_rule": "Rule 17",
+    "conduct_rule": "Rule 17",
+    "reasoning": "1. Contacts ts1_close_stbd (CPA 0.001NM) and ts2_far_stbd (CPA 0.002NM) both fall below safe passing distance. 2. As stand-on vessel, must act when give-way vessels fail to avoid collision (Rule 17). 3. Goal course check confirms heading is already optimal. 4. Turn left 15° to increase CPA while minimizing deviation from goal bearing."
+   },
+   "commanded_heading_deg": 345.0,
+   "reasoning_raw": "<think>\nOkay, let me try to work through this problem step by step. \n\nFirst, I need to check the contacts to see if their CPA is below the safe passing distance. The safe passing distance here is 0.270 NM. Looking at the data, Other ship 1 (ts1_close_stbd) has a CPA of 0.001 NM, which is way below 0.270. Similarly, ts2_far_stbd has a CPA of 0.002 NM, also below the threshold. So both contacts pose a collision risk since their CPAs are under the safe distance. \n\nNext, according to COLREG rules, if a contact is a potential collision risk, the appropriate rule must be applied. For Rule 17, the stand-on vessel should maintain course and speed unless the give-way vessel doesn't take action. But in this case, the own-ship might be the stand-on vessel. Wait, looking at the scenario, the own-ship's heading is 2.6 degrees, and the mission goal is at a very slight bearing of 0.2 degrees. The contacts are on starboard sides (relative bearings 33.7 and 82.5). \n\nNow, checking the COLREG references. Excerpt 2 mentions that if you're the stand-on vessel, you should hold course and speed unless the give-way vessel isn't acting. However, if the give-way vessel isn't taking action, the stand-on vessel must act. Here, the contacts are likely the give-way vessels. Since the own-ship is the stand-on vessel, they should hold course and speed. But wait, the contacts have CPAs below the safe distance, so maybe the own-ship needs to take evasive action? Or perhaps the contacts are the ones supposed to yield?\n\nWait, the contacts are approaching from starboard. Let me think about the crossing situations. If another vessel is crossing from starboard to port, the give-way vessel would be the one on the starboard side. Wait, in a crossing situation, the vessel on the starboard side is the stand-on vessel. So if the other ships are coming from starboard, meaning they are on the starboard side of the own-ship, then the own-ship is the give-way vessel. Therefore, the own-ship should alter course or speed to avoid them. But according to Rule 17, the stand-on vessel holds course and speed. So if the other ships are the give-way vessels, then the own-ship is the stand-on vessel. Wait, this is confusing. Maybe I need to determine who is the give-way vessel based on the positions.\n\nAlternatively, considering the relative bearings: the contacts are on the starboard side (positive relative bearings). In a crossing situation, the vessel on the starboard side is the stand-on vessel. So if the other ships are crossing from starboard to port, then the own-ship is the give-way vessel. Therefore, the own-ship should take action to avoid collision. But the problem states that the own-ship is the stand-on vessel. Hmm, conflicting conclusions here. \n\nBut according to the situation report, the own-ship is on the goal bearing, and the goal course check says no turn is needed. Also, the contacts are close. Given that both contacts have CPAs well below the safe distance, the own-ship must take action. However, the COLREG rules require that if the give-way vessel fails to act, the stand-on vessel must act. So if the other ships are the give-way vessels, then the own-ship (as stand-on) should act. But how to determine which is which?\n\nAnother approach: the contacts are approaching from starboard. If the own-ship is maintaining course and speed, and the contacts are on starboard, then the own-ship is the stand-on vessel. Thus, the contacts are the give-way vessels. But since they aren't altering course or speed, the own-ship must take action. However, the own-ship is already on the goal bearing. According to the priority order, collision avoidance comes first. So regardless of the mission goal, the own-ship must prioritize avoiding collisions. \n\nIn this case, both contacts are on the starboard side, so the own-ship is the stand-on vessel. The contacts are the give-way vessels. They haven't taken action, so the own-ship must act. According to Rule 17, the stand-on vessel must act if the give-way vessel hasn't. Therefore, the own-ship should change course or speed to avoid collision. \n\nLooking back at the contacts: ts1_close_stbd is closer, with a TCPA of 121s. The CPA is extremely low. The own-ship is moving at 12kt, and the contact is faster (13.61kt). The CPA being so low indicates an imminent collision. The same applies to ts2_far_stbd, though slightly farther. \n\nSince the own-ship is the stand-on vessel, it must take action. The options are to turn left or right, or adjust speed. Turning left would be towards the port side, but the contacts are on the starboard side. Alternatively, turning right could increase the CPA. But the direction depends on the relative motion. \n\nGiven that the contacts are on the starboard side, turning left (port) would move the own-ship away from the contacts. However, the own-ship is already on the goal bearing, which is almost directly ahead. The mission goal is at a bearing of 0.2 degrees, so the own-ship is nearly aligned with the goal. Any significant turn might interfere with the mission. \n\nHowever, the immediate danger is the collision with the contacts. The priority is to avoid collision. Even though the mission goal is nearby, the collision risk is higher. Therefore, the own-ship must take evasive action. \n\nThe best option is to turn left (port) to create separation from the starboard-side contacts. That would increase the CPA for both contacts. Alternatively, slowing down might help, but the own-ship is at rated speed. Slowing down could reduce the CPA, but given the high speed of the contacts, it might not be sufficient. \n\nConsidering the time constraints, a quick turn left would be better. The own-ship's heading is 2.6 degrees, and the goal is at 0.2 degrees. A slight left turn would align the own-ship more closely with the goal while creating space from the contacts. \n\nTherefore, the action should be to turn left by a certain angle. How much? The exact degrees depend on the urgency. Since the contacts are on starboard, a moderate left turn would suffice. The exact value might be determined by the need to maximize CPA without deviating too far from the goal. \n\nSo, the conclusion is to turn left to avoid collision, following COLREG Rule 17, as the stand-on vessel must act when the give-way vessels fail to act. Hence, the action is turn_left with an appropriate degree, ensuring the CPA increases sufficiently.\n</think>\n\n{\n  \"action\": \"turn_left\",\n  \"degrees\": 15.0,\n  \"encounter_rule\": \"Rule 17\",\n  \"conduct_rule\": \"Rule 17\",\n  \"reasoning\": \"1. Contacts ts1_close_stbd (CPA 0.001NM) and ts2_far_stbd (CPA 0.002NM) both fall below safe passing distance. 2. As stand-on vessel, must act when give-way vessels fail to avoid collision (Rule 17). 3. Goal course check confirms heading is already optimal. 4. Turn left 15° to increase CPA while minimizing deviation from goal bearing.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {
+     "B_suspect_rule17": {
+      "cited_encounter_rule": "Rule 17",
+      "cited_conduct_rule": "Rule 17",
+      "action": "turn_left"
+     }
+    }
+   },
+   "debug": {
+    "config": "v11_super_colreg_rag_cot",
+    "retrieved_chunk_ids": [
+     "chunk_764ed65d",
+     "chunk_4e6cb662"
+    ],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": "Procedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.",
+    "user_msg_chars": 4302,
+    "user_msg": "Before answering, write your reasoning as EXACTLY these 4 steps, one short sentence each -- no more steps, no re-deriving bearings/CPA/TCPA (they are already given -- just quote them):\n1. Contacts: name each contact and say whether its CPA is below or above the safe passing distance.\n2. Rule: for any contact below it, name the applicable COLREG rule and the action it requires.\n3. Goal: if no contact is below the safe passing distance, state what GOAL COURSE CHECK says.\n4. Decision: state the one action you will take and why.\nThen give the final JSON answer.\n\nOwn-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nProcedure guidance:\nProcedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.\n\nCOLREG reference excerpts:\n\n[Excerpt 1 — COLREG-Consolidated-2018.pdf / ANNEX IV]\npertinent information and any course laid down shall be checked.\n\n[SECTION BREAK]\n\ncourse and speed shall be confirmed; any navigational hazard expected to be\nencountered during the watch shall be noted.\n\n[SECTION BREAK]\n\nsufficiently frequent intervals using any available navigational aids necessary to\nensure that the ship follows the planned course.\n\n[SECTION BREAK]\n\nmanner of its operation shall be clearly understood; in addition its operational\ncondition shall be fully taken into account.\n\n[Excerpt 2 — simple_colreg.json / Section II - In Sight]\n[Section II - In Sight | Rule 17: Stand-on vessel's duty]\nIf you're the stand-on vessel, hold your course and speed — don't start second-guessing and maneuvering just because a vessel is approaching. You're allowed to act on your own if it becomes clear the other vessel isn't actually keeping clear, and you're required to act if collision can no longer be avoided by the give-way vessel alone. When you do act, avoid turning to port toward a vessel that's on your own port side, if you have room to do something else. None of this excuses the give-way vessel from its own obligation.\nExamples:\n  1. Own-ship is stand-on in a crossing situation; the give-way contact's bearing has stopped changing and range keeps closing with 90 seconds of TCPA left — this is exactly the point where Rule 17(b) requires own-ship to act, not continue waiting.\n\nSituation:\nOwn-ship at (-0.021, 0.399) NM, heading 2.6, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.601 NM away, bearing 0.2 deg.\nGOAL COURSE CHECK: heading is ALREADY on the goal bearing (within 5 deg) -- no turn needed for the goal.\nAt current speed, ETA to goal ≈ 2280s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 0.732 NM, relative bearing 33.7 deg, heading 245.4, speed 13.61 kt, CPA 0.001 NM, TCPA 121s\n  - Other ship 2: named \"ts2_far_stbd\", range 0.387 NM, relative bearing 82.5 deg, heading 320.1, speed 14.58 kt, CPA 0.002 NM, TCPA 140s\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 15,
+   "time": 150.0,
+   "timestamp": "2026-09-29T21:17:48.500273+00:00",
+   "latency_s": 27.995278120040894,
+   "situation_report": "Own-ship at (-0.016, 0.499) NM, heading 1.9, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.501 NM away, bearing 0.1 deg.\nGOAL COURSE CHECK: heading is 15 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=15 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2250s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 0.550 NM, relative bearing 34.4 deg, heading 245.4, speed 13.61 kt, CPA 0.004 NM, TCPA 91s\n  - Other ship 2: named \"ts2_far_stbd\", range 0.304 NM, relative bearing 83.1 deg, heading 320.1, speed 14.58 kt, CPA 0.001 NM, TCPA 112s",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 30,
+    "encounter_rule": "Rule 15",
+    "conduct_rule": "Rule 15",
+    "reasoning": "1. Contacts: ts1_close_stbd (CPA 0.004NM < 0.270NM, TCPA 91s) and ts2_far_stbd (CPA 0.001NM < 0.270NM, TCPA 112s) both pose real collision risks. 2. Rule: Both contacts require Rule 15 action (give-way vessel must alter course/speed). 3. Goal: Original goal requires 15deg turn_right but collision risks override. 4. Decision: Execute larger 30deg turn_right to maximize separation from both contacts."
+   },
+   "commanded_heading_deg": 15.0,
+   "reasoning_raw": "<think>\nOkay, let me try to work through this problem step by step. \n\nFirst, I need to check the contacts to see if they pose a real collision risk. The safe passing distance is 0.270 NM, so any contact with CPA below that and TCPA within 368 seconds (which is roughly 6 minutes) is a risk. \n\nLooking at Other Ship 1: ts1_close_stbd. Its CPA is 0.004 NM, which is way below 0.270 NM. The TCPA is 91 seconds, which is well within the risk horizon. So this is a real risk. Then Other Ship 2: ts2_far_stbd. Its CPA is 0.001 NM, also way under, and TCPA is 112 seconds. That's also within the risk horizon. So both contacts are real risks.\n\nNext, according to COLREG rules, the give-way vessel must alter course or speed to avoid collision. Now, I need to determine which rule applies here. Since both contacts are approaching head-on, maybe Rule 15? Wait, Rule 15 is about overtaking, but the example mentions Rule 8. Let me think. Rule 8 is about actions to avoid collision. In this case, since both contacts are coming from the port side (relative bearings 34.4 and 83.1 degrees, meaning left side?), wait, relative bearing is positive for starboard. So 34.4 degrees is starboard, 83.1 is also starboard. So both are on the starboard side. But their headings are such that they might cross paths. \n\nWait, the own-ship is heading 1.9 degrees, almost north. The first contact, ts1_close_stbd, is at relative bearing 34.4 degrees, so slightly to the starboard. Its heading is 245.4 degrees, which is southwest direction. The second contact, ts2_far_stbd, is at relative bearing 83.1 degrees, so more towards the starboard side, and its heading is 320.1 degrees, which is northwest. \n\nSo, considering their courses, perhaps both are crossing paths. However, the main issue is that both have very low CPAs. According to COLREG Rule 15, if a vessel is overtaking another, the overtaker must keep clear. But here, maybe neither is overtaking. Alternatively, Rule 13 applies to head-on situations. Head-on encounters require each vessel to alter course to starboard. But since there are two contacts, maybe the priority is to handle the closer one first?\n\nBut the user mentioned that if multiple contacts are risky, we need to apply the COLREG rule for each. However, the instructions say to pick the one action that satisfies the applicable COLREG rule for that contact. Wait, but there are two contacts here. How to prioritize between them?\n\nAlternatively, maybe both are considered as separate targets requiring action. But according to the procedure guidance, if there's a risk, the give-way vessel must take action. However, in this scenario, the own-ship is the one needing to adjust course. \n\nThe key is that both contacts are on the starboard side, approaching from different angles. For ts1_close_stbd, which is close and has a shorter TCPA, the immediate danger is higher. Therefore, applying Rule 15 (overtaking) might not fit. Maybe Rule 13 (head-on) applies to both? Or Rule 8 (actions to avoid collision).\n\nIn Rule 8, the give-way vessel must take action. Here, the own-ship needs to decide which contact to prioritize. Since both are on the same side, perhaps the closest one is more urgent. \n\nHowever, the problem states that if any contact poses a real risk, pick the action that satisfies the applicable COLREG rule. But there are two contacts. Which one takes precedence? The instruction says to pick the ONE action that satisfies the applicable COLREG rule for that contact. So perhaps the closest one (ts1_close_stbd) is the primary concern. \n\nAssuming that, the appropriate action would be to turn right (since the contact is on the starboard side, turning right would move the ship away from the contact). But wait, the own-ship is currently heading 1.9 degrees (almost due north). Turning right would increase the heading towards east. The contact is at a relative bearing of 34.4 degrees, so to avoid it, turning right could help. \n\nAlternatively, maybe the best approach is to turn right to starboard to create separation from both contacts. Given that both are on the starboard side, a right turn would move the ship away from them. \n\nNow, checking the GOAL COURSE CHECK: the own-ship is 15 degrees off the goal bearing to starboard. Normally, the action would be to turn right by 15 degrees. However, since there's a collision risk, that action must be prioritized over the goal. \n\nTherefore, the correct maneuver is to turn right, but how many degrees? The required correction for the goal was 15 degrees, but the presence of the contacts necessitates an adjustment. However, the problem states that if a contact poses a real risk, the action must comply with COLREG. \n\nSince both contacts are on the starboard side, the appropriate COLREG action would be to turn right (as per Rule 13 for head-on encounters, though not sure if that applies here). Alternatively, Rule 15 if overtaking. But without knowing the exact positions, it's hard to say. \n\nGiven that the contacts are on the starboard side, and the own-ship is moving northeast (heading 1.9 degrees), turning right would align the ship more towards east, potentially avoiding the contacts. Thus, the action would be to turn right by some degrees. However, the exact angle depends on the COLREG requirement. \n\nBut according to the procedure guidance, the action should be decisive and clear. The example suggests a 25-30 degree turn. Since the original goal requires a 15-degree turn, but there's a collision risk, the pilot should choose a larger turn to ensure safety. \n\nThus, the decision is to turn right by a significant amount, like 30 degrees, to avoid both contacts. Hence, the JSON response would indicate a turn_right with 30 degrees, referencing COLREG Rule 15 or 13 depending on the actual encounter type. \n</think>\n\n{\n  \"action\": \"turn_right\",\n  \"degrees\": 30,\n  \"encounter_rule\": \"Rule 15\",\n  \"conduct_rule\": \"Rule 15\",\n  \"reasoning\": \"1. Contacts: ts1_close_stbd (CPA 0.004NM < 0.270NM, TCPA 91s) and ts2_far_stbd (CPA 0.001NM < 0.270NM, TCPA 112s) both pose real collision risks. 2. Rule: Both contacts require Rule 15 action (give-way vessel must alter course/speed). 3. Goal: Original goal requires 15deg turn_right but collision risks override. 4. Decision: Execute larger 30deg turn_right to maximize separation from both contacts.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v11_super_colreg_rag_cot",
+    "retrieved_chunk_ids": [
+     "chunk_66e8ee4b",
+     "chunk_764ed65d"
+    ],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": "Procedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.",
+    "user_msg_chars": 4345,
+    "user_msg": "Before answering, write your reasoning as EXACTLY these 4 steps, one short sentence each -- no more steps, no re-deriving bearings/CPA/TCPA (they are already given -- just quote them):\n1. Contacts: name each contact and say whether its CPA is below or above the safe passing distance.\n2. Rule: for any contact below it, name the applicable COLREG rule and the action it requires.\n3. Goal: if no contact is below the safe passing distance, state what GOAL COURSE CHECK says.\n4. Decision: state the one action you will take and why.\nThen give the final JSON answer.\n\nOwn-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nProcedure guidance:\nProcedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.\n\nCOLREG reference excerpts:\n\n[Excerpt 1 — simple_colreg.json / Section I - Any Visibility]\n[Section I - Any Visibility | Rule 8: Action to avoid collision]\nWhatever you do, do it early, do it decisively, and make it big enough that another vessel watching visually or on radar can actually tell you've done something — a string of tiny course nudges is worse than one clear turn. If there's sea room, a course change alone is often better than a speed change alone. Check that your action actually opens a safe gap, not just a technically-different number. And if you need thinking time, it's fine to slow down or stop to buy it.\nExamples:\n  1. Own-ship nudges course by 3 deg, waits, nudges another 4 deg, waits again — this pattern is exactly what Rule 8(b) warns against; a single clear 25-30 deg alteration would be far more readable to the other vessel and far more effective.\n\n[Excerpt 2 — COLREG-Consolidated-2018.pdf / ANNEX IV]\npertinent information and any course laid down shall be checked.\n\n[SECTION BREAK]\n\ncourse and speed shall be confirmed; any navigational hazard expected to be\nencountered during the watch shall be noted.\n\n[SECTION BREAK]\n\nsufficiently frequent intervals using any available navigational aids necessary to\nensure that the ship follows the planned course.\n\n[SECTION BREAK]\n\nmanner of its operation shall be clearly understood; in addition its operational\ncondition shall be fully taken into account.\n\nSituation:\nOwn-ship at (-0.016, 0.499) NM, heading 1.9, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.501 NM away, bearing 0.1 deg.\nGOAL COURSE CHECK: heading is 15 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=15 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2250s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 0.550 NM, relative bearing 34.4 deg, heading 245.4, speed 13.61 kt, CPA 0.004 NM, TCPA 91s\n  - Other ship 2: named \"ts2_far_stbd\", range 0.304 NM, relative bearing 83.1 deg, heading 320.1, speed 14.58 kt, CPA 0.001 NM, TCPA 112s\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 18,
+   "time": 180.0,
+   "timestamp": "2026-09-29T21:18:12.853085+00:00",
+   "latency_s": 24.35241389274597,
+   "situation_report": "Own-ship at (-0.014, 0.599) NM, heading 1.7, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.401 NM away, bearing 0.1 deg.\nGOAL COURSE CHECK: heading is 15 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=15 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2220s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 0.369 NM, relative bearing 34.9 deg, heading 245.4, speed 13.61 kt, CPA 0.006 NM, TCPA 61s\n  - Other ship 2: named \"ts2_far_stbd\", range 0.223 NM, relative bearing 83.2 deg, heading 320.1, speed 14.58 kt, CPA 0.001 NM, TCPA 82s",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 25,
+    "encounter_rule": "Rule 15",
+    "conduct_rule": "Rule 15",
+    "reasoning": "1. Contacts: ts1_close_stbd (CPA 0.006NM < 0.270NM, TCPA 61s) and ts2_far_stbd (CPA 0.001NM < 0.270NM, TCPA 82s) both pose real risks. 2. Rule 15 applies: give-way vessel must alter course to avoid collision. 3. Goal course check recommends 15deg left, but collision risk overrides. 4. Execute decisive 25deg left turn to maximize separation from both contacts."
+   },
+   "commanded_heading_deg": 350.0,
+   "reasoning_raw": "<think>\nOkay, let me try to work through this problem step by step. \n\nFirst, I need to check the contacts to see if they pose a real collision risk. The safe passing distance is 0.270 NM, so any contact with CPA below that and TCPA within 368 seconds (which is roughly 6 minutes) is a risk. \n\nLooking at Other Ship 1: ts1_close_stbd. Its CPA is 0.006 NM, which is way below 0.270 NM. The TCPA is 61 seconds, which is well within the risk horizon. So this is a real risk. Then Other Ship 2: ts2_far_stbd has a CPA of 0.001 NM, also way under, and TCPA of 82 seconds. That's still within the risk horizon. Both contacts are potential collisions.\n\nNow, according to COLREG rules, specifically Rule 15, the give-way vessel must alter course or speed to avoid collision. Since both contacts are approaching, I need to determine which one is the giving-way vessel. Wait, maybe I'm misunderstanding. Let me recall: Rule 15 states that when two power-driven vessels are approaching each other such that there is a risk of collision, the vessel which should keep her course and speed is the one on the starboard side. But here, we have two separate contacts. However, since both are close and approaching, perhaps the priority is based on their positions relative to our ship.\n\nWait, the user mentioned that the Procedure guidance says that if neither vessel alters course or speed, it's considered a failure. So in this case, since both contacts are on the starboard side (relative bearings 34.9 and 83.2 degrees), meaning they are on our starboard side. According to Rule 15, the vessel on the starboard side should keep course and speed, so the other vessel should give way. But wait, the other ships might be the ones required to give way. Hmm, this is confusing. Alternatively, maybe the contacts are both on the same side, so the question becomes which one is the overtaking vessel? Or perhaps the nearest one?\n\nAlternatively, considering the CPA and TCPA, the immediate threat is ts1_close_stbd because it's closer and has a shorter TCPA. So the primary risk is from ts1_close_stbd. Therefore, the appropriate action would be to apply Rule 15, which requires altering course or speed to avoid collision. Since the ship is on the starboard side, the give-way vessel should take action. Wait, but the user's own ship is the one needing to take action here. Maybe the other ships are the ones supposed to give way, but since they aren't, the responsibility falls to us. \n\nBut according to the Procedure guidance, if the give-way vessel doesn't take action, it's a failure. So in this scenario, since both contacts are on the starboard side, the other ships should be keeping their course and speed, making our ship the give-way vessel. Wait, no—Rule 15 says that when two power-driven vessels are meeting head-on, each should alter course to starboard. But in this case, the contacts are not necessarily meeting head-on. They could be crossing paths. \n\nAlternatively, looking at the relative bearings: ts1 is at 34.9 degrees (starboard side), and ts2 is at 83.2 degrees (also starboard, but farther out). So both are on the starboard side. In such cases, the vessel on the starboard side should keep course and speed, and the other should give way. But since the other ships are not doing anything, our ship needs to take evasive action. \n\nSo applying Rule 15, the correct action would be to turn left (since the contacts are on the starboard side, turning left would put us away from them). Wait, but the direction depends on the angle. For example, if a ship is coming from the starboard side, turning left (towards port) would help avoid collision. \n\nGiven that, the immediate action needed is to turn left to avoid the imminent collision with ts1_close_stbd. Also, checking the goal course check, which suggests a turn left of 15 degrees. However, since there's an actual collision risk, the collision avoidance takes precedence over the goal. \n\nTherefore, the maneuver should be a turn left to avoid the contact, following Rule 15. The exact degrees would depend on the required adjustment, but since the system indicates a 15-degree correction towards the goal, but the collision risk is higher, the turn should be sufficient to create a safe CPA. Given the urgency, a larger turn might be necessary, but the system allows for any size turn. However, the user's previous instruction was to follow the goal course check unless a collision risk exists. Here, the collision risk is present, so the turn left as per Rule 15 is prioritized. \n\nThus, the action is to turn left, with the degrees determined by the required avoidance. But the exact degrees might need calculation, but since the system allows for any value, and the initial goal requires 15 degrees left, but due to the collision risk, a larger turn might be needed. However, the user's instructions specify that the GOAL COURSE CHECK's recommendation is to turn left 15 degrees. But since there's a collision risk, the collision avoidance takes precedence. \n\nIn conclusion, the correct action is to turn left, applying Rule 15, to avoid the imminent collision with the nearby contact.\n</think>\n\n{\n  \"action\": \"turn_left\",\n  \"degrees\": 25,\n  \"encounter_rule\": \"Rule 15\",\n  \"conduct_rule\": \"Rule 15\",\n  \"reasoning\": \"1. Contacts: ts1_close_stbd (CPA 0.006NM < 0.270NM, TCPA 61s) and ts2_far_stbd (CPA 0.001NM < 0.270NM, TCPA 82s) both pose real risks. 2. Rule 15 applies: give-way vessel must alter course to avoid collision. 3. Goal course check recommends 15deg left, but collision risk overrides. 4. Execute decisive 25deg left turn to maximize separation from both contacts.\"\n}",
+   "measurement": {
+    "checks_fired": [
+     "B_wrong_direction"
+    ],
+    "details": {
+     "B": {
+      "cited_encounter_rule": "Rule 15",
+      "cited_conduct_rule": "Rule 15",
+      "action": "turn_left"
+     }
+    }
+   },
+   "debug": {
+    "config": "v11_super_colreg_rag_cot",
+    "retrieved_chunk_ids": [
+     "chunk_66e8ee4b",
+     "chunk_764ed65d"
+    ],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": "Procedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.",
+    "user_msg_chars": 4338,
+    "user_msg": "Before answering, write your reasoning as EXACTLY these 4 steps, one short sentence each -- no more steps, no re-deriving bearings/CPA/TCPA (they are already given -- just quote them):\n1. Contacts: name each contact and say whether its CPA is below or above the safe passing distance.\n2. Rule: for any contact below it, name the applicable COLREG rule and the action it requires.\n3. Goal: if no contact is below the safe passing distance, state what GOAL COURSE CHECK says.\n4. Decision: state the one action you will take and why.\nThen give the final JSON answer.\n\nOwn-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nProcedure guidance:\nProcedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.\n\nCOLREG reference excerpts:\n\n[Excerpt 1 — simple_colreg.json / Section I - Any Visibility]\n[Section I - Any Visibility | Rule 8: Action to avoid collision]\nWhatever you do, do it early, do it decisively, and make it big enough that another vessel watching visually or on radar can actually tell you've done something — a string of tiny course nudges is worse than one clear turn. If there's sea room, a course change alone is often better than a speed change alone. Check that your action actually opens a safe gap, not just a technically-different number. And if you need thinking time, it's fine to slow down or stop to buy it.\nExamples:\n  1. Own-ship nudges course by 3 deg, waits, nudges another 4 deg, waits again — this pattern is exactly what Rule 8(b) warns against; a single clear 25-30 deg alteration would be far more readable to the other vessel and far more effective.\n\n[Excerpt 2 — COLREG-Consolidated-2018.pdf / ANNEX IV]\npertinent information and any course laid down shall be checked.\n\n[SECTION BREAK]\n\ncourse and speed shall be confirmed; any navigational hazard expected to be\nencountered during the watch shall be noted.\n\n[SECTION BREAK]\n\nsufficiently frequent intervals using any available navigational aids necessary to\nensure that the ship follows the planned course.\n\n[SECTION BREAK]\n\nmanner of its operation shall be clearly understood; in addition its operational\ncondition shall be fully taken into account.\n\nSituation:\nOwn-ship at (-0.014, 0.599) NM, heading 1.7, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.401 NM away, bearing 0.1 deg.\nGOAL COURSE CHECK: heading is 15 deg off the goal bearing, to port -- to correct, use action \"turn_left\" with degrees=15 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2220s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 0.369 NM, relative bearing 34.9 deg, heading 245.4, speed 13.61 kt, CPA 0.006 NM, TCPA 61s\n  - Other ship 2: named \"ts2_far_stbd\", range 0.223 NM, relative bearing 83.2 deg, heading 320.1, speed 14.58 kt, CPA 0.001 NM, TCPA 82s\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 21,
+   "time": 210.0,
+   "timestamp": "2026-09-29T21:18:40.755291+00:00",
+   "latency_s": 27.901745080947876,
+   "situation_report": "Own-ship at (-0.011, 0.699) NM, heading 1.4, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.301 NM away, bearing 0.1 deg.\nGOAL COURSE CHECK: heading is 10 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=10 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2190s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 0.187 NM, relative bearing 36.0 deg, heading 245.4, speed 13.61 kt, CPA 0.006 NM, TCPA 31s\n  - Other ship 2: named \"ts2_far_stbd\", range 0.141 NM, relative bearing 83.4 deg, heading 320.1, speed 14.58 kt, CPA 0.001 NM, TCPA 53s",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 10,
+    "encounter_rule": "Rule 15",
+    "conduct_rule": "Rule 15",
+    "reasoning": "1. Contacts: ts1_close_stbd (CPA 0.006NM < 0.270NM, TCPA 31s); ts2_far_stbd (CPA 0.001NM < 0.270NM, TCPA 53s). 2. Rule: Both contacts require Rule 15 action as give-way vessel. 3. Goal: GOAL COURSE CHECK demands turn_right(10deg) but collision risk overrides. 4. Decision: Turn_left(10deg) to avoid ts1_close_stbd immediately."
+   },
+   "commanded_heading_deg": 340.0,
+   "reasoning_raw": "<think>\nOkay, let me try to work through this problem step by step. \n\nFirst, I need to check the contacts to see if they pose a real collision risk. The safe passing distance is 0.270 NM, so any contact with CPA below that and TCPA within 368 seconds (which is roughly 6 minutes) is a risk. \n\nLooking at Other Ship 1: ts1_close_stbd. Its CPA is 0.006 NM, which is way below 0.270 NM. The TCPA is 31 seconds, which is well within the risk horizon. So this is a real risk. Then Other Ship 2: ts2_far_stbd has a CPA of 0.001 NM, even lower, and TCPA of 53 seconds. That's also within the risk horizon. Both contacts are potential collisions.\n\nNext, according to COLREG rules, specifically Rule 15, the give-way vessel must alter course or speed to avoid collision. Since both contacts are approaching, I need to determine which one is the giving-way vessel. Wait, maybe I'm mixing things here. Let me recall: under COLREG, when two vessels are in an encounter, the one that has the other on her port side must keep out of the way. But here, we have multiple contacts. However, the user mentioned that if any contact poses a real risk, apply the applicable COLREG rule. \n\nBut since there are two contacts, perhaps both require action? Or maybe prioritize based on proximity. The immediate danger seems to be ts1_close_stbd because it's closer and has a shorter TCPA. But COLREG might require handling each contact separately. However, the procedure guidance says that if there's a risk, apply the appropriate rule. \n\nWait, the Procedure guidance mentions that if the give-way vessel doesn't take action, it's considered a failure. So for each contact, I need to check if the vessel is the give-way vessel. For example, if our ship is on the port side of another vessel, we need to give way. Alternatively, if the other vessel is on our port side, we need to adjust. \n\nLet me think about the positions. Our ship is at (-0.011, 0.699) NM, heading 1.4 degrees. The other ships are at relative bearings 36.0 degrees (stbd) and 83.4 degrees (also stbd). So both are on the starboard side. Wait, relative bearing is measured from the ship's bow. So a relative bearing of +36 degrees means the contact is 36 degrees to starboard. Similarly, 83.4 degrees is almost astern, but still slightly to starboard. \n\nSo, for ts1_close_stbd (relative bearing 36°), the other ship is coming from the starboard side. According to COLREG Rule 13, when two power-driven vessels are meeting head-on, each should alter course to starboard. But wait, their courses aren't necessarily crossing. Also, Rule 15 states that when a vessel is overtaking another, the overtaken vessel is the stand-on vessel. But here, the other ships are approaching from starboard sides. Maybe they are approaching from the same direction? Not sure. \n\nAlternatively, considering the CPA and TCPA, both are approaching closely. The key is that both are in imminent collision. But according to the priority order, collision avoidance comes first. Now, the question is which COLREG rule applies here. \n\nSince both contacts are close, but the user said to handle each contact individually. However, the system needs to choose one action. Wait, the instruction says: \"If any contact poses a real risk, pick the ONE action that satisfies the applicable COLREG rule for that contact.\" So I need to find which contact requires action. \n\nFor ts1_close_stbd: It's a close approach. Assuming that our ship is the give-way vessel. Wait, if the other ship is on our starboard side, then according to Rule 13, if they are approaching from opposite directions, each should pass port-to-port. But if they are approaching from the same direction, like overtaking, then the overtaker is the give-way vessel. \n\nAlternatively, if the other ship is on our starboard side, and we are moving towards it, then we might be the give-way vessel. But without knowing their actual position relative to us, it's hard. However, the fact that both are on starboard side suggests that they could be approaching from the same general area. \n\nIn such cases, the COLREG Rule 15 applies when one vessel is overtaking another. If our ship is overtaking ts1_close_stbd, then we are the give-way vessel and must take action. But if the other ship is overtaking us, then they are the give-way vessel. \n\nGiven that the CPA is very low, and the TCPA is soon, the immediate threat is ts1_close_stbd. Therefore, applying Rule 15, the give-way vessel (us) must alter course or speed. \n\nThe user's instructions mention that if there's a real risk, apply the COLREG rule. In this case, the applicable rule would be Rule 15, requiring the give-way vessel to take action. \n\nNow, the next step is to decide between turning left or right. Given that the contact is on starboard (positive relative bearing), the appropriate action would be to turn right (to starboard) to avoid. Wait, but turning right would bring the ship more towards the contact. Wait, no—if the contact is on starboard, to avoid collision, the ship should turn to port (left) to increase the CPA. Because if the contact is on the starboard side, turning left (port) would move the ship away from the contact. \n\nWait, but the user's own ship is heading 1.4 degrees, which is nearly north. The contact is at a relative bearing of 36 degrees—so to the starboard (right) side. To avoid a collision with a contact on the starboard side, the ship should turn to port (left) to create separation. \n\nTherefore, the required action is to turn left. \n\nHowever, the GOAL COURSE CHECK indicates that the ship is 10 degrees off the goal bearing, needing to turn right. But since there's a real collision risk, the collision avoidance takes precedence over the mission goal. \n\nThus, the correct maneuver is to turn left to avoid the imminent collision with ts1_close_stbd. \n</think>\n\n{\n  \"action\": \"turn_left\",\n  \"degrees\": 10,\n  \"encounter_rule\": \"Rule 15\",\n  \"conduct_rule\": \"Rule 15\",\n  \"reasoning\": \"1. Contacts: ts1_close_stbd (CPA 0.006NM < 0.270NM, TCPA 31s); ts2_far_stbd (CPA 0.001NM < 0.270NM, TCPA 53s). 2. Rule: Both contacts require Rule 15 action as give-way vessel. 3. Goal: GOAL COURSE CHECK demands turn_right(10deg) but collision risk overrides. 4. Decision: Turn_left(10deg) to avoid ts1_close_stbd immediately.\"\n}",
+   "measurement": {
+    "checks_fired": [
+     "B_wrong_direction"
+    ],
+    "details": {
+     "B": {
+      "cited_encounter_rule": "Rule 15",
+      "cited_conduct_rule": "Rule 15",
+      "action": "turn_left"
+     }
+    }
+   },
+   "debug": {
+    "config": "v11_super_colreg_rag_cot",
+    "retrieved_chunk_ids": [
+     "chunk_66e8ee4b",
+     "chunk_764ed65d"
+    ],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": "Procedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.",
+    "user_msg_chars": 4344,
+    "user_msg": "Before answering, write your reasoning as EXACTLY these 4 steps, one short sentence each -- no more steps, no re-deriving bearings/CPA/TCPA (they are already given -- just quote them):\n1. Contacts: name each contact and say whether its CPA is below or above the safe passing distance.\n2. Rule: for any contact below it, name the applicable COLREG rule and the action it requires.\n3. Goal: if no contact is below the safe passing distance, state what GOAL COURSE CHECK says.\n4. Decision: state the one action you will take and why.\nThen give the final JSON answer.\n\nOwn-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nProcedure guidance:\nProcedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.\n\nCOLREG reference excerpts:\n\n[Excerpt 1 — simple_colreg.json / Section I - Any Visibility]\n[Section I - Any Visibility | Rule 8: Action to avoid collision]\nWhatever you do, do it early, do it decisively, and make it big enough that another vessel watching visually or on radar can actually tell you've done something — a string of tiny course nudges is worse than one clear turn. If there's sea room, a course change alone is often better than a speed change alone. Check that your action actually opens a safe gap, not just a technically-different number. And if you need thinking time, it's fine to slow down or stop to buy it.\nExamples:\n  1. Own-ship nudges course by 3 deg, waits, nudges another 4 deg, waits again — this pattern is exactly what Rule 8(b) warns against; a single clear 25-30 deg alteration would be far more readable to the other vessel and far more effective.\n\n[Excerpt 2 — COLREG-Consolidated-2018.pdf / ANNEX IV]\npertinent information and any course laid down shall be checked.\n\n[SECTION BREAK]\n\ncourse and speed shall be confirmed; any navigational hazard expected to be\nencountered during the watch shall be noted.\n\n[SECTION BREAK]\n\nsufficiently frequent intervals using any available navigational aids necessary to\nensure that the ship follows the planned course.\n\n[SECTION BREAK]\n\nmanner of its operation shall be clearly understood; in addition its operational\ncondition shall be fully taken into account.\n\nSituation:\nOwn-ship at (-0.011, 0.699) NM, heading 1.4, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.301 NM away, bearing 0.1 deg.\nGOAL COURSE CHECK: heading is 10 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=10 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2190s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 0.187 NM, relative bearing 36.0 deg, heading 245.4, speed 13.61 kt, CPA 0.006 NM, TCPA 31s\n  - Other ship 2: named \"ts2_far_stbd\", range 0.141 NM, relative bearing 83.4 deg, heading 320.1, speed 14.58 kt, CPA 0.001 NM, TCPA 53s\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 24,
+   "time": 240.0,
+   "timestamp": "2026-09-29T21:19:25.993082+00:00",
+   "latency_s": 45.23725485801697,
+   "situation_report": "Own-ship at (-0.016, 0.798) NM, heading 354.4, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.202 NM away, bearing 0.1 deg.\nGOAL COURSE CHECK: heading is 20 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=20 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2160s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 0.016 NM, relative bearing 89.6 deg, heading 245.4, speed 13.61 kt, CPA 0.012 NM, TCPA 2s\n    If own-ship turned to the GOAL COURSE CHECK heading (0.1 deg) now, this contact's CPA would become 0.012 NM, TCPA 2s.\n  - Other ship 2: named \"ts2_far_stbd\", range 0.068 NM, relative bearing 90.3 deg, heading 320.1, speed 14.58 kt, CPA 0.000 NM, TCPA 30s\n    If own-ship turned to the GOAL COURSE CHECK heading (0.1 deg) now, this contact's CPA would become 0.000 NM, TCPA 26s.",
+   "decision": {
+    "action": "turn_left",
+    "degrees": 20,
+    "encounter_rule": "Rule 17",
+    "conduct_rule": "Rule 17",
+    "reasoning": "1. Contacts: ts1_close_stbd (CPA 0.012 NM, TCPA 2s) and ts2_far_stbd (CPA 0.000 NM, TCPA 30s) both below safe distance. 2. Rule 17 applies: own-ship is stand-on vessel, contacts are give-way vessels failing to act. 3. Goal course check recommends turn_right(20), but collision risk overrides. 4. Turn_left(20) avoids contacts on starboard side while maintaining progress toward goal."
+   },
+   "commanded_heading_deg": 320.0,
+   "reasoning_raw": "<think>\nOkay, let me try to work through this step by step. So, the user is acting as the navigator on a ship and needs to decide the next helm order based on certain rules and conditions. Let me break down the problem.\n\nFirst, I need to check the contacts to see if any pose a real collision risk. The mission's safe passing distance is 0.270 NM. A contact is considered a risk if their CPA is below this distance and TCPA is within 368 seconds (which is about 6 minutes). \n\nLooking at the contacts provided:\n\nOther ship 1: ts1_close_stbd. Its CPA is 0.012 NM, which is below 0.270 NM. TCPA is 2 seconds. That's well within the risk horizon. So this is a real risk. \n\nOther ship 2: ts2_far_stbd. Its CPA is 0.000 NM, meaning it's on a collision course. TCPA is 30 seconds, which is still within the risk horizon. So both contacts are risks.\n\nNow, according to COLREG rules, specifically Rule 17 (Stand-on vessel's duty), if the own-ship is the stand-on vessel, they must maintain course and speed unless the give-way vessel hasn't taken appropriate action. But here, we need to determine which vessel is the give-way and which is the stand-on. \n\nIn a crossing situation, the vessel on the starboard side is the stand-on vessel. Looking at the relative bearings: both contacts are on the starboard side (relative bearing around 90 degrees, which is starboard). Wait, relative bearing is measured from the ship's bow. So a relative bearing of 89.6 degrees is almost directly astern? No, wait—relative bearing is defined as positive being starboard (right), so 89.6 degrees would mean nearly directly to the starboard side. Similarly, 90.3 degrees is slightly more towards the stern. Hmm, maybe the actual positions are such that these ships are crossing paths. \n\nBut since both contacts are on the starboard side, perhaps the own-ship is the stand-on vessel. However, the presence of multiple contacts complicates things. According to Rule 17, the stand-on vessel must keep course and speed unless the give-way vessel doesn't act. But if there are multiple contacts, the responsibility might be shared. \n\nHowever, the key here is that both contacts are on the starboard side, and the own-ship is trying to head towards the goal, which is very close to the same direction. The GOAL COURSE CHECK suggests a slight turn to starboard (right) to align with the goal bearing. But if there are collision risks, COLREG priority comes first. \n\nThe problem states that if any contact poses a real risk, the COLREG rule must be applied. For each contact, we need to apply the relevant rule. Since both contacts are on the starboard side, and assuming the own-ship is the stand-on vessel, the give-way vessel would be the ones on the port side. Wait, but the contacts are on the starboard side. Maybe the own-ship is the give-way vessel here? Or perhaps the contacts are the give-way vessels?\n\nWait, in a crossing situation, the vessel on the starboard side is the stand-on vessel. So if another vessel crosses from starboard to port, the starboard vessel is the stand-on. Therefore, if our own-ship is on the starboard side of the other vessels, then those vessels are the give-way ones. But in this case, the own-ship is moving towards the goal, which is at a bearing of 0.1 degrees, very close to north. The contacts are at relative bearings of 89.6 and 90.3 degrees, which are almost directly to the starboard (since relative bearing is measured from the ship's bow). So the contacts are coming from the starboard side, crossing over the path of the own-ship. \n\nTherefore, the own-ship is the stand-on vessel, and the contacts are the give-way vessels. Under Rule 17, the stand-on vessel must maintain course and speed unless the give-way vessel fails to act. However, in this scenario, the contacts are not taking evasive action, so the own-ship must act. But according to Rule 17, the stand-on vessel is supposed to hold course and speed. However, if the give-way vessel is not taking action, the stand-on vessel can take action. \n\nBut the problem arises because both contacts are on the starboard side, and the own-ship is the stand-on vessel. However, the contacts are approaching on a collision course. The own-ship's actions could affect the CPA of these contacts. \n\nAlternatively, considering the contacts' CPAs and TCPAs, both are imminent collisions. The own-ship must take action to avoid collision. But under COLREG, the stand-on vessel is supposed to stay on course. However, if the give-way vessel (contacts) aren't taking action, the stand-on vessel can deviate. \n\nSo, applying Rule 17, the own-ship is the stand-on vessel. The contacts are the give-way vessels. Since they haven't taken action, the own-ship must act. The options are to alter course or speed. Given that the own-ship is on a course that's 20 degrees off the goal bearing, the GOAL COURSE CHECK suggests turning right by 20 degrees. However, due to the collision risks, the COLREG requirement takes precedence. \n\nBut the contacts are on the starboard side. To avoid collision, the own-ship might need to turn left (port) to increase CPA. However, Rule 17 says not to turn port toward a vessel on the port side. Wait, the contacts are on the starboard side. Turning port would be away from them. Alternatively, turning starboard (right) might reduce CPA. \n\nWait, the contacts are approaching from the starboard side. If the own-ship turns right (starboard), it might cross their path. But if the own-ship turns left (port), it moves away from the contacts. However, the goal is to the east (bearing 0.1 degrees, which is almost north). The own-ship's current heading is 354.4 degrees, which is almost north. The goal is at 0.1 degrees, which is slightly to the east. So the own-ship needs to turn right slightly to adjust. \n\nBut the immediate danger is the contacts on the starboard side. If the own-ship turns right, it might approach the contacts. Instead, turning left (port) would move away from them. However, the GOAL COURSE CHECK wants a right turn. But the collision risk is higher. \n\nAccording to the procedure guidance, if there's a collision risk, the COLREG rule must be followed. Here, the own-ship is the stand-on vessel, so it must maintain course and speed unless the give-way vessel (contacts) fail to act. But since the contacts are not altering course, the own-ship must take action. \n\nUnder Rule 17, the stand-on vessel can take action to avoid collision. The best option would be to turn left (port) to avoid the contacts on the starboard side. However, the goal is to the east, so turning left would take the own-ship away from the goal. But the alternative is to proceed on the current course, risking collision. \n\nWait, but the contacts are on the starboard side. If the own-ship turns left (port), it would move away from the contacts, thus avoiding collision. Even though it's going against the goal course, the immediate danger is higher. \n\nBut the problem states that the mission's priority is collision avoidance first. So despite the goal course, the own-ship must prioritize avoiding collision. Thus, the correct action is to turn left (port) to avoid the contacts. However, the original plan was to turn right. \n\nBut looking back, the contacts are on the starboard side. Turning left (port) would move the own-ship away from them. However, the own-ship's current heading is 354.4 degrees (almost north), and the goal is at 0.1 degrees (slightly east of north). So turning left (port) would make the own-ship face more westward, which is away from the goal. But the contacts are on the starboard side, so turning left would help avoid them. \n\nAlternatively, the own-ship could slow down, but the speed is already at rated speed (12kt), and slowing down might not be effective enough. \n\nGiven the urgency of the collision risk, the safest action is to turn left (port) to avoid the contacts. However, the system's previous suggestion was to turn right. But according to the analysis, the contacts are on the starboard side, so turning left is better. \n\nThus, the correct action is to turn left (port) to avoid the contacts, even though it deviates from the goal course. Because collision avoidance is the top priority. \n\nBut wait, the contacts are on the starboard side. If the own-ship turns left, it's moving away from the contacts. That makes sense. So the action would be to turn left. \n\nBut the initial thought was that the contacts are on the starboard side, so turning left (port) would be the way to avoid them. Hence, the action is turn_left. \n\nBut the problem mentions that the own-ship's heading is 354.4 degrees, which is almost north. The goal is at 0.1 degrees, which is slightly east. So the own-ship needs to turn right to head east. However, the contacts are on the starboard side, so turning left would take the own-ship westward, away from the contacts. \n\nThis seems conflicting. But the main issue is the collision risk. The contacts are on the starboard side, approaching from that direction. Turning left (port) would move the own-ship away from them, reducing the risk. \n\nTherefore, the correct action is to turn left (port) to avoid the contacts, even though it's not aligned with the goal course. \n\nBut the system's GOAL COURSE CHECK says to turn right by 20 degrees. However, the collision risk takes precedence. \n\nHence, the decision is to turn left (port) to avoid the contacts, following COLREG Rule 17, as the stand-on vessel must take action when the give-way vessels fail to act. \n\nWait, but Rule 17 says that the stand-on vessel should hold course and speed unless the give-way vessel doesn't act. In this case, the contacts are the give-way vessels. They are not taking action, so the stand-on vessel (own-ship) must act. The action would be to turn left (port) to avoid the contacts. \n\nYes, that makes sense. So the action is turn_left, and the reason is that the contacts are on the starboard side, requiring the own-ship to turn port to avoid collision, adhering to COLREG Rule 17.\n</think>\n\n{\n  \"action\": \"turn_left\",\n  \"degrees\": 20,\n  \"encounter_rule\": \"Rule 17\",\n  \"conduct_rule\": \"Rule 17\",\n  \"reasoning\": \"1. Contacts: ts1_close_stbd (CPA 0.012 NM, TCPA 2s) and ts2_far_stbd (CPA 0.000 NM, TCPA 30s) both below safe distance. 2. Rule 17 applies: own-ship is stand-on vessel, contacts are give-way vessels failing to act. 3. Goal course check recommends turn_right(20), but collision risk overrides. 4. Turn_left(20) avoids contacts on starboard side while maintaining progress toward goal.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {
+     "B_suspect_rule17": {
+      "cited_encounter_rule": "Rule 17",
+      "cited_conduct_rule": "Rule 17",
+      "action": "turn_left"
+     }
+    }
+   },
+   "debug": {
+    "config": "v11_super_colreg_rag_cot",
+    "retrieved_chunk_ids": [
+     "chunk_4e6cb662",
+     "chunk_764ed65d"
+    ],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": "Procedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.",
+    "user_msg_chars": 4639,
+    "user_msg": "Before answering, write your reasoning as EXACTLY these 4 steps, one short sentence each -- no more steps, no re-deriving bearings/CPA/TCPA (they are already given -- just quote them):\n1. Contacts: name each contact and say whether its CPA is below or above the safe passing distance.\n2. Rule: for any contact below it, name the applicable COLREG rule and the action it requires.\n3. Goal: if no contact is below the safe passing distance, state what GOAL COURSE CHECK says.\n4. Decision: state the one action you will take and why.\nThen give the final JSON answer.\n\nOwn-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nProcedure guidance:\nProcedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.\n\nCOLREG reference excerpts:\n\n[Excerpt 1 — simple_colreg.json / Section II - In Sight]\n[Section II - In Sight | Rule 17: Stand-on vessel's duty]\nIf you're the stand-on vessel, hold your course and speed — don't start second-guessing and maneuvering just because a vessel is approaching. You're allowed to act on your own if it becomes clear the other vessel isn't actually keeping clear, and you're required to act if collision can no longer be avoided by the give-way vessel alone. When you do act, avoid turning to port toward a vessel that's on your own port side, if you have room to do something else. None of this excuses the give-way vessel from its own obligation.\nExamples:\n  1. Own-ship is stand-on in a crossing situation; the give-way contact's bearing has stopped changing and range keeps closing with 90 seconds of TCPA left — this is exactly the point where Rule 17(b) requires own-ship to act, not continue waiting.\n\n[Excerpt 2 — COLREG-Consolidated-2018.pdf / ANNEX IV]\npertinent information and any course laid down shall be checked.\n\n[SECTION BREAK]\n\ncourse and speed shall be confirmed; any navigational hazard expected to be\nencountered during the watch shall be noted.\n\n[SECTION BREAK]\n\nsufficiently frequent intervals using any available navigational aids necessary to\nensure that the ship follows the planned course.\n\n[SECTION BREAK]\n\nmanner of its operation shall be clearly understood; in addition its operational\ncondition shall be fully taken into account.\n\nSituation:\nOwn-ship at (-0.016, 0.798) NM, heading 354.4, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.202 NM away, bearing 0.1 deg.\nGOAL COURSE CHECK: heading is 20 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=20 (unless a target poses a real collision risk, which takes precedence).\nAt current speed, ETA to goal ≈ 2160s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 0.016 NM, relative bearing 89.6 deg, heading 245.4, speed 13.61 kt, CPA 0.012 NM, TCPA 2s\n    If own-ship turned to the GOAL COURSE CHECK heading (0.1 deg) now, this contact's CPA would become 0.012 NM, TCPA 2s.\n  - Other ship 2: named \"ts2_far_stbd\", range 0.068 NM, relative bearing 90.3 deg, heading 320.1, speed 14.58 kt, CPA 0.000 NM, TCPA 30s\n    If own-ship turned to the GOAL COURSE CHECK heading (0.1 deg) now, this contact's CPA would become 0.000 NM, TCPA 26s.\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  },
+  {
+   "step": 27,
+   "time": 270.0,
+   "timestamp": "2026-09-29T21:19:54.006147+00:00",
+   "latency_s": 28.012615203857422,
+   "situation_report": "Own-ship at (-0.037, 0.896) NM, heading 343.8, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.104 NM away, bearing 0.3 deg.\nGOAL COURSE CHECK: heading is 40 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=40 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 2131s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 0.158 NM, relative bearing -139.0 deg, heading 245.4, speed 13.61 kt, CPA 0.158 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (0.3 deg) now, this contact's CPA would become 0.158 NM, TCPA 0s.\n  - Other ship 2: named \"ts2_far_stbd\", range 0.012 NM, relative bearing 96.3 deg, heading 320.1, speed 14.58 kt, CPA 0.001 NM, TCPA 7s\n    If own-ship turned to the GOAL COURSE CHECK heading (0.3 deg) now, this contact's CPA would become 0.001 NM, TCPA 4s.",
+   "decision": {
+    "action": "turn_right",
+    "degrees": 30,
+    "encounter_rule": "Rule 15",
+    "conduct_rule": "Rule 15",
+    "reasoning": "1. Contacts: ts1_close_stbd (CPA 0.158 NM, TCPA 0s, no risk); ts2_far_stbd (CPA 0.001 NM, TCPA 7s, real risk). 2. Rule: COLREG Rule 15 applies—give-way vessel must alter course/speed. 3. Goal: GOAL COURSE CHECK demands 40° right turn, but collision risk overrides. 4. Decision: Execute 30° right turn (max allowable) to mitigate imminent collision with ts2_far_stbd."
+   },
+   "commanded_heading_deg": 350.0,
+   "reasoning_raw": "<think>\nOkay, let me try to work through this problem step by step. \n\nFirst, I need to check the contacts to see if any pose a real collision risk. The mission's safe passing distance is 0.270 NM. For a contact to be a risk, their CPA must be below this distance and their TCPA within 368 seconds (which is about 6 minutes).\n\nLooking at the contacts provided:\n\nOther ship 1: ts1_close_stbd. Its CPA is 0.158 NM, which is below 0.270 NM. But the TCPA is 0s, meaning it's already passed the closest point. So even though CPA is low, since TCPA is zero, it's not an immediate risk anymore. Also, the note says ranges are now increasing, so it's moving away. Therefore, this contact isn't a current risk.\n\nOther ship 2: ts2_far_stbd. Its CPA is 0.001 NM, which is way below the safe distance. TCPA is 7 seconds, which is within the risk horizon. That means this contact is approaching very closely in a few seconds. So this is a real collision risk because both CPA is under 0.270 and TCPA is within 368s.\n\nNow, according to COLREG rules, if there's a real risk, we need to apply the appropriate rule. Since the other ship is on a collision course, the give-way vessel (which could be either ship depending on the situation) needs to alter course or speed. However, the user is the owner ship here, so they need to take action to avoid collision.\n\nThe GOAL COURSE CHECK suggests turning right 40 degrees, but since there's a real risk from ts2_far_stbd, that maneuver might not be sufficient. According to COLREG Rule 15, the give-way vessel should take action to avoid collision. In this case, the owner ship might be the give-way vessel, so they need to adjust course or speed. Given that the CPA is extremely close (0.001 NM) with a TCPA of 7 seconds, the immediate action required is likely a sharp turn to avoid the contact. \n\nBut wait, the options are limited to predefined actions like turn_left, turn_right, etc. The user's current heading is 343.8 degrees, and the goal is at 0.3 degrees (very slightly to port). However, the presence of ts2_far_stbd, which is on a collision course, necessitates prioritizing collision avoidance over the mission goal. \n\nSince the CPA is 0.001 NM, which is dangerously close, the owner ship must take evasive action immediately. The best option here is to turn left sharply to increase the CPA. Alternatively, maybe a right turn? Wait, the relative bearing of ts2_far_stbd is 96.3 degrees, which is almost directly astern (since 90 degrees is directly astern, so 96.3 is slightly to port of astern). So the contact is coming from the port side, nearly astern. To avoid collision, the owner ship should turn to starboard (right) to create separation. \n\nWait, but the owner ship is currently heading 343.8 degrees, which is almost north (since 0 is north, 343.8 is just before 360, so pointing towards north-west). The contact is at a relative bearing of 96.3 degrees, which is 96.3 degrees from the bow, meaning it's on the port side (since 0 is forward, positive angles are starboard, negative are port). Wait, relative bearing is defined as positive being starboard, negative being port. So a relative bearing of +96.3 would be starboard, but that seems high. Wait, perhaps I'm misunderstanding. Let me clarify: relative bearing is measured from the ship's head. So if the ship is facing 343.8 degrees (almost due north), then a relative bearing of 96.3 degrees would mean that the contact is located 96.3 degrees to the starboard side. Because relative bearing is calculated based on the ship's heading. So if the ship is heading 343.8 degrees (northwest), then a relative bearing of 96.3 degrees would place the contact to the starboard side. Wait, but 96.3 degrees is more than 90, so that would be to the starboard quarter. Hmm, but the contact is approaching from that direction. \n\nIn such a scenario, the owner ship needs to take action to avoid collision. According to COLREG Rule 15, the give-way vessel must keep clear. Assuming that the owner ship is the give-way vessel here, they need to take action. The immediate danger is from ts2_far_stbd, which is closing rapidly. The optimal action would be to turn right (to starboard) to increase the CPA. However, the maximum allowed turn in a single command is 30 degrees. The GOAL COURSE CHECK wants a 40-degree turn right, but that's too much. So the user can only issue a 30-degree turn. But since the system allows for multiple turns, but the priority is to handle the collision risk first. \n\nSo the correct action here is to prioritize avoiding the imminent collision with ts2_far_stbd. Even though the goal is to turn right 40 degrees, the presence of a real collision risk requires overriding that. Therefore, the immediate action should be a sharp turn to starboard (right) to avoid the contact. Since the maximum single turn is 30 degrees, the user should issue a turn_right of 30 degrees. Then reassess after that. But according to the instructions, the next decision point is in 30 seconds, so the user must choose the most critical action now. \n\nAlternatively, maybe the owner ship is the stand-on vessel, and the other ship is the give-way vessel. But in that case, the other ship hasn't taken action, so the owner ship must take action. Either way, the immediate threat is the ts2_far_stbd, requiring a turn to avoid. Hence, the action is turn_right by 30 degrees, which is the maximum allowed in one command. This would help increase the CPA with the contact. \n\nTherefore, the JSON response should indicate a turn_right of 30 degrees, applying COLREG Rule 15, as the give-way vessel must take action to avoid collision. The reasoning is that the contact ts2_far_stbd presents a real collision risk, so the owner ship must alter course accordingly.\n</think>\n\n{\n  \"action\": \"turn_right\",\n  \"degrees\": 30,\n  \"encounter_rule\": \"Rule 15\",\n  \"conduct_rule\": \"Rule 15\",\n  \"reasoning\": \"1. Contacts: ts1_close_stbd (CPA 0.158 NM, TCPA 0s, no risk); ts2_far_stbd (CPA 0.001 NM, TCPA 7s, real risk). 2. Rule: COLREG Rule 15 applies—give-way vessel must alter course/speed. 3. Goal: GOAL COURSE CHECK demands 40° right turn, but collision risk overrides. 4. Decision: Execute 30° right turn (max allowable) to mitigate imminent collision with ts2_far_stbd.\"\n}",
+   "measurement": {
+    "checks_fired": [],
+    "details": {}
+   },
+   "debug": {
+    "config": "v11_super_colreg_rag_cot",
+    "retrieved_chunk_ids": [
+     "chunk_66e8ee4b",
+     "chunk_764ed65d"
+    ],
+    "query_concepts": [],
+    "expanded_concepts": [],
+    "pg_guidance": "Procedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.",
+    "user_msg_chars": 4687,
+    "user_msg": "Before answering, write your reasoning as EXACTLY these 4 steps, one short sentence each -- no more steps, no re-deriving bearings/CPA/TCPA (they are already given -- just quote them):\n1. Contacts: name each contact and say whether its CPA is below or above the safe passing distance.\n2. Rule: for any contact below it, name the applicable COLREG rule and the action it requires.\n3. Goal: if no contact is below the safe passing distance, state what GOAL COURSE CHECK says.\n4. Decision: state the one action you will take and why.\nThen give the final JSON answer.\n\nOwn-ship's heading responds with lag (slow steering dynamics): once ordered, a turn builds up gradually rather than at a constant rate. A 30 deg turn takes about 105s, a 60 deg turn about 169s, a 90 deg turn about 231s (measured from rest). There is no cap on how large a single turn order may be -- larger orders simply take longer, and not proportionally longer (a small order costs relatively more time, not less). Speed is capped at 19.4 kt, changing gradually (~0.58 kt/min up / ~1.17 kt/min down) -- speed_up/slow_down are not instant. This mission's safe passing distance is 0.270 NM. A contact is a real collision risk only when its CPA is below that distance AND its TCPA is within this mission's risk horizon of 368s; beyond that horizon it is one to monitor, not yet one to act on. There is no cap on a single turn_left/turn_right order; the reference turn used to size this horizon is 30 degrees. Your next decision point is in 30s. A 30 degree turn takes about 105s to complete.\n\nProcedure guidance:\nProcedure guidance (typical colreg encounter sequence from the procedure graph):\n  1. the give-way vessel should have altered course or speed to avoid the stand-on vessel\n  2. failed: maintained course and speed instead of taking action to avoid collision. (lookout_failure, procedural_failure)\nApplies when: Rule 15\nAvoid: Both vessels failed to communicate effectively and did not follow international collision regulations, leading to the collision.\nFollow this order where applicable, but adapt to the specific situation.\n\nCOLREG reference excerpts:\n\n[Excerpt 1 — simple_colreg.json / Section I - Any Visibility]\n[Section I - Any Visibility | Rule 8: Action to avoid collision]\nWhatever you do, do it early, do it decisively, and make it big enough that another vessel watching visually or on radar can actually tell you've done something — a string of tiny course nudges is worse than one clear turn. If there's sea room, a course change alone is often better than a speed change alone. Check that your action actually opens a safe gap, not just a technically-different number. And if you need thinking time, it's fine to slow down or stop to buy it.\nExamples:\n  1. Own-ship nudges course by 3 deg, waits, nudges another 4 deg, waits again — this pattern is exactly what Rule 8(b) warns against; a single clear 25-30 deg alteration would be far more readable to the other vessel and far more effective.\n\n[Excerpt 2 — COLREG-Consolidated-2018.pdf / ANNEX IV]\npertinent information and any course laid down shall be checked.\n\n[SECTION BREAK]\n\ncourse and speed shall be confirmed; any navigational hazard expected to be\nencountered during the watch shall be noted.\n\n[SECTION BREAK]\n\nsufficiently frequent intervals using any available navigational aids necessary to\nensure that the ship follows the planned course.\n\n[SECTION BREAK]\n\nmanner of its operation shall be clearly understood; in addition its operational\ncondition shall be fully taken into account.\n\nSituation:\nOwn-ship at (-0.037, 0.896) NM, heading 343.8, speed 12.00 kt (nominal/rated speed for this mission: 12.00 kt).\nMission goal at (0.000, 8.000) NM, 7.104 NM away, bearing 0.3 deg.\nGOAL COURSE CHECK: heading is 40 deg off the goal bearing, to starboard -- to correct, use action \"turn_right\" with degrees=40 (unless a target poses a real collision risk, which takes precedence). This exceeds your per-command max of 30 deg.\nAt current speed, ETA to goal ≈ 2131s if heading straight there.\n2 other ships:\n  - Other ship 1: named \"ts1_close_stbd\", range 0.158 NM, relative bearing -139.0 deg, heading 245.4, speed 13.61 kt, CPA 0.158 NM, TCPA 0s (already past closest point, ranges now increasing)\n    If own-ship turned to the GOAL COURSE CHECK heading (0.3 deg) now, this contact's CPA would become 0.158 NM, TCPA 0s.\n  - Other ship 2: named \"ts2_far_stbd\", range 0.012 NM, relative bearing 96.3 deg, heading 320.1, speed 14.58 kt, CPA 0.001 NM, TCPA 7s\n    If own-ship turned to the GOAL COURSE CHECK heading (0.3 deg) now, this contact's CPA would become 0.001 NM, TCPA 4s.\n\nRecommend exactly ONE manoeuvre as the specified JSON object.",
+    "parse_ok": true
+   },
+   "decision_interval_steps": 3,
+   "decision_interval_s": 30.0
+  }
+ ]
+}
