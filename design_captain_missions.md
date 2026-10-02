@@ -94,7 +94,7 @@ This follows on from the existing two-track architecture (see `.github/copilot-i
   - [16.2 Goal-setting & planning — algorithm/data mapping](#sec-16-2)
   - [16.3 Tool use — decided direction](#sec-16-3)
   - [16.4 Reasoning training — teacher-distillation pipeline, concrete mapping](#sec-16-4)
-  - [16.5 Still-open item: RAG source corpus](#sec-16-5)
+  - [16.5 RAG source corpus — correction: already acquired](#sec-16-5)
   - [16.6 Build order when this block is picked up](#sec-16-6)
 
 ---
@@ -1481,9 +1481,11 @@ Already specified in general terms in §13.C.10; the step-by-step mechanism conc
 Training mechanics otherwise unchanged from VHF/OOW: same base model (Qwen3-8B), own separate QLoRA SFT→DPO→Reflection chain (own adapters under `_models/Captain/`), same contamination filter (cosine ≥ 0.85 dropped) run against **both** Captain held-out eval files (`captain_gold_answers.json` + `captain_mission_scenarios.json`).
 
 <a id="sec-16-5"></a>
-### 16.5 Still-open item: RAG source corpus
+### 16.5 RAG source corpus — correction: already acquired, not actually open (2026-10-02)
 
-**Not resolved this pass, explicitly deferred** (per the user's choice, 2026-10-01): the actual ISM/SOLAS/STCW/MARPOL source text for the RAG corpus is still unidentified beyond Bowditch (§5.4, confirmed usable but a reference/procedural text, not core regulation). Assigned back to the agent to research when this block is picked up — same kind of acquisition pass as `build_captain_legal_corpus.py` already did for `Data/Captain/Legal_Reference/`.
+**Correction to this section's own earlier text** (which incorrectly said this was "not resolved this pass, explicitly deferred" on 2026-10-01 — that claim was written without re-checking §14.1 Tier 1 first, which had already recorded the real status one day earlier). The raw ISM/SOLAS/STCW/MARPOL-equivalent source corpus is **already acquired**: `pipeline/ingest/build_captain_legal_corpus.py` (built 2026-09-30) pulled 11 real regulatory documents into `Data/Captain/Legal_Reference/` (with a `manifest.json` recording url/license/sha256/fetched_at for every file) — BMP5 (anti-piracy guidance), the 6 current UK Merchant Shipping statutory instruments implementing STCW/the ISM Code/the 4 MARPOL Annexes (via legislation.gov.uk, OGL v3.0), and 3 US eCFR parts (46 CFR 138/13 + 33 CFR 96, the ISM Code's actual US implementation, US Government Work/public domain) — plus 8 TSB Canada + 8 Nautical Institute MARS incident-narrative samples for the Track 1 incident library. See §14.1 Tier 1 for the full acquisition record.
+
+What genuinely remains open (not the raw text itself): deciding which parts of these 11 documents actually enter the RAG corpus/training data — that parsing/filtering decision was explicitly deferred to `build_captain_json.py` (§16.6 step 1), which has NOT been written yet. IMO's own resolution text (the ISM Code's actual parent instrument, Resolution A.741(18)) was confirmed NOT legitimately bulk-downloadable (IMODOCS registration required for 2000-present, pre-2000 "available in print" only) — the UK/US statutory implementations above are the real substitute, not a placeholder.
 
 <a id="sec-16-6"></a>
 ### 16.6 Build order when this block is picked up
