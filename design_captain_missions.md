@@ -494,6 +494,8 @@ This covers almost exactly what was described as the Captain's role (new waypoin
 
 - Existing generator patterns (`Basic Simulator/generate_imazu_missions.py`, `generate_random_imazu_missions.py`, `generate_impossible_missions.py`) already show how to procedurally generate fictional-but-realistic scenarios + "failure category" tags — the same pattern extends naturally to multi-leg missions with brown-envelope injection.
 
+**Action taken (2026-10-03):** the VHF/OOW material identified above as Captain-relevant (5 VHF distress/DSC docs, 2 OOW COLREG docs, all 66 raw CHIRP newsletter PDFs) has been COPIED into `Data/Captain/CaptainProtocol/` (new folder, §6.1), with provenance tracked in its own `manifest.json`. Deliberately a copy, not a cross-domain reference, so VHF/OOW/Captain training material stays fully separated/maintainable. `Data/Captain/Original/`'s 806 duplicate OOW_Incidents PDFs were NOT re-copied (already identical on disk). Still pending: `build_captain_json.py` itself (§16.6 step 1) to actually parse this folder's contents, and the Captain-specific non-COLREG article filter for the CHIRP PDFs.
+
 <a id="sec-5-2"></a>
 ### 5.2 External, publicly accessible sources
 
@@ -580,7 +582,8 @@ Mirrors the existing `AgentPaths(domain=..., source_dirname=...)` convention alr
 
 | Folder | Purpose | Analogous to (VHF/OOW) |
 |---|---|---|
-| `Data/Captain/CaptainProtocol/` | Source regulatory texts: ISM Code, SOLAS extracts, STCW extracts, MARPOL extracts, ICS Bridge Procedures Guide summary, Master's Standing Orders / Night Order Book templates, Mission Order (§8) templates | `VHFProtocol/`, `COLREGRules`-equivalent for OOW |
+| `Data/Captain/CaptainProtocol/` *(existing since 2026-10-03)* | Source regulatory/procedure texts. Currently populated by copying the VHF/OOW material identified as Captain-relevant in §5.1 — NOT yet the ISM/SOLAS/STCW/MARPOL extracts (those live in `Legal_Reference/`, acquired separately, see §14.1 Tier 1): 5 VHF distress/DSC-procedure docs (MAYDAY call, coastguard contact, DSC alert flow, GMDSS DSC procedures, MAYDAY-repeat escalation sequence), 2 OOW COLREG-grounding docs (`COLREG-Consolidated-2018.pdf`, `simple_colreg.json`), and all 66 raw CHIRP newsletter PDFs (for Captain's own non-COLREG-article filter, once `build_captain_json.py` exists — see §5.1a). Provenance tracked in its own `manifest.json` (source_domain/source_path/sha256/reason per file, same shape as `Legal_Reference/manifest.json`). Deliberately a COPY, not a reference/symlink to `Data/VHF/`/`Data/OOW/` — keeps the 3 domains' training material fully separated/maintainable per the project's own domain-isolation convention. | `VHFProtocol/`, `COLREGRules`-equivalent for OOW |
+| `Data/Captain/Legal_Reference/` *(existing since 2026-09-30, not yet in this table)* | Externally-acquired regulatory corpus: BMP5 + 6 UK Merchant Shipping SIs (STCW/ISM/4× MARPOL) + 3 US eCFR parts + MARS/TSB Canada incident narratives (§14.1 Tier 1). Own `manifest.json` (url/license/sha256/fetched_at). | — (new, no direct OOW equivalent) |
 | `Data/Captain/Original/` *(existing)* | Raw incident PDFs — confirmed duplicate of `OOW_Incidents`, kept as-is or later symlinked/removed | `OOW_Incidents/{uk,usa}` |
 | `Data/Captain/Processed Leo/` *(existing, rename candidate: `Captain_Incidents_Extra/`)* | The 108 new, unused, 97%-collision-relevant 1990–2014 MAIB reports (§5.1c) | — (new, no OOW equivalent) |
 | `Data/Captain/Captain_Eval/` | **Held-out**, never used for training | `VHF_Eval/`, `OOW_Eval/` |
