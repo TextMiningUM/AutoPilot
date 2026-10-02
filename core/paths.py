@@ -84,6 +84,16 @@ class AgentPaths:
         return cls(domain="OOW", source_dirname="OOW_Protocols", workspace=workspace)
 
     @classmethod
+    def captain(cls, workspace: Path | str | None = None) -> "AgentPaths":
+        """Paths object pre-configured for the Captain (mission-command) agent layout.
+        ``source_dir`` (Data/Captain/CaptainProtocol/) holds material copied from VHF/OOW
+        plus raw CHIRP newsletters (design_captain_missions.md Sec 6.1/5.1) -- Captain's
+        own externally-acquired regulatory corpus (BMP5/eCFR/UK legislation/MARS/TSB) lives
+        in the separate ``Data/Captain/Legal_Reference/`` folder instead (Sec 14.1 Tier 1),
+        not under ``source_dir`` -- build_captain_json.py reads from both."""
+        return cls(domain="Captain", source_dirname="CaptainProtocol", workspace=workspace)
+
+    @classmethod
     def from_env(cls, workspace: Path | str | None = None) -> "AgentPaths":
         """Paths object selected by the ``AUTOPILOT_DOMAIN`` env var (default ``"VHF"``).
 
@@ -96,7 +106,7 @@ class AgentPaths:
         """
         import os
         name = os.environ.get("AUTOPILOT_DOMAIN", "VHF").upper()
-        factory = {"VHF": cls.vhf, "OOW": cls.oow}.get(name)
+        factory = {"VHF": cls.vhf, "OOW": cls.oow, "CAPTAIN": cls.captain}.get(name)
         if factory is None:
             raise ValueError(
                 f"Unknown AUTOPILOT_DOMAIN={name!r}; add an AgentPaths classmethod for it."

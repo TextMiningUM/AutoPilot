@@ -75,12 +75,50 @@ def test_new_domain_paths_are_derived() -> None:
     assert paths.domain_models_dir.name == "COLREG"
 
 
+def test_captain_paths_match_current_layout() -> None:
+    paths = AgentPaths.captain()
+
+    assert paths.workspace.exists(), paths.workspace
+    assert (paths.workspace / ".git").exists(), "workspace should be the git root"
+
+    # Only source_dir (CaptainProtocol/) exists on disk so far -- json_dir/eval_dir/
+    # cache_dir are not created yet (build_captain_json.py/mkdirs() haven't run).
+    assert paths.data_root.is_dir(),  paths.data_root
+    assert paths.source_dir.is_dir(), paths.source_dir
+
+    assert paths.domain        == "Captain"
+    assert paths.source_dir.name == "CaptainProtocol"
+    assert paths.eval_dir.name   == "Captain_Eval"
+    assert paths.json_dir.name   == "Captain_JSON"
+    assert paths.cache_dir.name  == "Captain_Agents_Training"
+    assert paths.domain_models_dir.name == "Captain"
+
+
+def test_from_env_dispatches_to_captain() -> None:
+    import os
+    old = os.environ.get("AUTOPILOT_DOMAIN")
+    try:
+        os.environ["AUTOPILOT_DOMAIN"] = "Captain"
+        paths = AgentPaths.from_env()
+        assert paths.domain == "Captain"
+        assert paths.source_dir.name == "CaptainProtocol"
+    finally:
+        if old is None:
+            os.environ.pop("AUTOPILOT_DOMAIN", None)
+        else:
+            os.environ["AUTOPILOT_DOMAIN"] = old
+
+
 if __name__ == "__main__":
     test_vhf_paths_match_current_layout()
     test_oow_paths_match_current_layout()
     test_new_domain_paths_are_derived()
-    print("OK — AgentPaths matches current VHF/OOW layout and derives new domains correctly.")
+    test_captain_paths_match_current_layout()
+    test_from_env_dispatches_to_captain()
+    print("OK — AgentPaths matches current VHF/OOW/Captain layout and derives new domains correctly.")
     print("\nVHF paths:")
     print(AgentPaths.vhf().describe())
     print("\nOOW paths:")
     print(AgentPaths.oow().describe())
+    print("\nCaptain paths:")
+    print(AgentPaths.captain().describe())
