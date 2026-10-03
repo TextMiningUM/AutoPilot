@@ -253,6 +253,46 @@ Reflection builders — this file is ready-shaped for both, but AgentPaths(domai
 has no RAG/KG-building call sequence wired up yet (added `AgentPaths.chief_engineer()` in
 `core/paths.py` this pass, nothing downstream run yet).
 
+### 4.3.2 Cross-model (GPT vs. Claude) agreement filter on the 655 `llm_synthesized` rows
+
+User asked to independently re-answer the same 655 synthesis prompts with Claude (the user's own
+Anthropic key, model `claude-sonnet-5`) and keep only the GPT items that a second, independent
+model agrees with — a real second opinion, not just a volume-booster. New script
+`pipeline/track1/extract_chief_engineer_known_issues_crossval.py` (reuses `build_all_seeds()`/
+`SYNTHESIZE_SYSTEM_PROMPT`/`user_prompt_synthesize`/`parse_response` from
+`extract_chief_engineer_known_issues.py` unchanged — only swaps which API answers):
+
+1. **generate** — re-ran the same 36 synthesis seeds through Claude, producing **721 independent
+   items** in `chief_engineer_known_issues_traces_claude.jsonl` (1 seed errored out of 36).
+   Needed 2 real fixes specific to `claude-sonnet-5` (both logged for future reuse): (a) this
+   model returns an extended-thinking block ahead of the actual text block in `resp.content`,
+   so `resp.content[0]` is NOT reliably the answer (every older Claude model used elsewhere in
+   this repo puts the answer at `content[0]`) — fixed by scanning for the first `type=="text"`
+   block instead of assuming position 0; (b) a non-streaming call truncated silently at
+   `max_tokens=16000` even for modest item counts (confirmed empirically: a 15-item request hit
+   the cap and produced unparseable JSON), and the API outright REJECTS `max_tokens` high enough
+   to avoid this on a non-streaming call ("Streaming is required for operations that may take
+   longer than 10 minutes") — fixed by switching to `client.messages.stream()` with
+   `max_tokens=32000`.
+2. **crossval** — embeds every GPT item and every Claude item (same `BAAI/bge-large-en-v1.5`
+   embedder as the rest of this project) and keeps only GPT items with a sufficiently similar
+   Claude-generated counterpart. FIRST ATTEMPT had a real bug (caught via the measured
+   distribution, not assumed): restricting candidates to "same system" compared GPT's free-text
+   `known_issue.system` field (e.g. "low-temperature cooling water system") against Claude's
+   code-level slug (e.g. `cooling_water`) — these essentially never matched as exact strings,
+   so ~98% of GPT items had zero candidates (p95 similarity measured at 0.000, the tell). FIXED
+   by dropping the same-system restriction entirely (a full 655x721 cosine-similarity search is
+   trivial at this scale, and each item's real content -- situation + failure mode + corrective
+   actions -- is specific enough that genuine cross-system false matches aren't a real risk).
+   Re-measured distribution: p5=0.720, p50=0.790, p75=0.825, p95=0.871, mean=0.793 -- a
+   believable range for independently-generated-but-topically-related content (not near-
+   duplicates, which would cluster near DEDUP_THRESH~0.94). At the default threshold 0.80,
+   **284/655 (43.4%) GPT items** have a Claude-agreed counterpart -- written to
+   `chief_engineer_known_issues_traces_agreed.jsonl`, each row annotated with
+   `cross_validated_by`/`agreement_similarity`/`matched_claude_chunk_id`. Threshold is an
+   explicit starting point (same "illustrative, tunable" status as every other threshold in
+   `core/embedding.py`), not yet independently calibrated.
+
 <a id="sec-4-4"></a>
 ### 4.4 KG design: fault → cause → system → corrective-action graph
 

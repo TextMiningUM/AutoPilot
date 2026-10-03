@@ -201,9 +201,6 @@ def cmd_crossval(args: argparse.Namespace) -> None:
 
     gpt_rows = _load_rows(OUT_FILE, "llm_synthesized")
     claude_rows = _load_rows(CLAUDE_OUT_FILE, "llm_synthesized_claude")
-    # GPT rows don't carry "system" at top level -- it lives under trace.known_issue.system.
-    for r in gpt_rows:
-        r["system"] = r["trace"].get("known_issue", {}).get("system", "")
     print(f"GPT items: {len(gpt_rows)}   Claude items: {len(claude_rows)}")
 
     print(f"Loading embedder ({EMBEDDER_MODEL})...")
@@ -213,23 +210,20 @@ def cmd_crossval(args: argparse.Namespace) -> None:
     gpt_embs = model.encode(gpt_texts, normalize_embeddings=True, batch_size=64, show_progress_bar=True)
     claude_embs = model.encode(claude_texts, normalize_embeddings=True, batch_size=64, show_progress_bar=True)
 
-    claude_by_system: dict[str, list[int]] = {}
-    for idx, r in enumerate(claude_rows):
-        claude_by_system.setdefault(r.get("system", ""), []).append(idx)
+    # Deliberately NOT restricted to same-system candidates: GPT's known_issue.system is
+    # free text (e.g. "low-temperature cooling water system") while Claude rows carry the
+    # CODE-level slug (e.g. "cooling_water") from build_all_seeds() -- these rarely match
+    # as exact strings (confirmed empirically: p95 similarity was 0.000 when restricted,
+    # i.e. almost every GPT item had zero same-"system"-string candidates). A full search
+    # is cheap at this scale (655x721 matrix) and the item TEXT itself (situation + failure
+    # mode + corrective actions) is specific enough that true cross-system false matches
+    # are not a real risk -- unrelated problems simply don't score high cosine similarity.
+    sims_matrix = gpt_embs @ claude_embs.T
+    best_idx_arr = np.argmax(sims_matrix, axis=1)
+    best_sims = sims_matrix[np.arange(len(gpt_rows)), best_idx_arr]
+    best_idx = best_idx_arr.tolist()
 
-    best_sims = np.zeros(len(gpt_rows))
-    best_idx = [-1] * len(gpt_rows)
-    for i, r in enumerate(gpt_rows):
-        cand_idx = claude_by_system.get(r["system"], [])
-        if not cand_idx:
-            continue
-        cand_embs = claude_embs[cand_idx]
-        sims = cand_embs @ gpt_embs[i]
-        j = int(np.argmax(sims))
-        best_sims[i] = float(sims[j])
-        best_idx[i] = cand_idx[j]
-
-    print("\nSimilarity distribution (GPT item -> best same-system Claude item):")
+    print("\nSimilarity distribution (GPT item -> best Claude item, any system):")
     for p in [5, 10, 25, 50, 75, 90, 95]:
         print(f"  p{p}: {np.percentile(best_sims, p):.3f}")
     print(f"  mean: {best_sims.mean():.3f}  min: {best_sims.min():.3f}  max: {best_sims.max():.3f}")
