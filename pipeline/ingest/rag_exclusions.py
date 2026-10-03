@@ -19,8 +19,15 @@ from pathlib import Path
 # Directory-level exclusions (relative to the repo workspace root) -- whole trees that
 # must never be read as a RAG source. Matched via prefix/substring against a candidate
 # file's path string (enforcement point 1) since these are directories, not filenames.
+# Despite this module's OOW-era docstring/name, build_rag.py's raise_if_excluded_source()
+# call is domain-agnostic -- these exclusions apply to every domain's RAG build, so every
+# domain's own held-out eval dir belongs here (VHF_Eval was a pre-existing gap, found
+# 2026-10-03 while adding Captain's own entries).
 EXCLUDED_DIR_PREFIXES = [
     "Data/OOW/OOW_Eval",                          # held-out eval data -- retrieving it IS the answer sheet
+    "Data/VHF/VHF_Eval",                          # held-out eval data -- retrieving it IS the answer sheet
+    "Data/Captain/Captain_Eval",                  # held-out eval data -- retrieving it IS the answer sheet
+    "Data/Captain/Scenarios",                     # generated/held-out mission scenarios, not source knowledge
     "Basic Simulator/Data/missions/_llm_runs",    # mission run logs, not source knowledge
     "Data/OOW/OOW_Literature_Review",             # meta-literature about BUILDING agents, not seamanship
 ]
