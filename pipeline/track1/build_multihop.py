@@ -52,6 +52,12 @@ SYSTEM = {
         "known-issue sources. Explain each source's contribution, then give a combined precise answer "
         "citing the affected systems/components."
     ),
+    "Captain": (
+        "You are a ship's Captain, an AI command agent responsible for ISM/SOLAS/MARPOL-compliant "
+        "decision-making. Some questions require you to synthesize information from multiple "
+        "reference sources. Explain each source's contribution, then give a combined precise answer "
+        "with correct regulation/article citations."
+    ),
 }[paths.domain]
 
 
@@ -84,10 +90,19 @@ def summarize_trace(trace: dict) -> str:
             sentences.append(f"The steps are: {joined}.")
     channels = t.get("channels") or []
     if channels:
-        sentences.append(f"Use {', '.join(str(c) for c in channels)}.")
+        # trace["channels"] means different things per domain (VHF channel numbers, OOW
+        # COLREG rule citations, Captain regulation/article citations) -- same rendering
+        # gap build_reflection.py's _channels_sentence() already fixed; mirrored here.
+        if paths.domain in ("OOW", "Captain"):
+            sentences.append(f"This involves {', '.join(str(c) for c in channels)}.")
+        else:
+            sentences.append(f"Use {', '.join(str(c) for c in channels)}.")
     prowords = t.get("prowords_used") or []
     if prowords:
-        sentences.append(f"Use the prowords {', '.join(prowords)}.")
+        if paths.domain in ("OOW", "Captain"):
+            sentences.append(f"This concerns {', '.join(prowords)}.")
+        else:
+            sentences.append(f"Use the prowords {', '.join(prowords)}.")
     kf = t.get("key_facts") or []
     if kf:
         sentences.append(_clean(kf[0]) + ".")

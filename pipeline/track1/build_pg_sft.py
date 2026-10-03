@@ -63,6 +63,11 @@ SYSTEM = {
         "the correct order. Cite the affected system/component and never skip or reorder "
         "safety steps."
     ),
+    "Captain": (
+        "You are a ship's Captain, an AI command agent responsible for ISM/SOLAS/MARPOL-"
+        "compliant decision-making. Procedures must be carried out in the correct order. "
+        "Cite the applicable regulation/article and never skip or reorder safety steps."
+    ),
 }[paths.domain]
 
 FAMILY_PHRASE = {
@@ -72,6 +77,11 @@ FAMILY_PHRASE = {
     "dsc": "a DSC alert procedure",
     "colreg_encounter": "a collision-avoidance encounter",
     "routine_call": "a routine ship-to-ship or ship-to-shore call",
+    "engine_failure": "an engine failure",
+    "fog": "a restricted-visibility (fog) situation",
+    "distress_call": "a distress call",
+    "whale_zone": "a charted whale/marine-mammal zone transit",
+    "commercial_instruction": "a commercial-vs-safety instruction conflict",
     "general": "this procedure",
 }
 

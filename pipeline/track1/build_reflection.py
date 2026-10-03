@@ -66,19 +66,30 @@ SYSTEM = {
         "the Draft against safety-critical requirements (affected system/component, manufacturer "
         "limits, corrective-action steps, warnings), then a Refined answer that fixes any omissions."
     ),
+    "Captain": (
+        "You are a ship's Captain, an AI command agent responsible for ISM/SOLAS/MARPOL-compliant "
+        "decision-making. For each question, produce a Draft answer, then a Critique that checks the "
+        "Draft against safety-critical requirements (regulation/article citations, reporting/command "
+        "procedure, warnings), then a Refined answer that fixes any omissions."
+    ),
 }[paths.domain]
 
 
 def _channels_sentence(channels: list[str]) -> str:
     """Renders trace["channels"] -- VHF channel numbers, but for OOW this field instead
     holds COLREG rule citations already formatted like "Rule 15" (see extract_reasoning.py's
-    own docstring) -- rendering those with a "Channel " prefix produced nonsensical
-    "Channel Rule 15" text, so this is domain-aware rather than always assuming VHF."""
+    own docstring), and for Captain it holds specific regulation/article citations like
+    "ISM Code Art. 5" (see extract_captain_reasoning.py's own docstring) -- rendering either
+    with a "Channel " prefix produces nonsensical text, so this is domain-aware rather than
+    always assuming VHF."""
     if not channels:
         return ""
     if paths.domain == "OOW":
         joined = channels[0] if len(channels) == 1 else ", ".join(channels[:-1]) + f" and {channels[-1]}"
         return f"This involves {joined}."
+    if paths.domain == "Captain":
+        joined = channels[0] if len(channels) == 1 else ", ".join(channels[:-1]) + f" and {channels[-1]}"
+        return f"This is governed by {joined}."
     chs = [c if c.lower().startswith("channel") else f"Channel {c}" for c in channels]
     joined = chs[0] if len(chs) == 1 else ", ".join(chs[:-1]) + f" and {chs[-1]}"
     return f"Use {joined}."
@@ -87,25 +98,34 @@ def _channels_sentence(channels: list[str]) -> str:
 def _prowords_sentence(prowords: list[str]) -> str:
     """Renders trace["prowords_used"] -- VHF prowords (MAYDAY, OVER, ...), but for OOW this
     field instead holds vessel-role/situational tags like "give-way vessel" (see
-    extract_reasoning.py's own docstring) -- those are not prowords, so "Use the prowords
-    give-way vessel" is nonsensical; domain-aware rendering avoids that."""
+    extract_reasoning.py's own docstring), and for Captain it holds key roles/actors like
+    "master"/"dpa" (see extract_captain_reasoning.py's own docstring) -- those are not
+    prowords, so "Use the prowords give-way vessel" is nonsensical; domain-aware rendering
+    avoids that."""
     if not prowords:
         return ""
     if paths.domain == "OOW":
         joined = prowords[0] if len(prowords) == 1 else ", ".join(prowords[:-1]) + f" and {prowords[-1]}"
         return f"This concerns the {joined} obligations."
+    if paths.domain == "Captain":
+        joined = prowords[0] if len(prowords) == 1 else ", ".join(prowords[:-1]) + f" and {prowords[-1]}"
+        return f"This involves the {joined}."
     return f"Use the prowords {', '.join(prowords)} as appropriate."
 
 
 def _channels_dropped_desc(channels: list[str]) -> str:
     if paths.domain == "OOW":
         return f"the applicable COLREG rule citations ({', '.join(channels)})"
+    if paths.domain == "Captain":
+        return f"the applicable regulation/article citations ({', '.join(channels)})"
     return f"the channel numbers ({', '.join(channels)})"
 
 
 def _prowords_dropped_desc(prowords: list[str]) -> str:
     if paths.domain == "OOW":
         return f"the applicable vessel-role context ({', '.join(prowords)})"
+    if paths.domain == "Captain":
+        return f"the applicable role/actor context ({', '.join(prowords)})"
     return f"the required prowords ({', '.join(prowords)})"
 
 

@@ -172,6 +172,9 @@ DPO_FILES   = {
     "ChiefEngineer": [
         CACHE / "chief_engineer_known_issues_dpo_pairs.jsonl",
     ],
+    "Captain": [
+        CACHE / "captain_dpo_pairs.jsonl",
+    ],
 }[paths.domain]
 
 # 2026-09-28 quality review: replaced the fixed LEO_DPO_CAP=500 with a cap computed as a

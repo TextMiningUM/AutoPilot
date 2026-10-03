@@ -190,6 +190,17 @@ SFT_DATASETS = {
         # VHF/OOW's Track 1/Track 2 split.
         CACHE / "chiefengineer_conversations.jsonl",
     ],
+    "Captain": [
+        # Track 1 only (design_captain_missions.md Sec 16.6) -- built from
+        # extract_captain_reasoning.py's reasoning traces. No Track 2 conversational/
+        # mission-level training data yet (that needs the mission-sim teacher-
+        # distillation pipeline, Sec 13.C.10, not yet built).
+        CACHE / "captain_sft_direct.jsonl",
+        CACHE / "captain_sft_cot.jsonl",
+        CACHE / "captain_sft_rag.jsonl",
+        CACHE / "captain_multihop.jsonl",
+        CACHE / "captain_pg_sft.jsonl",
+    ],
 }[paths.domain]
 
 

@@ -122,6 +122,9 @@ REFL_FILES   = {
     "ChiefEngineer": [
         CACHE / "chief_engineer_known_issues_reflection.jsonl",
     ],
+    "Captain": [
+        CACHE / "captain_reflection.jsonl",
+    ],
 }[paths.domain]
 
 # 2026-09-28 quality review: replaced the fixed LEO_REFLECTION_CAP=500 with a cap computed
