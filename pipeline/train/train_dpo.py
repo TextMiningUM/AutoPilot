@@ -161,6 +161,13 @@ DPO_FILES   = {
         # generator/oracle rollout would never produce, since they only exist because the
         # model itself made a mistake to get there.
         CACHE / "oow_dagger_dpo_pairs.jsonl",
+        # Stap 2 2026-10-03 -- decision-reversal pairs (build_oow_decision_reversal_dpo.py):
+        # mined to directly counter a real stalling failure found in GRPO A/B evaluation
+        # (model gets stuck repeating hold_course after risk escalates past the point it
+        # should commit to a turn) -- chosen=oracle's fresh action when the oracle's OWN
+        # required action genuinely changes between consecutive checkpoints of a real
+        # trajectory, rejected=the oracle's now-stale action from the previous checkpoint.
+        CACHE / "oow_decision_reversal_dpo_pairs.jsonl",
     ],
     "ChiefEngineer": [
         CACHE / "chief_engineer_known_issues_dpo_pairs.jsonl",
