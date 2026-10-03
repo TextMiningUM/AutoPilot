@@ -92,6 +92,23 @@ MODEL_VARIANTS: dict[str, dict[str, str]] = {
                        "baseline_ruletree at eval/inference time too (training data alone "
                        "doesn't give the live agent loop the same active infill).",
     },
+    "qwen_sftdpo_v5": {
+        "label": "QWEN-SFT-DPO-V5",
+        "weights": "MERGED:OOW-QWEN_v5_sftdpo",
+        "description": "SFT+DPO merged checkpoint (2026-10-03) -- adds 1976 decision-"
+                       "reversal DPO pairs (build_oow_decision_reversal_dpo.py) on top of "
+                       "qwen_sftdpo_v4's own mix. Targets the hold_course-stalling "
+                       "failure found in GRPO A/B evaluation (model repeats a stale "
+                       "action long after risk has escalated past the point it should "
+                       "commit to a turn): chosen=the oracle's fresh action whenever its "
+                       "own required action genuinely changes between consecutive "
+                       "checkpoints of a real trajectory, rejected=the oracle's own "
+                       "now-stale action from the previous checkpoint. Mined "
+                       "deterministically from existing run logs, zero API/GPU cost. "
+                       "Reflection deliberately excluded, same composition convention as "
+                       "every other qwen_sftdpo* variant. Intended for use under "
+                       "kinematics_model='nomoto_v2'.",
+    },
 }
 
 DEFAULT_VARIANT = "qwen_base"
