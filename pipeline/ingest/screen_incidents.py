@@ -91,16 +91,24 @@ def extract_pages_cached(pdf_path: Path) -> list[str]:
     return pages
 
 
-def score_pages(pages: list[str]) -> dict:
+def score_pages(pages: list[str], pos_keywords: dict[str, int] | None = None,
+                neg_keywords: dict[str, int] | None = None) -> dict:
+    """`pos_keywords`/`neg_keywords` default to COLREG_KEYWORDS/NON_COLREG_KEYWORDS (every
+    existing caller's behaviour is unchanged) -- pass a different vocabulary (e.g. a
+    machinery-relevance keyword set) to reuse this exact same scoring mechanism for a
+    different relevance question over the same cached page text, see
+    screen_chief_engineer_sources.py."""
+    pos_keywords = COLREG_KEYWORDS if pos_keywords is None else pos_keywords
+    neg_keywords = NON_COLREG_KEYWORDS if neg_keywords is None else neg_keywords
     full = "\n".join(pages).lower()
     pos, hits = 0, {}
-    for kw, weight in COLREG_KEYWORDS.items():
+    for kw, weight in pos_keywords.items():
         c = full.count(kw)
         if c:
             pos += c * weight
             hits[kw] = c
     neg, neg_hits = 0, {}
-    for kw, weight in NON_COLREG_KEYWORDS.items():
+    for kw, weight in neg_keywords.items():
         c = full.count(kw)
         if c:
             neg += c * weight

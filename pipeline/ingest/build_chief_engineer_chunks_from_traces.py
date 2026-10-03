@@ -82,10 +82,26 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--traces-file", type=str, default=str(DEFAULT_TRACES_FILE),
                     help="known-issues reasoning traces jsonl to build chunks from")
+    ap.add_argument("--append", action="store_true",
+                    help="merge onto the chunks/embeddings ALREADY at CHUNKS_FILE/EMBS_FILE/IDS_FILE "
+                         "(e.g. the manual-text chunks build_rag.py produced from "
+                         "build_chief_engineer_json.py's output) instead of overwriting them -- run "
+                         "build_rag.py FIRST, then this script with --append, so the final RAG index "
+                         "covers both the parsed manuals AND the known-issues traces. Skips any "
+                         "chunk_id already present (resume-safe on repeated --append runs).")
     args = ap.parse_args()
 
     chunks = build_chunks(Path(args.traces_file))
     print(f"Built {len(chunks)} chunks from {args.traces_file}")
+
+    existing_chunks: list[dict] = []
+    if args.append and CHUNKS_FILE.exists() and EMBS_FILE.exists() and IDS_FILE.exists():
+        existing_chunks = json.loads(CHUNKS_FILE.read_text(encoding="utf-8"))
+        existing_ids = {c["chunk_id"] for c in existing_chunks}
+        before = len(chunks)
+        chunks = existing_chunks + [c for c in chunks if c["chunk_id"] not in existing_ids]
+        print(f"--append: merging onto {len(existing_chunks)} existing chunks "
+              f"({before - (len(chunks) - len(existing_chunks))} already present, skipped)")
 
     print(f"Embedding with {EMBEDDER_MODEL}...")
     embedder = SentenceTransformer(EMBEDDER_MODEL)
@@ -95,7 +111,7 @@ def main() -> None:
     CHUNKS_FILE.write_text(json.dumps(chunks, indent=2, ensure_ascii=False), encoding="utf-8")
     np.save(EMBS_FILE, np.asarray(embs, dtype=np.float32))
     IDS_FILE.write_text(json.dumps([c["chunk_id"] for c in chunks], ensure_ascii=False), encoding="utf-8")
-    print(f"Wrote {CHUNKS_FILE.name}, {EMBS_FILE.name}, {IDS_FILE.name}")
+    print(f"Wrote {CHUNKS_FILE.name} ({len(chunks)} total chunks), {EMBS_FILE.name}, {IDS_FILE.name}")
 
 
 if __name__ == "__main__":
