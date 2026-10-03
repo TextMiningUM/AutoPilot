@@ -40,6 +40,7 @@ from pipeline.chief_engineer_agent_spec import (
     generate_degradation_trace, generate_synthetic_incident, compute_engine_status,
 )
 from pipeline import chief_engineer_memory
+from pipeline import chief_engineer_remote
 
 st.set_page_config(page_title="Engine Room", page_icon="\U0001F6E2\uFE0F", layout="wide")
 
@@ -412,15 +413,26 @@ with tab_monitor:
             else:
                 st.caption("No drawings manifest found yet.")
 
-# ── Ask the Chief Engineer (real retrieval over known-issues traces) ───────────────────
+# ── Ask the Chief Engineer (real retrieval + optional real generation via the cloud) ───
 with tab_chat:
+    remote_up = chief_engineer_remote.is_remote_server_up()
+    status = "\U0001F7E2 cloud model reachable" if remote_up else "\U0001F534 cloud model not reachable (SSH tunnel down?)"
+    st.caption(status)
+    use_remote = st.toggle("Generate answer with fine-tuned model (cloud)", value=remote_up, disabled=not remote_up)
     query = st.text_input("Question", placeholder="e.g. what causes main bearing overheating?",
                            label_visibility="collapsed")
     if query:
-        with st.spinner("Searching known-issues corpus..."):
+        if use_remote and remote_up:
+            with st.spinner("Asking the fine-tuned Chief Engineer model (cloud)..."):
+                try:
+                    answer = chief_engineer_remote.ask_chief_engineer_remote(query)
+                    st.markdown(answer)
+                except (ConnectionError, RuntimeError) as e:
+                    st.error(str(e))
+        with st.expander("Retrieved known-issue sources", expanded=not (use_remote and remote_up)):
             hits = chief_engineer_memory.retrieve(query, k=3)
-        for h in hits:
-            tag = "placeholder" if h.is_placeholder else f"score {h.score:.2f}"
-            st.markdown(f"**{h.source}** _({tag})_")
-            st.caption(h.text)
+            for h in hits:
+                tag = "placeholder" if h.is_placeholder else f"score {h.score:.2f}"
+                st.markdown(f"**{h.source}** _({tag})_")
+                st.caption(h.text)
 
