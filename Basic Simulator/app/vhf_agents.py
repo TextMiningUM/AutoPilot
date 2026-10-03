@@ -75,6 +75,7 @@ from sentence_transformers import SentenceTransformer, CrossEncoder
 from core import EMBEDDER_MODEL
 from core.paths import AgentPaths
 from core.qwen_loader import load_qwen
+from pipeline.qwen_remote import generate_remote, is_remote_server_up
 from pipeline.ingest.build_kg import kg_retrieve, rerank_hits
 from pipeline.ingest.pg_guidance import ProceduralGraph, render_guidance
 from pipeline.eval.prep_ablation import format_context
@@ -213,6 +214,20 @@ def _generate(tok, mdl, messages: list[dict], max_new_tokens: int = 400) -> str:
     return result.strip()
 
 
+def _generate_or_remote(messages: list[dict], model: str, max_new_tokens: int = 400) -> str:
+    """Routes generation to the cloud inference server (cloud/qwen_inference_server.py)
+    when `st.session_state.vhf_use_remote` is set AND the server is actually reachable
+    (see app/pages/3_Communications.py's sidebar toggle) -- skips loading Qwen3-8B locally
+    entirely in that case. Otherwise falls back to the original local load+generate path,
+    unchanged. Every ask_vhf_*() call site below goes through this single choke point so
+    the remote/local decision never needs to be duplicated per call site."""
+    weights = resolve_weights(model)
+    if st.session_state.get("vhf_use_remote") and is_remote_server_up():
+        return generate_remote("VHF", messages, weights=weights, max_new_tokens=max_new_tokens)
+    tok, mdl = _load_qwen(weights)
+    return _generate(tok, mdl, messages, max_new_tokens=max_new_tokens)
+
+
 def build_vhf_prompt(question: str, config: str = "v1_rag", k: int = 6, dense_n: int = 40,
                      system_prompt: str | None = None) -> tuple[list[dict], dict]:
     """Builds the (system, user) messages for `config` (one of MODEL_CONFIGS's keys) --
@@ -268,8 +283,7 @@ def ask_vhf_qa(question: str, config: str = "v1_rag", model: str = DEFAULT_VARIA
     """Track 1: answer `question` under prompt-ablation `config` (see MODEL_CONFIGS).
     Returns {"answer", "config", "sources": [chunk_id, ...] | None, "pg_used": str | None}."""
     messages, debug = build_vhf_prompt(question, config=config, k=k, dense_n=dense_n)
-    tok, mdl = _load_qwen(resolve_weights(model))
-    answer = _generate(tok, mdl, messages, max_new_tokens=max_new_tokens)
+    answer = _generate_or_remote(messages, model, max_new_tokens=max_new_tokens)
     return {"answer": answer, **debug}
 
 
@@ -333,7 +347,6 @@ def ask_vhf_comms(scenario: dict, mode: str, user_text: str | None = None,
     """
     if mode not in ("transmit", "receive"):
         raise ValueError(f"Unknown mode {mode!r} -- must be 'transmit' or 'receive'")
-    tok, mdl = _load_qwen(resolve_weights(model))
     brief = _scenario_brief(scenario)
 
     if mode == "transmit":
@@ -343,7 +356,7 @@ def ask_vhf_comms(scenario: dict, mode: str, user_text: str | None = None,
             {"role": "system", "content": SYSTEM_VHF_TRANSMIT},
             {"role": "user", "content": f"Scenario:\n{brief}\n\nThe operator transmitted:\n\"{user_text}\""},
         ]
-        feedback = _generate(tok, mdl, messages, max_new_tokens=max_new_tokens)
+        feedback = _generate_or_remote(messages, model, max_new_tokens=max_new_tokens)
         return {"feedback": feedback}
 
     if mode == "receive":
@@ -353,14 +366,14 @@ def ask_vhf_comms(scenario: dict, mode: str, user_text: str | None = None,
                 {"role": "system", "content": SYSTEM_VHF_RECEIVE},
                 {"role": "user", "content": f"Scenario:\n{brief}\n\nIssue your opening VHF hail."},
             ]
-            reply = _generate(tok, mdl, messages, max_new_tokens=max_new_tokens)
+            reply = _generate_or_remote(messages, model, max_new_tokens=max_new_tokens)
             new_history = [{"role": "assistant", "content": reply}]
             return {"message": reply, "history": new_history}
         if not user_text:
             raise ValueError("mode='receive' with existing history requires user_text (the operator's reply)")
         messages = ([{"role": "system", "content": f"{SYSTEM_VHF_RECEIVE}\n\nScenario:\n{brief}"}]
                    + history + [{"role": "user", "content": user_text}])
-        reply = _generate(tok, mdl, messages, max_new_tokens=max_new_tokens)
+        reply = _generate_or_remote(messages, model, max_new_tokens=max_new_tokens)
         new_history = history + [{"role": "user", "content": user_text},
                                  {"role": "assistant", "content": reply}]
         return {"message": reply, "history": new_history}
@@ -393,7 +406,6 @@ def ask_vhf_from_oow_decision(situation: str, oow_decision: dict, model: str = D
     {"action", "degrees", "encounter_rule", "conduct_rule", "reasoning"}.
     Returns {"transmission": str}.
     """
-    tok, mdl = _load_qwen(resolve_weights(model))
     messages = [
         {"role": "system", "content": SYSTEM_VHF_OOW_COMMS},
         {"role": "user", "content": (
@@ -401,5 +413,5 @@ def ask_vhf_from_oow_decision(situation: str, oow_decision: dict, model: str = D
             "Draft the radio call for this manoeuvre."
         )},
     ]
-    transmission = _generate(tok, mdl, messages, max_new_tokens=max_new_tokens)
+    transmission = _generate_or_remote(messages, model, max_new_tokens=max_new_tokens)
     return {"transmission": transmission}

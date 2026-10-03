@@ -22,8 +22,10 @@ Five tabs:
     example), light/sound manoeuvring + restricted-visibility signal patterns (COLREG
     Rules 32-35, real sourced data), and a Morse encoder/decoder (a genuine, still-
     practiced signalling sub-channel per Sec 9's scope note, not an easter egg).
-  - "Secret Transmission" (Sec 12.7 easter egg): a Caesar-cipher toy, clearly labelled as
-    NOT a real GMDSS/VHF procedure, kept structurally separate from the real content.
+  - "Secret Transmission" (Sec 12.7/12.12): a Caesar-cipher easter egg, plus two REAL
+    cryptography sub-tabs -- passphrase-based AES-256-GCM, and RSA-OAEP hybrid encryption
+    ("PGP-style", the same scheme OpenPGP itself uses). Still not a GMDSS/VHF procedure,
+    kept structurally separate from the real content.
 
 Model: base Qwen3-8B, 4-bit NF4 -- loads lazily on first Ask/Grade/Draft action (same
 GPU as the OOW page uses; keep only one page's model loaded at a time on an 8 GB laptop
@@ -47,7 +49,11 @@ from app.vhf_agents import (
     scenario_playback, MODEL_CONFIGS,
 )
 from app.vhf_model_variants import DEFAULT_VARIANT
-from app.vhf_crypto import caesar_encode, caesar_decode
+from pipeline.qwen_remote import is_remote_server_up
+from app.vhf_crypto import (
+    caesar_encode, caesar_decode, encrypt_aes_gcm, decrypt_aes_gcm,
+    generate_rsa_keypair, encrypt_rsa_hybrid, decrypt_rsa_hybrid,
+)
 from app.vhf_signals import (
     PHONETIC_ALPHABET, FLAG_BLAZONS, MORSE_CODE, MANOEUVRING_SIGNALS,
     RESTRICTED_VISIBILITY_SIGNALS, load_flag_meanings, flag_svg, flag_signal_example,
@@ -82,6 +88,13 @@ with st.sidebar:
             status.write("Ready.")
             st.session_state.vhf_model_ready = True
             st.rerun()
+    remote_up = is_remote_server_up()
+    st.caption("\U0001F7E2 cloud model reachable" if remote_up else "\U0001F534 cloud model not reachable (SSH tunnel down?)")
+    st.session_state.vhf_use_remote = st.toggle(
+        "Generate on cloud GPU instead of locally", value=st.session_state.get("vhf_use_remote", False),
+        disabled=not remote_up, help="Routes every Ask/Grade/Draft call to cloud/qwen_inference_server.py "
+                                     "over the SSH tunnel on port 8801 instead of loading Qwen3-8B locally.",
+    )
     st.header("Prompt config (Track 1)")
     config = st.selectbox("Config", list(MODEL_CONFIGS), index=list(MODEL_CONFIGS).index("v1_rag"),
                           format_func=lambda c: MODEL_CONFIGS[c])
@@ -330,17 +343,82 @@ with tab_signals:
             if morse_in:
                 st.code(morse_to_text(morse_in), language=None)
 
-# ── Tab 5: Secret Transmission (crypto easter egg) ────────────────────────
+# ── Tab 5: Secret Transmission ────────────────────────────────────────────
 with tab_crypto:
     st.subheader("\U0001F510 Secret Transmission")
-    st.warning("Just for fun -- a Caesar (shift) cipher, **not** a real GMDSS/VHF procedure. "
-              "Never use this for anything safety-related.")
-    shift = st.slider("Shift", min_value=1, max_value=25, value=3)
-    message = st.text_input("Message", placeholder="e.g. MEET AT BUOY DELTA ONE TWO")
-    col_enc, col_dec = st.columns(2)
-    with col_enc:
-        if st.button("Encode") and message:
-            st.code(caesar_encode(message, shift))
-    with col_dec:
-        if st.button("Decode") and message:
-            st.code(caesar_decode(message, shift))
+    sub_caesar, sub_aes, sub_rsa = st.tabs([
+        "Caesar (easter egg)", "\U0001F511 Passphrase (AES-256-GCM)",
+        "\U0001F4DC Asymmetric / PGP-style (RSA-OAEP)",
+    ])
+
+    with sub_caesar:
+        st.warning("Just for fun -- a Caesar (shift) cipher, **not** a real GMDSS/VHF procedure. "
+                  "Never use this for anything safety-related.")
+        shift = st.slider("Shift", min_value=1, max_value=25, value=3)
+        message = st.text_input("Message", placeholder="e.g. MEET AT BUOY DELTA ONE TWO")
+        col_enc, col_dec = st.columns(2)
+        with col_enc:
+            if st.button("Encode") and message:
+                st.code(caesar_encode(message, shift))
+        with col_dec:
+            if st.button("Decode") and message:
+                st.code(caesar_decode(message, shift))
+
+    with sub_aes:
+        st.caption("Real encryption -- AES-256-GCM (NIST SP 800-38D), key derived from your "
+                  "passphrase via PBKDF2-HMAC-SHA256 (600k iterations). Both sides need the "
+                  "same passphrase, shared out-of-band beforehand.")
+        passphrase = st.text_input("Shared passphrase", type="password", key="aes_passphrase")
+        col_aes_enc, col_aes_dec = st.columns(2)
+        with col_aes_enc:
+            st.markdown("**Encrypt**")
+            aes_plain = st.text_area("Message to encrypt", key="aes_plain")
+            if st.button("Encrypt", key="aes_encrypt_btn") and aes_plain and passphrase:
+                st.code(encrypt_aes_gcm(aes_plain, passphrase), language="json")
+        with col_aes_dec:
+            st.markdown("**Decrypt**")
+            aes_blob = st.text_area("Encrypted blob (JSON)", key="aes_blob")
+            if st.button("Decrypt", key="aes_decrypt_btn") and aes_blob and passphrase:
+                try:
+                    st.code(decrypt_aes_gcm(aes_blob, passphrase))
+                except ValueError as e:
+                    st.error(str(e))
+
+    with sub_rsa:
+        st.caption("Real asymmetric encryption -- the same hybrid scheme OpenPGP itself uses: "
+                  "a random AES-256 session key encrypts your message, then RSA-OAEP(SHA-256) "
+                  "encrypts that session key with the recipient's public key. Generate a keypair, "
+                  "share the PUBLIC key with whoever should send you secrets, keep the PRIVATE "
+                  "key to yourself.")
+        if st.button("Generate keypair"):
+            priv, pub = generate_rsa_keypair()
+            st.session_state.rsa_private_pem = priv
+            st.session_state.rsa_public_pem = pub
+        if st.session_state.get("rsa_public_pem"):
+            with st.expander("My keypair"):
+                st.markdown("**Public key** (share this)")
+                st.code(st.session_state.rsa_public_pem, language=None)
+                st.markdown("**Private key** (keep secret)")
+                st.code(st.session_state.rsa_private_pem, language=None)
+
+        col_rsa_enc, col_rsa_dec = st.columns(2)
+        with col_rsa_enc:
+            st.markdown("**Encrypt to a public key**")
+            rsa_pub_in = st.text_area("Recipient's public key (PEM)", key="rsa_pub_in",
+                                      value=st.session_state.get("rsa_public_pem", ""))
+            rsa_plain = st.text_area("Message to encrypt", key="rsa_plain")
+            if st.button("Encrypt", key="rsa_encrypt_btn") and rsa_plain and rsa_pub_in:
+                try:
+                    st.code(encrypt_rsa_hybrid(rsa_plain, rsa_pub_in), language="json")
+                except ValueError as e:
+                    st.error(str(e))
+        with col_rsa_dec:
+            st.markdown("**Decrypt with my private key**")
+            rsa_priv_in = st.text_area("My private key (PEM)", key="rsa_priv_in",
+                                       value=st.session_state.get("rsa_private_pem", ""))
+            rsa_blob = st.text_area("Encrypted blob (JSON)", key="rsa_blob")
+            if st.button("Decrypt", key="rsa_decrypt_btn") and rsa_blob and rsa_priv_in:
+                try:
+                    st.code(decrypt_rsa_hybrid(rsa_blob, rsa_priv_in))
+                except ValueError as e:
+                    st.error(str(e))
