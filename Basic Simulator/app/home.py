@@ -28,16 +28,13 @@ from app.units import kn_to_mps, mps_to_kn, m_to_nm, nm_to_m
 
 st.set_page_config(page_title="OOW COLREG Simulator", page_icon="\U0001F9ED", layout="wide")
 
+_HEADER_IMAGE = ROOT.parent / "Data" / "OOW" / "OOW_Protocols" / "ViewfomrtheBridge.jpg"
+if _HEADER_IMAGE.exists():
+    st.image(str(_HEADER_IMAGE), width="stretch")
+
 # ── Cool-ish nautical theme ──────────────────────────────────────────────
 st.markdown("""
 <style>
-.hero {
-    background: linear-gradient(120deg, #0b3d63 0%, #146c94 55%, #19a7ce 100%);
-    padding: 1.4rem 1.8rem; border-radius: 14px; margin-bottom: 1.2rem;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
-}
-.hero h1 { color: #f4fbff; margin: 0; font-size: 1.9rem; }
-.hero p { color: #d6f0fb; margin: 0.3rem 0 0 0; font-size: 0.95rem; }
 .badge {
     display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px;
     font-weight: 600; font-size: 0.85rem; margin-right: 0.4rem;

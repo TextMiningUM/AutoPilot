@@ -43,15 +43,13 @@ from pipeline import chief_engineer_memory
 
 st.set_page_config(page_title="Engine Room", page_icon="\U0001F6E2\uFE0F", layout="wide")
 
+_HEADER_IMAGE = ROOT.parent / "Data" / "ChiefEngineer" / "ChiefEngineerManuals" / "man_project_guides" / "EngineRoom.jpg"
+if _HEADER_IMAGE.exists():
+    st.image(str(_HEADER_IMAGE), width="stretch")
+
 # ── SCADA-mimic dark theme, compact "submarine control room" layout ────────────────────
 st.markdown("""
-<style>
-.block-container { padding-top: 0.8rem; padding-bottom: 1rem; }
-.ce-header { background:#111417; border:1px solid #2a2f35; border-radius:8px;
-    padding:0.5rem 0.9rem; margin-bottom:0.5rem; display:flex; justify-content:space-between;
-    align-items:center; }
-.ce-header h1 { color:#eef3f7; font-size:1.25rem; margin:0; letter-spacing:0.04em; }
-.ce-header .sub { color:#8aa0b0; font-size:0.72rem; margin-top:0.1rem; }
+<style>.block-container { padding-top: 2.5rem; padding-bottom: 1rem; }
 .ce-clock { color:#7fe3a3; font-family:monospace; font-size:0.95rem; text-align:right; }
 div[data-testid="stMetric"] { background: rgba(20,60,40,0.07); border-radius: 6px;
     padding: 0.25rem 0.5rem; border: 1px solid rgba(20,60,40,0.18); }
@@ -178,12 +176,9 @@ n_unacked = sum(1 for k in alarm_keys if k not in st.session_state.ce_ack)
 # ── Dark SCADA-style header bar: vessel/engine identity + ACK/MUTE + clock ──────────────
 h_title, h_ack, h_mute, h_clock = st.columns([5, 1, 1, 1.4])
 with h_title:
-    st.markdown(
-        '<div class="ce-header"><div><h1>MAIN PROPULSION</h1>'
-        '<div class="sub">Single screw \u2022 1 \u00d7 MAN B&W S-series main engine \u2192 1 \u00d7 fixed-pitch propeller'
-        ' (not twin-screw -- design_chief_engineer.md Sec 4.1)</div></div></div>',
-        unsafe_allow_html=True,
-    )
+    st.subheader("MAIN PROPULSION")
+    st.caption("Single screw \u2022 1 \u00d7 MAN B&W S-series main engine \u2192 1 \u00d7 fixed-pitch propeller"
+              " (not twin-screw -- design_chief_engineer.md Sec 4.1)")
 with h_ack:
     if st.button(f"ACK ({n_unacked})", use_container_width=True, disabled=n_unacked == 0):
         st.session_state.ce_ack |= set(alarm_keys)

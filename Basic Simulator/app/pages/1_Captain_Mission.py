@@ -153,9 +153,9 @@ def _load(scenario_name: str) -> None:
     st.session_state._captain_loaded_scenario = scenario_name
 
 
-st.title("\U0001F6A2 Captain walking-skeleton")
-st.caption("Mission-level brown-envelope decision layer above OOW/VHF -- "
-          "design_captain_missions.md Sec 14/15.3's own debug control set, rendered as widgets.")
+_HEADER_IMAGE = ROOT.parent / "Data" / "Captain" / "CaptainProtocol" / "R2G-LUSV-Open-Sea-StormBanner.png"
+if _HEADER_IMAGE.exists():
+    st.image(str(_HEADER_IMAGE), width="stretch")
 
 picked = st.sidebar.selectbox("Scenario", options=list(SCENARIO_PATHS), key="captain_scenario_picked")
 if ("captain_skeleton" not in st.session_state

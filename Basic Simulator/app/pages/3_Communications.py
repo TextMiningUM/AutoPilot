@@ -56,23 +56,9 @@ from app.vhf_signals import (
 
 st.set_page_config(page_title="VHF Communications Simulator", page_icon="\U0001F4FB", layout="wide")
 
-# Same gradient family as Basic Simulator's hero (visual consistency across this
-# project's simulator interfaces) -- kept lightweight, no new CSS conventions invented.
-st.markdown("""
-<style>
-.hero {
-    background: linear-gradient(120deg, #0b3d63 0%, #146c94 55%, #19a7ce 100%);
-    padding: 1.2rem 1.6rem; border-radius: 14px; margin-bottom: 1rem;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
-}
-.hero h1 { color: #f4fbff; margin: 0; font-size: 1.7rem; }
-.hero p { color: #d6f0fb; margin: 0.3rem 0 0 0; font-size: 0.9rem; }
-</style>
-<div class="hero">
-<h1>\U0001F4FB VHF Communications Simulator</h1>
-<p>Base Qwen3-8B -- no VHF fine-tuning yet (design_vhf_communications.md Sec 9.3)</p>
-</div>
-""", unsafe_allow_html=True)
+_HEADER_IMAGE = ROOT.parent / "Data" / "VHF" / "VHFProtocol" / "RadioRoomHeader.jpg"
+if _HEADER_IMAGE.exists():
+    st.image(str(_HEADER_IMAGE), width="stretch")
 
 with st.sidebar:
     st.header("Model")
