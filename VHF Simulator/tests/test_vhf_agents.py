@@ -81,3 +81,46 @@ def test_build_vhf_prompt_rejects_unknown_config() -> None:
 
 def test_model_configs_and_config_specs_same_keys() -> None:
     assert set(vhf_agents.MODEL_CONFIGS) == set(vhf_agents._CONFIG_SPECS)
+
+
+def test_v6_rag_rerank_config_registered() -> None:
+    assert "v6_rag_rerank" in vhf_agents.MODEL_CONFIGS
+    assert vhf_agents._CONFIG_SPECS["v6_rag_rerank"]["rerank"] is True
+    # every OTHER config must be rerank=False -- a stray True would silently try to load
+    # the reranker (and widen the retrieval pool) for a config that never asked for it
+    assert all(not spec["rerank"] for name, spec in vhf_agents._CONFIG_SPECS.items()
+              if name != "v6_rag_rerank")
+
+
+def test_system_vhf_oow_comms_never_implies_contingent_on_agreement() -> None:
+    """§1.1's hard rule (also enforced by eval_colreg_scenarios.py's judge prompt): VHF
+    must never imply a manoeuvre is contingent on the other vessel's agreement."""
+    text = vhf_agents.SYSTEM_VHF_OOW_COMMS.lower()
+    assert "never" in text and "agreement" in text
+    assert "never decide" in text or "never decides" in text
+
+
+def test_ask_vhf_from_oow_decision_builds_expected_prompt(monkeypatch) -> None:
+    """Mocks _load_qwen/_generate (no real model load) -- verifies the OOW decision JSON
+    and situation text both reach the user message, and the system prompt is used."""
+    captured = {}
+
+    def fake_load_qwen(weights):
+        return "FAKE_TOK", "FAKE_MDL"
+
+    def fake_generate(tok, mdl, messages, max_new_tokens=300):
+        captured["messages"] = messages
+        return "Gulf Explorer, Gulf Explorer, this is Texas Spirit, over."
+
+    monkeypatch.setattr(vhf_agents, "_load_qwen", fake_load_qwen)
+    monkeypatch.setattr(vhf_agents, "_generate", fake_generate)
+
+    decision = {"action": "turn_right", "degrees": 20, "encounter_rule": "Rule 14",
+               "conduct_rule": "Rule 14", "reasoning": "Head-on, alter to starboard."}
+    result = vhf_agents.ask_vhf_from_oow_decision("Head-on with MV Gulf Explorer.", decision)
+
+    assert result["transmission"].startswith("Gulf Explorer")
+    messages = captured["messages"]
+    assert messages[0]["content"] == vhf_agents.SYSTEM_VHF_OOW_COMMS
+    assert "Head-on with MV Gulf Explorer." in messages[1]["content"]
+    assert "turn_right" in messages[1]["content"] and "Rule 14" in messages[1]["content"]

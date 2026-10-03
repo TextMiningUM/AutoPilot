@@ -375,7 +375,13 @@ def main() -> None:
     # ── Load embedder + tokenizer ─────────────────────────────────────────
     print("Loading embedder...", flush=True)
     t0 = time.time()
-    model = SentenceTransformer(EMBEDDER_MODEL)
+    # CPU explicitly -- this is an offline batch rebuild script, often run while a live
+    # agent (Basic Simulator / VHF Simulator) wants the GPU for Qwen; SentenceTransformer
+    # defaults to CUDA if available otherwise, which silently contends with/steals VRAM
+    # from whatever else is using the GPU at the time (confirmed the hard way: 4 overlapping
+    # build_rag --force runs pegged the GPU at 100%/6+GB while a live Qwen session was
+    # trying to use it, 2026-10-03).
+    model = SentenceTransformer(EMBEDDER_MODEL, device="cpu")
     tokenizer = model.tokenizer
     print(f"  ready in {time.time()-t0:.1f}s", flush=True)
 
@@ -428,8 +434,10 @@ def main() -> None:
     print(f"\nChunks containing an embedding-detected internal topic split: {n_semantic_split}")
 
     # ── Embed ─────────────────────────────────────────────────────────────
-    print(f"\nEmbedding {len(all_chunks)} chunks on "
-          f"{'GPU' if hasattr(model, '_target_device') else 'auto'}...", flush=True)
+    # NOTE: model.device, not the deprecated _target_device -- that attribute exists
+    # regardless of actual device and previously made this log claim "GPU" even when
+    # running CPU-only (misleading during this session's device="cpu" contention fix).
+    print(f"\nEmbedding {len(all_chunks)} chunks on {model.device}...", flush=True)
     t0 = time.time()
     texts = [c["text_with_context"] for c in all_chunks]
     embs = model.encode(

@@ -393,7 +393,7 @@ def main() -> None:
 
     # Smoke test
     print("\nLoading embedder for retrieval smoke test...")
-    model = SentenceTransformer(EMBEDDER_MODEL)
+    model = SentenceTransformer(EMBEDDER_MODEL, device="cpu")  # keep GPU free for a live Qwen session
 
     QUERIES = [
         "What is VHF Channel 70 used for?",

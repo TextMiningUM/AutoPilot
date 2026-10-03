@@ -408,7 +408,7 @@ def main() -> None:
         raise SystemExit("No traces with >=2 ordered procedure steps found.")
 
     print("Loading embedder...")
-    model = SentenceTransformer(EMBEDDER_MODEL)
+    model = SentenceTransformer(EMBEDDER_MODEL, device="cpu")  # keep GPU free for a live Qwen session
     pg = build_pg(records, model)
 
     out_file.write_text(json.dumps(pg, ensure_ascii=False, indent=1), encoding="utf-8")

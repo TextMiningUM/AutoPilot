@@ -86,7 +86,8 @@ def main() -> None:
     from sentence_transformers.cross_encoder.losses import BinaryCrossEntropyLoss
 
     print(f"Loading base model {args.base_model} ...", flush=True)
-    model = CrossEncoder(args.base_model, num_labels=1, model_kwargs={"torch_dtype": "float32"})
+    model = CrossEncoder(args.base_model, num_labels=1, model_kwargs={"torch_dtype": "float32"},
+                         device="cpu")  # keep GPU free for a live Qwen session, matches this script's own "safe on CPU" docstring claim
 
     base_acc, n_eval = accuracy_at_1(model, dev_rows)
     print(f"BEFORE fine-tuning: dev accuracy@1 = {base_acc:.3f}  (n={n_eval} queries)", flush=True)

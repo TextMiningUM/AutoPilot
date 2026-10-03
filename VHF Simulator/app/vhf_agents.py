@@ -63,12 +63,12 @@ os.environ.setdefault("AUTOPILOT_DOMAIN", "VHF")
 import numpy as np
 import streamlit as st
 import torch
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 
 from core import EMBEDDER_MODEL
 from core.paths import AgentPaths
 from core.qwen_loader import load_qwen
-from pipeline.ingest.build_kg import kg_retrieve
+from pipeline.ingest.build_kg import kg_retrieve, rerank_hits
 from pipeline.ingest.pg_guidance import ProceduralGraph, render_guidance
 from pipeline.eval.prep_ablation import format_context
 
@@ -119,19 +119,25 @@ MODEL_CONFIGS: dict[str, str] = {
     "v3_pg_conversation": "v3 PG (Track 2 conversations only) -- guidance from VHF dialogue traces",
     "v4_pg_merged":       "v4 PG (merged) -- guidance from rule text + conversations combined",
     "v5_rag_pg":          "v5 RAG + PG (merged) combined",
+    "v6_rag_rerank":      "v6 RAG + reranker -- dense+KG pool re-scored by a fine-tuned cross-encoder (falls back to v1_rag if not trained yet)",
 }
 
 # Every entry carries the SAME keys so build_vhf_prompt() never has to .get() with a
 # default -- a missing key would silently no-op that ingredient instead of raising.
 _CONFIG_SPECS: dict[str, dict] = {
-    "bare_qwen":          dict(bare=True,  rag=False, pg=None),
-    "v0_base":            dict(bare=False, rag=False, pg=None),
-    "v1_rag":             dict(bare=False, rag=True,  pg=None),
-    "v2_pg_rule":         dict(bare=False, rag=False, pg="rule"),
-    "v3_pg_conversation": dict(bare=False, rag=False, pg="conversation"),
-    "v4_pg_merged":       dict(bare=False, rag=False, pg="merged"),
-    "v5_rag_pg":          dict(bare=False, rag=True,  pg="merged"),
+    "bare_qwen":          dict(bare=True,  rag=False, pg=None, rerank=False),
+    "v0_base":            dict(bare=False, rag=False, pg=None, rerank=False),
+    "v1_rag":             dict(bare=False, rag=True,  pg=None, rerank=False),
+    "v2_pg_rule":         dict(bare=False, rag=False, pg="rule", rerank=False),
+    "v3_pg_conversation": dict(bare=False, rag=False, pg="conversation", rerank=False),
+    "v4_pg_merged":       dict(bare=False, rag=False, pg="merged", rerank=False),
+    "v5_rag_pg":          dict(bare=False, rag=True,  pg="merged", rerank=False),
+    "v6_rag_rerank":      dict(bare=False, rag=True,  pg=None, rerank=True),
 }
+
+# v6_rag_rerank: retrieve a wider pool at this size, then rerank_hits() narrows back to
+# the caller's real k -- mirrors Basic Simulator/app/agents.py's v7_super_rag pattern.
+RERANK_POOL_SIZE = 20
 
 
 @st.cache_resource(show_spinner="Loading VHF retrieval index (RAG + KG + Procedural Graphs)...")
@@ -149,7 +155,12 @@ def _load_retrieval():
     for key, suffix in (("merged", ""), ("rule", "_rule"), ("conversation", "_conversation")):
         pg_file = cache / f"vhf_pg{suffix}.json"
         pg_graphs[key] = ProceduralGraph(pg_file, embedder) if pg_file.exists() else None
-    return embedder, embs, ids, kg, chunk_by_id, pg_graphs
+    # v6_rag_rerank only -- see pipeline/train/train_reranker.py + build_vhf_reranker_pairs.py.
+    # Also tiny (~22M params), CPU-only. None if not yet trained, so v6_rag_rerank gracefully
+    # falls back to plain v1_rag-style retrieval (no reranking) rather than erroring.
+    reranker_dir = paths.domain_models_dir / "vhf_reranker"
+    reranker = CrossEncoder(str(reranker_dir), device="cpu") if reranker_dir.exists() else None
+    return embedder, embs, ids, kg, chunk_by_id, pg_graphs, reranker
 
 
 @st.cache_resource(show_spinner="Loading Qwen3-8B (4-bit NF4) onto GPU...")
@@ -213,10 +224,20 @@ def build_vhf_prompt(question: str, config: str = "v1_rag", k: int = 6, dense_n:
     parts: list[str] = []
 
     if spec["rag"] or spec["pg"]:
-        embedder, embs, ids, kg, chunk_by_id, pg_graphs = _load_retrieval()
+        embedder, embs, ids, kg, chunk_by_id, pg_graphs, reranker = _load_retrieval()
         if spec["rag"]:
-            hits, _, _ = kg_retrieve(question, embedder, embs, ids, kg, k=k, dense_n=dense_n,
-                                     max_per_document=RAG_MAX_PER_DOCUMENT)
+            if spec["rerank"] and reranker is not None:
+                pool, _, _ = kg_retrieve(question, embedder, embs, ids, kg, k=RERANK_POOL_SIZE,
+                                         dense_n=max(dense_n, RERANK_POOL_SIZE * 2),
+                                         max_per_document=RAG_MAX_PER_DOCUMENT)
+                hits = rerank_hits(question, pool, chunk_by_id, reranker, k=k)
+                debug["reranked"] = True
+            else:
+                hits, _, _ = kg_retrieve(question, embedder, embs, ids, kg, k=k, dense_n=dense_n,
+                                         max_per_document=RAG_MAX_PER_DOCUMENT)
+                debug["reranked"] = False
+                if spec["rerank"]:
+                    debug["rerank_unavailable"] = True  # requested but vhf_reranker not trained yet
             parts.append(f"Reference excerpts:\n{format_context(hits, chunk_by_id)}")
             debug["sources"] = [h["chunk_id"] for h in hits]
         if spec["pg"]:
