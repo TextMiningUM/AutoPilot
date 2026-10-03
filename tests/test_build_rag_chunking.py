@@ -67,6 +67,24 @@ def test_splits_a_section_that_internally_drifts_topic():
     assert pieces[1]["section_id"] == "s1_t2"
 
 
+def test_does_not_split_a_standalone_type_section_even_with_a_real_topic_shift():
+    # chirp_report is in STANDALONE_TYPES -- must stay one complete, unsplit retrieval
+    # unit even though its text has the exact same detectable topic shift as the
+    # "reference" test above. Caught via a real over-fragmentation bug on the actual
+    # CHIRP corpus (11 sections -> 50 chunks) before this guard was added.
+    section = {
+        "section_id": "s1", "title": "Mixed", "type": "chirp_report",
+        "text": (
+            "The whale population here is large. Whale sightings are common near the coast. "
+            "Whale watching tours operate daily. Fog often rolls in during the morning. "
+            "Fog reduces visibility significantly. Fog can last for hours."
+        ),
+        "topics": ["marine"], "pages": [1],
+    }
+    pieces = build_rag._split_section_by_topic(section)
+    assert pieces == [section]
+
+
 def test_does_not_split_a_section_with_too_few_sentences():
     section = {
         "section_id": "s1", "title": "Short", "type": "reference",
@@ -128,3 +146,34 @@ def test_contains_semantic_split_flag_propagates_to_the_chunk():
     doc = {"document_id": "doc1", "source_file": "f.txt", "source_type": "guide"}
     chunks = build_rag.chunk_chapter(chapter, doc, 0)
     assert any(c["contains_semantic_split"] for c in chunks)
+
+
+# ── degenerate-chunk filter ───────────────────────────────────────────────
+def test_is_degenerate_chunk_text_drops_near_empty_fragments():
+    assert build_rag._is_degenerate_chunk_text("BMP") is True
+    assert build_rag._is_degenerate_chunk_text("10") is True
+    assert build_rag._is_degenerate_chunk_text("\u2022") is True
+    assert build_rag._is_degenerate_chunk_text("Planning") is True
+
+
+def test_is_degenerate_chunk_text_keeps_real_sentences():
+    assert build_rag._is_degenerate_chunk_text("Whale sightings are common near the coast.") is False
+    assert build_rag._is_degenerate_chunk_text("Rule 13 - Overtaking") is False
+
+
+def test_build_chunks_for_document_drops_degenerate_sections():
+    doc = {
+        "document_id": "doc1", "source_file": "f.pdf", "source_type": "guide",
+        "chapters": [{"title": "Chapter", "sections": [
+            # type="rule" (STANDALONE_TYPES) so it can never merge into the next
+            # section -- isolates the degenerate-filter behavior from the separate
+            # merge-decision logic.
+            {"section_id": "s1", "title": "s1", "type": "rule", "text": "BMP",
+             "topics": ["x"], "pages": [1]},
+            _section("s2", "Whale sightings are common near the coast today.", ["x"]),
+        ]}],
+    }
+    chunks, n_dropped = build_rag.build_chunks_for_document(doc)
+    assert n_dropped == 1
+    assert len(chunks) == 1
+    assert "Whale" in chunks[0]["text"]

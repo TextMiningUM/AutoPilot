@@ -97,6 +97,22 @@ def token_count(text: str) -> int:
     return len(tokenizer.encode(text, add_special_tokens=False)) if text else 0
 
 
+_WORD_RE = re.compile(r"[A-Za-z]{2,}")
+MIN_REAL_WORDS_PER_CHUNK = 2
+
+
+def _is_degenerate_chunk_text(text: str) -> bool:
+    """True if `text` has fewer than MIN_REAL_WORDS_PER_CHUNK alphabetic words of
+    length>=2 -- catches a mis-detected tiny 'section' (a lone page number, bullet, or
+    1-2 word caption) that a PDF's generic heading-detector occasionally promotes to
+    its own section, PRE-DATING the topic-segmentation work (a pre-existing parsing
+    artifact, not something that feature introduced). Confirmed on the real Captain
+    corpus: BMP5.pdf's bullet-list/caption-heavy layout alone produced 263 such
+    near-empty chunks (e.g. 'BMP', '10', 'Planning', bare bullet characters) before
+    this filter existed -- pure noise, never a useful retrieval unit."""
+    return len(_WORD_RE.findall(text)) < MIN_REAL_WORDS_PER_CHUNK
+
+
 # ── Chunker ───────────────────────────────────────────────────────────────
 def _embed(texts: list[str]) -> np.ndarray:
     """Batch-embed `texts` with the already-loaded global `model` (normalize_embeddings=True,
@@ -113,7 +129,17 @@ def _split_section_by_topic(section: dict) -> list[dict]:
     _split_oversized_section below (see core/text_segmentation.py and
     Docs/rag_chunking_design_and_verification.md for the full method). Returns
     [section] unchanged if there isn't a confident boundary (short text, or no deep
-    enough similarity valley) -- the common case, so this is cheap for most sections."""
+    enough similarity valley) -- the common case, so this is cheap for most sections.
+
+    NEVER splits a STANDALONE_TYPES section (rule/chirp_report/moos_case/...) -- those
+    are already defined as ONE complete, independent retrieval unit on purpose (e.g. one
+    CHIRP article = one near-miss case); internally fragmenting one would violate that
+    same guarantee the merge-blocking logic below protects. Caught directly during real
+    corpus testing: CHIRP documents were massively over-fragmenting (11 sections -> 50
+    chunks) before this guard was added -- a short narrative report's own natural
+    sentence-to-sentence topic drift was being mistaken for a genuine section boundary."""
+    if section["type"] in STANDALONE_TYPES:
+        return [section]
     text = join_hyphenated_linebreaks(section["text"])
     sentences = split_sentences(text)
     if len(sentences) < MIN_SENTENCES_FOR_TOPIC_SPLIT:
@@ -305,12 +331,15 @@ def chunk_chapter(chapter: dict, doc: dict, chapter_index: int) -> list[dict]:
     return out
 
 
-def build_chunks_for_document(doc: dict) -> list[dict]:
-    """Chunk every chapter of one parsed document."""
+def build_chunks_for_document(doc: dict) -> tuple[list[dict], int]:
+    """Chunk every chapter of one parsed document. Returns (kept_chunks, n_dropped) --
+    drops any resulting chunk whose text is too degenerate (a lone page number/bullet/
+    short caption) to be a useful retrieval unit, see _is_degenerate_chunk_text()."""
     chunks = []
     for chapter_index, chapter in enumerate(doc.get("chapters", [])):
         chunks.extend(chunk_chapter(chapter, doc, chapter_index))
-    return chunks
+    kept = [c for c in chunks if not _is_degenerate_chunk_text(c["text"])]
+    return kept, len(chunks) - len(kept)
 
 
 def _outputs_stale() -> bool:
@@ -354,6 +383,7 @@ def main() -> None:
     print("\nBuilding chunks from _json/...", flush=True)
     all_chunks: list[dict] = []
     per_doc: list[tuple[str, int, int]] = []
+    total_dropped_degenerate = 0
 
     for path in sorted(JSON_OUT_DIR.glob("*.json")):
         if path.name.startswith("_"):
@@ -367,13 +397,15 @@ def main() -> None:
         # training JSONL, meta-literature never belong in the RAG corpus).
         raise_if_excluded_source(doc["source_file"])
         n_sections = sum(len(ch.get("sections", [])) for ch in doc["chapters"])
-        chunks = build_chunks_for_document(doc)
+        chunks, n_dropped = build_chunks_for_document(doc)
+        total_dropped_degenerate += n_dropped
         all_chunks.extend(chunks)
         per_doc.append((doc["source_file"], n_sections, len(chunks)))
         print(f"  {doc['source_file']:<70} sections={n_sections:>4}  chunks={len(chunks):>4}", flush=True)
 
     RAG_CHUNKS_FILE.write_text(json.dumps(all_chunks, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"\n{len(all_chunks)} chunks from {len(per_doc)} documents", flush=True)
+    print(f"\n{len(all_chunks)} chunks from {len(per_doc)} documents "
+          f"({total_dropped_degenerate} degenerate chunks dropped)", flush=True)
     print(f"Saved: {RAG_CHUNKS_FILE}", flush=True)
 
     # Stats
