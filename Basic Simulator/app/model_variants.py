@@ -109,6 +109,21 @@ MODEL_VARIANTS: dict[str, dict[str, str]] = {
                        "every other qwen_sftdpo* variant. Intended for use under "
                        "kinematics_model='nomoto_v2'.",
     },
+    "qwen_sftdpo_v6": {
+        "label": "QWEN-SFT-DPO-V6",
+        "weights": "MERGED:OOW-QWEN_v6_sftdpo",
+        "description": "SFT+DPO merged checkpoint, part of the automated v5->v6 training "
+                       "cycle (full IMP/Imazu/UM/RND sweep under v5, tag v5_diag_v1, then "
+                       "a cumulative re-mine of every run-log-derived DPO/reflection "
+                       "builder -- build_dagger_dpo.py/build_oow_decision_reversal_dpo.py/"
+                       "build_outcome_dpo.py/build_outcome_reflection.py/"
+                       "build_measurement_dpo.py/build_measurement_reflection.py -- so "
+                       "this model is trained on v5's OWN new mistakes on top of v5's "
+                       "mix, same iterative-DAgger pattern as the v2->v3 step). Reflection "
+                       "deliberately excluded, same composition convention as every other "
+                       "qwen_sftdpo* variant. Intended for use under "
+                       "kinematics_model='nomoto_v2'.",
+    },
 }
 
 DEFAULT_VARIANT = "qwen_base"
