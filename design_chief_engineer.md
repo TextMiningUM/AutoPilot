@@ -1,6 +1,6 @@
 # Design Note: Chief Engineer — Conditional/Predictive Maintenance + Malfunction-Troubleshooting Chatbot (Track 4)
 
-**Status:** DESIGN / RESEARCH only — nothing implemented yet, per explicit user instruction (2026-10-03). This is the fourth domain alongside VHF (mature), OOW (actively being built) and Captain (design-only). `Data/ChiefEngineer/` already exists as an empty, reserved folder (noted in `design_captain_missions.md` §2.5/§2.6 as "anticipated but never built").
+**Status (updated 2026-10-03, later):** started as DESIGN/RESEARCH only, but real implementation has since landed for both parts — Part A's condition-monitoring core (`pipeline/chief_engineer_agent_spec.py`) and an Engine Room Dashboard (`Basic Simulator/app/pages/2_Engine_Room.py`) exist; Part B's full retrieval stack (RAG chunks + KG + PG built from the 706 known-issues traces, `pipeline/chief_engineer_memory.py` doing real hybrid dense+concept-graph+PG retrieval) and Track 1 SFT/DPO/Reflection/Multihop training data are built, contamination-filtered against a real held-out gold set, and wired into `train_sft.py`/`train_dpo.py`/`train_reflection.py`. See §9's updated status log for the full detail and what's still genuinely open (Track 2 conversational dialogues, drawing ingestion, hydraulic/pneumatic drawing sourcing, an actual cloud training run). This is the fourth domain alongside VHF (mature), OOW (actively being built) and Captain (design-only). `Data/ChiefEngineer/` already exists as an empty, reserved folder (noted in `design_captain_missions.md` §2.5/§2.6 as "anticipated but never built").
 
 This domain is **not** a mission-command or navigation agent like Captain/OOW — it is a **technical/engineering-department** agent with two explicitly requested, distinct parts:
 
@@ -248,10 +248,19 @@ tag, in `Data/ChiefEngineer/ChiefEngineer_Agents_Training/chief_engineer_known_i
 This is the project's established "literal thousands of genuinely distinct documented known
 issues for one specific engine model don't exist on the open web" finding, resolved via the
 user-approved hybrid approach rather than inflating volume by mislabeling synthetic content as
-real. Not yet wired into `build_rag.py`'s embedding/retrieval step or any of the Track-1 SFT/DPO/
-Reflection builders — this file is ready-shaped for both, but AgentPaths(domain="ChiefEngineer")
-has no RAG/KG-building call sequence wired up yet (added `AgentPaths.chief_engineer()` in
-`core/paths.py` this pass, nothing downstream run yet).
+real.
+
+**Update (2026-10-03, later):** this is now fully wired. A new
+`pipeline/ingest/build_chief_engineer_chunks_from_traces.py` turns these traces directly into
+RAG-chunk-shaped records (no `build_chief_engineer_json.py` needed) feeding the SAME
+`build_kg.py`/`build_pg.py`/`build_sft.py`/`build_multihop.py`/`build_rlhf.py`/
+`build_reflection.py` unchanged, producing `chiefengineer_rag_chunks.json`/`_kg.json`/`_pg.json`
+and the full Track-1 SFT/DPO/Reflection/Multihop/PG-SFT suite, all contamination-filtered
+against a real `chiefengineer_gold_answers.json` (§4.2) and loaded by `train_sft.py`/
+`train_dpo.py`/`train_reflection.py`. `pipeline/chief_engineer_memory.py` (the module the live
+Engine Room dashboard calls) now does real `kg_retrieve()` hybrid retrieval plus PG guidance
+over this index, replacing an earlier from-scratch cosine-similarity-only version. See §9's
+updated status log for exact counts.
 
 ### 4.3.2 Cross-model (GPT vs. Claude) agreement filter on the 655 `llm_synthesized` rows
 
@@ -467,12 +476,24 @@ All 5 of the originally-open questions from this design note's first pass are no
 4. **Part A's sensor data** — DECIDED: generate **synthetic** data for both halves — synthetic degradation traces (§3.7, already planned) **and** a synthetic incident/casualty history for the reference vessel's own engine room, also feeding Part B's RAG corpus (§3.8, new subsection added this pass). Not yet wired into `app/mission_sim.py`'s live clock — that remains a later integration step once the walking-skeleton condition-evaluation functions (§3.4) exist, same "don't build the UI/live-wiring before the backend logic works" sequencing Captain's own design already adopted (`design_captain_missions.md` §15).
 5. **Where Part A's output surfaces** — DECIDED: both. `EngineStatus` continues to feed the existing Captain pipeline unchanged (§3.6), **and** a new standalone Engine Room Dashboard is added (§8), mirroring Captain's own simulator-UI proposal. The dashboard talks to the **Captain**, not the OOW (§8.1) — this also resolves the user's own follow-up question about whether OOW needs this data (it does not; OOW only ever receives the already-planned `captain_speed_cap_kn`-style relayed constraint).
 
-**Remaining genuinely open items** (not resolved by this pass, carried forward):
+**Remaining genuinely open items** (as of this pass, carried forward):
 - Final sourcing of hydraulic and pneumatic/compressed-air reference drawings (§4.3) — re-searched 2026-10-03, still not found.
 - WinGD / Wärtsilä project-guide equivalents not checked (MAN Energy Solutions/Everllence's own guides ARE now acquired, §7).
 - Exact machinery-relevance filter for mining the existing MAIB/NTSB/TSB/ATSB/CHIRP corpora (§7) — not yet designed, same status as before this pass.
-- No parsing/chunking/RAG-building has been done on the 21 newly-acquired files — same "raw acquisition only" posture as `build_captain_legal_corpus.py`, deciding what enters RAG/KG/PG is a separate later step.
-- No code has been written for either Part A or Part B's actual condition-monitoring/retrieval logic — this remains a design/research document only for that part, per the user's original instruction. (The new `pipeline/ingest/build_chief_engineer_corpus.py` is acquisition tooling, not Part A/B logic.)
+- No parsing/chunking/RAG-building has been done on the 21 NAVEDTRA/legal/Wikipedia files acquired in §7 (only the 2 MAN Project Guides feed the known-issues traces so far) — same "raw acquisition only" posture as `build_captain_legal_corpus.py` for the rest.
+- `build_drawing_index.py` (§4.3's drawing-ingestion proposal) is still design-only — no code written, the 5 acquired drawings are not yet retrievable through RAG/KG.
+- Track 2 (conversational malfunction-troubleshooting dialogues, `chiefengineer_malfunction_scenarios.json`, §4.2) does not exist yet — Track 1 (manual/known-issue knowledge) is the only track trained so far, confirmed by `train_sft.py`'s own "Track 1 only so far" comment.
+- The wired QLoRA SFT/DPO/Reflection training stage has NOT actually been run on the cloud GPU pod yet — only the data-loading functions (`load_all_sft()`/`load_dpo()`/`load_reflection()`) have been dry-run-verified locally, per this project's established local/cloud split.
+- No `eval_finetuned.py`-equivalent run has been performed yet against the new real `chiefengineer_gold_answers.json` (§4.2) — there is no fine-tuned Chief Engineer model yet to evaluate.
+
+### 2026-10-03 (later): Part A core + Engine Room Dashboard + Part B retrieval/training pipeline all built
+Across several sessions working on this domain in parallel, the following moved from design to real, tested code/data without this section being kept in sync — recorded here in one place for an accurate status picture:
+
+- **Part A**: `pipeline/chief_engineer_agent_spec.py` implements the §3.4/§3.5 condition-evaluation/RUL/maintenance-recommendation dataclasses and functions for real (15 passing tests), plus a synthetic incident/casualty generator (§3.8). `Basic Simulator/app/pages/2_Engine_Room.py` is a real Streamlit dashboard panel matching §8.2's design (status strip, condition detail view, chatbot query box, synthetic-incident timeline).
+- **Part B retrieval**: `pipeline/ingest/build_chief_engineer_chunks_from_traces.py` + unchanged `build_kg.py`/`build_pg.py` produced `chiefengineer_rag_chunks.json`/`_kg.json`/`_pg.json` from the 706 known-issues traces (§4.3.1). `pipeline/chief_engineer_memory.py` was upgraded from an ad-hoc cosine-only retrieval to real `kg_retrieve()` hybrid dense+concept-graph retrieval plus PG guidance — the same retrieval stack every other domain's live agent uses. No reranker exists for this domain yet (none trained).
+- **Part B training data**: the unchanged `build_sft.py`/`build_multihop.py`/`build_rlhf.py`/`build_reflection.py`/`build_pg_sft.py` produced `chief_engineer_known_issues_{direct,cot,rag,multihop,reflection,dpo_pairs}.jsonl` + `chiefengineer_pg_sft.jsonl` from the same traces, and `train_sft.py`/`train_dpo.py`/`train_reflection.py` each gained a `"ChiefEngineer"` entry in their per-domain dataset-file dicts.
+- **Real held-out eval set**: `Data/ChiefEngineer/ChiefEngineer_Eval/chiefengineer_gold_answers.json` replaced a 1-row placeholder with 29 real Q&A rows grounded in the 49 `manual_extract` trace rows' real manual citations (same schema as `vhf_gold_answers.json`). Re-running the 5 Track-1 builders against this real file (instead of the placeholder, which had made every contamination check a silent no-op) dropped a small, healthy number of near-duplicate rows (4/0/7/2/0 across the 5 builders) — confirming the gold set is realistically grounded without gutting the training data.
+- Full detail of this pass's own work (the memory.py upgrade + gold set + rebuild) is in this agent's session notes; the condition-monitoring core/dashboard (`bfeb890`) and the initial RAG/KG/PG/SFT/DPO/multihop/reflection build (`eabfa3e`/`caf2635`/`56ac3d7`) were done in other, concurrent sessions on this same repo.
 
 ## 2026-10-03 (same day, later): first real corpus acquisition pass — 21 files
 User asked to download/scrape "as much as possible" of everything listed in §7. Built
