@@ -24,9 +24,11 @@ def test_builds_a_row_when_all_three_fields_present() -> None:
     result = build_row(row)
     assert result is not None
     content = result["messages"][-1]["content"]
+    # Fluent prose only -- no "Critique:"/"Refined:" label:value dumps (see
+    # copilot-instructions.md's hard rule against telegraphic training-data style).
     assert "Draft:" in content and "Held course" in content
-    assert "Critique: Had the give-way vessel altered course early" in content
-    assert "Refined:" in content and "Alter course to starboard" in content
+    assert "Had the give-way vessel altered course early" in content
+    assert "Alter course to starboard" in content
 
 
 def test_returns_none_when_avoidance_summary_missing() -> None:
