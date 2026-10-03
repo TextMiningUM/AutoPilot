@@ -312,84 +312,108 @@ m4.metric("Active alerts", str(n_alerts))
 if engine_status.fault:
     st.caption(f"\u26A0\uFE0F {engine_status.fault}")
 
+tab_monitor, tab_chat = st.tabs(["\U0001F5A5\uFE0F Monitor", "\U0001F4AC Ask the Chief Engineer"])
+
 # ── Schematic (left) + 2x4 ring-gauge meter bank (right) ────────────────────────────────
 _visible = SUBSYSTEMS.get(st.session_state.ce_subsystem) if st.session_state.ce_subsystem != "ALL" else None
 VISIBLE_COMPONENTS = [l for l in COMPONENTS if _visible is None or _component_key(l) in _visible]
 
-schem_col, gauge_col = st.columns([3, 2])
-with schem_col:
-    illustrative_rpm = round(RATED_RPM * max(0.0, min(1.0, speed_fraction)))
-    st.plotly_chart(_schematic_figure(verdicts, illustrative_rpm), use_container_width=False,
-                    config={"displayModeBar": False})
-    st.caption("Mimic diagram, not to scale -- chip colour = severity at that measurement point; "
-               "shaft RPM is illustrative (derived from the speed cap), not a modelled engine simulation.")
-with gauge_col:
-    st.caption("Meter bank \u2014 % of critical limit")
-    grid = VISIBLE_COMPONENTS[:8]  # 2 rows x 4 columns
-    for row_start in (0, 4):
-        row_cols = st.columns(4)
-        for col, limit in zip(row_cols, grid[row_start:row_start + 4]):
-            v = verdicts[_component_key(limit)]
-            col.plotly_chart(_ring_gauge(v), use_container_width=True, config={"displayModeBar": False})
-            col.caption(f"{limit.component_id}  \n{v.value:.1f} {limit.unit}")
+with tab_monitor:
+    schem_col, gauge_col, detail_col = st.columns([3, 1.6, 2.4])
+    with schem_col:
+        illustrative_rpm = round(RATED_RPM * max(0.0, min(1.0, speed_fraction)))
+        st.plotly_chart(_schematic_figure(verdicts, illustrative_rpm), use_container_width=False,
+                        config={"displayModeBar": False})
+        st.caption("Mimic diagram, not to scale -- chip colour = severity at that measurement point; "
+                   "shaft RPM is illustrative (derived from the speed cap), not a modelled engine simulation.")
+    with gauge_col:
+        st.caption("Meter bank \u2014 % of critical limit")
+        grid = VISIBLE_COMPONENTS[:8]  # 4 rows x 2 columns -- narrower bank, room for detail_col alongside
+        for row_start in (0, 2, 4, 6):
+            row_cols = st.columns(2)
+            for col, limit in zip(row_cols, grid[row_start:row_start + 2]):
+                v = verdicts[_component_key(limit)]
+                col.plotly_chart(_ring_gauge(v), use_container_width=True, config={"displayModeBar": False})
+                col.caption(f"{limit.component_id}  \n{v.value:.1f} {limit.unit}")
 
-st.caption("Alarm list" + (" \U0001F507 (muted)" if st.session_state.ce_muted else ""))
-if not alarm_keys:
-    st.markdown('<span class="sev-badge sev-nominal">no active alarms</span>', unsafe_allow_html=True)
-else:
-    rows_html = []
-    for key in sorted(alarm_keys, key=lambda k: -("nominal", "watch", "warning", "critical").index(verdicts[k].severity)):
-        v = verdicts[key]
-        rec = recommend_maintenance(v)
-        acked = key in st.session_state.ce_ack
-        row_class = "ce-alarm-row-ack" if acked else "ce-alarm-row-new"
-        rows_html.append(
-            f'<tr class="{row_class}"><td><span class="sev-badge sev-{v.severity}">{v.severity}</span></td>'
-            f'<td>{key[0]}/{key[1]}</td><td>{rec.action if rec else ""}</td>'
-            f'<td>{elapsed_h:.0f}h</td><td>{"ACK" if acked else "NEW"}</td></tr>'
-        )
-    st.markdown(
-        '<table class="ce-alarm-table"><tr><th>Sev</th><th>Source</th><th>Message</th>'
-        '<th>Time</th><th>Status</th></tr>' + "".join(rows_html) + "</table>",
-        unsafe_allow_html=True,
-    )
+    # ── Component detail (trend chart drill-down) -- sits beside the meter bank ─────────
+    with detail_col:
+        st.caption("Component detail")
+        sel_label = st.selectbox("", [f"{l.component_id}/{l.parameter}" for l in VISIBLE_COMPONENTS], label_visibility="collapsed")
+        sel_limit = VISIBLE_COMPONENTS[[f"{l.component_id}/{l.parameter}" for l in VISIBLE_COMPONENTS].index(sel_label)]
+        sel_key = _component_key(sel_limit)
+        sel_hist = st.session_state.ce_traces[sel_key][: st.session_state.ce_reveal]
+        sel_verdict = verdicts[sel_key]
 
-st.divider()
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=[r.timestamp_s / 3600 for r in sel_hist], y=[r.value for r in sel_hist],
+                                  mode="lines+markers", line=dict(width=2), marker=dict(size=4), showlegend=False))
+        if sel_limit.direction == "range":
+            lo, hi = sel_limit.warning_threshold  # type: ignore[misc]
+            fig.add_hrect(y0=lo, y1=hi, fillcolor="green", opacity=0.08, line_width=0)
+        else:
+            fig.add_hline(y=sel_limit.warning_threshold, line_dash="dot", line_color="orange", line_width=1)
+            fig.add_hline(y=sel_limit.critical_threshold, line_dash="dot", line_color="red", line_width=1)
+        fig.update_layout(height=CHART_HEIGHT, margin=dict(l=4, r=4, t=4, b=4),
+                           xaxis_title=None, yaxis_title=sel_limit.unit)
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-# ── Component detail (trend chart drill-down) ───────────────────────────────────────────
-with st.container():
-    st.caption("Component detail")
-    sel_label = st.selectbox("", [f"{l.component_id}/{l.parameter}" for l in VISIBLE_COMPONENTS], label_visibility="collapsed")
-    sel_limit = VISIBLE_COMPONENTS[[f"{l.component_id}/{l.parameter}" for l in VISIBLE_COMPONENTS].index(sel_label)]
-    sel_key = _component_key(sel_limit)
-    sel_hist = st.session_state.ce_traces[sel_key][: st.session_state.ce_reveal]
-    sel_verdict = verdicts[sel_key]
+        badge_class = f"sev-{sel_verdict.severity}"
+        st.markdown(f'<span class="sev-badge {badge_class}">{sel_verdict.severity}</span> '
+                    f'trend {sel_verdict.trend_slope_per_h:+.2f}/h', unsafe_allow_html=True)
+        rec = recommend_maintenance(sel_verdict)
+        if rec:
+            st.caption(f"\u2192 {rec.action}")
+        st.caption(f"Source: {sel_limit.source_citation}")
 
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=[r.timestamp_s / 3600 for r in sel_hist], y=[r.value for r in sel_hist],
-                              mode="lines+markers", line=dict(width=2), marker=dict(size=4), showlegend=False))
-    if sel_limit.direction == "range":
-        lo, hi = sel_limit.warning_threshold  # type: ignore[misc]
-        fig.add_hrect(y0=lo, y1=hi, fillcolor="green", opacity=0.08, line_width=0)
-    else:
-        fig.add_hline(y=sel_limit.warning_threshold, line_dash="dot", line_color="orange", line_width=1)
-        fig.add_hline(y=sel_limit.critical_threshold, line_dash="dot", line_color="red", line_width=1)
-    fig.update_layout(height=CHART_HEIGHT, margin=dict(l=4, r=4, t=4, b=4),
-                       xaxis_title=None, yaxis_title=sel_limit.unit)
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        st.caption("Alarm list" + (" \U0001F507 (muted)" if st.session_state.ce_muted else ""))
+        if not alarm_keys:
+            st.markdown('<span class="sev-badge sev-nominal">no active alarms</span>', unsafe_allow_html=True)
+        else:
+            rows_html = []
+            for key in sorted(alarm_keys, key=lambda k: -("nominal", "watch", "warning", "critical").index(verdicts[k].severity)):
+                v = verdicts[key]
+                rec = recommend_maintenance(v)
+                acked = key in st.session_state.ce_ack
+                row_class = "ce-alarm-row-ack" if acked else "ce-alarm-row-new"
+                rows_html.append(
+                    f'<tr class="{row_class}"><td><span class="sev-badge sev-{v.severity}">{v.severity}</span></td>'
+                    f'<td>{key[0]}/{key[1]}</td><td>{rec.action if rec else ""}</td>'
+                    f'<td>{elapsed_h:.0f}h</td><td>{"ACK" if acked else "NEW"}</td></tr>'
+                )
+            st.markdown(
+                '<table class="ce-alarm-table"><tr><th>Sev</th><th>Source</th><th>Message</th>'
+                '<th>Time</th><th>Status</th></tr>' + "".join(rows_html) + "</table>",
+                unsafe_allow_html=True,
+            )
 
-    badge_class = f"sev-{sel_verdict.severity}"
-    st.markdown(f'<span class="sev-badge {badge_class}">{sel_verdict.severity}</span> '
-                f'trend {sel_verdict.trend_slope_per_h:+.2f}/h', unsafe_allow_html=True)
-    rec = recommend_maintenance(sel_verdict)
-    if rec:
-        st.caption(f"\u2192 {rec.action}")
-    st.caption(f"Source: {sel_limit.source_citation}")
+        # ── Synthetic incident drill (Phase 2) ──────────────────────────────────────────
+        with st.expander("\U0001F9EA Synthetic incident drill", expanded=False):
+            ic1, ic2 = st.columns(2)
+            inc_seed = ic1.number_input("Incident seed", min_value=0, max_value=9999, value=1, key="inc_seed")
+            caught = ic2.toggle("Caught in time", value=True, key="inc_caught")
+            missed = generate_synthetic_incident(sel_limit, seed=int(inc_seed), caught_in_time=False)
+            caught_inc = generate_synthetic_incident(sel_limit, seed=int(inc_seed), caught_in_time=True)
+            shown = caught_inc if caught else missed
+            st.caption(shown.narrative)
 
-st.divider()
+        # ── Drawings (illustrative, honest provenance -- design_chief_engineer.md Sec 4.3) ──
+        with st.expander("\U0001F4D0 Reference drawings (illustrative)", expanded=False):
+            manifest_path = DRAWINGS_DIR / "manifest.json"
+            if manifest_path.exists():
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                st.caption(manifest.get("_comment", "")[:220] + "\u2026")
+                cols = st.columns(len(manifest["files"]))
+                for col, entry in zip(cols, manifest["files"]):
+                    img_path = DRAWINGS_DIR / entry["file"]
+                    if img_path.exists():
+                        col.image(str(img_path), use_container_width=True)
+                    col.caption(f"{entry['title']} \u2014 *{entry['source_vessel']}* (illustrative)")
+            else:
+                st.caption("No drawings manifest found yet.")
 
 # ── Ask the Chief Engineer (real retrieval over known-issues traces) ───────────────────
-with st.expander("\U0001F4AC Ask the Chief Engineer", expanded=False):
+with tab_chat:
     query = st.text_input("Question", placeholder="e.g. what causes main bearing overheating?",
                            label_visibility="collapsed")
     if query:
@@ -400,27 +424,3 @@ with st.expander("\U0001F4AC Ask the Chief Engineer", expanded=False):
             st.markdown(f"**{h.source}** _({tag})_")
             st.caption(h.text)
 
-# ── Synthetic incident drill (Phase 2) ──────────────────────────────────────────────────
-with st.expander("\U0001F9EA Synthetic incident drill", expanded=False):
-    ic1, ic2 = st.columns(2)
-    inc_seed = ic1.number_input("Incident seed", min_value=0, max_value=9999, value=1, key="inc_seed")
-    caught = ic2.toggle("Caught in time", value=True, key="inc_caught")
-    missed = generate_synthetic_incident(sel_limit, seed=int(inc_seed), caught_in_time=False)
-    caught_inc = generate_synthetic_incident(sel_limit, seed=int(inc_seed), caught_in_time=True)
-    shown = caught_inc if caught else missed
-    st.caption(shown.narrative)
-
-# ── Drawings (illustrative, honest provenance -- design_chief_engineer.md Sec 4.3) ──────
-with st.expander("\U0001F4D0 Reference drawings (illustrative)", expanded=False):
-    manifest_path = DRAWINGS_DIR / "manifest.json"
-    if manifest_path.exists():
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        st.caption(manifest.get("_comment", "")[:220] + "\u2026")
-        cols = st.columns(len(manifest["files"]))
-        for col, entry in zip(cols, manifest["files"]):
-            img_path = DRAWINGS_DIR / entry["file"]
-            if img_path.exists():
-                col.image(str(img_path), use_container_width=True)
-            col.caption(f"{entry['title']} \u2014 *{entry['source_vessel']}* (illustrative)")
-    else:
-        st.caption("No drawings manifest found yet.")
