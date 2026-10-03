@@ -134,6 +134,13 @@ FAMILY_RULES = [
 
 
 def classify_family(trace: dict) -> str:
+    # Captain traces already carry a deterministic mapped_event_type (Sec 13.C.10,
+    # extract_captain_reasoning.py's own keyword-guard-validated field) -- reuse it
+    # directly as the family instead of guessing from VHF/OOW-specific regexes that
+    # don't fit this domain's vocabulary (no MAYDAY/DSC/COLREG-rule-number content).
+    mapped = trace.get("mapped_event_type")
+    if mapped and mapped != "unmapped":
+        return mapped
     blob = " ".join([
         str(trace.get("situation") or ""),
         " ".join(trace.get("prowords_used") or []),

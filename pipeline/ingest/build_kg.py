@@ -136,7 +136,47 @@ _OOW_ALIASES: dict[str, list[str]] = {
     "vessel traffic service":   ["vessel_traffic_service"],
 }
 
-CONCEPT_ALIASES: dict[str, list[str]] = _OOW_ALIASES if paths.domain == "OOW" else _VHF_ALIASES
+# Captain's chunks are parsed by REUSED VHF/OOW parser functions (build_captain_json.py
+# never forks a new parser), so their tagged "concepts" already come from
+# _VHF_ALIASES/CONCEPT_KEYWORDS's existing vocabulary -- but the corpus's own real
+# subject matter (ISM/SOLAS/MARPOL/BMP5, the 5 v1 event types) has no query-time alias
+# boost at all without this. Additive only: does not touch _VHF_ALIASES/_OOW_ALIASES.
+_CAPTAIN_ALIASES: dict[str, list[str]] = {
+    "ism code":              ["ISM Code"],
+    "safety management":     ["ISM Code"],
+    "solas":                 ["SOLAS"],
+    "marpol":                ["MARPOL"],
+    "stcw":                  ["STCW"],
+    "bmp5":                  ["BMP5"],
+    "best management practice": ["BMP5"],
+    "piracy":                ["BMP5", "distress_call"],
+    "anti-piracy":           ["BMP5"],
+    "armed robbery":         ["BMP5"],
+    "engine failure":        ["engine_failure"],
+    "engine breakdown":      ["engine_failure"],
+    "propulsion failure":    ["engine_failure"],
+    "main engine":           ["engine_failure"],
+    "fog":                   ["fog"],
+    "restricted visibility": ["fog"],
+    "distress call":         ["distress_call"],
+    "mayday":                ["distress_call", "MAYDAY"],
+    "duty to assist":        ["distress_call"],
+    "whale":                 ["whale_zone"],
+    "marine mammal":         ["whale_zone"],
+    "protected zone":        ["whale_zone"],
+    "commercial instruction": ["commercial_instruction"],
+    "schedule pressure":     ["commercial_instruction"],
+    "charter party":         ["commercial_instruction"],
+    "dpa":                   ["commercial_instruction"],
+    "designated person":     ["commercial_instruction"],
+    "port of refuge":        ["engine_failure"],
+    "place of refuge":       ["engine_failure"],
+}
+
+_CONCEPT_ALIASES_BY_DOMAIN: dict[str, dict[str, list[str]]] = {
+    "OOW": _OOW_ALIASES, "VHF": _VHF_ALIASES, "Captain": _CAPTAIN_ALIASES,
+}
+CONCEPT_ALIASES: dict[str, list[str]] = _CONCEPT_ALIASES_BY_DOMAIN.get(paths.domain, _VHF_ALIASES)
 
 
 def load_chunks() -> list[dict]:
