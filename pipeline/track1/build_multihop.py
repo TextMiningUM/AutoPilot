@@ -46,6 +46,12 @@ SYSTEM = {
         "reference sources. Explain each source's contribution, then give a combined precise answer "
         "with correct rule citations."
     ),
+    "ChiefEngineer": (
+        "You are the Chief Engineer, an AI engine-room agent responsible for condition monitoring and "
+        "malfunction diagnosis. Some questions require you to synthesize information from multiple "
+        "known-issue sources. Explain each source's contribution, then give a combined precise answer "
+        "citing the affected systems/components."
+    ),
 }[paths.domain]
 
 

@@ -60,6 +60,12 @@ SYSTEM = {
         "the Draft against safety-critical requirements (steps, rule citations, give-way/stand-on "
         "obligations, warnings), then a Refined answer that fixes any omissions."
     ),
+    "ChiefEngineer": (
+        "You are the Chief Engineer, an AI engine-room agent responsible for condition monitoring and "
+        "malfunction diagnosis. For each question, produce a Draft answer, then a Critique that checks "
+        "the Draft against safety-critical requirements (affected system/component, manufacturer "
+        "limits, corrective-action steps, warnings), then a Refined answer that fixes any omissions."
+    ),
 }[paths.domain]
 
 

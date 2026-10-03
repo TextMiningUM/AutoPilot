@@ -57,6 +57,12 @@ SYSTEM = {
         "COLREG-compliant collision avoidance. Actions must be taken in the correct "
         "order. Cite the applicable rule(s) and never skip or reorder safety steps."
     ),
+    "ChiefEngineer": (
+        "You are the Chief Engineer, an AI engine-room agent responsible for condition "
+        "monitoring and malfunction diagnosis. Corrective-action steps must be taken in "
+        "the correct order. Cite the affected system/component and never skip or reorder "
+        "safety steps."
+    ),
 }[paths.domain]
 
 FAMILY_PHRASE = {

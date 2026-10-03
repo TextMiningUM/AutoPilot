@@ -87,6 +87,9 @@ from pipeline.captain_types import (
     Port, load_region_json, ports_from_region, zones_from_region,
 )
 from pipeline.nomoto import SHIP_PROFILES
+from pipeline.chief_engineer_agent_spec import (
+    all_known_limits, compute_engine_status, evaluate_condition, generate_degradation_trace,
+)
 
 REGIONS_DIR = REPO_ROOT / "Data" / "Captain" / "Regions"
 ENCOUNTER_DT_S = 10.0  # matches app.simulation.VesselConstraints' own usual default
@@ -451,14 +454,37 @@ class CaptainSkeleton:
         self._log_delta("captain_response", old=None,
                         new={"plan": response.plan, "reasoning": response.reasoning}, cause=event.event_id)
 
+    def _compute_live_engine_status(self, event: BrownEnvelopeEvent) -> EngineStatus:
+        """Chief Engineer condition-monitoring fallback (design_chief_engineer.md Sec 3.6) --
+        used ONLY when a scenario's engine_failure event omits `capped_speed_kn` (every
+        existing scripted scenario still provides it explicitly and is completely
+        unaffected). Deterministically seeds one component's degradation trace from the
+        event_id, evaluates it, and aggregates to the same EngineStatus shape the scripted
+        path already produces -- zero consumer-side changes."""
+        limits = all_known_limits()
+        component_id = event.params.get("component_id")
+        parameter = event.params.get("parameter")
+        limit = next((l for l in limits if l.component_id == component_id and l.parameter == parameter),
+                     limits[0])
+        seed = sum(map(ord, event.event_id)) % 10_000
+        trace = generate_degradation_trace(limit, seed=seed, n_points=12, dt_hours=2.0, will_fail=True)
+        verdict = evaluate_condition(trace[-1], limit, trace)
+        return compute_engine_status([verdict], rated_speed_kn=self.order.speed_of_advance_kn,
+                                      reported_at=self.sim.state.elapsed_s)
+
     def _handle_engine_failure(self, event: BrownEnvelopeEvent) -> None:
         """The ONE fully-wired decision layer (Sec 13.A.4/13.A.8): builds the
         EngineFailureContext from live Mission-sim/route-planner facts, applies the
         deterministic baseline Captain (`oracle_best`, Sec 14), runs the shield, and
         applies the result to the sim."""
-        capped_speed_kn = float(event.params["capped_speed_kn"])
+        if "capped_speed_kn" in event.params:
+            capped_speed_kn = float(event.params["capped_speed_kn"])
+            fault = event.params.get("fault")
+        else:
+            live_status = self._compute_live_engine_status(event)
+            capped_speed_kn = live_status.max_speed_kn
+            fault = live_status.fault
         repair_duration_h = float(event.params.get("repair_duration_h", 24.0))
-        fault = event.params.get("fault")
         engine_status = EngineStatus(max_speed_kn=capped_speed_kn, fault=fault,
                                      reported_at=self.sim.state.elapsed_s)
         self.state.resources["engine_status"] = {"max_speed_kn": engine_status.max_speed_kn,

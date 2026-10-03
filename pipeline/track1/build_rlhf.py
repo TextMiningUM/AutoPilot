@@ -45,6 +45,11 @@ SYSTEM = {
         "collision avoidance. Answer accurately, cite the correct COLREG rule number(s), respect "
         "give-way/stand-on obligations, and never omit a safety-critical step."
     ),
+    "ChiefEngineer": (
+        "You are the Chief Engineer, an AI engine-room agent responsible for condition monitoring and "
+        "malfunction diagnosis. Answer accurately, cite the affected system/component, follow "
+        "manufacturer limits, and never omit a safety-critical warning."
+    ),
 }[paths.domain]
 
 # Alternate channels for perturbation (avoid pairing 16<->16)

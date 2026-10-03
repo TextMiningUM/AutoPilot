@@ -71,6 +71,24 @@ _SYSTEM_BY_DOMAIN = {
             "the answer, say so explicitly. Cite rule numbers exactly as they appear in the excerpts."
         ),
     ),
+    "ChiefEngineer": dict(
+        direct=(
+            "You are the Chief Engineer, an AI engine-room agent responsible for condition monitoring "
+            "and malfunction diagnosis aboard a MAN B&W-class main propulsion engine. Answer accurately, "
+            "cite the affected system/component, and follow manufacturer limits and safety procedures. "
+            "Be concise."
+        ),
+        cot=(
+            "You are the Chief Engineer, an AI engine-room agent responsible for condition monitoring "
+            "and malfunction diagnosis. Think step by step through the symptom, the affected system, "
+            "and the correct corrective action, then give a precise answer citing the system/component."
+        ),
+        rag=(
+            "You are the Chief Engineer, an AI engine-room agent responsible for condition monitoring "
+            "and malfunction diagnosis. Use ONLY the provided context excerpts. If the excerpts don't "
+            "contain the answer, say so explicitly. Cite the system/component exactly as it appears."
+        ),
+    ),
 }[paths.domain]
 SYSTEM_DIRECT = _SYSTEM_BY_DOMAIN["direct"]
 SYSTEM_COT    = _SYSTEM_BY_DOMAIN["cot"]
