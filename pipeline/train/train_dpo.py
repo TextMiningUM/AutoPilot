@@ -162,6 +162,9 @@ DPO_FILES   = {
         # model itself made a mistake to get there.
         CACHE / "oow_dagger_dpo_pairs.jsonl",
     ],
+    "ChiefEngineer": [
+        CACHE / "chief_engineer_known_issues_dpo_pairs.jsonl",
+    ],
 }[paths.domain]
 
 # 2026-09-28 quality review: replaced the fixed LEO_DPO_CAP=500 with a cap computed as a

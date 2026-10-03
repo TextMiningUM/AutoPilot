@@ -176,6 +176,16 @@ SFT_DATASETS = {
         CACHE / "oow_pg_sft.jsonl",
         CACHE / "oow_pg_incident_sft.jsonl",
     ],
+    "ChiefEngineer": [
+        # Track 1 only so far (no Track 2 conversational corpus exists yet for this
+        # domain) -- built from pipeline.track1.extract_chief_engineer_known_issues's
+        # 756 known-issue reasoning traces (manual_extract/web_sourced/llm_synthesized).
+        CACHE / "chief_engineer_known_issues_direct.jsonl",
+        CACHE / "chief_engineer_known_issues_cot.jsonl",
+        CACHE / "chief_engineer_known_issues_rag.jsonl",
+        CACHE / "chief_engineer_known_issues_multihop.jsonl",
+        CACHE / "chiefengineer_pg_sft.jsonl",
+    ],
 }[paths.domain]
 
 

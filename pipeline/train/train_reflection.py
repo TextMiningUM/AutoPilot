@@ -119,6 +119,9 @@ REFL_FILES   = {
         # low-level controller -- see train_sft.py's own comment for the full rationale.
         CACHE / "oow_scenario_RND_reflection_nomoto_llc.jsonl",
     ],
+    "ChiefEngineer": [
+        CACHE / "chief_engineer_known_issues_reflection.jsonl",
+    ],
 }[paths.domain]
 
 # 2026-09-28 quality review: replaced the fixed LEO_REFLECTION_CAP=500 with a cap computed
