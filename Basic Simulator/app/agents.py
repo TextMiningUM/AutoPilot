@@ -63,12 +63,12 @@ import numpy as np
 import streamlit as st
 import torch
 from sentence_transformers import SentenceTransformer
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TextStreamer
-from peft import PeftModel
+from transformers import TextStreamer
 
 from sentence_transformers import CrossEncoder
 
 from core import AgentPaths, EMBEDDER_MODEL
+from core.qwen_loader import load_qwen
 from pipeline.ingest.build_kg import kg_retrieve, rerank_hits
 from pipeline.ingest.pg_guidance import ProceduralGraph, render_guidance, load_merged_pg
 from pipeline.eval.prep_ablation import format_context
@@ -82,8 +82,6 @@ from app.missions import Mission, Vessel
 from app.narrate import contact_line, narrate
 from app.simulation import VesselConstraints
 from app.units import mps_to_kn
-
-MODEL_ID = "Qwen/Qwen3-8B"
 
 # `leo_moos_cases` (case-based RAG, numeric/geometric MOOS-narrative style -- same
 # vocabulary as a live situation-report query) otherwise dominates dense retrieval
@@ -229,77 +227,14 @@ def _load_retrieval():
 
 
 
-@st.cache_resource(show_spinner="Loading Qwen3-8B (4-bit NF4) -- first call only, ~1-2 min...")
+@st.cache_resource(show_spinner="Loading Qwen3-8B (4-bit NF4) onto GPU...")
 def _load_qwen(weights: str = "W0_base"):
-    """`weights="W0_base"` loads bare Qwen3-8B (default, unchanged). `weights="MERGED:<dir>"`
-    loads a standalone already-merged model directory (produced by pipeline/train/
-    merge_adapter.py, e.g. "MERGED:OOW-QWEN_v2_sftdpo") directly as the base -- no adapters
-    applied, still 4-bit-quantized on load same as every other path, so this isolates
-    "properly merged" vs "chained adapters" purely as a weights-loading difference (same
-    effective weights either way -- merge_and_unload() is mathematically exact -- the only
-    thing this changes is removing the PEFT dispatch overhead at inference time). Any other
-    value is a "+"-joined chain of LoRA adapter directory names under this domain's models
-    dir (e.g. "oow_qwen_sft_lora_v2" or "oow_qwen_sft_lora_v2+oow_qwen_dpo_lora_v2") applied
-    in order via PEFT, merging each into the base weights before applying the next -- this
-    MUST match how the corresponding train_*.py stage itself builds on the previous one
-    (train_dpo.py's load_model_with_sft_merged(): SFT adapter merged in BEFORE the DPO
-    adapter trains on top), otherwise the DPO/reflection adapter would be applied to the
-    wrong base distribution. `weights="MERGED:<dir>+<adapter>[+<adapter2>...]"` combines both:
-    starts from the merged dir as the base, then chains the given adapter(s) on top via PEFT
-    WITHOUT merging/re-saving -- added 2026-10-01 for quick A/B eval of a new adapter (e.g. a
-    GRPO LoRA) stacked on a previous merged checkpoint, since re-merging+save_pretrained()'ing
-    a SECOND time onto an already-merged-and-saved-quantized directory hits a transformers
-    core_model_loading.py NotImplementedError (stale weight-conversion-reversal metadata from
-    the first merge's save) -- staying unmerged sidesteps that entirely, at the cost of a
-    small PEFT dispatch overhead (acceptable for evaluation, not for a final deployed variant).
-    `st.cache_resource` keys its cache on the argument value, so base and each weights chain
-    get their own cached (tok, mdl) pair, never conflated."""
-    bnb = BitsAndBytesConfig(
-        load_in_4bit=True, bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
-    )
-    extra_adapter_names: list[str] = []
-    if weights.startswith("MERGED:"):
-        rest = weights[len("MERGED:"):]
-        merged_name, *extra_adapter_names = rest.split("+")
-        merged_dir = AgentPaths.oow().domain_models_dir / merged_name
-        if not merged_dir.exists():
-            raise FileNotFoundError(f"No merged model directory at {merged_dir} for weights={weights!r}")
-        model_source = str(merged_dir)
-    else:
-        model_source = MODEL_ID
-    tok = AutoTokenizer.from_pretrained(model_source)
-    # Pin the whole (4-bit) model onto the single GPU instead of device_map="auto": accelerate's
-    # auto-placement can decide to offload a few layers to CPU/disk when it under-estimates free
-    # VRAM, and bitsandbytes 4-bit refuses that combination outright ("Some modules are dispatched
-    # on the CPU or the disk...") unless llm_int8_enable_fp32_cpu_offload=True is set -- but the
-    # model fits comfortably in ~5-6 GB on this 8 GB card, so there's no need for CPU offload at all.
-    device_map = {"": 0} if torch.cuda.is_available() else "cpu"
-    mdl = AutoModelForCausalLM.from_pretrained(
-        model_source, quantization_config=bnb, device_map=device_map,
-        torch_dtype=torch.bfloat16, attn_implementation="sdpa",
-    )
-    if weights != "W0_base" and not weights.startswith("MERGED:"):
-        adapter_names = weights.split("+")
-        models_dir = AgentPaths.oow().domain_models_dir
-        for i, name in enumerate(adapter_names):
-            adapter_dir = models_dir / name
-            if not adapter_dir.exists():
-                raise FileNotFoundError(f"No adapter directory at {adapter_dir} for weights={weights!r}")
-            mdl = PeftModel.from_pretrained(mdl, str(adapter_dir))
-            if i < len(adapter_names) - 1:
-                mdl = mdl.merge_and_unload()  # fold in before the NEXT adapter trains/applies on top
-    elif extra_adapter_names:
-        models_dir = AgentPaths.oow().domain_models_dir
-        for i, name in enumerate(extra_adapter_names):
-            adapter_dir = models_dir / name
-            if not adapter_dir.exists():
-                raise FileNotFoundError(f"No adapter directory at {adapter_dir} for weights={weights!r}")
-            mdl = PeftModel.from_pretrained(mdl, str(adapter_dir))
-            if i < len(extra_adapter_names) - 1:
-                mdl = mdl.merge_and_unload()
-    mdl.eval()
-    return tok, mdl
+    """Thin `st.cache_resource`-wrapped call into the shared `core.qwen_loader.load_qwen()`
+    (lifted out 2026-10-03 so the VHF Simulator app can reuse the same loading logic
+    without duplicating it -- see that module's docstring for the full `weights` syntax).
+    `st.cache_resource` keys its cache on the argument value, so base and each weights
+    chain get their own cached (tok, mdl) pair, never conflated."""
+    return load_qwen(weights, AgentPaths.oow())
 
 
 def preload(status_cb=None) -> None:

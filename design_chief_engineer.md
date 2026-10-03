@@ -221,6 +221,38 @@ Every existing domain's pipeline (`build_*_json.py` → `build_rag.py` → `buil
 
 All 5 are real US Navy engineering drawings, originally held by NARA (National Archives), public domain as US federal government works, sourced via Wikimedia Commons (`Data/ChiefEngineer/ChiefEngineerManuals/Drawings/manifest.json` records each file's real title/source vessel/URL/licence — the manifest's own `_comment` states explicitly that these are illustrative stand-ins, not genuine Sawada-vessel drawings, so this is never misrepresented downstream). **Still missing** (no Commons/NARA hit found this pass, flagged for a future search pass): a **hydraulic** diagram (e.g. steering-gear power unit) and a **pneumatic/compressed-air** diagram (starting air/control air) — the 2 categories the user asked for that aren't yet covered.
 
+### 4.3.1 Known-problem/corrective-action reasoning traces — FIRST REAL DATA BUILT 2026-10-03
+
+User asked to search for known problems/solutions for the 2 acquired MAN B&W S50ME-C10.7/
+S60ME-C10.7 Project Guides and turn them into chunks usable as both RAG content and reasoning
+traces. New script `pipeline/track1/extract_chief_engineer_known_issues.py` (mirrors
+`extract_incident_reasoning.py`'s schema/pattern exactly — same `chunk_id`/`source_file`/
+`chapter_title`/`chunk_concepts` + nested `trace` shape, so it needs zero changes to be consumed
+by `build_sft.py`/`build_multihop.py`/`build_rlhf.py`/`build_reflection.py` once Chief
+Engineer's own training stage is wired up) produced **706 real trace rows** (hybrid approach,
+user-approved — see the chat session, not re-litigated here), each with an honest `provenance`
+tag, in `Data/ChiefEngineer/ChiefEngineer_Agents_Training/chief_engineer_known_issues_traces.jsonl`:
+
+- **49 `manual_extract`** — real paragraphs pulled straight out of the 2 Project Guides
+  (chapters 03/07–18), keyword-screened for actual failure-mode/limit/corrective-action content
+  (not spec/dimension prose), each with a real page citation.
+- **2 `web_sourced`** — real, dated Gard P&I club loss-prevention articles (bearing failures/
+  crankcase deflagration; auxiliary engine overspeed), each with its real URL kept as citation.
+- **655 `llm_synthesized`** — gpt-4o-mini-generated, distinct problem/cause/corrective-action
+  entries per real engine system (turbocharger, fuel oil, lubricating oil, cylinder lubrication,
+  piston rod stuffing box, cooling water, starting/control air, scavenge air, exhaust gas, engine
+  control system, vibration, monitoring/alarms), grounded by feeding the model that system's own
+  real manual excerpts as context, explicitly instructed never to invent a fake specific incident
+  (no vessel names/dates) — honestly labeled general domain-knowledge synthesis, not a citation.
+
+This is the project's established "literal thousands of genuinely distinct documented known
+issues for one specific engine model don't exist on the open web" finding, resolved via the
+user-approved hybrid approach rather than inflating volume by mislabeling synthetic content as
+real. Not yet wired into `build_rag.py`'s embedding/retrieval step or any of the Track-1 SFT/DPO/
+Reflection builders — this file is ready-shaped for both, but AgentPaths(domain="ChiefEngineer")
+has no RAG/KG-building call sequence wired up yet (added `AgentPaths.chief_engineer()` in
+`core/paths.py` this pass, nothing downstream run yet).
+
 <a id="sec-4-4"></a>
 ### 4.4 KG design: fault → cause → system → corrective-action graph
 

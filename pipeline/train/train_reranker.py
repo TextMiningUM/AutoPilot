@@ -32,8 +32,9 @@ from datasets import Dataset
 from core import AgentPaths
 
 paths = AgentPaths.from_env()
-PAIRS_FILE = paths.cache_dir / "oow_reranker_pairs.jsonl"
-OUT_DIR    = paths.domain_models_dir / "oow_reranker"
+_PFX = paths.domain.lower()
+PAIRS_FILE = paths.cache_dir / f"{_PFX}_reranker_pairs.jsonl"
+OUT_DIR    = paths.domain_models_dir / f"{_PFX}_reranker"
 
 BASE_MODEL = "cross-encoder/ms-marco-MiniLM-L6-v2"
 

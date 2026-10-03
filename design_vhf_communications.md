@@ -30,8 +30,17 @@
 - [9. Simulator interface design](#sec-9)
   - [9.1 Panel layout](#sec-9-1)
   - [9.2 Chain-of-command visibility](#sec-9-2)
+  - [9.3 Which VHF model backs the interface](#sec-9-3)
 - [10. Data sourcing for flags/light signals — research status](#sec-10)
 - [11. Open questions](#sec-11)
+- [12. Implementation plan — MVP interface (2026-10-03)](#sec-12)
+  - [12.1 Project location](#sec-12-1)
+  - [12.2 `app/vhf_model_variants.py`](#sec-12-2)
+  - [12.3 `app/vhf_agents.py` — two entry points, one per track](#sec-12-3)
+  - [12.4 `app/streamlit_app.py` — two tabs (MVP scope only)](#sec-12-4)
+  - [12.5 Build order](#sec-12-5)
+  - [12.6 Testing obligations](#sec-12-6)
+  - [12.7 Future phases](#sec-12-7)
 
 ---
 
@@ -229,6 +238,15 @@ Mirrors Captain's own proposed panel pattern (`design_captain_missions.md` §11.
 
 Per §8, every logged entry must show **which agent triggered it and why** (an OOW manoeuvre decision, a Captain mission-level instruction) — making the §8 protocol literally visible in the UI, the same design goal already stated for Captain's own Mission Log (`design_captain_missions.md` §11.5: "no new decision-logic needed, only a merge/render step" — this panel is exactly that same pattern, one more layer).
 
+<a id="sec-9-3"></a>
+### 9.3 Which VHF model backs the interface
+
+**Decided (2026-10-03, supersedes the first draft of this section):** the interface runs on **plain base Qwen3-8B, untuned** — not a fine-tuned checkpoint. User's explicit call: SFT/DPO/compression were tried for VHF and **did not work** (confirmed by the evaluation evidence already on hand, §9.3 below), so that line of effort is **dropped**, not deferred-pending-a-rerun as the first draft of this section proposed. Priority right now is getting a basic, genuinely working interface (Track 1 Q&A + Track 2 send/receive simulation) in front of the user — better VHF models are explicitly a **later** improvement, not a blocker for building the interface.
+
+- **Evaluation evidence (why this isn't a loss worth re-chasing right now)**: VHF never produced a usable fine-tuned/merged checkpoint — only `eval_qwen_base_smoke*` (n=2, base-only) exists, no merged SFT+DPO checkpoint was ever evaluated at scale, and OOW's own parallel results (§4.2 above, same architecture/recipe) already show Reflection underperforming, AWQ eval permanently blocked by a dependency conflict, and Pruning/Distillation causing large-to-catastrophic Track 2 regressions — i.e. the same recipe that struggled for OOW was tried for VHF and abandoned rather than debugged further, a reasonable call given the goal here is a working demo, not a research exercise.
+- **Model variant registry still proposed, scoped down**: a `VHF_MODEL_VARIANTS` registry (same shape as `Basic Simulator/app/model_variants.py`) with exactly one entry for now — `qwen_base` (`weights: "W0_base"`, plain Qwen3-8B 4-bit NF4) — so the interface's model-loading code has the identical pluggable shape as OOW's, and a future better VHF checkpoint (§9.3 note below) only requires adding one new dict entry, zero interface-code changes.
+- **Future improvement path, explicitly deferred**: if VHF fine-tuning is revisited later, it should get a fresh look at *why* it underperformed (e.g. via the same gap-analysis/consistency tooling already built for VHF's Track 1 data, §4.1) rather than assuming the OOW recipe just transfers — but this is future work, not a prerequisite for building the interface now.
+
 ---
 
 <a id="sec-10"></a>
@@ -249,7 +267,74 @@ No scraping has been done — a prioritised candidate list, same posture as the 
 ## 11. Open questions
 
 1. **Cross-domain retrieval**: does the broadened Comms agent get its **own** copy of the COLREG light/sound-signal text re-ingested under `Data/VHF/`, or does it retrieve cross-domain from OOW's existing index? The latter is cheaper/no-duplication but has no precedent yet in this project's retrieval architecture (every domain's RAG index today is self-contained).
-2. **Fine-tuning scope**: does the broadened agent get a single fine-tune spanning all 3 channels (one model, a `channel` field in its output), or does flag/light-signal competency stay a smaller, separate LoRA adapter layered on top of the existing VHF-QWEN? Not yet decided.
+2. **Fine-tuning scope**: moot for now per §9.3's 2026-10-03 decision (interface runs on base Qwen, no fine-tune) — revisit only if/when VHF fine-tuning is picked back up.
 3. **Naming**: keep "VHF" as the project-wide name (folders/`AgentPaths.vhf()`/scripts) despite the broadened scope, or introduce a new label (e.g. "Comms")? This note assumes **keep "VHF"** for continuity, per §7.1's own reasoning, but this hasn't been explicitly confirmed by the user.
 4. **§8.4's inbound-communication handling** — genuinely undesigned, flagged, not yet addressed by any existing doc.
 5. **Interface build order** — Chief Engineer's dashboard (`design_chief_engineer.md` §8) and Captain's panel (`design_captain_missions.md` §11) are also design-only/unbuilt; this note doesn't propose a priority order among the three, only documents how each would fit together once built.
+6. **RESOLVED (2026-10-03)**: VHF SFT/DPO/compression did not work and is dropped — the interface uses plain base Qwen3-8B (§9.3). Better VHF models are future work, not a prerequisite for building the interface.
+
+---
+
+<a id="sec-12"></a>
+## 12. Implementation plan — MVP interface (2026-10-03)
+
+**Scope of this plan**: pipeline + model are ready (base Qwen3-8B, §9.3) — this is purely about building the **interface**, phased so a basic working demo ships first. Mirrors `Basic Simulator/`'s existing, proven app shape (`app/model_variants.py` + `app/agents.py` + `app/streamlit_app.py`) rather than inventing a new pattern — "reuse before you rebuild" (`copilot-instructions.md`).
+
+### 12.1 Project location
+
+New sibling top-level folder **`VHF Simulator/`** (own `app/`, own `tests/`, own Streamlit entry point) — NOT a new page bolted onto `Basic Simulator/`, since VHF is its own domain with its own `AgentPaths`/data, exactly like Basic Simulator is OOW-only today. Structure mirrors Basic Simulator's:
+
+```
+VHF Simulator/
+├── app/
+│   ├── vhf_model_variants.py   # §12.2
+│   ├── vhf_agents.py           # §12.3
+│   └── streamlit_app.py        # §12.4
+└── tests/                      # §12.6
+```
+
+### 12.2 `app/vhf_model_variants.py`
+
+Same shape as `Basic Simulator/app/model_variants.py` (`MODEL_VARIANTS` dict, `resolve_weights()`/`variant_label()` helpers), but with **exactly one entry** per §9.3's decision:
+
+```python
+MODEL_VARIANTS = {
+    "qwen_base": {"label": "QWEN (base)", "weights": "W0_base",
+                  "description": "Untuned Qwen/Qwen3-8B, 4-bit NF4 -- no VHF fine-tuning (see design_vhf_communications.md §9.3)."},
+}
+DEFAULT_VARIANT = "qwen_base"
+```
+
+### 12.3 `app/vhf_agents.py` — two entry points, one per track
+
+**Refactor-first step (do this before writing new code):** `Basic Simulator/app/agents.py`'s `_load_qwen()` (base-model + adapter-chain + `MERGED:<dir>` loading, `st.cache_resource`-wrapped) is domain-agnostic already (takes a `weights` string, no OOW-specific logic) — lift it into a shared module (e.g. `core/qwen_loader.py`) and have **both** `Basic Simulator/app/agents.py` and the new `VHF Simulator/app/vhf_agents.py` import it, rather than copy-pasting a second loader that will drift (the project's own stated anti-pattern, `copilot-instructions.md` "Reuse before you rebuild"). Grep every call site first (per the same doc's rule) since `agents.py` is a live, in-use module.
+
+- **`ask_vhf_qa(question: str) -> dict`** (Track 1): retrieves context via `pipeline/ingest/build_kg.py`'s existing `kg_retrieve()` against VHF's own `vhf_rag_embeddings.npy`/`vhf_kg.json` (already built, §4.1 — zero new retrieval code, same function `eval_finetuned.py`'s ablation already proved works for this corpus, §2 table "v1_rag"/"v3_rag_cot" winning configs), builds a RAG+system prompt, calls the shared Qwen loader, returns `{answer, sources: [chunk_id, ...]}`.
+- **`ask_vhf_comms(scenario: dict, mode: str, user_input: str | None) -> dict`** (Track 2, the "zenden/ontvangen" simulation): two modes, both operating on one scenario row from `Data/VHF/VHF_Eval/vhf_colreg_scenarios.json` (reusing the held-out scenario bank as a scenario *source* for an interactive demo is fine — nothing is trained on these transcripts, consistent with them staying held-out):
+  - `mode="transmit"`: user composes the outbound call for the given scenario; the model grades it (channel choice, call format, phraseology) against the scenario's own `vhf_channel`/`colreg_rules` fields and returns corrected text + feedback — reuses the exact judging criteria `eval_colreg_scenarios.py`'s `ChannelProc`/`CallFormatOK`/`ColregCorrect` already encode (read, don't duplicate, that scoring logic where reasonable).
+  - `mode="receive"`: the model plays the OTHER station/vessel and issues an incoming hail; the user types a reply; the model evaluates the reply and responds in-character, turn by turn — a short back-and-forth loop, each turn appended to a transmission log list (the data structure §9.1's panel will later render).
+
+### 12.4 `app/streamlit_app.py` — two tabs (MVP scope only)
+
+- **Tab 1 "Ask VHF"**: free-text question box → `ask_vhf_qa()` → answer + an expandable "Sources" list of the retrieved chunks (builds real user trust that answers are grounded, cheap to add).
+- **Tab 2 "Radio Simulator"**: scenario picker (dropdown over `vhf_colreg_scenarios.json` rows, label = `category` + `region`) → mode toggle (Transmit / Receive) → a scrolling transmission-log panel (plain quoted-text entries for now — the flag/light-signal renderers from §9.1 are explicitly Phase 2, not MVP) → text input for the user's own call/reply.
+- Explicitly **deferred to later phases, not in this plan**: flag/light-sound channels (§7.3/§7.4), OOW→Comms wiring (§8.1's `ask_vhf(oow_decision)` promotion), chain-of-command visibility (§9.2 — no other agents exist yet to show), crypto easter egg (§12.7).
+
+### 12.5 Build order
+
+1. Lift `_load_qwen()` into `core/qwen_loader.py` (refactor, §12.3) — verify `Basic Simulator`'s existing tests still pass (`pytest "Basic Simulator/tests"`) before moving on, since this touches a live module.
+2. `VHF Simulator/app/vhf_model_variants.py` (§12.2) — trivial, no dependencies.
+3. `VHF Simulator/app/vhf_agents.py::ask_vhf_qa()` — wire up `kg_retrieve()` against the existing VHF RAG index; smoke-test locally against a couple of `vhf_gold_answers.json` questions (base Qwen already confirmed runnable on the local 8 GB RTX 4070, `cloud_sync.md`).
+4. `ask_vhf_comms()` — start with `mode="transmit"` only (simpler, no multi-turn state), then add `mode="receive"`.
+5. `streamlit_app.py` Tab 1, then Tab 2.
+6. Tests (§12.6).
+
+### 12.6 Testing obligations (per `copilot-instructions.md`)
+
+New `VHF Simulator/tests/` (separate suite, mirrors `Basic Simulator/tests/`'s own separation from repo-root `tests/`): mock the Qwen call entirely (no GPU/API key in CI) and unit-test the parts that don't need a real model — prompt-building functions, scenario-row → prompt-field mapping, transmission-log append/format logic, and a schema test asserting every `vhf_colreg_scenarios.json` row has the fields `ask_vhf_comms()` reads (`vhf_channel`, `colreg_rules`, `scenario`, `own_vessel`, `target_vessel`) — this exact kind of schema-assumption test is called out as this repo's most common real bug class.
+
+### 12.7 Future phases (explicitly out of scope for this plan)
+
+- **Phase 2** (§7.3/§7.4): flag signals + light/sound signals, once INTERCO is sourced (§10) and the cross-domain retrieval question (§11 Q1) is resolved.
+- **Phase 3**: the crypto-message easter egg — a clearly-labelled "just for fun" mode (e.g. a Caesar/simple substitution cipher toy), kept visually/structurally separate from the real regulatory content so it's never mistaken for an actual GMDSS procedure.
+- **Phase 4**: OOW→Comms live wiring (§8.1), once OOW's own simulator and this one need to talk to each other.

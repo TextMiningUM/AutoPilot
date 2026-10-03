@@ -94,6 +94,14 @@ class AgentPaths:
         return cls(domain="Captain", source_dirname="CaptainProtocol", workspace=workspace)
 
     @classmethod
+    def chief_engineer(cls, workspace: Path | str | None = None) -> "AgentPaths":
+        """Paths object pre-configured for the Chief Engineer agent layout (design_chief_engineer.md).
+        ``source_dir`` (Data/ChiefEngineer/ChiefEngineerManuals/) holds the acquired NAVEDTRA/
+        MAN project-guide/legal-reference/drawings/Wikipedia corpus (see
+        pipeline/ingest/build_chief_engineer_corpus.py)."""
+        return cls(domain="ChiefEngineer", source_dirname="ChiefEngineerManuals", workspace=workspace)
+
+    @classmethod
     def from_env(cls, workspace: Path | str | None = None) -> "AgentPaths":
         """Paths object selected by the ``AUTOPILOT_DOMAIN`` env var (default ``"VHF"``).
 
@@ -106,7 +114,12 @@ class AgentPaths:
         """
         import os
         name = os.environ.get("AUTOPILOT_DOMAIN", "VHF").upper()
-        factory = {"VHF": cls.vhf, "OOW": cls.oow, "CAPTAIN": cls.captain}.get(name)
+        factory = {
+            "VHF": cls.vhf,
+            "OOW": cls.oow,
+            "CAPTAIN": cls.captain,
+            "CHIEFENGINEER": cls.chief_engineer,
+        }.get(name)
         if factory is None:
             raise ValueError(
                 f"Unknown AUTOPILOT_DOMAIN={name!r}; add an AgentPaths classmethod for it."
