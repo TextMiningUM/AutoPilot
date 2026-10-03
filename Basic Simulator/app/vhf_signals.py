@@ -1,6 +1,6 @@
 """Flags / light / sound / Morse reference data + pure rendering helpers for the VHF
-Simulator's "Signals" tab (design_vhf_communications.md Sec 9.1/12.9). Safe to run
-locally -- no GPU/model calls, pure data + string functions.
+Communications page's "Signals" tab (design_vhf_communications.md Sec 9.1/12.9). Safe to
+run locally -- no GPU/model calls, pure data + string functions.
 
 Four sub-channels:
   - Flag MEANINGS are loaded straight from Data/VHF/VHF_JSON/flag_signals.json (the same

@@ -1,4 +1,4 @@
-"""Model-variant registry for the VHF Simulator -- same shape as
+"""Model-variant registry for the VHF Communications page -- same shape as
 `Basic Simulator/app/model_variants.py` (short key -> {label, weights, description}) so
 both apps share one convention, but with exactly ONE entry for now: VHF's own SFT/DPO/
 compression attempts did not work out and were dropped (see

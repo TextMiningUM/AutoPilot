@@ -1,4 +1,4 @@
-"""Tests for VHF Simulator/app/vhf_agents.py -- only the parts that don't need a real
+"""Tests for Basic Simulator/app/vhf_agents.py -- only the parts that don't need a real
 model/GPU (per copilot-instructions.md: tests must run without a GPU or live API key).
 Deliberately does NOT call _load_qwen()/_load_retrieval()/ask_vhf_qa()/ask_vhf_comms()
 (those load a real model) -- only pure prompt-building/scenario-schema logic."""
@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-APP_ROOT = Path(__file__).resolve().parent.parent  # VHF Simulator/
+APP_ROOT = Path(__file__).resolve().parent.parent  # Basic Simulator/
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 

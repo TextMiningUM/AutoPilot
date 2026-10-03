@@ -1,9 +1,9 @@
-"""Tests for VHF Simulator/app/vhf_signals.py -- all pure data/string functions, no GPU/
+"""Tests for Basic Simulator/app/vhf_signals.py -- all pure data/string functions, no GPU/
 model/network calls needed (per copilot-instructions.md)."""
 import sys
 from pathlib import Path
 
-APP_ROOT = Path(__file__).resolve().parent.parent  # VHF Simulator/
+APP_ROOT = Path(__file__).resolve().parent.parent  # Basic Simulator/
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 

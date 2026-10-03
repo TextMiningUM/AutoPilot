@@ -1,7 +1,10 @@
-"""VHF Simulator -- Streamlit interface (design_vhf_communications.md Sec 12, Phase 2).
+"""VHF Communications Streamlit page (design_vhf_communications.md Sec 12, Phase 2) --
+merged 2026-10-03 from the former standalone `VHF Simulator/` app into Basic Simulator's
+multipage router (app/streamlit_app.py), as the "Communications" sidebar entry.
 
-Run from the `VHF Simulator/` folder:
-    streamlit run app/streamlit_app.py
+Auto-discovered by Streamlit's native multipage convention (a `pages/` folder next to the
+main entrypoint, app/streamlit_app.py) -- run `streamlit run app/streamlit_app.py` and
+pick "Communications" from the sidebar page list.
 
 Five tabs:
   - "Ask VHF" (Track 1): free-text question -> grounded answer + retrieved sources,
@@ -21,15 +24,19 @@ Five tabs:
     practiced signalling sub-channel per Sec 9's scope note, not an easter egg).
   - "Secret Transmission" (Sec 12.7 easter egg): a Caesar-cipher toy, clearly labelled as
     NOT a real GMDSS/VHF procedure, kept structurally separate from the real content.
+
+Model: base Qwen3-8B, 4-bit NF4 -- loads lazily on first Ask/Grade/Draft action (same
+GPU as the OOW page uses; keep only one page's model loaded at a time on an 8 GB laptop
+GPU -- use the sidebar's "Unload model" button before switching pages if you hit an
+out-of-memory error).
 """
 from __future__ import annotations
 import sys
 from pathlib import Path
 
-APP_DIR = Path(__file__).resolve().parent
-ROOT = APP_DIR.parent
-REPO_ROOT = ROOT.parent
-for p in (ROOT, REPO_ROOT):
+APP_DIR = Path(__file__).resolve().parent.parent  # Basic Simulator/app/
+ROOT = APP_DIR.parent                             # Basic Simulator/
+for p in (ROOT, ROOT.parent):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
@@ -321,4 +328,3 @@ with tab_crypto:
     with col_dec:
         if st.button("Decode") and message:
             st.code(caesar_decode(message, shift))
-

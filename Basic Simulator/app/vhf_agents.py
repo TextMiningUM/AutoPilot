@@ -1,4 +1,4 @@
-"""VHF Simulator agents: ask_vhf_qa() (Track 1 -- rules/knowledge Q&A, with a
+"""VHF Communications agents: ask_vhf_qa() (Track 1 -- rules/knowledge Q&A, with a
 Basic-Simulator-style prompt-ablation config matrix) and ask_vhf_comms() (Track 2 --
 transmit/receive radio-call simulation).
 
@@ -43,6 +43,13 @@ partially built):
   - OOW->Comms wiring (Sec 8.1): `ask_vhf_from_oow_decision()` below.
   - Crypto easter egg (Sec 12.7): deliberately NOT in this module -- see `app/vhf_crypto.py`
     (kept structurally separate, per the design doc's "never mistaken for real content" rule).
+
+2026-10-03: merged into Basic Simulator's own `app` package (was a separate `VHF
+Simulator/` Streamlit process) as the "Communications" page -- see
+app/pages/3_Communications.py. The shared retrieval helpers imported below
+(kg_retrieve/render_guidance/format_context) take paths/kg data as explicit function
+parameters rather than relying on frozen import-time globals, so sharing one process
+with app/agents.py (OOW) is safe.
 """
 from __future__ import annotations
 import json
@@ -51,13 +58,13 @@ import sys
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent
-ROOT = APP_DIR.parent                # VHF Simulator/
-REPO_ROOT = ROOT.parent               # Auto Pilot/
+ROOT = APP_DIR.parent                # Basic Simulator/
+REPO_ROOT = ROOT.parent              # Auto Pilot/
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-# Must be set BEFORE importing any pipeline module -- several read AUTOPILOT_DOMAIN at
-# import time (AgentPaths.from_env() at module level).
+# Harmless no-op if app/agents.py (OOW) already set this in the same process -- the
+# shared retrieval helpers imported below don't depend on it at call time (see above).
 os.environ.setdefault("AUTOPILOT_DOMAIN", "VHF")
 
 import numpy as np
@@ -354,11 +361,11 @@ def ask_vhf_from_oow_decision(situation: str, oow_decision: dict, model: str = D
     pilot_agents.ipynb` (which called the Anthropic API) to the local base/fine-tuned model.
 
     `situation` is a short plain-text description of the encounter (own vessel/target
-    vessel/geometry -- the same kind of text `narrate()` produces in Basic Simulator,
-    passed in here as plain text rather than importing app.narrate directly: Basic
-    Simulator's own top-level package is ALSO named `app`, so importing it alongside this
-    project's `app` package would collide -- the OOW/Comms boundary is deliberately a
-    plain data contract (situation text + decision dict), not a Python import).
+    vessel/geometry -- the same kind of text `narrate()` produces in Basic Simulator),
+    passed in here as plain text rather than importing app.narrate directly -- the OOW/
+    Comms boundary stays a plain data contract (situation text + decision dict) even
+    though both modules now live in the same `app` package, since VHF should never need
+    to decide/compute anything from raw mission state itself.
     `oow_decision` is the OOW agent's own decision JSON shape (pipeline/oow_agent_spec.py):
     {"action", "degrees", "encounter_rule", "conduct_rule", "reasoning"}.
     Returns {"transmission": str}.
