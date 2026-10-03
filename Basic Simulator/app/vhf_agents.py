@@ -294,6 +294,29 @@ def _scenario_brief(scenario: dict) -> str:
     )
 
 
+def scenario_playback(scenario: dict) -> dict:
+    """Read-only narrative preview of one scenario (design_vhf_communications.md
+    Sec 12.11) -- region/vessels/situation/rules/channel plus the held-out gold
+    reference transmission, for a user to review what's in a scenario BEFORE engaging
+    in Transmit/Receive mode. Pure formatting, no model call -- same "fine to use
+    held-out eval data as a DEMO source" precedent as load_scenarios()/_scenario_brief()."""
+    ch = scenario.get("vhf_channel", {})
+    return {
+        "region": scenario.get("region", "?"),
+        "category": scenario.get("category", "?"),
+        "own_vessel": scenario.get("own_vessel", "?"),
+        "target_vessel": scenario.get("target_vessel", "?"),
+        "situation": scenario.get("scenario", "?"),
+        "colreg_rules": scenario.get("colreg_rules", []),
+        "channel_hailing": ch.get("hailing", "?"),
+        "channel_working": ch.get("working", "?"),
+        "channel_note": ch.get("note", ""),
+        "channel_settings": ch.get("settings", ""),
+        "reference_transmission": scenario.get("gold_answer"),
+        "expected_points": scenario.get("expected_points", []),
+    }
+
+
 def ask_vhf_comms(scenario: dict, mode: str, user_text: str | None = None,
                  history: list[dict] | None = None, model: str = DEFAULT_VARIANT,
                  max_new_tokens: int = 300) -> dict:

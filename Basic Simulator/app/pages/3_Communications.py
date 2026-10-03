@@ -44,7 +44,7 @@ import streamlit as st
 
 from app.vhf_agents import (
     ask_vhf_qa, ask_vhf_comms, ask_vhf_from_oow_decision, load_scenarios, preload, unload,
-    MODEL_CONFIGS,
+    scenario_playback, MODEL_CONFIGS,
 )
 from app.vhf_model_variants import DEFAULT_VARIANT
 from app.vhf_crypto import caesar_encode, caesar_decode
@@ -144,66 +144,96 @@ with tab_sim:
             st.write(f"Hailing: **{ch.get('hailing', '?')}** · Working: **{ch.get('working', '?')}**")
             st.write("COLREG rule(s): " + (", ".join(scenario.get("colreg_rules", [])) or "—"))
 
-    mode = st.radio("Mode", ["Transmit (you draft the call)", "Receive (agent hails you first)"],
-                    horizontal=True)
+    mode = st.radio("Mode", ["Preview (read-only playback)", "Transmit (you draft the call)",
+                    "Receive (agent hails you first)"], horizontal=True)
 
-    log_key = f"vhf_log_{idx}_{mode}"
-    if log_key not in st.session_state:
-        st.session_state[log_key] = []
+    if mode.startswith("Preview"):
+        pb = scenario_playback(scenario)
+        st.markdown(f"#### {pb['category']} \u2014 {pb['region']}")
+        col_own, col_target = st.columns(2)
+        with col_own:
+            st.markdown("**\U0001F6A2 Own vessel**")
+            st.write(pb["own_vessel"])
+        with col_target:
+            st.markdown("**\U0001F6A4 Target vessel**")
+            st.write(pb["target_vessel"])
+        st.markdown("**Situation**")
+        st.write(pb["situation"])
+        st.markdown(
+            f"**Channel:** hailing **{pb['channel_hailing']}**, working **{pb['channel_working']}**"
+            + (f" \u2014 {pb['channel_settings']}" if pb["channel_settings"] else "")
+        )
+        if pb["channel_note"]:
+            st.caption(pb["channel_note"])
+        st.markdown("**Applicable COLREG rule(s):** " + (", ".join(pb["colreg_rules"]) or "\u2014"))
+        if pb["reference_transmission"]:
+            with st.expander("Reference transmission (spoiler -- compare after you try Transmit/Receive yourself)"):
+                st.write(pb["reference_transmission"])
+                if pb["expected_points"]:
+                    st.markdown("**Expected points:**")
+                    for point in pb["expected_points"]:
+                        st.markdown(f"- {point}")
+        st.info("This is a read-only preview -- switch to **Transmit** or **Receive** above to "
+               "actually play out this scenario with the agent.")
 
-    if mode.startswith("Transmit"):
-        with st.form("transmit_form", clear_on_submit=True):
-            user_call = st.text_area("Your transmission", placeholder="e.g. \"Gulf Explorer, Gulf Explorer, this is Texas Spirit...\"")
-            sent = st.form_submit_button("Grade my transmission")
-        if sent and user_call:
-            try:
-                with st.spinner("Grading..."):
-                    result = ask_vhf_comms(scenario, mode="transmit", user_text=user_call)
-            except Exception as e:  # noqa: BLE001
-                st.error(f"Couldn't grade that transmission: {e}")
-            else:
-                st.session_state.vhf_model_ready = True
-                st.session_state[log_key].append({"speaker": "You", "content": user_call})
-                st.session_state[log_key].append({"speaker": "VHF Instructor", "content": result["feedback"]})
     else:
-        if not st.session_state[log_key] and st.button("Hail me"):
-            try:
-                with st.spinner("Generating incoming hail..."):
-                    result = ask_vhf_comms(scenario, mode="receive")
-            except Exception as e:  # noqa: BLE001
-                st.error(f"Couldn't generate a hail: {e}")
-            else:
-                st.session_state.vhf_model_ready = True
-                st.session_state[log_key] = result["history"]
-        if st.session_state[log_key]:
-            with st.form("reply_form", clear_on_submit=True):
-                reply = st.text_input("Your reply")
-                replied = st.form_submit_button("Send reply")
-            if replied and reply:
+        log_key = f"vhf_log_{idx}_{mode}"
+        if log_key not in st.session_state:
+            st.session_state[log_key] = []
+
+        if mode.startswith("Transmit"):
+            with st.form("transmit_form", clear_on_submit=True):
+                user_call = st.text_area("Your transmission", placeholder="e.g. \"Gulf Explorer, Gulf Explorer, this is Texas Spirit...\"")
+                sent = st.form_submit_button("Grade my transmission")
+            if sent and user_call:
                 try:
-                    with st.spinner("..."):
-                        result = ask_vhf_comms(scenario, mode="receive", user_text=reply,
-                                               history=st.session_state[log_key])
+                    with st.spinner("Grading..."):
+                        result = ask_vhf_comms(scenario, mode="transmit", user_text=user_call)
                 except Exception as e:  # noqa: BLE001
-                    st.error(f"Couldn't send that reply: {e}")
+                    st.error(f"Couldn't grade that transmission: {e}")
+                else:
+                    st.session_state.vhf_model_ready = True
+                    st.session_state[log_key].append({"speaker": "You", "content": user_call})
+                    st.session_state[log_key].append({"speaker": "VHF Instructor", "content": result["feedback"]})
+        else:
+            if not st.session_state[log_key] and st.button("Hail me"):
+                try:
+                    with st.spinner("Generating incoming hail..."):
+                        result = ask_vhf_comms(scenario, mode="receive")
+                except Exception as e:  # noqa: BLE001
+                    st.error(f"Couldn't generate a hail: {e}")
                 else:
                     st.session_state.vhf_model_ready = True
                     st.session_state[log_key] = result["history"]
+            if st.session_state[log_key]:
+                with st.form("reply_form", clear_on_submit=True):
+                    reply = st.text_input("Your reply")
+                    replied = st.form_submit_button("Send reply")
+                if replied and reply:
+                    try:
+                        with st.spinner("..."):
+                            result = ask_vhf_comms(scenario, mode="receive", user_text=reply,
+                                                   history=st.session_state[log_key])
+                    except Exception as e:  # noqa: BLE001
+                        st.error(f"Couldn't send that reply: {e}")
+                    else:
+                        st.session_state.vhf_model_ready = True
+                        st.session_state[log_key] = result["history"]
 
-    if st.session_state[log_key] and st.button("Clear log", key=f"clear_{log_key}"):
-        st.session_state[log_key] = []
-        st.rerun()
+        if st.session_state[log_key] and st.button("Clear log", key=f"clear_{log_key}"):
+            st.session_state[log_key] = []
+            st.rerun()
 
-    st.markdown("---")
-    st.markdown("**Transmission log**")
-    if not st.session_state[log_key]:
-        st.caption("No transmissions yet.")
-    for entry in st.session_state[log_key]:
-        speaker = entry.get("speaker") or ("You" if entry.get("role") == "user" else "Other station")
-        is_you = speaker == "You" or entry.get("role") == "user"
-        with st.chat_message("user" if is_you else "assistant",
-                             avatar="\U0001F6A2" if is_you else "\U0001F4FB"):
-            st.markdown(f"**{speaker}:** {entry['content']}")
+        st.markdown("---")
+        st.markdown("**Transmission log**")
+        if not st.session_state[log_key]:
+            st.caption("No transmissions yet.")
+        for entry in st.session_state[log_key]:
+            speaker = entry.get("speaker") or ("You" if entry.get("role") == "user" else "Other station")
+            is_you = speaker == "You" or entry.get("role") == "user"
+            with st.chat_message("user" if is_you else "assistant",
+                                 avatar="\U0001F6A2" if is_you else "\U0001F4FB"):
+                st.markdown(f"**{speaker}:** {entry['content']}")
 
 # ── Tab 3: OOW → Comms ───────────────────────────────────────────────────
 with tab_oow:

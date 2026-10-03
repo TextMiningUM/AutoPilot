@@ -58,6 +58,45 @@ def test_ask_vhf_comms_rejects_unknown_mode() -> None:
         raise AssertionError("expected ValueError for an unknown mode")
 
 
+def test_scenario_playback_has_all_expected_fields() -> None:
+    scenario = {
+        "category": "head_on", "region": "Houston Ship Channel",
+        "own_vessel": "MV Texas Spirit", "target_vessel": "MV Gulf Explorer",
+        "scenario": "Head-on encounter.", "colreg_rules": ["Rule 14", "Rule 34"],
+        "vhf_channel": {"hailing": "16", "working": "71", "note": "n", "settings": "s"},
+        "gold_answer": "Reference radio call text.",
+        "expected_points": ["point one", "point two"],
+    }
+    pb = vhf_agents.scenario_playback(scenario)
+    assert pb["category"] == "head_on" and pb["region"] == "Houston Ship Channel"
+    assert pb["own_vessel"] == "MV Texas Spirit" and pb["target_vessel"] == "MV Gulf Explorer"
+    assert pb["colreg_rules"] == ["Rule 14", "Rule 34"]
+    assert pb["channel_hailing"] == "16" and pb["channel_working"] == "71"
+    assert pb["channel_note"] == "n" and pb["channel_settings"] == "s"
+    assert pb["reference_transmission"] == "Reference radio call text."
+    assert pb["expected_points"] == ["point one", "point two"]
+
+
+def test_scenario_playback_handles_missing_optional_fields() -> None:
+    """Held-out scenario rows without gold_answer/expected_points must not crash --
+    those 2 fields are genuinely optional per the real vhf_colreg_scenarios.json schema."""
+    scenario = {"region": "?", "own_vessel": "?", "target_vessel": "?", "scenario": "?",
+                "vhf_channel": {"hailing": "16", "working": "71"}, "colreg_rules": []}
+    pb = vhf_agents.scenario_playback(scenario)
+    assert pb["reference_transmission"] is None
+    assert pb["expected_points"] == []
+
+
+def test_scenario_playback_matches_real_scenario_file() -> None:
+    """Runs scenario_playback() over every real held-out scenario row -- schema-shape
+    smoke test, same spirit as test_scenario_file_has_required_fields()."""
+    paths = AgentPaths.vhf()
+    scenarios = json.loads(paths.eval_file("vhf_colreg_scenarios.json").read_text(encoding="utf-8"))
+    for row in scenarios[:20]:
+        pb = vhf_agents.scenario_playback(row)
+        assert pb["region"] and pb["own_vessel"] and pb["target_vessel"]
+
+
 def test_build_vhf_prompt_bare_config_needs_no_retrieval() -> None:
     """"bare_qwen"/"v0_base" must not touch _load_retrieval() (no GPU/model-file
     dependency) -- the only 2 configs safe to build a prompt for without a real index."""
