@@ -11,17 +11,26 @@ Five tabs:
     with a session-scoped question history. Now also answers flag/light-sound questions
     (flag_signals.json/light_sound_signals.json are part of the same RAG index) and can
     use the v6_rag_rerank config once the VHF reranker is trained.
-  - "Radio Simulator" (Track 2): pick a scenario, then either draft your own
-    transmission (graded by the agent) or receive an incoming hail and reply to it,
-    rendered as a radio-style transmission log (st.chat_message bubbles).
+  - "Radio Simulator" (Track 2): pick a scenario, preview it read-only (with a "Play
+    reference transmission" distorted-VHF-audio button), then either draft your own
+    transmission or receive an incoming hail and reply to it -- by TYPING or by
+    RECORDING your voice (st.audio_input -> transcribe_wav_bytes(), openai-whisper,
+    optional/graceful -- see vhf_audio.py's module docstring), rendered as a radio-style
+    transmission log (st.chat_message bubbles) with a "Play (distorted VHF radio)"
+    button per entry (synthesize_vhf_voice_wav(), pyttsx3, also optional/graceful).
   - "OOW -> Comms" (Sec 8.1): draft the radio call for an already-made OOW manoeuvre
     decision -- VHF never decides the manoeuvre itself, only confirms it.
-  - "Signals" (Sec 9.1/12.9): channel-specific renderers for flags (ICS meaning +
+  - "Signals" (Sec 9.1/12.9/12.13): channel-specific renderers for flags (ICS meaning +
     phonetic + Morse + a real flag graphic rendered from Wikipedia's sourced heraldic
     blazon -- see vhf_signals.py's module docstring -- plus a deterministic send/receive
     example), light/sound manoeuvring + restricted-visibility signal patterns (COLREG
-    Rules 32-35, real sourced data), and a Morse encoder/decoder (a genuine, still-
-    practiced signalling sub-channel per Sec 9's scope note, not an easter egg).
+    Rules 32-35, real sourced data, now with synthesized blast-tone audio), a Morse
+    encoder/decoder (with synthesized Morse-tone audio, standard "PARIS" WPM timing),
+    and a 4th "Exchange Practice" sub-tab -- read an incoming flag/light/sound/Morse
+    signal, work out your own response, then reveal the correct one (see
+    vhf_signals.SIGNAL_EXCHANGE_SCENARIOS). Radio Simulator transmission-log entries
+    also get a "Play (distorted VHF radio)" button (see vhf_audio.py's module docstring
+    -- optional, needs pyttsx3, Windows-only, gracefully degrades if not installed).
   - "Secret Transmission" (Sec 12.7/12.12): a Caesar-cipher easter egg, plus two REAL
     cryptography sub-tabs -- passphrase-based AES-256-GCM, and RSA-OAEP hybrid encryption
     ("PGP-style", the same scheme OpenPGP itself uses). Still not a GMDSS/VHF procedure,
@@ -56,11 +65,29 @@ from app.vhf_crypto import (
 )
 from app.vhf_signals import (
     PHONETIC_ALPHABET, FLAG_BLAZONS, MORSE_CODE, MANOEUVRING_SIGNALS,
-    RESTRICTED_VISIBILITY_SIGNALS, load_flag_meanings, flag_svg, flag_signal_example,
-    text_to_morse, morse_to_text, pattern_to_symbols,
+    RESTRICTED_VISIBILITY_SIGNALS, SIGNAL_EXCHANGE_SCENARIOS, load_flag_meanings, flag_svg,
+    flag_signal_example, text_to_morse, morse_to_text, pattern_to_symbols,
+)
+from app.vhf_audio import (
+    synthesize_blast_wav, synthesize_morse_wav, synthesize_vhf_voice_wav, transcribe_wav_bytes,
 )
 
 st.set_page_config(page_title="VHF Communications Simulator", page_icon="\U0001F4FB", layout="wide")
+
+
+@st.cache_data(show_spinner=False)
+def _cached_transcribe(wav_bytes: bytes) -> str | None:
+    """Thin st.cache_data wrapper -- transcribe_wav_bytes() itself stays a plain,
+    Streamlit-free function (testable without a running app)."""
+    return transcribe_wav_bytes(wav_bytes)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_vhf_voice(text: str) -> bytes | None:
+    """Thin st.cache_data wrapper -- synthesize_vhf_voice_wav() itself stays a plain,
+    Streamlit-free function (testable without a running app)."""
+    return synthesize_vhf_voice_wav(text)
+
 
 _HEADER_IMAGE = ROOT.parent / "Data" / "VHF" / "VHFProtocol" / "RadioRoomHeader.jpg"
 if _HEADER_IMAGE.exists():
@@ -182,6 +209,11 @@ with tab_sim:
         if pb["reference_transmission"]:
             with st.expander("Reference transmission (spoiler -- compare after you try Transmit/Receive yourself)"):
                 st.write(pb["reference_transmission"])
+                ref_audio = _cached_vhf_voice(pb["reference_transmission"])
+                if ref_audio is not None:
+                    st.audio(ref_audio, format="audio/wav")
+                else:
+                    st.caption("\U0001F50A Audio playback needs pyttsx3 (not installed).")
                 if pb["expected_points"]:
                     st.markdown("**Expected points:**")
                     for point in pb["expected_points"]:
@@ -195,10 +227,28 @@ with tab_sim:
             st.session_state[log_key] = []
 
         if mode.startswith("Transmit"):
+            mic_key = f"transmit_mic_{idx}"
+            transcript_key = f"transmit_transcript_{idx}"
+            mic_audio = st.audio_input("Or record your transmission", key=mic_key)
+            if mic_audio is not None:
+                try:
+                    transcript = _cached_transcribe(mic_audio.getvalue())
+                except Exception as e:  # noqa: BLE001 -- bad/corrupt recording, don't crash the page
+                    st.error(f"Couldn't transcribe that recording: {e}")
+                else:
+                    if transcript is None:
+                        st.caption("\U0001F3A4 Speech-to-text needs openai-whisper (not installed).")
+                    else:
+                        st.session_state[transcript_key] = transcript
+                        st.caption(f"Transcribed: \u201c{transcript}\u201d")
             with st.form("transmit_form", clear_on_submit=True):
-                user_call = st.text_area("Your transmission", placeholder="e.g. \"Gulf Explorer, Gulf Explorer, this is Texas Spirit...\"")
+                user_call = st.text_area(
+                    "Your transmission", value=st.session_state.get(transcript_key, ""),
+                    placeholder="e.g. \"Gulf Explorer, Gulf Explorer, this is Texas Spirit...\"",
+                )
                 sent = st.form_submit_button("Grade my transmission")
             if sent and user_call:
+                st.session_state.pop(transcript_key, None)
                 try:
                     with st.spinner("Grading..."):
                         result = ask_vhf_comms(scenario, mode="transmit", user_text=user_call)
@@ -219,10 +269,25 @@ with tab_sim:
                     st.session_state.vhf_model_ready = True
                     st.session_state[log_key] = result["history"]
             if st.session_state[log_key]:
+                reply_mic_key = f"receive_mic_{idx}"
+                reply_transcript_key = f"receive_transcript_{idx}"
+                reply_mic_audio = st.audio_input("Or record your reply", key=reply_mic_key)
+                if reply_mic_audio is not None:
+                    try:
+                        reply_transcript = _cached_transcribe(reply_mic_audio.getvalue())
+                    except Exception as e:  # noqa: BLE001
+                        st.error(f"Couldn't transcribe that recording: {e}")
+                    else:
+                        if reply_transcript is None:
+                            st.caption("\U0001F3A4 Speech-to-text needs openai-whisper (not installed).")
+                        else:
+                            st.session_state[reply_transcript_key] = reply_transcript
+                            st.caption(f"Transcribed: \u201c{reply_transcript}\u201d")
                 with st.form("reply_form", clear_on_submit=True):
-                    reply = st.text_input("Your reply")
+                    reply = st.text_input("Your reply", value=st.session_state.get(reply_transcript_key, ""))
                     replied = st.form_submit_button("Send reply")
                 if replied and reply:
+                    st.session_state.pop(reply_transcript_key, None)
                     try:
                         with st.spinner("..."):
                             result = ask_vhf_comms(scenario, mode="receive", user_text=reply,
@@ -241,12 +306,20 @@ with tab_sim:
         st.markdown("**Transmission log**")
         if not st.session_state[log_key]:
             st.caption("No transmissions yet.")
-        for entry in st.session_state[log_key]:
+        for i, entry in enumerate(st.session_state[log_key]):
             speaker = entry.get("speaker") or ("You" if entry.get("role") == "user" else "Other station")
             is_you = speaker == "You" or entry.get("role") == "user"
             with st.chat_message("user" if is_you else "assistant",
                                  avatar="\U0001F6A2" if is_you else "\U0001F4FB"):
                 st.markdown(f"**{speaker}:** {entry['content']}")
+                if st.button("\U0001F50A Play (distorted VHF radio)", key=f"play_{log_key}_{i}"):
+                    audio_bytes = _cached_vhf_voice(entry["content"])
+                    if audio_bytes is None:
+                        st.info("Text-to-speech (pyttsx3) isn't installed -- this is an "
+                               "optional, local-only feature. See vhf_audio.py's module "
+                               "docstring.")
+                    else:
+                        st.audio(audio_bytes, format="audio/wav")
 
 # ── Tab 3: OOW → Comms ───────────────────────────────────────────────────
 with tab_oow:
@@ -291,7 +364,9 @@ with tab_oow:
 # ── Tab 4: Signals (flags / light / sound / Morse) ────────────────────────
 with tab_signals:
     st.subheader("\U0001F6A9 Flags, light/sound signals, and Morse code")
-    sig_flags, sig_light_sound, sig_morse = st.tabs(["Flags", "Light & Sound", "Morse"])
+    sig_flags, sig_light_sound, sig_morse, sig_practice = st.tabs(
+        ["Flags", "Light & Sound", "Morse", "\U0001F3AD Exchange Practice"]
+    )
 
     with sig_flags:
         st.caption("ICS single-flag meanings are real, sourced text (flag_signals.json, "
@@ -319,15 +394,18 @@ with tab_signals:
     with sig_light_sound:
         st.caption("Real, sourced patterns (COLREG Rules 32-35, light_sound_signals.json). "
                   "Light flashes and sound blasts share the same short/prolonged timing "
-                  "(Rule 34(b)) -- \u2022 = short, \u2014 = prolonged.")
+                  "(Rule 34(b)) -- \u2022 = short, \u2014 = prolonged. Audio is a synthesized "
+                  "illustrative tone (not a recording of a real ship's whistle).")
         st.markdown("**Manoeuvring signals (Rule 34)**")
         for sig in MANOEUVRING_SIGNALS:
             st.markdown(f"- `{pattern_to_symbols(sig['pattern'])}` -- {sig['name']} "
                        f"({sig['rule']})")
+            st.audio(synthesize_blast_wav(sig["pattern"]), format="audio/wav")
         st.markdown("**Restricted visibility (Rule 35)**")
         for sig in RESTRICTED_VISIBILITY_SIGNALS:
             st.markdown(f"- `{pattern_to_symbols(sig['pattern'])}` -- {sig['name']} "
                        f"({sig['rule']}, {sig['interval']})")
+            st.audio(synthesize_blast_wav(sig["pattern"]), format="audio/wav")
 
     with sig_morse:
         st.caption("A genuine, still-practiced signalling sub-channel (design doc Sec 9 "
@@ -336,12 +414,48 @@ with tab_signals:
         if morse_mode.startswith("Text"):
             text_in = st.text_input("Text", placeholder="e.g. SOS")
             if text_in:
-                st.code(text_to_morse(text_in), language=None)
+                morse_out = text_to_morse(text_in)
+                st.code(morse_out, language=None)
+                if morse_out:
+                    st.audio(synthesize_morse_wav(morse_out), format="audio/wav")
         else:
             morse_in = st.text_input("Morse (letters space-separated, / between words)",
                                      placeholder="e.g. ... --- ...")
             if morse_in:
                 st.code(morse_to_text(morse_in), language=None)
+                st.audio(synthesize_morse_wav(morse_in), format="audio/wav")
+
+    with sig_practice:
+        st.caption("Practice reading an incoming flag/light/sound/Morse signal and "
+                  "working out the right response, before revealing the real answer -- "
+                  "same sourced content as the other 3 sub-tabs, no model call needed.")
+        sc_labels = [f"{i}: {sc['channel']} \u2014 {sc['id']}" for i, sc in enumerate(SIGNAL_EXCHANGE_SCENARIOS)]
+        sc_idx = st.selectbox("Scenario", range(len(SIGNAL_EXCHANGE_SCENARIOS)),
+                              format_func=lambda i: sc_labels[i], key="practice_scenario")
+        sc = SIGNAL_EXCHANGE_SCENARIOS[sc_idx]
+        st.markdown(f"**Situation:** {sc['situation']}")
+
+        if sc.get("incoming_flag"):
+            st.markdown("**Incoming signal:**")
+            st.markdown(flag_svg(sc["incoming_flag"]), unsafe_allow_html=True)
+        if sc.get("incoming_pattern"):
+            st.markdown(f"**Incoming signal:** `{pattern_to_symbols(sc['incoming_pattern'])}`")
+            st.audio(synthesize_blast_wav(sc["incoming_pattern"]), format="audio/wav")
+
+        st.text_input("Your interpretation / response (not graded -- jot it down, then reveal)",
+                      key=f"practice_answer_{sc_idx}")
+
+        with st.expander("Reveal"):
+            st.write(sc["reveal_meaning"])
+            if sc.get("reveal_flag"):
+                st.markdown(flag_svg(sc["reveal_flag"]), unsafe_allow_html=True)
+            if sc.get("reveal_pattern"):
+                st.markdown(f"`{pattern_to_symbols(sc['reveal_pattern'])}`")
+                st.audio(synthesize_blast_wav(sc["reveal_pattern"]), format="audio/wav")
+            if sc.get("reveal_text"):
+                reveal_morse = text_to_morse(sc["reveal_text"])
+                st.code(f"{sc['reveal_text']}  ({reveal_morse})", language=None)
+                st.audio(synthesize_morse_wav(reveal_morse), format="audio/wav")
 
 # ── Tab 5: Secret Transmission ────────────────────────────────────────────
 with tab_crypto:

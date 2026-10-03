@@ -53,6 +53,35 @@ beautifulsoup4==4.15.0    # HTML parsing for MARS/TSB Canada incident-report pag
                           # (Captain Legal_Reference corpus -- see
                           # build_captain_legal_reference_json.py)
 
+# ── Optional: Basic Simulator "distorted VHF radio" audio (LOCAL only, any OS) ──────────
+# Only used by Basic Simulator/app/vhf_audio.py's synthesize_vhf_voice_wav() -- NOT
+# needed for the training/eval pipeline, NOT expected to be installed on the cloud GPU
+# pod. Gracefully degrades to returning None if missing (see that module's docstring) --
+# skip this install entirely on the cloud/Linux side.
+# Preferred engine -- natural-sounding offline neural TTS (any OS). Needs its voice
+# model downloaded once: `python -m piper.download_voices en_US-lessac-medium
+# --download-dir _models/piper_voices` (one-time, needs internet; offline afterward).
+piper-tts==1.8.0
+onnxruntime==1.30.0       # piper-tts dependency
+pathvalidate==3.3.1       # piper-tts dependency
+flatbuffers==25.12.19     # onnxruntime dependency
+# Fallback engine if the piper voice model isn't downloaded -- more robotic-sounding,
+# Windows-only (wraps SAPI5), but installed by default on every Windows machine.
+pyttsx3==2.99             # offline text-to-speech (wraps Windows SAPI5)
+pywin32==312              # SAPI5 COM bindings pyttsx3 needs on Windows
+comtypes==1.4.17          # COM bindings pyttsx3/pywin32 need on Windows
+
+# ── Optional: Basic Simulator speech-to-text (LOCAL only, any OS) ───────────────────────
+# Only used by Basic Simulator/app/vhf_audio.py's transcribe_wav_bytes() -- NOT needed
+# for the training/eval pipeline, NOT expected to be installed on the cloud GPU pod.
+# Gracefully degrades to returning None if missing. Runs on CPU deliberately (see that
+# module's docstring) to avoid contending with a live Qwen GPU session. No system
+# ffmpeg needed -- vhf_audio.py decodes WAV bytes itself and feeds Whisper a raw array.
+openai-whisper==20250625  # runs on torch/torchaudio, both already pinned above
+numba==0.68.0             # openai-whisper dependency
+llvmlite==0.50.0          # numba dependency
+more-itertools==11.1.0    # openai-whisper dependency
+
 # ── LLM API judges ──────────────────────────────────────────────────────
 openai==3.13.0            # gpt-4o-mini for reasoning extraction + Faith/Correct judging
 

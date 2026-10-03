@@ -331,6 +331,23 @@ def scenario_playback(scenario: dict) -> dict:
     }
 
 
+def scenario_narration(scenario: dict) -> str:
+    """Natural spoken-prose briefing for one scenario -- same sourced fields as
+    scenario_playback(), phrased for text-to-speech rather than label:value display
+    (a telegraphic dump reads badly out loud). Used by the Radio Simulator's "Play
+    scenario briefing" button (design doc Sec 12.14)."""
+    pb = scenario_playback(scenario)
+    rules = ", ".join(pb["colreg_rules"]) or "no specific rule on file"
+    return (
+        f"Scenario briefing. You are aboard {pb['own_vessel']}. "
+        f"{pb['target_vessel']} is involved in a {pb['category'].replace('_', ' ')} "
+        f"situation in {pb['region']}. {pb['situation']} "
+        f"Hail on channel {pb['channel_hailing']}, then move to working channel "
+        f"{pb['channel_working']} once contact is established. "
+        f"Applicable rules: {rules}."
+    )
+
+
 def ask_vhf_comms(scenario: dict, mode: str, user_text: str | None = None,
                  history: list[dict] | None = None, model: str = DEFAULT_VARIANT,
                  max_new_tokens: int = 300) -> dict:

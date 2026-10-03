@@ -320,3 +320,79 @@ def pattern_to_symbols(pattern: list[str]) -> str:
     """["short","short"] -> "• •" -- shared rendering for both light flashes (Rule 34(b):
     each flash ~1s, same timing as the whistle signal it supplements) and sound blasts."""
     return " ".join(_SYMBOL[p] for p in pattern)
+
+
+# ── Flag/light-sound/Morse exchange practice scenarios (design doc Sec 12.13) ──────────
+# Each scenario is either "interpret" (an incoming signal is shown -- what does it mean /
+# what should you do?), "compose" (a situation is described -- what would you send?), or
+# "respond" (an incoming light/sound signal is shown -- what's the correct REPLY signal,
+# per real Rule 34 practice?). Deliberately NOT a fabricated "two-way flag dialogue"
+# protocol -- single ICS flags are mostly one-shot urgent signals in reality, not a
+# back-and-forth like VHF radio, so flag scenarios are interpret/compose, never "respond".
+# Morse "compose" scenarios use genuine, standard telegraphy prosigns (CQ/K), not
+# invented vocabulary. All content here is sourced from the same material already in
+# FLAG_BLAZONS/load_flag_meanings()/MANOEUVRING_SIGNALS -- never duplicated/contradicted.
+SIGNAL_EXCHANGE_SCENARIOS: list[dict] = [
+    {
+        "id": "flag_diver_down",
+        "channel": "flag",
+        "situation": "You are approaching a work site in a narrow channel. A nearby "
+                    "vessel has a single flag hoisted.",
+        "task": "interpret",
+        "incoming_flag": "A",
+        "reveal_meaning": "Flag A (Alfa): \"I have a diver down; keep well clear at slow "
+                          "speed.\" You should keep well clear and reduce speed.",
+    },
+    {
+        "id": "flag_need_pilot",
+        "channel": "flag",
+        "situation": "Your vessel is approaching a pilotage area and requires a harbour pilot.",
+        "task": "compose",
+        "reveal_flag": "G",
+        "reveal_meaning": "Flag G (Golf): \"I require a pilot.\"",
+    },
+    {
+        "id": "light_sound_agree_starboard",
+        "channel": "light_sound",
+        "situation": "Head-on encounter in a narrow channel. The other vessel sounds one "
+                    "short blast.",
+        "task": "respond",
+        "incoming_pattern": ["short"],
+        "incoming_meaning": "Altering course to starboard (Rule 34(a)).",
+        "reveal_pattern": ["short"],
+        "reveal_meaning": "You are also altering to starboard -- the same signal, "
+                          "acknowledging agreement (Rule 34(a)).",
+    },
+    {
+        "id": "light_sound_danger",
+        "channel": "light_sound",
+        "situation": "The other vessel's heading doesn't appear to be changing despite a "
+                    "closing CPA, and your doubt about their intentions is growing.",
+        "task": "respond",
+        "incoming_pattern": ["short", "short", "short"],
+        "incoming_meaning": "They report operating astern propulsion (Rule 34(a)).",
+        "reveal_pattern": ["short"] * 5,
+        "reveal_meaning": "You remain in doubt about whether they are taking sufficient "
+                          "action -- sound the danger signal (Rule 34(d)): at least five "
+                          "short rapid blasts.",
+    },
+    {
+        "id": "morse_cq_call",
+        "channel": "morse",
+        "situation": "You want to make initial contact with any station that might be "
+                    "listening -- a general call.",
+        "task": "compose",
+        "reveal_text": "CQ",
+        "reveal_meaning": "CQ is the standard procedural prosign meaning \"calling any station\".",
+    },
+    {
+        "id": "morse_invitation_to_transmit",
+        "channel": "morse",
+        "situation": "You've just finished your own transmission and are ready for the "
+                    "other station to reply.",
+        "task": "compose",
+        "reveal_text": "K",
+        "reveal_meaning": "K is the standard prosign inviting any station to transmit "
+                          "(\"go ahead\").",
+    },
+]

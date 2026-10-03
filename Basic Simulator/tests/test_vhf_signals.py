@@ -111,3 +111,40 @@ def test_danger_signal_is_at_least_five_short_blasts() -> None:
     danger = next(s for s in vs.MANOEUVRING_SIGNALS if "Danger" in s["name"])
     assert len(danger["pattern"]) >= 5
     assert all(p == "short" for p in danger["pattern"])
+
+
+def test_signal_exchange_scenarios_have_valid_channel_and_task() -> None:
+    for sc in vs.SIGNAL_EXCHANGE_SCENARIOS:
+        assert sc["channel"] in ("flag", "light_sound", "morse")
+        assert sc["task"] in ("interpret", "compose", "respond")
+        assert sc["situation"] and sc["reveal_meaning"]
+
+
+def test_signal_exchange_scenarios_flag_tasks_never_respond() -> None:
+    """Real ICS single flags are one-shot urgent signals, not a 2-way dialogue -- flag
+    scenarios must only ever be interpret/compose, never a fabricated "respond" protocol."""
+    for sc in vs.SIGNAL_EXCHANGE_SCENARIOS:
+        if sc["channel"] == "flag":
+            assert sc["task"] in ("interpret", "compose")
+
+
+def test_signal_exchange_scenarios_flag_letters_are_real() -> None:
+    for sc in vs.SIGNAL_EXCHANGE_SCENARIOS:
+        if sc["channel"] == "flag":
+            letter = sc.get("incoming_flag") or sc.get("reveal_flag")
+            assert letter in vs.PHONETIC_ALPHABET
+
+
+def test_signal_exchange_scenarios_light_sound_patterns_are_valid() -> None:
+    for sc in vs.SIGNAL_EXCHANGE_SCENARIOS:
+        if sc["channel"] == "light_sound":
+            for key in ("incoming_pattern", "reveal_pattern"):
+                assert all(p in ("short", "prolonged") for p in sc[key])
+
+
+def test_signal_exchange_scenarios_morse_texts_are_encodable() -> None:
+    for sc in vs.SIGNAL_EXCHANGE_SCENARIOS:
+        if sc["channel"] == "morse":
+            text = sc["reveal_text"]
+            assert vs.text_to_morse(text)  # every character must map to a known Morse code
+
